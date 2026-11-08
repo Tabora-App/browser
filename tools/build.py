@@ -353,6 +353,7 @@ def apply_branding(config: dict, brand: str) -> None:
         + 'pref("app.update.checkInstallTime.days", 2);\n'
         + 'pref("app.update.badgeWaitTime", 0);\n'
         + 'pref("devtools.selfxss.count", 5);\n'
+        + product_prefs(brand)
     )
     nsi = dest / "branding.nsi"
     if nsi.exists():
@@ -366,6 +367,16 @@ def apply_branding(config: dict, brand: str) -> None:
         ):
             text = text.replace(old, new)
         nsi.write_text(text)
+
+
+def product_prefs(brand: str) -> str:
+    """Наши настройки по умолчанию из configs/prefs/: common.js и <brand>.js."""
+    parts = []
+    for name in ("common", brand):
+        path = CONFIGS / "prefs" / f"{name}.js"
+        if path.exists():
+            parts.append(f"\n// ---- configs/prefs/{name}.js ----\n" + path.read_text())
+    return "".join(parts)
 
 
 def apply_src() -> None:
