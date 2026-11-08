@@ -306,7 +306,6 @@ def apply_branding(config: dict, brand: str) -> None:
         "# License, v. 2.0. If a copy of the MPL was not distributed with this\n"
         "# file, You can obtain one at http://mozilla.org/MPL/2.0/.\n\n"
         f"MOZ_APP_DISPLAYNAME={names['full']}\n"
-        f"MOZ_APP_VENDOR={names['vendor']}\n"
         f"MOZ_MACBUNDLE_ID={mac_suffix}\n"
     )
     locales = dest / "locales" / "en-US"
@@ -449,6 +448,10 @@ def write_mozconfig(config: dict, brand: str) -> Path:
     changeset = git(["rev-parse", "--short", "HEAD"], cwd=ROOT, check=False) or "unknown"
     app_basename = config["name"].replace(" ", "")
     update_host = config.get("updateHost") or "localhost:7648 # заглушка, сервера обновлений пока нет"
+    # --target только для кросс-сборки: на родной машине mach сам определяет цель,
+    # а явный триплет без версии ОС заставляет configure считать сборку кросс-компиляцией
+    cross = plat != host_platform() or target_arch() != host_arch()
+    target_line = f"ac_add_options --target={target_triple()}" if cross else "# родная сборка: --target не задаём"
     header = f"""# Сгенерировано tools/build.py, не редактировать: правьте configs/*/mozconfig
 mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-{plat}-{target_arch()}
 
@@ -457,7 +460,7 @@ ac_add_options --with-app-basename={app_basename}
 ac_add_options --with-branding=browser/branding/{brand}
 ac_add_options --with-distribution-id={config['appId']}
 ac_add_options --enable-update-channel={brand}
-ac_add_options --target={target_triple()}
+{target_line}
 
 export MOZ_APPUPDATE_HOST={update_host}
 export MOZ_SOURCE_REPO={config.get('repository', '')}

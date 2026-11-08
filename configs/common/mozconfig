@@ -6,6 +6,11 @@
 # инструментом tools/build.py в заголовок mozconfig.
 
 ac_add_options --enable-application=browser
+
+# Локальная сборка на ноутбуке: не забирать все ядра и память (в CI переменная CI задана)
+if test -z "$CI"; then
+  mk_add_options MOZ_PARALLEL_BUILD=8
+fi
 ac_add_options --with-l10n-base="${topsrcdir}/browser/locales"
 
 if test "$SCCACHE_GHA_ENABLED" = "true"; then
