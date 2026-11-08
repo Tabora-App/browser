@@ -405,7 +405,7 @@ const App = {
     if (host) {
       parts.push(el("span", { class: "host" }, [el("img", { src: `page-icon:${d.source.url}`, alt: "" }), el("span", { text: host })]));
     }
-    const dot = () => el("span", { class: "dot" });
+    const dot = () => (parts.length ? el("span", { class: "dot" }) : null);
     if (state === "active") {
       const left = d.totalBytes > 0 && d.speed > 0 ? (d.totalBytes - d.currentBytes) / d.speed : 0;
       parts.push(dot(), el("span", { class: "mono", text: d.totalBytes > 0 ? `${fmtSize(d.currentBytes)} из ${fmtSize(d.totalBytes)}` : fmtSize(d.currentBytes) }));
