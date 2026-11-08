@@ -1133,6 +1133,97 @@ sidebar-main {
   padding: 0 12px 10px;
 }
 
+/* Свёрнутый вид: всё квадратами по центру колонки */
+:root[tabora-sidebar="compact"] #navigator-toolbox {
+  gap: 10px;
+  padding-inline: 4px;
+}
+
+:root[tabora-sidebar="compact"] #tabora-compact-search {
+  width: 44px;
+  height: 40px;
+  border-radius: 12px;
+  margin-top: 4px;
+}
+
+:root[tabora-sidebar="compact"] #tabora-spaces {
+  background: transparent;
+  padding: 2px 0;
+  gap: 10px;
+}
+
+:root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] #pinned-tabs-container::part(items-wrapper) {
+  grid-template-columns: repeat(2, 32px);
+  justify-content: center;
+  gap: 6px;
+}
+
+:root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] #pinned-tabs-container .tabbrowser-tab {
+  height: 32px !important;
+}
+
+:root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] #pinned-tabs-container .tab-background {
+  border-radius: 9px !important;
+}
+
+:root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] #pinned-tabs-container .tab-icon-image {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+:root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab:not(#pinned-tabs-container .tabbrowser-tab) {
+  width: 44px !important;
+  min-width: 44px !important;
+  max-width: 44px !important;
+  height: 40px !important;
+  margin-inline: auto !important;
+}
+
+:root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab:not(#pinned-tabs-container .tabbrowser-tab) .tab-background {
+  border-radius: 12px;
+}
+
+:root[tabora-sidebar="compact"] #tabora-memory {
+  width: 56px;
+  margin: 0 auto;
+  padding: 8px 6px;
+  border-radius: 12px;
+}
+
+:root[tabora-sidebar="compact"] #tabora-memory .value {
+  font-size: 11px;
+}
+
+:root[tabora-sidebar="compact"] #tabora-mail,
+:root[tabora-sidebar="compact"] #tabora-downloads {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto;
+  border-radius: 12px;
+}
+
+:root[tabora-sidebar="compact"] #tabora-downloads .head {
+  height: 44px;
+  width: 44px;
+}
+
+:root[tabora-sidebar="compact"] #tabora-downloads .live {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 6px;
+  padding: 0;
+}
+
+:root[tabora-sidebar="compact"] #tabora-downloads .bar {
+  height: 3px;
+}
+
+:root[tabora-sidebar="compact"] #tabora-downloads .pill {
+  top: -5px;
+  right: -5px;
+}
+
 /* Подсказка справа от значка */
 #tabora-tip {
   position: fixed;
@@ -1205,7 +1296,7 @@ sidebar-main {
 #tabora-topbar .title {
   flex: 1;
   min-width: 0;
-  font: 600 13px/1 var(--tabora-font);
+  font: 600 13px/1.35 var(--tabora-font);
   color: var(--tabora-text-2);
   white-space: nowrap;
   overflow: hidden;
