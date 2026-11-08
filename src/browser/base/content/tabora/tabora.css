@@ -1372,16 +1372,116 @@ sidebar-main {
 }
 
 /* ---- Меню и панели ------------------------------------------------------ */
+/* Firefox 159 красит всплывающие панели дизайн-токенами (@layer tokens-*);
+ * объявления вне слоёв их перекрывают. Контекстные меню на macOS родные и
+ * тёмные сами по себе. */
 
-menupopup,
-panel {
-  --panel-background: var(--tabora-panel);
-  --panel-color: var(--tabora-text);
+:root {
+  --panel-background-color: var(--tabora-panel);
   --panel-border-color: var(--tabora-panel-border);
+  --panel-text-color: var(--tabora-text);
+  --panel-border-radius: 14px;
+  --panel-menuitem-border-radius: 8px;
+  --panel-menuitem-margin-inline: 8px;
+  --panel-menuitem-padding-block: 7px;
+  --panel-menuitem-padding-inline: 10px;
+  --panel-subview-body-padding-block: 8px;
+  --toolbarseparator-color: var(--tabora-line);
+
+  --button-background-color-menu-hover: var(--tabora-raised);
+  --button-background-color-menu-active: var(--tabora-raised-2);
+  --button-text-color-menu-hover: var(--tabora-text);
+  --button-text-color-menu-active: var(--tabora-text);
+  --button-background-color-ghost-hover: var(--tabora-raised);
+  --button-background-color-ghost-active: var(--tabora-raised-2);
+  --button-background-color: var(--tabora-raised);
+  --button-background-color-hover: var(--tabora-raised-2);
+  --button-background-color-active: var(--tabora-line);
+  --button-text-color: var(--tabora-text);
+  --button-text-color-hover: var(--tabora-text);
+  --button-border-color: transparent;
+
+  --color-accent-primary: var(--tabora-accent);
+  --color-accent-primary-hover: #d4f87a;
+  --color-accent-primary-active: #bce64c;
+  --button-background-color-primary: var(--tabora-accent);
+  --button-background-color-primary-hover: #d4f87a;
+  --button-background-color-primary-active: #bce64c;
+  --button-text-color-primary: var(--tabora-on-accent);
+  --button-text-color-primary-hover: var(--tabora-on-accent);
+  --button-text-color-primary-active: var(--tabora-on-accent);
+  --link-color: var(--tabora-accent);
+  --link-color-hover: #d4f87a;
+  --link-color-active: #bce64c;
+
+  --text-color: var(--tabora-text);
+  --text-color-deemphasized: var(--tabora-text-3);
+  --icon-color: var(--tabora-text-2);
+  --border-color: var(--tabora-line);
+  --border-color-interactive: var(--tabora-field-border);
+  --background-color-box: var(--tabora-field);
+  --input-bgcolor: var(--tabora-field);
+  --input-color: var(--tabora-text);
+  --input-border-color: var(--tabora-field-border);
+
+  --panel-banner-item-background-color: var(--tabora-accent-dim);
+  --panel-banner-item-hover-bgcolor: rgba(200, 242, 90, 0.24);
+  --panel-banner-item-active-bgcolor: rgba(200, 242, 90, 0.3);
+  --panel-banner-item-color: var(--tabora-text);
+  --panel-banner-item-icon-color: var(--tabora-accent);
 }
 
-.panel-subview-body,
-#appMenu-popup,
+panel,
 menupopup {
+  --panel-background-color: var(--tabora-panel) !important;
+  --panel-border-color: var(--tabora-panel-border) !important;
+  --panel-text-color: var(--tabora-text) !important;
+  --panel-border-radius: 14px !important;
+  color-scheme: dark;
   font-family: var(--tabora-font);
+}
+
+panel::part(content) {
+  font-family: var(--tabora-font);
+  font-size: 13px;
+}
+
+.subviewbutton,
+.panel-subview-body,
+.panel-header,
+#appMenu-popup,
+#identity-popup,
+#protections-popup,
+#downloadsPanel,
+#BMB_bookmarksPopup {
+  font-family: var(--tabora-font);
+}
+
+.subviewbutton {
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+
+.subviewbutton > .menu-accel,
+.subviewbutton > .toolbarbutton-text + .menu-accel,
+.subviewbutton[shortcut]::after {
+  font-family: var(--tabora-mono);
+  font-size: 11px;
+  color: var(--tabora-text-4);
+}
+
+.panel-header > h1 {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--tabora-text);
+}
+
+toolbarseparator {
+  color: var(--tabora-line) !important;
+}
+
+/* Шапка меню с предложением войти в аккаунт Firefox: заменит аккаунт Tabora. */
+#appMenu-fxa-status2,
+#appMenu-fxa-separator {
+  display: none !important;
 }
