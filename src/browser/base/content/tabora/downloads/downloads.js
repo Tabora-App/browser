@@ -376,14 +376,28 @@ const App = {
     return node;
   },
 
+  /** Плашка типа файла: значок по виду и расширение, цвет по категории. */
   iconFor(download) {
-    const path = download.target?.path;
-    if (path) {
-      const img = el("img", { class: "icon", alt: "", src: `moz-icon://file://${encodeURI(path)}?size=64` });
-      img.addEventListener("error", () => img.replaceWith(el("span", { class: "ext", text: extOf(fileName(download)) || "файл" })));
-      return img;
+    const kind = kindOf(download);
+    const ext = extOf(fileName(download));
+    const glyph = {
+      doc: ["M6 3h8l5 5v13H6z", "M14 3v5h5", "M9 13h6M9 17h6"],
+      archive: ["M4 7h16v13H4z", "M4 7l1.5-3h13L20 7", "M10 11h4"],
+      app: ["M12 3l8 4.5v9L12 21l-8-4.5v-9z", "M12 12l8-4.5M12 12v9M12 12L4 7.5"],
+      video: ["M4 6h16v12H4z", "M10 9.5v5l4.5-2.5z"],
+      image: ["M4 5h16v14H4z", "M4 15l5-5 4 4 3-3 4 4", "M15.5 9.5h.01"],
+      other: ["M6 3h8l5 5v13H6z", "M14 3v5h5"],
+    }[kind] || ["M6 3h8l5 5v13H6z", "M14 3v5h5"];
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    for (const [k, v] of Object.entries({ viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "1.7", "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" })) {
+      svg.setAttribute(k, v);
     }
-    return el("span", { class: "ext", text: extOf(fileName(download)) || "файл" });
+    for (const d of glyph) {
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", d);
+      svg.append(path);
+    }
+    return el("span", { class: "plate", dataset: { kind } }, [svg, el("b", { class: "ext", text: ext || "файл" })]);
   },
 
   metaParts(d, state, host) {

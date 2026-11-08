@@ -1330,7 +1330,7 @@ var Tabora = {
     const chips = ["Саммари страницы", "Сравнить вкладки", "Тёмная тема для сайта"].map(q =>
       this.html("button", { "data-q": q }, q)
     );
-    const panel = this.html("div", { id: "tabora-agent", hidden: "true" }, null, [
+    const inner = this.html("div", { class: "agent-inner" }, null, [
       this.html("div", { class: "head" }, null, [
         this.html("span", { class: "orb", "aria-hidden": "true" }),
         this.html("div", { class: "who" }, null, [
@@ -1345,6 +1345,12 @@ var Tabora = {
       this.html("div", { class: "chips" }, null, chips),
       this.html("div", { class: "composer" }, null, [input, sendBtn]),
     ]);
+    const panel = this.html("div", { id: "tabora-agent", hidden: "true" }, null, [inner]);
+    panel.addEventListener("transitionend", e => {
+      if (e.target === panel && e.propertyName === "width" && !panel.hasAttribute("open")) {
+        panel.hidden = true;
+      }
+    });
     browser.append(panel);
     closeBtn.addEventListener("click", () => this.toggleAgent(false));
     const send = () => {
@@ -1385,13 +1391,16 @@ var Tabora = {
 
   toggleAgent(force) {
     const panel = document.getElementById("tabora-agent");
-    const show = force === undefined ? panel.hidden : force;
-    panel.hidden = !show;
-    document
-      .getElementById("tabora-agent-toggle")
-      ?.setAttribute("aria-pressed", String(show));
+    const isOpen = panel.hasAttribute("open");
+    const show = force === undefined ? !isOpen : force;
+    document.getElementById("tabora-agent-toggle")?.setAttribute("aria-pressed", String(show));
     if (show) {
-      document.getElementById("tabora-agent-input")?.focus();
+      panel.hidden = false;
+      panel.getBoundingClientRect(); // кадр на раскладку, затем выезд справа
+      panel.setAttribute("open", "true");
+      document.getElementById("tabora-agent-input")?.focus({ preventScroll: true });
+    } else {
+      panel.removeAttribute("open");
     }
   },
 

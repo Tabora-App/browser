@@ -106,23 +106,30 @@
 }
 
 #tabora-drawer .rail-item[aria-selected="true"] > svg {
-  color: var(--tabora-accent);
+  color: var(--tabora-accent-ink);
 }
 
 #tabora-drawer .rail-item[data-hidden] {
   opacity: 0.45;
 }
 
+#tabora-drawer .rail-item {
+  will-change: transform;
+}
+
+#tabora-drawer .rail-item[shifting] {
+  transition: transform 160ms cubic-bezier(0.2, 0, 0, 1), background-color var(--tabora-ease), color var(--tabora-ease), border-color var(--tabora-ease);
+}
+
 #tabora-drawer .rail-item[dragging] {
-  opacity: 0.4;
+  z-index: 2;
+  background: var(--tabora-raised-2);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  transition: none;
 }
 
-#tabora-drawer .rail-item[drop="before"] {
-  box-shadow: 0 -2px 0 0 var(--tabora-accent);
-}
-
-#tabora-drawer .rail-item[drop="after"] {
-  box-shadow: 0 2px 0 0 var(--tabora-accent);
+#tabora-drawer[editing] .rail-item:not([data-hidden]) {
+  cursor: grab;
 }
 
 #tabora-drawer .rail-ctl {
@@ -200,7 +207,7 @@
 
 #tabora-drawer[editing] #tabora-rail-edit {
   background: var(--tabora-accent-dim, rgba(200, 242, 90, 0.14));
-  color: var(--tabora-accent);
+  color: var(--tabora-accent-ink);
 }
 
 /* ---- Панель ------------------------------------------------------------ */
@@ -949,7 +956,7 @@
 
 #tabora-drawer .dcol-add:hover {
   background: var(--tabora-panel);
-  color: var(--tabora-accent);
+  color: var(--tabora-accent-ink);
   border-color: var(--tabora-accent);
 }
 

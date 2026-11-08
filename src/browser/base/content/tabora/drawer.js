@@ -203,7 +203,7 @@ Object.assign(Tabora, {
       });
       b.append(ctl);
       b.addEventListener("click", () => {
-        if (d.editing) {
+        if (d.editing || this._railDragged) {
           return;
         }
         if (d.open && d.section === id) {
@@ -212,37 +212,12 @@ Object.assign(Tabora, {
           this.openDrawer(id);
         }
       });
-      // Перестановка в режиме правки
-      b.draggable = true;
-      b.addEventListener("dragstart", e => {
-        if (!d.editing || isHidden) {
-          e.preventDefault();
+      // Перестановка в режиме правки: тянем указателем, соседи раздвигаются
+      b.addEventListener("pointerdown", e => {
+        if (!d.editing || isHidden || e.button !== 0 || e.target.closest(".rail-ctl")) {
           return;
         }
-        e.dataTransfer.setData("tabora/section", id);
-        e.dataTransfer.effectAllowed = "move";
-        b.setAttribute("dragging", "true");
-      });
-      b.addEventListener("dragend", () => b.removeAttribute("dragging"));
-      b.addEventListener("dragover", e => {
-        if (d.editing && !isHidden && e.dataTransfer.types.includes("tabora/section")) {
-          e.preventDefault();
-          const r = b.getBoundingClientRect();
-          b.setAttribute("drop", e.clientY < r.top + r.height / 2 ? "before" : "after");
-        }
-      });
-      b.addEventListener("dragleave", () => b.removeAttribute("drop"));
-      b.addEventListener("drop", e => {
-        const from = e.dataTransfer.getData("tabora/section");
-        const side = b.getAttribute("drop");
-        b.removeAttribute("drop");
-        if (!from || from === id) {
-          return;
-        }
-        const list = visible.filter(x => x !== from);
-        const at = list.indexOf(id) + (side === "after" ? 1 : 0);
-        list.splice(at, 0, from);
-        this.saveSections(list);
+        this.railDrag(b, e, visible);
       });
       return b;
     };
@@ -250,6 +225,68 @@ Object.assign(Tabora, {
     if (d.editing) {
       hidden.forEach(id => box.append(make(id, true)));
     }
+  },
+
+  railDrag(item, e, order) {
+    const box = item.parentNode;
+    const items = [...box.querySelectorAll('.rail-item:not([data-hidden])')];
+    const from = items.indexOf(item);
+    const startY = e.clientY;
+    const step = item.getBoundingClientRect().height + 6;
+    let to = from;
+    let moved = false;
+    const place = () => {
+      items.forEach((it, i) => {
+        if (it === item) {
+          return;
+        }
+        let shift = 0;
+        if (from < to && i > from && i <= to) {
+          shift = -step;
+        } else if (to < from && i >= to && i < from) {
+          shift = step;
+        }
+        it.setAttribute("shifting", "true");
+        it.style.transform = shift ? `translateY(${shift}px)` : "";
+      });
+    };
+    const onMove = ev => {
+      const dy = ev.clientY - startY;
+      if (!moved && Math.abs(dy) < 4) {
+        return;
+      }
+      if (!moved) {
+        moved = true;
+        item.setAttribute("dragging", "true");
+        item.setPointerCapture(e.pointerId);
+      }
+      item.style.transform = `translateY(${dy}px)`;
+      to = Math.max(0, Math.min(items.length - 1, from + Math.round(dy / step)));
+      place();
+    };
+    const onUp = () => {
+      item.removeEventListener("pointermove", onMove);
+      item.removeEventListener("pointerup", onUp);
+      item.removeEventListener("pointercancel", onUp);
+      items.forEach(it => {
+        it.style.transform = "";
+        it.removeAttribute("shifting");
+      });
+      item.removeAttribute("dragging");
+      if (moved && to !== from) {
+        const list = [...order];
+        const [id] = list.splice(from, 1);
+        list.splice(to, 0, id);
+        this.saveSections(list);
+      }
+      if (moved) {
+        this._railDragged = true;
+        setTimeout(() => (this._railDragged = false), 0);
+      }
+    };
+    item.addEventListener("pointermove", onMove);
+    item.addEventListener("pointerup", onUp);
+    item.addEventListener("pointercancel", onUp);
   },
 
   setDrawerEditing(on) {

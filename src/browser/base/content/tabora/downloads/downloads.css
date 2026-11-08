@@ -161,8 +161,21 @@ kbd { font: 500 10px/1 var(--mono); color: var(--text-4); border: 1px solid var(
   display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; flex-shrink: 0;
 }
 .thumb img { width: 100%; height: 100%; object-fit: cover; }
-.thumb img.icon { width: 34px; height: 34px; object-fit: contain; }
-.thumb .ext { font: 800 11px/1 var(--mono); text-transform: uppercase; color: var(--text-2); }
+.plate {
+  --k: #9aa3b2;
+  width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  background: color-mix(in srgb, var(--k) 14%, var(--thumb-bg)); color: color-mix(in srgb, var(--k) 85%, var(--text));
+}
+.plate[data-kind="doc"] { --k: #7cc4ff; }
+.plate[data-kind="archive"] { --k: #ff9f5a; }
+.plate[data-kind="app"] { --k: #c39bff; }
+.plate[data-kind="video"] { --k: #ff8fd1; }
+.plate[data-kind="image"] { --k: #7ddf6a; }
+.plate svg { width: 24px; height: 24px; }
+.plate .ext { font: 800 9px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.04em; color: inherit; opacity: 0.9; max-width: 48px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (prefers-color-scheme: light) {
+  .plate { background: color-mix(in srgb, var(--k) 22%, #ffffff); color: color-mix(in srgb, var(--k) 55%, #16171a); }
+}
 
 .info { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .name-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -205,7 +218,9 @@ kbd { font: 500 10px/1 var(--mono); color: var(--text-4); border: 1px solid var(
 /* Плитки */
 .page[data-view="grid"] .item { grid-template-columns: 1fr; grid-template-rows: auto auto; gap: 10px; padding: 10px; align-items: start; }
 .page[data-view="grid"] .thumb { width: 100%; height: 132px; border-radius: 10px; }
-.page[data-view="grid"] .thumb img.icon { width: 48px; height: 48px; }
+.page[data-view="grid"] .plate { gap: 8px; }
+.page[data-view="grid"] .plate svg { width: 44px; height: 44px; }
+.page[data-view="grid"] .plate .ext { font-size: 12px; max-width: 120px; }
 .page[data-view="grid"] .actions { position: absolute; top: 14px; right: 14px; padding: 2px; background: var(--card-2); border: 1px solid var(--line-2); border-radius: 9px; opacity: 0; transition: opacity var(--ease); }
 .page[data-view="grid"] .item:hover .actions, .page[data-view="grid"] .item:focus-within .actions { opacity: 1; }
 .page[data-view="grid"] .act { padding: 0; width: 30px; height: 30px; }
