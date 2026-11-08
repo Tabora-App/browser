@@ -13,7 +13,15 @@ Object.assign(Tabora, {
   walletStore() {
     if (!this._walletMod) {
       this._walletMod = ChromeUtils.importESModule("chrome://browser/content/tabora/wallet/WalletStore.sys.mjs");
-      Services.obs.addObserver(() => this.drawerDirty("wallet"), this._walletMod.WalletStore.TOPIC);
+      Services.obs.addObserver((subject, topic, what) => {
+        this.drawerDirty("wallet");
+        if (what === "locked" || what === "destroyed") {
+          const pill = document.getElementById("tabora-wallet-total");
+          if (pill) {
+            pill.hidden = true;
+          }
+        }
+      }, this._walletMod.WalletStore.TOPIC);
       window.addEventListener("blur", () => this.walletHideSecrets());
     }
     return this._walletMod;
@@ -649,9 +657,30 @@ Object.assign(Tabora, {
         w.balances[`${id}:${addr}`] = { error: e.message, at: Date.now() };
       }
     }));
+    this.updateWalletCard();
     if (seq === this.drawer.seq && this.drawer.open && this.drawer.section === "wallet") {
       this.renderDrawer();
     }
+  },
+
+  /** Сумма активов на карточке сайдбара (только пока кошелёк разблокирован). */
+  updateWalletCard() {
+    const pill = document.getElementById("tabora-wallet-total");
+    if (!pill) {
+      return;
+    }
+    const { WalletStore } = this.walletStore();
+    if (!WalletStore.exists || !WalletStore.unlocked) {
+      pill.hidden = true;
+      return;
+    }
+    const assets = this.walletAssets();
+    if (assets.some(a => a.pending)) {
+      return;
+    }
+    const total = assets.reduce((n, a) => n + (a.usd || 0), 0);
+    pill.textContent = `$${total.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+    pill.hidden = false;
   },
 
   /* ---- Получить ------------------------------------------------------------- */

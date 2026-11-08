@@ -972,6 +972,7 @@ var Tabora = {
     const map = [
       ["#tabora-compact-search", "Адрес или поиск", "⌘K"],
       ["#vertical-tabs-newtab-button", "Новая вкладка", "⌘T"],
+      ["#tabora-wallet-card", "Кошелёк", document.getElementById("tabora-wallet-total")?.textContent || "⌘⇧W"],
       ["#tabora-mail", "Почта и алиасы", "⌘⇧M"],
       ["#tabora-downloads", "Загрузки", document.getElementById("tabora-downloads-note")?.textContent || "⌘⇧J"],
       ["#tabora-memory", `Память · ${document.getElementById("tabora-memory-value")?.textContent || ""}`, document.getElementById("tabora-memory-note")?.textContent || ""],
@@ -990,7 +991,7 @@ var Tabora = {
       return;
     }
     const info = this.tipTextFor(e.target);
-    const el = info ? e.target.closest(".tabbrowser-tab, .tabora-space, #tabora-compact-search, #vertical-tabs-newtab-button, #tabora-mail, #tabora-downloads, #tabora-memory, #tabora-sidebar-toggle") : null;
+    const el = info ? e.target.closest(".tabbrowser-tab, .tabora-space, #tabora-compact-search, #vertical-tabs-newtab-button, #tabora-wallet-card, #tabora-mail, #tabora-downloads, #tabora-memory, #tabora-sidebar-toggle") : null;
     if (!el || el === this.tipTarget) {
       return;
     }
@@ -1082,11 +1083,18 @@ var Tabora = {
       this.html("span", { class: "kbd" }, "⌘⇧M"),
     ]);
     mail.addEventListener("click", () => this.openMail());
+    const walletCard = this.html("button", { id: "tabora-wallet-card", title: "Кошелёк (⌘⇧W)" }, null, [
+      this.svg(["M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v2", "M3 7v10a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-7a1 1 0 0 0-1-1H5a2 2 0 0 1-2-2z", "M16 14h.01"], 16, 1.8),
+      this.html("span", {}, "Кошелёк"),
+      this.html("span", { class: "pill mono", id: "tabora-wallet-total", hidden: "true" }),
+      this.html("span", { class: "kbd" }, "⌘⇧W"),
+    ]);
+    walletCard.addEventListener("click", () => this.toggleDrawer("wallet"));
     const downloads = this.buildDownloadsCard();
     if (sidebar) {
-      sidebar.after(memory, mail, downloads);
+      sidebar.after(memory, walletCard, mail, downloads);
     } else {
-      toolbox.append(memory, mail, downloads);
+      toolbox.append(memory, walletCard, mail, downloads);
     }
   },
 

@@ -227,8 +227,9 @@
 #navigator-toolbox > #tabora-pinned { order: 2; }
 #navigator-toolbox > #sidebar-container { order: 3 !important; }
 #navigator-toolbox > #tabora-memory { order: 4; }
-#navigator-toolbox > #tabora-mail { order: 5; }
-#navigator-toolbox > #tabora-downloads { order: 6; }
+#navigator-toolbox > #tabora-wallet-card { order: 5; }
+#navigator-toolbox > #tabora-mail { order: 6; }
+#navigator-toolbox > #tabora-downloads { order: 7; }
 
 /* Строка 1: кнопки окна, назад, вперёд, обновить, меню. Строка 2: адрес. */
 #nav-bar {
@@ -731,6 +732,7 @@ sidebar-main {
   color: var(--tabora-text-4);
 }
 
+#tabora-wallet-card,
 #tabora-mail {
   display: flex;
   align-items: center;
@@ -749,20 +751,24 @@ sidebar-main {
   -moz-window-dragging: no-drag;
 }
 
+#tabora-wallet-card:hover,
 #tabora-mail:hover {
   border-color: var(--tabora-line);
   background: var(--tabora-panel);
 }
 
+#tabora-wallet-card svg,
 #tabora-mail svg {
   color: var(--tabora-text-3);
   flex-shrink: 0;
 }
 
+#tabora-wallet-card > span:first-of-type,
 #tabora-mail > span:first-of-type {
   flex: 1;
 }
 
+#tabora-wallet-card .kbd,
 #tabora-mail .kbd {
   font: 500 10px/1 var(--tabora-mono);
   color: var(--tabora-text-5);
@@ -775,6 +781,19 @@ sidebar-main {
   background: var(--tabora-accent);
   border-radius: 10px;
   padding: 4px 8px;
+}
+
+#tabora-wallet-card .pill {
+  font: 500 11px/1 var(--tabora-mono);
+  color: var(--tabora-text-2);
+  background: var(--tabora-raised);
+  border-radius: 7px;
+  padding: 4px 7px;
+  margin-inline-end: 4px;
+}
+
+#tabora-wallet-card .pill[hidden] {
+  display: none;
 }
 
 /* ---- Карточка загрузок ------------------------------------------------- */
@@ -942,7 +961,7 @@ sidebar-main {
 
 /* ---- Свёрнутый сайдбар ------------------------------------------------ */
 
-#navigator-toolbox > #tabora-sidebar-foot { order: 7; }
+#navigator-toolbox > #tabora-sidebar-foot { order: 8; }
 
 :root[tabora-sidebar-animating] #navigator-toolbox {
   transition: width 220ms cubic-bezier(0.2, 0, 0, 1), min-width 220ms cubic-bezier(0.2, 0, 0, 1);
@@ -1104,6 +1123,7 @@ sidebar-main {
 }
 
 /* Почта и загрузки: значок, бейдж, тонкая полоска прогресса */
+:root[tabora-sidebar="compact"] #tabora-wallet-card,
 :root[tabora-sidebar="compact"] #tabora-mail,
 :root[tabora-sidebar="compact"] #tabora-downloads .head {
   justify-content: center;
@@ -1111,6 +1131,7 @@ sidebar-main {
   gap: 0;
 }
 
+:root[tabora-sidebar="compact"] #tabora-wallet-card > span,
 :root[tabora-sidebar="compact"] #tabora-mail > span,
 :root[tabora-sidebar="compact"] #tabora-downloads .title,
 :root[tabora-sidebar="compact"] #tabora-downloads .head .kbd,
@@ -1195,6 +1216,7 @@ sidebar-main {
   font-size: 11px;
 }
 
+:root[tabora-sidebar="compact"] #tabora-wallet-card,
 :root[tabora-sidebar="compact"] #tabora-mail,
 :root[tabora-sidebar="compact"] #tabora-downloads {
   width: 44px;
