@@ -1,0 +1,32 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Диалог «О программе» в цветах Tabora */
+#aboutDialogContainer {
+  background-color: #0b0c0e;
+  color: #ecedef;
+  color-scheme: dark;
+}
+
+#bottomBox {
+  background-color: #121317;
+  border-top: 1px solid #23262c;
+  padding: 15px 10px;
+}
+
+#rightBox {
+  background-size: auto 44px;
+  margin-inline: 30px;
+  padding-top: 64px;
+}
+
+/* Текст про сообщество Mozilla и ссылки на пожертвования скрыты,
+   пока нет собственных строк локализации */
+#communityDesc,
+#communityExperimentalDesc,
+#contributeDesc,
+#contributeDescReferrals,
+#helpus {
+  display: none;
+}
