@@ -461,7 +461,7 @@ Object.assign(Tabora, {
         const bal = w.balances[`${id}:${address}`];
         const price = w.prices?.[chain.symbol] || 0;
         const row = h("div", { class: "w-chain", "data-chain": id, style: `--c:${chain.color}` }, null, [
-          h("span", { class: "w-dot" }),
+          h("img", { class: "w-logo", src: chain.logo, alt: "" }),
           h("div", { class: "w-chain-text" }, null, [h("b", {}, chain.name), h("span", { class: "w-addr mono", title: address }, this.shortAddr(address))]),
           h("div", { class: "w-chain-bal" }, null, [
             h("b", { class: `w-native${bal?.error ? " err" : ""}` }, bal ? (bal.error ? "нет связи" : `${bal.native} ${chain.symbol}`) : "…"),
@@ -510,12 +510,12 @@ Object.assign(Tabora, {
       const address = account.addresses[id];
       const bal = this.wallet.balances[`${id}:${address}`];
       if (!bal || bal.error) {
-        out.push({ key: `${id}:native`, chain: id, chainName: chain.name, color: chain.color, symbol: chain.symbol, amount: "0", usd: 0, native: true, pending: !bal, error: bal?.error });
+        out.push({ key: `${id}:native`, chain: id, chainName: chain.name, color: chain.color, symbol: chain.symbol, logo: chain.logo, chainLogo: chain.logo, amount: "0", usd: 0, native: true, pending: !bal, error: bal?.error });
         continue;
       }
-      out.push({ key: `${id}:native`, chain: id, chainName: chain.name, color: chain.color, symbol: chain.symbol, amount: bal.native, usd: parseFloat(bal.native) * (prices[chain.symbol] || 0), native: true, address });
+      out.push({ key: `${id}:native`, chain: id, chainName: chain.name, color: chain.color, symbol: chain.symbol, logo: chain.logo, chainLogo: chain.logo, amount: bal.native, usd: parseFloat(bal.native) * (prices[chain.symbol] || 0), native: true, address });
       for (const t of bal.tokens || []) {
-        out.push({ key: `${id}:${t.address || t.mint}`, chain: id, chainName: chain.name, color: chain.color, symbol: t.symbol, amount: t.amount, usd: parseFloat(t.amount) * (prices[t.symbol] || 0), token: t, address });
+        out.push({ key: `${id}:${t.address || t.mint}`, chain: id, chainName: chain.name, color: chain.color, symbol: t.symbol, logo: t.logo, chainLogo: chain.logo, amount: t.amount, usd: parseFloat(t.amount) * (prices[t.symbol] || 0), token: t, address });
       }
     }
     out.sort((a, b) => (b.usd || 0) - (a.usd || 0) || (parseFloat(b.amount) || 0) - (parseFloat(a.amount) || 0));
@@ -526,7 +526,10 @@ Object.assign(Tabora, {
     const h = (t, x, y, c) => this.html(t, x, y, c);
     const { WalletStore, CHAINS } = this.walletStore();
     const row = h("div", { class: "w-asset", style: `--c:${a.color}` }, null, [
-      h("span", { class: "w-coin" }, null, [h("b", {}, a.symbol.slice(0, 1)), h("i", { class: "w-coin-chain" })]),
+      h("span", { class: "w-coin" }, null, [
+        a.logo ? h("img", { src: a.logo, alt: "" }) : h("b", {}, a.symbol.slice(0, 1)),
+        h("i", { class: "w-coin-chain" }, null, a.chainLogo ? [h("img", { src: a.chainLogo, alt: "" })] : []),
+      ]),
       h("div", { class: "w-chain-text" }, null, [h("b", {}, a.symbol), h("span", { class: "w-sub-line" }, a.native ? a.chainName : `${a.chainName}${a.token?.custom ? " · свой токен" : ""}`)]),
       h("div", { class: "w-chain-bal" }, null, [
         h("b", { class: `w-native${a.error ? " err" : ""}` }, a.pending ? "…" : a.error ? "нет связи" : a.amount),
@@ -666,7 +669,7 @@ Object.assign(Tabora, {
     const copy = this.wButton("Копировать адрес", "primary", () => this.copyText(address, "Адрес скопирован"));
     const explorer = this.wButton("В обозревателе", "ghost", () => this.openInSpace(chain.explorer + address, true));
     return h("div", { class: "w-receive" }, null, [
-      h("div", { class: "w-flow-head" }, null, [h("b", {}, `Получить ${chain.symbol}`), back]),
+      h("div", { class: "w-flow-head" }, null, [h("span", { class: "w-title-logo" }, null, [h("img", { class: "w-logo", src: chain.logo, alt: "" }), h("b", {}, `Получить ${chain.symbol}`)]), back]),
       h("p", { class: "w-sub" }, `${chain.name}${chain.sameAs ? " и другие сети EVM с тем же адресом" : ""} · ${account.name}`),
       qr,
       h("div", { class: "w-address mono", title: address }, address),
@@ -748,7 +751,7 @@ Object.assign(Tabora, {
           this.wallet.balances = {};
         }
       }), 13);
-      const row = h("div", { class: "w-node", style: `--c:${chain.color}` }, null, [h("span", { class: "w-dot" }), h("span", { class: "w-node-name" }, chain.name), select, add]);
+      const row = h("div", { class: "w-node", style: `--c:${chain.color}` }, null, [h("img", { class: "w-logo small", src: chain.logo, alt: "" }), h("span", { class: "w-node-name" }, chain.name), select, add]);
       nodes.append(row);
       if (window.TaboraSelect) {
         window.TaboraSelect.enhance(select, { compact: true });

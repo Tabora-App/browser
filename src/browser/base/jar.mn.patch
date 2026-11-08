@@ -2,7 +2,7 @@ diff --git a/browser/base/jar.mn b/browser/base/jar.mn
 index b2b5db6040..fbeefdc452 100644
 --- a/browser/base/jar.mn
 +++ b/browser/base/jar.mn
-@@ -33,6 +33,41 @@ browser.jar:
+@@ -33,6 +33,51 @@ browser.jar:
          content/browser/aboutTabCrashed.xhtml         (content/aboutTabCrashed.xhtml)
          content/browser/blanktab.html                 (content/blanktab.html)
          content/browser/browser.js                    (content/browser.js)
@@ -25,6 +25,16 @@ index b2b5db6040..fbeefdc452 100644
 +        content/browser/tabora/wallet/WalletStore.sys.mjs  (content/tabora/wallet/WalletStore.sys.mjs)
 +        content/browser/tabora/wallet/wallet.js  (content/tabora/wallet/wallet.js)
 +        content/browser/tabora/wallet/wallet.css  (content/tabora/wallet/wallet.css)
++        content/browser/tabora/wallet/logos/ethereum.png  (content/tabora/wallet/logos/ethereum.png)
++        content/browser/tabora/wallet/logos/bitcoin.png  (content/tabora/wallet/logos/bitcoin.png)
++        content/browser/tabora/wallet/logos/solana.png  (content/tabora/wallet/logos/solana.png)
++        content/browser/tabora/wallet/logos/tron.png  (content/tabora/wallet/logos/tron.png)
++        content/browser/tabora/wallet/logos/polygon.png  (content/tabora/wallet/logos/polygon.png)
++        content/browser/tabora/wallet/logos/base.png  (content/tabora/wallet/logos/base.png)
++        content/browser/tabora/wallet/logos/arbitrum.png  (content/tabora/wallet/logos/arbitrum.png)
++        content/browser/tabora/wallet/logos/usdt.png  (content/tabora/wallet/logos/usdt.png)
++        content/browser/tabora/wallet/logos/usdc.png  (content/tabora/wallet/logos/usdc.png)
++        content/browser/tabora/wallet/logos/dai.png  (content/tabora/wallet/logos/dai.png)
 +        content/browser/tabora/actors/TaboraCookiesChild.sys.mjs  (content/tabora/actors/TaboraCookiesChild.sys.mjs)
 +        content/browser/tabora/actors/TaboraCookiesParent.sys.mjs  (content/tabora/actors/TaboraCookiesParent.sys.mjs)
 +        content/browser/tabora/drawer.css  (content/tabora/drawer.css)

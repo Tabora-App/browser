@@ -21,28 +21,30 @@ const NODES_PREF = "tabora.wallet.nodes";
 const b58check = base58check(sha256);
 export const qrcodegen = C.qrcodegen;
 
+const LOGO = name => `chrome://browser/content/tabora/wallet/logos/${name}.png`;
+
 export const CHAINS = {
-  ethereum: { id: "ethereum", name: "Ethereum", symbol: "ETH", kind: "evm", chainId: 1, decimals: 18, color: "#8a92ff", path: "m/44'/60'/0'/0/{i}",
+  ethereum: { id: "ethereum", logo: LOGO("ethereum"), name: "Ethereum", symbol: "ETH", kind: "evm", chainId: 1, decimals: 18, color: "#8a92ff", path: "m/44'/60'/0'/0/{i}",
     nodes: ["https://ethereum-rpc.publicnode.com", "https://cloudflare-eth.com", "https://rpc.ankr.com/eth", "https://eth.llamarpc.com"],
     explorer: "https://etherscan.io/address/",
-    tokens: [{ symbol: "USDT", address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6 }, { symbol: "USDC", address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6 }, { symbol: "DAI", address: "0x6B175474E89094C44Da98b954EedeAC495271d0F", decimals: 18 }] },
-  base: { id: "base", name: "Base", symbol: "ETH", kind: "evm", chainId: 8453, decimals: 18, color: "#4f7bff", path: "m/44'/60'/0'/0/{i}", sameAs: "ethereum",
+    tokens: [{ symbol: "USDT", logo: LOGO("usdt"), address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6 }, { symbol: "USDC", logo: LOGO("usdc"), address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6 }, { symbol: "DAI", logo: LOGO("dai"), address: "0x6B175474E89094C44Da98b954EedeAC495271d0F", decimals: 18 }] },
+  base: { id: "base", logo: LOGO("base"), name: "Base", symbol: "ETH", kind: "evm", chainId: 8453, decimals: 18, color: "#4f7bff", path: "m/44'/60'/0'/0/{i}", sameAs: "ethereum",
     nodes: ["https://base-rpc.publicnode.com", "https://mainnet.base.org", "https://base.llamarpc.com"], explorer: "https://basescan.org/address/",
-    tokens: [{ symbol: "USDC", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 }, { symbol: "USDT", address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 }] },
-  arbitrum: { id: "arbitrum", name: "Arbitrum", symbol: "ETH", kind: "evm", chainId: 42161, decimals: 18, color: "#6fb6ff", path: "m/44'/60'/0'/0/{i}", sameAs: "ethereum",
+    tokens: [{ symbol: "USDC", logo: LOGO("usdc"), address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 }, { symbol: "USDT", logo: LOGO("usdt"), address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 }] },
+  arbitrum: { id: "arbitrum", logo: LOGO("arbitrum"), name: "Arbitrum", symbol: "ETH", kind: "evm", chainId: 42161, decimals: 18, color: "#6fb6ff", path: "m/44'/60'/0'/0/{i}", sameAs: "ethereum",
     nodes: ["https://arbitrum-one-rpc.publicnode.com", "https://arb1.arbitrum.io/rpc"], explorer: "https://arbiscan.io/address/",
-    tokens: [{ symbol: "USDT", address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 }, { symbol: "USDC", address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6 }] },
-  polygon: { id: "polygon", name: "Polygon", symbol: "POL", kind: "evm", chainId: 137, decimals: 18, color: "#c39bff", path: "m/44'/60'/0'/0/{i}", sameAs: "ethereum",
+    tokens: [{ symbol: "USDT", logo: LOGO("usdt"), address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 }, { symbol: "USDC", logo: LOGO("usdc"), address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6 }] },
+  polygon: { id: "polygon", logo: LOGO("polygon"), name: "Polygon", symbol: "POL", kind: "evm", chainId: 137, decimals: 18, color: "#c39bff", path: "m/44'/60'/0'/0/{i}", sameAs: "ethereum",
     nodes: ["https://polygon-bor-rpc.publicnode.com", "https://polygon-rpc.com"], explorer: "https://polygonscan.com/address/",
-    tokens: [{ symbol: "USDT", address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", decimals: 6 }, { symbol: "USDC", address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6 }] },
-  bitcoin: { id: "bitcoin", name: "Bitcoin", symbol: "BTC", kind: "btc", decimals: 8, color: "#ff9f5a", path: "m/84'/0'/0'/0/{i}",
+    tokens: [{ symbol: "USDT", logo: LOGO("usdt"), address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", decimals: 6 }, { symbol: "USDC", logo: LOGO("usdc"), address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6 }] },
+  bitcoin: { id: "bitcoin", logo: LOGO("bitcoin"), name: "Bitcoin", symbol: "BTC", kind: "btc", decimals: 8, color: "#ff9f5a", path: "m/84'/0'/0'/0/{i}",
     nodes: ["https://mempool.space/api", "https://blockstream.info/api"], explorer: "https://mempool.space/address/" },
-  solana: { id: "solana", name: "Solana", symbol: "SOL", kind: "sol", decimals: 9, color: "#5ee0d0", path: "m/44'/501'/{i}'/0'",
+  solana: { id: "solana", logo: LOGO("solana"), name: "Solana", symbol: "SOL", kind: "sol", decimals: 9, color: "#5ee0d0", path: "m/44'/501'/{i}'/0'",
     nodes: ["https://api.mainnet-beta.solana.com", "https://solana-rpc.publicnode.com", "https://rpc.ankr.com/solana"], explorer: "https://solscan.io/account/",
-    tokens: [{ symbol: "USDC", mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6 }, { symbol: "USDT", mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", decimals: 6 }] },
-  tron: { id: "tron", name: "TRON", symbol: "TRX", kind: "tron", decimals: 6, color: "#ff7b7b", path: "m/44'/195'/0'/0/{i}",
+    tokens: [{ symbol: "USDC", logo: LOGO("usdc"), mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6 }, { symbol: "USDT", logo: LOGO("usdt"), mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", decimals: 6 }] },
+  tron: { id: "tron", logo: LOGO("tron"), name: "TRON", symbol: "TRX", kind: "tron", decimals: 6, color: "#ff7b7b", path: "m/44'/195'/0'/0/{i}",
     nodes: ["https://api.trongrid.io", "https://tron-rpc.publicnode.com/jsonrpc"], explorer: "https://tronscan.org/#/address/",
-    tokens: [{ symbol: "USDT", address: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", decimals: 6 }, { symbol: "USDC", address: "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8", decimals: 6 }] },
+    tokens: [{ symbol: "USDT", logo: LOGO("usdt"), address: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", decimals: 6 }, { symbol: "USDC", logo: LOGO("usdc"), address: "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8", decimals: 6 }] },
 };
 export const CHAIN_ORDER = ["ethereum", "base", "arbitrum", "polygon", "bitcoin", "solana", "tron"];
 
@@ -669,7 +671,7 @@ export const WalletStore = {
           const data = "0x70a08231" + address.slice(2).toLowerCase().padStart(64, "0");
           const hex = await this.evm(chainId, "eth_call", [{ to: t.address, data }, "latest"]);
           const v = BigInt(hex === "0x" ? 0 : hex);
-          out.tokens.push({ symbol: t.symbol, amount: this.format(v, t.decimals, 2), raw: v.toString(), decimals: t.decimals, address: t.address, custom: !!t.custom });
+          out.tokens.push({ symbol: t.symbol, logo: t.logo, amount: this.format(v, t.decimals, 2), raw: v.toString(), decimals: t.decimals, address: t.address, custom: !!t.custom });
         } catch (e) {}
       }));
     } else if (chain.kind === "btc") {
@@ -684,7 +686,7 @@ export const WalletStore = {
         const held = new Map((t.result?.value || []).map(acc => [acc.account.data.parsed.info.mint, acc.account.data.parsed.info]));
         for (const known of this.tokensFor(chainId)) {
           const info = held.get(known.mint);
-          out.tokens.push({ symbol: known.symbol, amount: info ? info.tokenAmount.uiAmountString : "0", raw: info?.tokenAmount.amount || "0", mint: known.mint, decimals: known.decimals, custom: !!known.custom });
+          out.tokens.push({ symbol: known.symbol, logo: known.logo, amount: info ? info.tokenAmount.uiAmountString : "0", raw: info?.tokenAmount.amount || "0", mint: known.mint, decimals: known.decimals, custom: !!known.custom });
         }
       } catch (e) {}
     } else if (chain.kind === "tron") {
@@ -704,7 +706,7 @@ export const WalletStore = {
               try {
                 const data = "0x70a08231" + hex.slice(2).padStart(64, "0");
                 const v = BigInt((await this.evm(chainId, "eth_call", [{ to: this.tronHex(t.address), data }, "latest"], { url })) || 0);
-                out.tokens.push({ symbol: t.symbol, amount: this.format(v, t.decimals, 2), raw: v.toString(), decimals: t.decimals, address: t.address, custom: !!t.custom });
+                out.tokens.push({ symbol: t.symbol, logo: t.logo, amount: this.format(v, t.decimals, 2), raw: v.toString(), decimals: t.decimals, address: t.address, custom: !!t.custom });
               } catch (e) {}
             }
           } else {
@@ -719,7 +721,7 @@ export const WalletStore = {
             }
             for (const known of this.tokensFor(chainId)) {
               const raw = held.get(known.address) || "0";
-              out.tokens.push({ symbol: known.symbol, amount: this.format(BigInt(raw), known.decimals, 2), raw, decimals: known.decimals, address: known.address, custom: !!known.custom });
+              out.tokens.push({ symbol: known.symbol, logo: known.logo, amount: this.format(BigInt(raw), known.decimals, 2), raw, decimals: known.decimals, address: known.address, custom: !!known.custom });
             }
           }
           if (i !== index) {
