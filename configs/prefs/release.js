@@ -67,3 +67,10 @@ pref("browser.newtabpage.enabled", false);
 pref("browser.startup.page", 1);
 pref("browser.startup.homepage", "about:blank");
 pref("browser.newtab.preload", false);
+
+// Язык интерфейса: русский. Перевод встроен языковым пакетом (tools/langpack.py),
+// собранным из официальной локализации Firefox с брендом Tabora, поэтому подпись
+// Mozilla на нём не действует и для языковых пакетов не требуется.
+pref("intl.locale.requested", "ru,en-US");
+pref("extensions.langpacks.signatures.required", false);
+pref("extensions.installDistroAddons", true);

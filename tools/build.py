@@ -505,9 +505,29 @@ def cmd_run(args: argparse.Namespace) -> None:
     mach(["run", "--noprofile", *args.args], config, brand)
 
 
+def install_langpacks(config: dict, brand: str) -> None:
+    """Встроенные языковые пакеты (см. tools/langpack.py) кладутся в distribution/extensions
+    собранного приложения до упаковки: package-manifest забирает distribution/* целиком."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    import langpack  # noqa: E402
+
+    version = (BUILD_STATE / "engine-version").read_text().strip()
+    branding = ENGINE / "browser" / "branding" / brand
+    dist_dir = objdir() / "dist"
+    targets = [dist_dir / "bin"]
+    targets += [app / "Contents" / "Resources" for app in dist_dir.glob("*.app")]
+    for locale in config.get("locales", ["ru"]):
+        xpi = langpack.build_langpack(locale, version, branding, BUILD_STATE / "langpacks")
+        for res in targets:
+            if res.exists():
+                langpack.install_into(res, xpi)
+        log(f"языковой пакет {locale} → distribution/extensions")
+
+
 def cmd_package(args: argparse.Namespace) -> None:
     config = load_config()
     brand = brand_name(config, args.brand)
+    install_langpacks(config, brand)
     mach(["package"], config, brand)
     DIST.mkdir(exist_ok=True)
     dist_dir = objdir() / "dist"
