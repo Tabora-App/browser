@@ -311,7 +311,7 @@ const App = {
       }
       const total = ds.reduce((s, d) => s + (d.target?.size || d.totalBytes || d.currentBytes || 0), 0);
       const group = el("section", { class: "group" }, [
-        el("div", { class: "group-title" }, [title, el("span", { text: `${ds.length} · ${fmtSize(total)}` })]),
+        el("div", { class: "group-title" }, [title, el("span", { text: total ? `${ds.length} · ${fmtSize(total)}` : String(ds.length) })]),
         el("div", { class: "group-items" }, ds.map(d => this.node(d))),
       ]);
       list.append(group);
@@ -352,9 +352,6 @@ const App = {
       thumb.append(img);
     } else {
       thumb.append(this.iconFor(download));
-    }
-    if (state === "active" || state === "paused") {
-      thumb.append(el("span", { class: "ring", style: `--p:${download.progress || 0}` }));
     }
 
     const info = el("div", { class: "info" }, [
@@ -478,10 +475,6 @@ const App = {
   updateNode(d, entry) {
     const node = entry.node;
     const state = stateOf(d);
-    const ring = node.querySelector(".ring");
-    if (ring) {
-      ring.style.setProperty("--p", d.progress || 0);
-    }
     const bar = node.querySelector(".progress");
     if (bar) {
       bar.style.setProperty("--p", d.progress || 0);

@@ -163,13 +163,6 @@ kbd { font: 500 10px/1 var(--mono); color: var(--text-4); border: 1px solid var(
 .thumb img { width: 100%; height: 100%; object-fit: cover; }
 .thumb img.icon { width: 34px; height: 34px; object-fit: contain; }
 .thumb .ext { font: 800 11px/1 var(--mono); text-transform: uppercase; color: var(--text-2); }
-.thumb .ring {
-  position: absolute; inset: 0; border-radius: 12px;
-  background: conic-gradient(var(--accent) calc(var(--p, 0) * 1%), transparent 0);
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
-}
-.item[data-state="paused"] .thumb .ring { opacity: 0.5; }
 
 .info { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .name-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
