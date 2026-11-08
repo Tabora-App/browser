@@ -1,0 +1,12 @@
+diff --git a/toolkit/themes/shared/desktop-jar.inc.mn b/toolkit/themes/shared/desktop-jar.inc.mn
+index 88fae08bbf..a5c28c155b 100644
+--- a/toolkit/themes/shared/desktop-jar.inc.mn
++++ b/toolkit/themes/shared/desktop-jar.inc.mn
+@@ -59,6 +59,7 @@
+   skin/classic/global/dirListing/up.png                    (../../shared/dirListing/up.png)
+ #endif
+   skin/classic/global/in-content/common-shared.css         (../../shared/in-content/common-shared.css)
++  skin/classic/global/in-content/tabora-incontent.css      (../../shared/in-content/tabora-incontent.css)
+   skin/classic/global/in-content/info-pages.css            (../../shared/in-content/info-pages.css)
+   skin/classic/global/in-content/wifi.svg                  (../../shared/in-content/wifi.svg)
+   skin/classic/global/icons/arrow-left.svg                 (../../shared/icons/arrow-left.svg)

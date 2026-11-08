@@ -1,0 +1,181 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Tabora: общий стиль всех служебных страниц (about:preferences, about:addons,
+ * about:downloads, about:logins, about:sessionrestore, страницы ошибок и т. д.).
+ * Подключается из in-content/common-shared.css, поэтому действует везде, где
+ * Firefox использует свой in-content дизайн. Токены Firefox объявлены в @layer,
+ * обычные объявления здесь их перекрывают. Тёмная и светлая схемы следуют
+ * выбору «Внешний вид веб-сайтов». */
+
+@import url("chrome://browser/content/tabora/fonts.css");
+
+:root {
+  --tabora-bg: #0f1013;
+  --tabora-card: #121317;
+  --tabora-card-border: #23262c;
+  --tabora-field: #1b1d22;
+  --tabora-field-border: #2a2d34;
+  --tabora-raised: #23262c;
+  --tabora-raised-2: #2a2d34;
+  --tabora-line: #2e3138;
+  --tabora-text: #ecedef;
+  --tabora-text-2: #c9ccd3;
+  --tabora-text-3: #9a9ea8;
+  --tabora-text-4: #868b95;
+  --tabora-text-strong: #ffffff;
+  --tabora-accent: #c8f25a;
+  --tabora-accent-hover: #d4f87a;
+  --tabora-accent-active: #bce64c;
+  --tabora-on-accent: #0b0c0e;
+  --tabora-danger: #ffb4a3;
+  --tabora-font: "Manrope", -apple-system, system-ui, sans-serif;
+  --tabora-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --tabora-deemphasized-border: #1b1d22;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --tabora-bg: #f6f4ef;
+    --tabora-card: #ffffff;
+    --tabora-card-border: #e0dcd3;
+    --tabora-field: #ffffff;
+    --tabora-field-border: #dad6cd;
+    --tabora-raised: #e9e6df;
+    --tabora-raised-2: #ddd9d0;
+    --tabora-line: #d6d2c8;
+    --tabora-text: #16171a;
+    --tabora-text-2: #3d4047;
+    --tabora-text-3: #5e626b;
+    --tabora-text-4: #868b95;
+    --tabora-text-strong: #16171a;
+    --tabora-danger: #c2412f;
+    --tabora-deemphasized-border: #ebe8e1;
+  }
+}
+
+:root {
+  color-scheme: light dark;
+  font-family: var(--tabora-font);
+
+  /* Поверхности */
+  --background-color-canvas: var(--tabora-bg);
+  --background-color-box: var(--tabora-card);
+  --card-background-color: var(--tabora-card);
+  --card-border: 1px solid var(--tabora-card-border);
+  --card-border-radius: 14px;
+  --border-color: var(--tabora-line);
+  --border-color-interactive: var(--tabora-field-border);
+  --border-color-deemphasized: var(--tabora-deemphasized-border);
+  --border-color-transparent: transparent;
+  --border-radius-small: 8px;
+  --border-radius-medium: 10px;
+  --border-radius-large: 14px;
+
+  /* Текст и значки */
+  --text-color: var(--tabora-text);
+  --text-color-deemphasized: var(--tabora-text-3);
+  --text-color-error: var(--tabora-danger);
+  --icon-color: var(--tabora-text-2);
+  --link-color: var(--tabora-text-2);
+  --link-color-hover: var(--tabora-text-strong);
+  --link-color-active: var(--tabora-text-strong);
+  --link-color-visited: var(--tabora-text-2);
+
+  /* Акцент */
+  --color-accent-primary: var(--tabora-accent);
+  --color-accent-primary-hover: var(--tabora-accent-hover);
+  --color-accent-primary-active: var(--tabora-accent-active);
+  --focus-outline-color: var(--tabora-accent);
+  --text-color-accent-primary-selected: var(--tabora-on-accent);
+  --button-background-color-primary: var(--tabora-accent);
+  --button-background-color-primary-hover: var(--tabora-accent-hover);
+  --button-background-color-primary-active: var(--tabora-accent-active);
+  --button-text-color-primary: var(--tabora-on-accent);
+  --button-text-color-primary-hover: var(--tabora-on-accent);
+  --button-text-color-primary-active: var(--tabora-on-accent);
+  --background-color-list-item-selected: var(--tabora-raised);
+  --text-color-list-item-selected: var(--tabora-text-strong);
+  --background-color-list-item-hover: var(--tabora-card);
+
+  /* Кнопки и поля */
+  --button-background-color: var(--tabora-raised);
+  --button-background-color-hover: var(--tabora-raised-2);
+  --button-background-color-active: var(--tabora-line);
+  --button-background-color-ghost-hover: var(--tabora-field);
+  --button-background-color-ghost-active: var(--tabora-raised);
+  --button-text-color: var(--tabora-text);
+  --button-text-color-hover: var(--tabora-text-strong);
+  --button-border-color: transparent;
+  --button-border-radius: 9px;
+  --input-bgcolor: var(--tabora-field);
+  --input-color: var(--tabora-text);
+  --input-border-color: var(--tabora-field-border);
+  --input-background-color: var(--tabora-field);
+  --input-text-color: var(--tabora-text);
+  --checkbox-checked-background-color: var(--tabora-accent);
+  --checkbox-checked-border-color: var(--tabora-accent);
+  --checkbox-checked-color: var(--tabora-on-accent);
+
+  /* Списки и меню внутри страниц */
+  --panel-background-color: var(--tabora-card);
+  --panel-border-color: var(--tabora-field-border);
+  --panel-text-color: var(--tabora-text);
+  --panel-border-radius: 12px;
+  --button-background-color-menu-hover: var(--tabora-raised);
+  --button-text-color-menu-hover: var(--tabora-text-strong);
+
+  /* Дерево вкладок на about:sessionrestore и подобных */
+  --in-content-item-selected: var(--tabora-raised);
+  --in-content-item-selected-text: var(--tabora-text-strong);
+  --in-content-item-hover: var(--tabora-card);
+  --in-content-page-background: var(--tabora-bg);
+  --in-content-box-background: var(--tabora-card);
+  --in-content-box-border-color: var(--tabora-card-border);
+  --in-content-text-color: var(--tabora-text);
+  --in-content-accent-color: var(--tabora-accent);
+}
+
+body {
+  font-family: var(--tabora-font);
+  letter-spacing: -0.003em;
+}
+
+h1, h2, h3 {
+  font-family: var(--tabora-font);
+  font-weight: 800;
+  letter-spacing: -0.015em;
+}
+
+/* Деревья и списки XUL (восстановление сессии): наша подсветка вместо системной */
+tree, treechildren {
+  color: var(--tabora-text);
+  background-color: var(--tabora-card);
+}
+
+treechildren::-moz-tree-row(selected),
+treechildren::-moz-tree-row(selected, focus) {
+  background-color: var(--tabora-raised);
+  border-radius: 8px;
+}
+
+treechildren::-moz-tree-row(hover) {
+  background-color: var(--tabora-card-border);
+}
+
+treechildren::-moz-tree-cell-text(selected),
+treechildren::-moz-tree-cell-text(selected, focus) {
+  color: var(--tabora-text-strong);
+}
+
+treechildren::-moz-tree-row(odd) {
+  background-color: transparent;
+}
+
+treecol {
+  background-color: var(--tabora-card);
+  color: var(--tabora-text-3);
+  border-color: var(--tabora-card-border);
+  font-weight: 700;
+}

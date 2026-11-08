@@ -1,0 +1,12 @@
+diff --git a/toolkit/themes/shared/in-content/common-shared.css b/toolkit/themes/shared/in-content/common-shared.css
+index 14c0bf4c4d..05f8214332 100644
+--- a/toolkit/themes/shared/in-content/common-shared.css
++++ b/toolkit/themes/shared/in-content/common-shared.css
+@@ -4,6 +4,7 @@
+ 
+ @import url("chrome://global/skin/design-system/tokens-brand.css");
+ @import url("chrome://global/skin/design-system/text-and-typography.css");
++@import url("chrome://global/skin/in-content/tabora-incontent.css");
+ 
+ @namespace html "http://www.w3.org/1999/xhtml";
+ @namespace xul "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";

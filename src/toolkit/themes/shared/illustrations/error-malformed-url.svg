@@ -1,0 +1,7 @@
+<!-- Tabora: нейтральная иллюстрация вместо лисы Firefox. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">
+  <rect x="12.3" y="12.3" width="275.4" height="275.4" rx="76.5" fill="#1b1d22"/>
+  <rect x="12.8" y="12.8" width="274.4" height="274.4" rx="76.5" fill="none" stroke="#2a2d34"/>
+  <circle cx="150.0" cy="150.0" r="96.9" fill="none" stroke="#c8f25a" stroke-width="22.4" stroke-dasharray="112.2 56.1" stroke-linecap="round"/>
+  <circle cx="150.0" cy="150.0" r="32.6" fill="#c8f25a"/>
+</svg>
