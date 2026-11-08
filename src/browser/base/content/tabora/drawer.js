@@ -339,7 +339,7 @@ Object.assign(Tabora, {
     this.sizeDrawer();
     this.renderDrawer();
     const input = document.getElementById("tabora-drawer-search");
-    if (input && !this.SECTIONS[d.section].wide) {
+    if (input && !this.SECTIONS[d.section].wide && !this.SECTIONS[d.section].noSearch) {
       input.focus({ preventScroll: true });
     }
   },
@@ -414,7 +414,8 @@ Object.assign(Tabora, {
     panel.setAttribute("data-section", d.section);
     const input = document.getElementById("tabora-drawer-search");
     input.placeholder = s.search || "Поиск";
-    panel.querySelector(".dhead").hidden = !!s.wide;
+    panel.querySelector(".dhead").hidden = !!s.wide || !!s.noSearch;
+    panel.querySelector(".dchips").hidden = true;
     const foot = document.getElementById("tabora-drawer-foot");
     foot.replaceChildren();
     foot.hidden = true;

@@ -34,6 +34,7 @@ var Tabora = {
     this.moveToolboxIntoBrowser();
     Services.scriptloader.loadSubScript("chrome://browser/content/tabora/drawer.js", window);
     Services.scriptloader.loadSubScript("chrome://browser/content/tabora/agent.js", window);
+    Services.scriptloader.loadSubScript("chrome://browser/content/tabora/wallet/wallet.js", window);
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
       "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "startTimers", "updateTitle", "localizeUrlbar",
@@ -1866,6 +1867,7 @@ var Tabora = {
       { glyph: "★", title: "Закладки", note: "Ящик: папки и поиск", key: "⌘⇧B", tags: "bookmarks закладки избранное", run: () => this.openDrawer("bookmarks") },
       { glyph: "▣", title: "Медиа", note: "Ящик: картинки и видео со вкладок", key: "⌘⇧I", tags: "media медиа картинки видео", run: () => this.openDrawer("media") },
       { glyph: "◫", title: "Пространства", note: "Полотно: вкладки по пространствам", key: "⌘⇧S", tags: "spaces пространства контейнеры", run: () => this.openDrawer("spaces") },
+      { glyph: "◈", title: "Кошелёк", note: "Ethereum, L2, Bitcoin, Solana, TRON на одной фразе", key: "⌘⇧W", tags: "wallet кошелёк крипто eth btc sol trx", run: () => this.openDrawer("wallet") },
       { glyph: "✎", title: "Написать письмо", note: "Окно письма поверх любой вкладки", key: "", tags: "compose написать письмо mail new", run: () => this.openCompose() },
       { glyph: "✉", title: "Почта и алиасы", note: "Входящие, коды подтверждения, алиасы", key: "⌘⇧M", tags: "mail почта email письма алиасы inbox", run: () => this.openMail() },
       { glyph: "⚙", title: "Настройки", note: "Поведение, приватность, внешний вид", key: "⌘,", tags: "settings preferences", run: () => openPreferences() },
@@ -2336,8 +2338,8 @@ var Tabora = {
           this.openMail();
           e.preventDefault();
           e.stopPropagation();
-        } else if (e.shiftKey && this.drawer && { KeyJ: "downloads", KeyH: "history", KeyI: "media", KeyS: "spaces", KeyB: "bookmarks" }[e.code]) {
-          this.toggleDrawer({ KeyJ: "downloads", KeyH: "history", KeyI: "media", KeyS: "spaces", KeyB: "bookmarks" }[e.code]);
+        } else if (e.shiftKey && this.drawer && { KeyJ: "downloads", KeyH: "history", KeyI: "media", KeyS: "spaces", KeyB: "bookmarks", KeyW: "wallet" }[e.code]) {
+          this.toggleDrawer({ KeyJ: "downloads", KeyH: "history", KeyI: "media", KeyS: "spaces", KeyB: "bookmarks", KeyW: "wallet" }[e.code]);
           e.preventDefault();
           e.stopPropagation();
         } else if (!e.shiftKey && e.key === "Escape" && this.drawer?.open) {

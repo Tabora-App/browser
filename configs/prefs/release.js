@@ -90,3 +90,6 @@ pref("tabora.cookies.handledCount", 0);
 // Web3: имя.eth и ipfs:// открываются через публичные шлюзы; оба можно сменить
 pref("tabora.web3.ensGateway", "eth.limo");
 pref("tabora.web3.ipfsGateway", "dweb.link");
+
+// Кошелёк: автоблокировка (минуты), публичные ноды меняются в настройках кошелька
+pref("tabora.wallet.autolockMinutes", 15);

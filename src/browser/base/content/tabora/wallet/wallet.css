@@ -1,0 +1,728 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Кошелёк в ящике (wallet.js). Префикс w-. */
+
+#tabora-drawer .w-welcome,
+#tabora-drawer .w-locked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 36px 18px 20px;
+}
+
+#tabora-drawer .w-welcome b,
+#tabora-drawer .w-locked b {
+  font: 700 16px/1.3 var(--tabora-font);
+  color: var(--tabora-text-strong);
+}
+
+#tabora-drawer .w-welcome p,
+#tabora-drawer .w-sub {
+  margin: 0;
+  font: 400 12.5px/1.5 var(--tabora-font);
+  color: var(--tabora-text-3);
+}
+
+#tabora-drawer .w-hint {
+  margin: 0;
+  font: 400 11.5px/1.45 var(--tabora-font);
+  color: var(--tabora-text-4);
+}
+
+#tabora-drawer .w-orb {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: var(--tabora-accent);
+  position: relative;
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--tabora-accent) 35%, transparent);
+}
+
+#tabora-drawer .w-orb::after {
+  content: "";
+  position: absolute;
+  inset: 20px;
+  border-radius: 50%;
+  background: var(--tabora-on-accent);
+}
+
+#tabora-drawer .w-points {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  width: 100%;
+}
+
+#tabora-drawer .w-points li {
+  font: 400 12px/1.45 var(--tabora-font);
+  color: var(--tabora-text-3);
+  padding-inline-start: 18px;
+  position: relative;
+}
+
+#tabora-drawer .w-points li::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tabora-accent);
+}
+
+#tabora-drawer .w-actions {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* Кнопки */
+#tabora-drawer .w-btn {
+  height: 36px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--tabora-field-border);
+  border-radius: 10px;
+  background: var(--tabora-field);
+  color: var(--tabora-text);
+  font: 600 13px/1 var(--tabora-font);
+  cursor: default;
+  transition: background-color var(--tabora-ease), border-color var(--tabora-ease), color var(--tabora-ease), opacity var(--tabora-ease);
+}
+
+#tabora-drawer .w-btn:hover {
+  border-color: var(--tabora-line);
+  background: var(--tabora-raised);
+}
+
+#tabora-drawer .w-btn.primary {
+  background: var(--tabora-accent);
+  border-color: var(--tabora-accent);
+  color: var(--tabora-on-accent);
+  font-weight: 700;
+}
+
+#tabora-drawer .w-btn.primary:hover {
+  background: var(--tabora-accent-hover, #d6ff6e);
+}
+
+#tabora-drawer .w-btn.ghost {
+  background: transparent;
+}
+
+#tabora-drawer .w-btn.small {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+#tabora-drawer .w-btn.danger {
+  color: #ffb4a3;
+  border-color: color-mix(in srgb, #ff7b7b 40%, var(--tabora-field-border));
+}
+
+#tabora-drawer .w-btn[disabled] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+#tabora-drawer .w-link {
+  border: 0;
+  background: transparent;
+  color: var(--tabora-text-4);
+  font: 600 12px/1 var(--tabora-font);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: default;
+  align-self: center;
+}
+
+#tabora-drawer .w-link:hover {
+  color: var(--tabora-text);
+}
+
+/* Поля */
+#tabora-drawer .w-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#tabora-drawer .w-field > span {
+  font: 700 11px/1 var(--tabora-font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tabora-text-4);
+}
+
+#tabora-drawer .w-input,
+#tabora-drawer .w-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 12px;
+  height: 38px;
+  border: 1px solid var(--tabora-field-border);
+  border-radius: 10px;
+  background: var(--tabora-field);
+  color: var(--tabora-text-strong);
+  font: 500 13px/1 var(--tabora-font);
+  outline: none;
+  transition: border-color var(--tabora-ease);
+}
+
+#tabora-drawer .w-textarea {
+  height: auto;
+  padding: 10px 12px;
+  font: 500 13px/1.6 var(--tabora-mono);
+  resize: vertical;
+}
+
+#tabora-drawer .w-input:focus,
+#tabora-drawer .w-textarea:focus {
+  border-color: var(--tabora-accent);
+}
+
+#tabora-drawer .w-meter {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+#tabora-drawer .w-meter span {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--tabora-panel-border);
+}
+
+#tabora-drawer .w-meter[level="1"] span:nth-child(-n + 1) { background: #ff7b7b; }
+#tabora-drawer .w-meter[level="2"] span:nth-child(-n + 2) { background: #ff9f5a; }
+#tabora-drawer .w-meter[level="3"] span:nth-child(-n + 3) { background: #c8f25a; }
+#tabora-drawer .w-meter[level="4"] span:nth-child(-n + 4) { background: var(--tabora-accent); }
+
+#tabora-drawer .w-error {
+  padding: 8px 12px;
+  border-radius: 9px;
+  background: color-mix(in srgb, #ff7b7b 14%, var(--tabora-field));
+  color: #ffb4a3;
+  font: 600 12px/1.3 var(--tabora-font);
+}
+
+#tabora-drawer .w-warn {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, #ff7b7b 55%, transparent);
+  background: color-mix(in srgb, #ff7b7b 10%, var(--tabora-field));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#tabora-drawer .w-warn b {
+  font: 700 13px/1.3 var(--tabora-font);
+  color: #ffb4a3;
+}
+
+#tabora-drawer .w-warn p {
+  margin: 0;
+  font: 400 12px/1.5 var(--tabora-font);
+  color: var(--tabora-text-2);
+}
+
+#tabora-drawer .w-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 500 12.5px/1.3 var(--tabora-font);
+  color: var(--tabora-text-2);
+  padding: 4px 2px;
+}
+
+#tabora-drawer .w-check input {
+  -moz-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border-radius: 6px;
+  border: 1px solid var(--tabora-line);
+  background: var(--tabora-field);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+#tabora-drawer .w-check input:checked {
+  background: var(--tabora-accent);
+  border-color: var(--tabora-accent);
+}
+
+#tabora-drawer .w-check input:checked::after {
+  content: "";
+  width: 10px;
+  height: 10px;
+  background: var(--tabora-on-accent);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5L20 7'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5L20 7'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* Поток онбординга */
+#tabora-drawer .w-flow,
+#tabora-drawer .w-receive,
+#tabora-drawer .w-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 10px 8px 16px;
+}
+
+#tabora-drawer .w-flow-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#tabora-drawer .w-flow-head b {
+  font: 700 15px/1.3 var(--tabora-font);
+  color: var(--tabora-text-strong);
+}
+
+#tabora-drawer .w-steps {
+  display: flex;
+  gap: 4px;
+}
+
+#tabora-drawer .w-steps span {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--tabora-panel-border);
+}
+
+#tabora-drawer .w-steps span.on {
+  background: var(--tabora-accent);
+}
+
+#tabora-drawer .w-flow-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+#tabora-drawer .w-seg {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--tabora-field);
+  border: 1px solid var(--tabora-field-border);
+  align-self: flex-start;
+}
+
+#tabora-drawer .w-seg button {
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--tabora-text-3);
+  font: 600 12px/1 var(--tabora-font);
+  cursor: default;
+}
+
+#tabora-drawer .w-seg button[aria-pressed="true"] {
+  background: var(--tabora-raised);
+  color: var(--tabora-text-strong);
+}
+
+#tabora-drawer .w-phrase {
+  margin: 0;
+  padding: 10px;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  border-radius: 12px;
+  background: var(--tabora-field);
+  border: 1px solid var(--tabora-field-border);
+  user-select: none;
+  -moz-user-select: none;
+}
+
+#tabora-drawer .w-phrase li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: var(--tabora-panel);
+  font: 500 12.5px/1 var(--tabora-mono);
+  color: var(--tabora-text-strong);
+  overflow: hidden;
+}
+
+#tabora-drawer .w-phrase li i {
+  font: 500 10px/1 var(--tabora-mono);
+  color: var(--tabora-text-5);
+  font-style: normal;
+  min-width: 14px;
+}
+
+#tabora-drawer .w-phrase[masked] li span {
+  filter: blur(6px);
+}
+
+#tabora-drawer .w-quiz {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#tabora-drawer .w-quiz b {
+  font: 700 12px/1 var(--tabora-font);
+  color: var(--tabora-text-3);
+}
+
+#tabora-drawer .w-quiz-opts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+#tabora-drawer .w-quiz-opts button {
+  height: 32px;
+  border: 1px solid var(--tabora-field-border);
+  border-radius: 9px;
+  background: var(--tabora-field);
+  color: var(--tabora-text);
+  font: 500 12.5px/1 var(--tabora-mono);
+  cursor: default;
+}
+
+#tabora-drawer .w-quiz-opts button[aria-pressed="true"] {
+  border-color: var(--tabora-accent);
+  background: color-mix(in srgb, var(--tabora-accent) 14%, var(--tabora-field));
+  color: var(--tabora-text-strong);
+}
+
+#tabora-drawer .w-status {
+  font: 500 11px/1 var(--tabora-mono);
+  color: var(--tabora-text-4);
+}
+
+#tabora-drawer .w-status[ok] {
+  color: var(--tabora-accent-ink);
+}
+
+/* Заблокирован */
+#tabora-drawer .w-lock-mark {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tabora-field);
+  border: 1px solid var(--tabora-field-border);
+  color: var(--tabora-text-3);
+}
+
+#tabora-drawer .w-locked .w-field,
+#tabora-drawer .w-locked .w-btn,
+#tabora-drawer .w-locked .w-error {
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+}
+
+/* Главный экран */
+#tabora-drawer .w-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 6px 4px 10px;
+}
+
+#tabora-drawer .w-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 14px;
+  border-radius: 14px;
+  background: var(--tabora-field);
+  border: 1px solid var(--tabora-field-border);
+}
+
+#tabora-drawer .w-head-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#tabora-drawer .w-head-row .spacer {
+  flex: 1;
+}
+
+#tabora-drawer .w-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--tabora-text-strong);
+  font: 700 14px/1 var(--tabora-font);
+  cursor: default;
+}
+
+#tabora-drawer .w-pick:hover {
+  background: var(--tabora-raised);
+}
+
+#tabora-drawer .w-pick.small {
+  height: 24px;
+  font: 600 12px/1 var(--tabora-font);
+  color: var(--tabora-text-3);
+  align-self: flex-start;
+}
+
+#tabora-drawer .w-pick svg {
+  color: var(--tabora-text-4);
+}
+
+#tabora-drawer .w-total {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px 0;
+}
+
+#tabora-drawer .w-total-sum {
+  font: 600 28px/1.1 var(--tabora-mono);
+  color: var(--tabora-text-strong);
+  letter-spacing: -0.02em;
+}
+
+#tabora-drawer .w-total-note {
+  font: 500 11px/1 var(--tabora-mono);
+  color: var(--tabora-text-4);
+}
+
+#tabora-drawer .w-badge-danger {
+  align-self: flex-start;
+  margin: 2px 10px 0;
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: color-mix(in srgb, #ff7b7b 16%, var(--tabora-field));
+  color: #ffb4a3;
+  font: 700 10.5px/1 var(--tabora-font);
+}
+
+#tabora-drawer .w-chains {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#tabora-drawer .w-chain {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  cursor: default;
+  transition: background-color var(--tabora-ease);
+}
+
+#tabora-drawer .w-chain:hover {
+  background: var(--tabora-raised);
+}
+
+#tabora-drawer .w-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--c);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--c) 55%, transparent);
+  flex: none;
+}
+
+#tabora-drawer .w-chain-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#tabora-drawer .w-chain-text b {
+  font: 600 13px/1.2 var(--tabora-font);
+  color: var(--tabora-text);
+}
+
+#tabora-drawer .w-addr {
+  font: 500 11px/1.2 var(--tabora-mono);
+  color: var(--tabora-text-4);
+  white-space: nowrap;
+}
+
+#tabora-drawer .w-chain-text {
+  flex: 1 1 120px;
+}
+
+#tabora-drawer .w-chain-bal {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+
+#tabora-drawer .w-native {
+  font: 600 13px/1.2 var(--tabora-mono);
+  color: var(--tabora-text-strong);
+  white-space: nowrap;
+}
+
+#tabora-drawer .w-native.err {
+  color: #ffb4a3;
+  font-weight: 500;
+}
+
+#tabora-drawer .w-usd {
+  font: 500 11px/1.2 var(--tabora-mono);
+  color: var(--tabora-text-4);
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Получить */
+#tabora-drawer .w-receive {
+  align-items: center;
+  text-align: center;
+}
+
+#tabora-drawer .w-receive .w-flow-head {
+  width: 100%;
+}
+
+#tabora-drawer .w-qr {
+  width: 220px;
+  height: 220px;
+  border-radius: 16px;
+  background: #fff;
+  padding: 8px;
+  box-sizing: content-box;
+}
+
+#tabora-drawer .w-address {
+  font: 500 12px/1.5 var(--tabora-mono);
+  color: var(--tabora-text-strong);
+  word-break: break-all;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--tabora-field);
+  border: 1px solid var(--tabora-field-border);
+  user-select: text;
+  -moz-user-select: text;
+}
+
+/* Настройки */
+#tabora-drawer .w-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--tabora-field);
+  border: 1px solid var(--tabora-field-border);
+}
+
+#tabora-drawer .w-group-title {
+  font: 700 11px/1 var(--tabora-font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tabora-text-4);
+  margin-bottom: 2px;
+}
+
+#tabora-drawer .w-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#tabora-drawer .w-node-name {
+  flex: 1;
+  font: 600 12.5px/1 var(--tabora-font);
+  color: var(--tabora-text);
+}
+
+#tabora-drawer .w-node .tsel {
+  width: 170px;
+}
+
+#tabora-drawer .w-node .icon-btn {
+  width: 26px;
+  height: 26px;
+}
+
+/* Лист подтверждения поверх панели */
+#tabora-drawer .w-sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: flex-end;
+  padding: 10px;
+  background: color-mix(in srgb, var(--tabora-bg) 55%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+#tabora-drawer .dpanel {
+  position: relative;
+}
+
+#tabora-drawer .w-sheet-card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--tabora-panel);
+  border: 1px solid var(--tabora-line);
+  box-shadow: var(--tabora-shadow-lg, 0 18px 50px rgba(0, 0, 0, 0.5));
+  animation: tsel-in 160ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+#tabora-drawer .w-sheet-card b {
+  font: 700 14px/1.3 var(--tabora-font);
+  color: var(--tabora-text-strong);
+}
+
+#tabora-drawer .w-sheet-card .w-actions {
+  justify-content: flex-end;
+}
