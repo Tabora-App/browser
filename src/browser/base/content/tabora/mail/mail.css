@@ -222,13 +222,20 @@ kbd {
 .bulk-bar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 8px 14px;
   border-bottom: 1px solid var(--line);
   background: var(--card);
+  white-space: nowrap;
+  container-type: inline-size;
 }
-.bulk-count { flex: 1; font-size: 12px; font-weight: 700; color: var(--text-2); }
+.bulk-count { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; min-width: 0; font-size: 12px; font-weight: 600; color: var(--text-3); }
+.bulk-count b { min-width: 22px; height: 22px; padding: 0 7px; border-radius: 11px; background: var(--accent); color: var(--on-accent, #0b0c0e); font: 800 11px/22px var(--font); text-align: center; }
+.bulk-actions { display: flex; align-items: center; gap: 4px; margin-inline-start: auto; min-width: 0; }
 .tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   height: 28px;
   padding: 0 10px;
   border: 1px solid var(--stroke);
@@ -237,6 +244,16 @@ kbd {
   color: var(--text-2);
   font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.tool svg { flex-shrink: 0; color: var(--text-3); }
+.tool-close { width: 28px; padding: 0; justify-content: center; border-color: transparent; }
+/* Узкая колонка: оставляем только значки */
+@container (max-width: 400px) {
+  .bulk-count-label { display: none; }
+  .tool span { display: none; }
+  .tool { width: 30px; padding: 0; justify-content: center; }
 }
 .tool:hover { background: var(--raised); color: var(--text-strong); }
 

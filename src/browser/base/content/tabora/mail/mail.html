@@ -59,11 +59,13 @@
         </div>
       </header>
       <div class="bulk-bar" id="bulk-bar" hidden>
-        <span class="bulk-count" id="bulk-count"></span>
-        <button class="tool" data-bulk="read" type="button" title="Прочитано">Прочитано</button>
-        <button class="tool" data-bulk="archive" type="button" title="В архив (E)">В архив</button>
-        <button class="tool" data-bulk="trash" type="button" title="Удалить (#)">Удалить</button>
-        <button class="tool" data-bulk="clear" type="button" title="Снять выделение (Esc)">Снять</button>
+        <span class="bulk-count"><b id="bulk-count"></b><span class="bulk-count-label">выбрано</span></span>
+        <div class="bulk-actions">
+          <button class="tool" data-bulk="read" data-icon="read" type="button" title="Отметить прочитанным"><span>Прочитано</span></button>
+          <button class="tool" data-bulk="archive" data-icon="archive" type="button" title="В архив (E)"><span>В архив</span></button>
+          <button class="tool" data-bulk="trash" data-icon="trash" type="button" title="Удалить (#)"><span>Удалить</span></button>
+          <button class="tool tool-close" data-bulk="clear" data-icon="close" type="button" title="Снять выделение (Esc)" aria-label="Снять выделение"></button>
+        </div>
       </div>
       <div class="messages" id="messages" role="listbox" aria-label="Письма" tabindex="0"></div>
     </section>

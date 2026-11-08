@@ -465,7 +465,7 @@ const App = {
   renderBulk() {
     const bar = $("bulk-bar");
     bar.hidden = !this.checked.size;
-    $("bulk-count").textContent = `Выбрано: ${this.checked.size}`;
+    $("bulk-count").textContent = String(this.checked.size);
   },
 
   toggleCheck(threadId) {
@@ -972,6 +972,9 @@ const App = {
       }
       this.renderList();
     });
+    for (const b of $("bulk-bar").querySelectorAll("[data-icon]")) {
+      b.prepend(icon(b.dataset.icon, 14));
+    }
     $("bulk-bar").addEventListener("click", e => {
       const btn = e.target.closest("[data-bulk]");
       if (btn) {

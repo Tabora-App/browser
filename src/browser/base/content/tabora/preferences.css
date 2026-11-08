@@ -152,6 +152,7 @@ input[type="search"]:focus-visible {
 #category-ai-features,
 #category-experimental,
 #category-more-from-mozilla,
+setting-group[groupid="browserTheme"],
 setting-group[groupid="profiles"],
 setting-group[groupid="backup"],
 setting-group[groupid="referrals"],

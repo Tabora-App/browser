@@ -197,7 +197,8 @@ kbd { font: 500 10px/1 var(--mono); color: var(--text-4); border: 1px solid var(
 .act.primary:hover { background: var(--accent-hover); }
 .act.danger:hover { color: var(--warn); }
 .act svg { width: 15px; height: 15px; }
-.act.icon-only { padding: 0; width: 32px; }
+.act.icon-only { padding: 0; width: 32px; background: var(--card-2); border-color: var(--line-2); color: var(--text-3); }
+.act.icon-only:hover { background: var(--raised); border-color: var(--stroke); color: var(--text-strong); }
 .item:not(:hover):not(:focus-within) .actions .act.quiet { opacity: 0; }
 
 /* Плитки */

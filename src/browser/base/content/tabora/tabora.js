@@ -34,7 +34,7 @@ var Tabora = {
     this.moveToolboxIntoBrowser();
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
-      "searchEngineName", "initSpaces", "initKeys", "initTabHooks", "startTimers", "updateTitle", "localizeUrlbar",
+      "searchEngineName", "initSpaces", "initKeys", "initTabHooks", "initDownloads", "startTimers", "updateTitle", "localizeUrlbar",
       "routeUrlbarToCommandBar",
     ]) {
       try {
@@ -748,7 +748,9 @@ var Tabora = {
   /** Тема оболочки следует выбору «Тема браузера» в настройках Firefox:
    *  browser.theme.toolbar-theme 0 — тёмная, 1 — светлая, 2 — как в системе. */
   initTheme() {
-    const PREF = "browser.theme.toolbar-theme";
+    // Одна настройка на весь браузер: выбор схемы в «Настройки → Внешний вид»
+    // (0 тёмная, 1 светлая, 2 как в системе) красит и сайты, и оболочку.
+    const PREF = "layout.css.prefers-color-scheme.content-override";
     const media = window.matchMedia("(prefers-color-scheme: light)");
     const apply = () => {
       const pref = Services.prefs.getIntPref(PREF, 2);
@@ -886,11 +888,186 @@ var Tabora = {
       this.html("span", { class: "kbd" }, "⌘⇧M"),
     ]);
     mail.addEventListener("click", () => this.openMail());
+    const downloads = this.buildDownloadsCard();
     if (sidebar) {
-      sidebar.after(memory, mail);
+      sidebar.after(memory, mail, downloads);
     } else {
-      toolbox.append(memory, mail);
+      toolbox.append(memory, mail, downloads);
     }
+  },
+
+  /* ---- Карточка загрузок под почтой: кнопка и живой прогресс ------------- */
+
+  buildDownloadsCard() {
+    const h = (tag, attrs, text, children) => this.html(tag, attrs, text, children);
+    const head = h("button", { class: "head", id: "tabora-downloads-open", title: "Загрузки (⌘⇧J)" }, null, [
+      this.svg(["M12 4v11", "M7 10l5 5 5-5", "M4 19h16"], 16, 1.8),
+      h("span", { class: "title" }, "Загрузки"),
+      h("span", { class: "pill", id: "tabora-downloads-pill", hidden: "true" }),
+      h("span", { class: "kbd" }, "⌘⇧J"),
+    ]);
+    head.addEventListener("click", () => this.openDownloads());
+    const toggle = h("button", { class: "icon-btn", id: "tabora-downloads-toggle", type: "button", title: "Пауза" }, null, [this.svg(["M8 5v14", "M16 5v14"], 13, 2.2)]);
+    const cancel = h("button", { class: "icon-btn", id: "tabora-downloads-cancel", type: "button", title: "Отменить" }, null, [this.svg(["M6 6l12 12", "M18 6 6 18"], 13, 2.2)]);
+    toggle.addEventListener("click", e => { e.stopPropagation(); this.downloadsToggle(); });
+    cancel.addEventListener("click", e => { e.stopPropagation(); this.downloadsCancel(); });
+    const live = h("div", { class: "live", id: "tabora-downloads-live", hidden: "true" }, null, [
+      h("div", { class: "row" }, null, [
+        h("span", { class: "name", id: "tabora-downloads-name" }),
+        h("span", { class: "pct", id: "tabora-downloads-pct" }),
+      ]),
+      h("div", { class: "bar", "aria-hidden": "true" }, null, [h("div", { id: "tabora-downloads-bar" })]),
+      h("div", { class: "row" }, null, [
+        h("span", { class: "note", id: "tabora-downloads-note" }),
+        h("span", { class: "ctl" }, null, [toggle, cancel]),
+      ]),
+    ]);
+    const card = h("div", { id: "tabora-downloads" }, null, [head, live]);
+    card.addEventListener("dragover", e => { if (e.dataTransfer.types.includes("text/uri-list") || e.dataTransfer.types.includes("text/plain")) { e.preventDefault(); card.toggleAttribute("drop", true); } });
+    card.addEventListener("dragleave", () => card.removeAttribute("drop"));
+    card.addEventListener("drop", e => { e.preventDefault(); card.removeAttribute("drop"); this.downloadFromDrop(e.dataTransfer); });
+    return card;
+  },
+
+  async initDownloads() {
+    // Все пути к «Библиотеке → Загрузки» ведут на нашу страницу
+    const self = this;
+    BrowserCommands.downloadsUI = () => self.openDownloads();
+    const { Downloads } = ChromeUtils.importESModule("resource://gre/modules/Downloads.sys.mjs");
+    this._dl = { list: await Downloads.getList(Downloads.ALL), items: new Set(), timer: null };
+    const refresh = () => this.updateDownloadsCard();
+    await this._dl.list.addView({
+      onDownloadAdded: d => { this._dl.items.add(d); refresh(); },
+      onDownloadChanged: d => { this.downloadFinished(d); refresh(); },
+      onDownloadRemoved: d => { this._dl.items.delete(d); refresh(); },
+    });
+  },
+
+  downloadFinished(d) {
+    if (d.succeeded && !d._taboraNoticed) {
+      d._taboraNoticed = true;
+      if (this._dl.seenStart && d.startTime >= this._dl.seenStart) {
+        this.notice(`Скачано: ${PathUtils.filename(d.target.path)}`);
+      }
+    }
+  },
+
+  activeDownloads() {
+    return [...this._dl.items].filter(d => !d.stopped || (d.canceled && d.hasPartialData && !d.error));
+  },
+
+  updateDownloadsCard() {
+    const card = document.getElementById("tabora-downloads");
+    if (!card || !this._dl) {
+      return;
+    }
+    this._dl.seenStart ??= new Date();
+    const running = [...this._dl.items].filter(d => !d.stopped);
+    const paused = [...this._dl.items].filter(d => d.stopped && d.canceled && d.hasPartialData && !d.error);
+    const live = document.getElementById("tabora-downloads-live");
+    const pill = document.getElementById("tabora-downloads-pill");
+    const all = [...running, ...paused];
+    pill.hidden = !all.length;
+    pill.textContent = String(all.length);
+    card.toggleAttribute("active", !!running.length);
+    card.toggleAttribute("paused", !running.length && !!paused.length);
+    live.hidden = !all.length;
+    if (!all.length) {
+      clearInterval(this._dl.timer);
+      this._dl.timer = null;
+      return;
+    }
+    if (!this._dl.timer) {
+      this._dl.timer = setInterval(() => this.updateDownloadsCard(), 1000);
+    }
+    const cur = running[0] || paused[0];
+    const total = all.reduce((n, d) => n + (d.totalBytes > 0 ? d.totalBytes : d.currentBytes), 0);
+    const done = all.reduce((n, d) => n + d.currentBytes, 0);
+    const speed = running.reduce((n, d) => n + (d.speed || 0), 0);
+    const fmt = this.fmtBytes;
+    document.getElementById("tabora-downloads-name").textContent = all.length > 1 ? `${PathUtils.filename(cur.target.path)} и ещё ${all.length - 1}` : PathUtils.filename(cur.target.path);
+    const pctEl = document.getElementById("tabora-downloads-pct");
+    const bar = document.getElementById("tabora-downloads-bar");
+    const known = all.every(d => d.hasProgress && d.totalBytes > 0);
+    const pct = known && total ? Math.round((done / total) * 100) : null;
+    pctEl.textContent = pct === null ? "" : `${pct}%`;
+    bar.style.width = `${pct ?? 100}%`;
+    bar.classList.toggle("indeterminate", pct === null && !!running.length);
+    const parts = [];
+    const bytes = total ? `${fmt(done)} из ${fmt(total)}` : fmt(done);
+    if (running.length) {
+      if (speed > 0) {
+        parts.push(`${fmt(speed)}/с`);
+        if (known && total > done) {
+          parts.push(this.fmtEta((total - done) / speed));
+        }
+      } else {
+        parts.push(bytes);
+      }
+    } else {
+      parts.push("на паузе", bytes);
+    }
+    const note = document.getElementById("tabora-downloads-note");
+    note.textContent = parts.join(" · ");
+    note.title = bytes;
+    const toggle = document.getElementById("tabora-downloads-toggle");
+    const pausedMode = !running.length;
+    toggle.title = pausedMode ? "Продолжить" : "Пауза";
+    toggle.replaceChildren(pausedMode ? this.svg(["M7 5v14l12-7z"], 13, 2.2) : this.svg(["M8 5v14", "M16 5v14"], 13, 2.2));
+  },
+
+  downloadsToggle() {
+    const running = [...this._dl.items].filter(d => !d.stopped);
+    if (running.length) {
+      running.forEach(d => d.cancel());
+    } else {
+      [...this._dl.items].filter(d => d.stopped && d.canceled && d.hasPartialData && !d.error).forEach(d => d.start());
+    }
+  },
+
+  downloadsCancel() {
+    for (const d of this.activeDownloads()) {
+      d.cancel().then(() => d.removePartialData()).then(() => this._dl.list.remove(d)).catch(() => {});
+    }
+  },
+
+  async downloadFromDrop(dt) {
+    const url = (dt.getData("text/uri-list") || dt.getData("text/plain") || "").split("\n")[0].trim();
+    if (!/^https?:\/\//i.test(url)) {
+      return;
+    }
+    const { Downloads } = ChromeUtils.importESModule("resource://gre/modules/Downloads.sys.mjs");
+    const dir = await Downloads.getPreferredDownloadsDirectory();
+    const name = decodeURIComponent(url.split("/").pop().split(/[?#]/)[0]) || "файл";
+    const download = await Downloads.createDownload({ source: url, target: PathUtils.join(dir, name) });
+    await this._dl.list.add(download);
+    download.start().catch(() => {});
+  },
+
+  fmtBytes(b) {
+    if (!(b > 0)) {
+      return "0 Б";
+    }
+    const u = ["Б", "КБ", "МБ", "ГБ"];
+    let i = 0;
+    while (b >= 1000 && i < u.length - 1) {
+      b /= 1000;
+      i++;
+    }
+    return `${i ? b.toFixed(b < 10 ? 1 : 0).replace(".", ",") : Math.round(b)} ${u[i]}`;
+  },
+
+  fmtEta(sec) {
+    if (!isFinite(sec) || sec < 1) {
+      return "";
+    }
+    if (sec < 60) {
+      return `ещё ${Math.ceil(sec)} с`;
+    }
+    if (sec < 3600) {
+      return `ещё ${Math.ceil(sec / 60)} мин`;
+    }
+    return `ещё ${Math.floor(sec / 3600)} ч ${Math.ceil((sec % 3600) / 60)} мин`;
   },
 
   buildTopbar() {

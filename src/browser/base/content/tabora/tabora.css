@@ -223,6 +223,7 @@
 #navigator-toolbox > #sidebar-container { order: 3 !important; }
 #navigator-toolbox > #tabora-memory { order: 4; }
 #navigator-toolbox > #tabora-mail { order: 5; }
+#navigator-toolbox > #tabora-downloads { order: 6; }
 
 /* Строка 1: кнопки окна, назад, вперёд, обновить, меню. Строка 2: адрес. */
 #nav-bar {
@@ -772,6 +773,169 @@ sidebar-main {
   background: var(--tabora-accent);
   border-radius: 10px;
   padding: 4px 8px;
+}
+
+/* ---- Карточка загрузок ------------------------------------------------- */
+
+#tabora-downloads {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--tabora-panel-border);
+  border-radius: 12px;
+  background: transparent;
+  flex-shrink: 0;
+  transition: border-color var(--tabora-ease), background-color var(--tabora-ease);
+  -moz-window-dragging: no-drag;
+}
+
+#tabora-downloads:hover,
+#tabora-downloads[active],
+#tabora-downloads[paused] {
+  border-color: var(--tabora-line);
+  background: var(--tabora-panel);
+}
+
+#tabora-downloads[drop] {
+  border-color: var(--tabora-accent);
+  background: color-mix(in srgb, var(--tabora-accent) 10%, var(--tabora-panel));
+}
+
+#tabora-downloads .head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 42px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--tabora-text);
+  font: 600 13px/1 var(--tabora-font);
+  text-align: left;
+  cursor: default;
+}
+
+#tabora-downloads .head svg {
+  color: var(--tabora-text-3);
+  flex-shrink: 0;
+}
+
+#tabora-downloads[active] .head svg {
+  color: var(--tabora-accent);
+}
+
+#tabora-downloads .title {
+  flex: 1;
+}
+
+#tabora-downloads .kbd {
+  font: 500 10px/1 var(--tabora-mono);
+  color: var(--tabora-text-5);
+}
+
+#tabora-downloads .pill {
+  font: 800 11px/1 var(--tabora-font);
+  color: var(--tabora-on-accent);
+  background: var(--tabora-accent);
+  border-radius: 10px;
+  padding: 4px 7px;
+}
+
+#tabora-downloads[paused] .pill {
+  background: var(--tabora-raised-2);
+  color: var(--tabora-text-2);
+}
+
+#tabora-downloads .live {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 2px 12px 11px;
+}
+
+#tabora-downloads .live .row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 18px;
+}
+
+#tabora-downloads .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 500 12px/1.2 var(--tabora-font);
+  color: var(--tabora-text-2);
+}
+
+#tabora-downloads .pct {
+  font: 500 12px/1 var(--tabora-mono);
+  color: var(--tabora-text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+#tabora-downloads .bar {
+  height: 5px;
+  background: var(--tabora-panel-border);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+
+#tabora-downloads .bar > div {
+  height: 100%;
+  width: 0;
+  background: var(--tabora-accent);
+  border-radius: 3px;
+  transition: width 0.5s cubic-bezier(0.2, 0, 0, 1);
+}
+
+#tabora-downloads[paused] .bar > div {
+  background: var(--tabora-text-5);
+}
+
+#tabora-downloads .bar > div.indeterminate {
+  width: 30% !important;
+  animation: tabora-dl-slide 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes tabora-dl-slide {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(400%); }
+}
+
+#tabora-downloads .note {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 500 11px/1.2 var(--tabora-mono);
+  color: var(--tabora-text-4);
+  font-variant-numeric: tabular-nums;
+}
+
+#tabora-downloads .ctl {
+  display: flex;
+  gap: 2px;
+  margin-inline-end: -6px;
+}
+
+#tabora-downloads .ctl .icon-btn {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--tabora-text-3);
+}
+
+#tabora-downloads .ctl .icon-btn:hover {
+  background: var(--tabora-raised);
+  color: var(--tabora-text-strong);
 }
 
 /* ---- Главная область ---------------------------------------------------- */
