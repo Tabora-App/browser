@@ -5,13 +5,13 @@
 /* Кошелёк в ящике (wallet.js). Префикс w-. */
 
 #tabora-drawer {
-  --w-danger: var(--w-danger);
-  --w-danger-soft: var(--w-danger-soft);
+  --w-danger: #ff8a80;
+  --w-danger-soft: rgba(255, 123, 123, 0.14);
 }
 
 :root[tabora-theme="light"] #tabora-drawer {
   --w-danger: #b42318;
-  --w-danger-soft: #d92d20;
+  --w-danger-soft: rgba(180, 35, 24, 0.1);
 }
 
 /* Кнопки-значки внутри кошелька: без системного вида и без рамки фокуса */
@@ -944,4 +944,471 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+/* ---- Отправка ---- */
+#tabora-drawer .w-send {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 6px 8px;
+  min-height: 100%;
+}
+
+#tabora-drawer .w-send .spacer {
+  flex: 1;
+}
+
+#tabora-drawer .w-title {
+  font: 700 15px/1.3 var(--tabora-font);
+  color: var(--tabora-text-strong);
+}
+
+#tabora-drawer .w-asset-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 6px 10px 6px 8px;
+  border: 1px solid var(--tabora-line);
+  border-radius: 12px;
+  background: var(--tabora-panel);
+  color: var(--tabora-text-strong);
+  font: 600 13px/1.2 var(--tabora-font);
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+}
+
+#tabora-drawer .w-asset-pick:hover {
+  border-color: var(--tabora-line-strong, var(--tabora-text-dim));
+}
+
+#tabora-drawer .w-asset-pick .w-coin {
+  width: 32px;
+  height: 32px;
+}
+
+#tabora-drawer .w-asset-pick .w-coin img {
+  width: 32px;
+  height: 32px;
+}
+
+#tabora-drawer .w-asset-pick-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+#tabora-drawer .w-asset-pick-text b {
+  font: 700 13px/1.2 var(--tabora-font);
+}
+
+#tabora-drawer .w-asset-pick-text span {
+  font: 500 11.5px/1.2 var(--tabora-font);
+  color: var(--tabora-text-dim);
+}
+
+#tabora-drawer .w-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#tabora-drawer .w-input-row .w-input {
+  flex: 1;
+  min-width: 0;
+}
+
+#tabora-drawer .w-input-row .icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--tabora-line);
+  background: var(--tabora-panel);
+  color: var(--tabora-text);
+  appearance: none;
+  flex: none;
+}
+
+#tabora-drawer .w-input-suffix {
+  position: absolute;
+  right: 12px;
+  font: 700 12px/1 var(--tabora-font);
+  color: var(--tabora-text-dim);
+  pointer-events: none;
+}
+
+#tabora-drawer .w-field:has(.w-input-suffix) .w-input-row {
+  position: relative;
+}
+
+#tabora-drawer .w-field:has(.w-input-suffix) .w-input {
+  padding-right: 56px;
+}
+
+#tabora-drawer .w-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+#tabora-drawer .w-link.small {
+  font-size: 11.5px;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 0;
+}
+
+#tabora-drawer .w-note {
+  min-height: 14px;
+  font: 500 11.5px/1.35 var(--tabora-font);
+  color: var(--tabora-text-dim);
+}
+
+#tabora-drawer .w-note.ok {
+  color: var(--tabora-accent-ink);
+}
+
+#tabora-drawer .w-note.bad {
+  color: var(--w-danger);
+}
+
+#tabora-drawer .w-note.danger {
+  color: var(--w-danger);
+  font-weight: 600;
+}
+
+#tabora-drawer .w-fee {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 12px;
+  border-radius: 12px;
+  background: var(--tabora-panel);
+  border: 1px solid var(--tabora-line);
+}
+
+#tabora-drawer .w-fee-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 0;
+  font: 500 12px/1.3 var(--tabora-font);
+  color: var(--tabora-text);
+}
+
+#tabora-drawer .w-fee-row + .w-fee-row {
+  border-top: 1px solid var(--tabora-line);
+}
+
+#tabora-drawer .w-fee-row > span:first-child {
+  color: var(--tabora-text-dim);
+  flex: none;
+}
+
+#tabora-drawer .w-fee-row > span:last-child {
+  text-align: right;
+  color: var(--tabora-text-strong);
+  overflow-wrap: anywhere;
+}
+
+#tabora-drawer .w-fee-row.muted > span:last-child {
+  color: var(--tabora-text-dim);
+}
+
+#tabora-drawer .w-fee-row.ok > span:last-child {
+  color: var(--tabora-accent-ink);
+}
+
+#tabora-drawer .w-fee-row.bad > span:last-child {
+  color: var(--w-danger);
+  font-weight: 600;
+}
+
+#tabora-drawer .w-fee-row .mono {
+  font-family: var(--tabora-mono);
+  font-size: 11.5px;
+}
+
+#tabora-drawer .w-warn {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--tabora-accent) 14%, var(--tabora-panel));
+  border: 1px solid color-mix(in srgb, var(--tabora-accent) 40%, transparent);
+  font: 500 12px/1.45 var(--tabora-font);
+  color: var(--tabora-text-strong);
+}
+
+#tabora-drawer .w-warn.danger {
+  background: var(--w-danger-soft);
+  border-color: color-mix(in srgb, var(--w-danger) 45%, transparent);
+}
+
+/* ---- Лист подтверждения ---- */
+#tabora-drawer .w-sheet-card.w-confirm {
+  gap: 10px;
+  max-height: calc(100% - 4px);
+  overflow: auto;
+}
+
+#tabora-drawer .w-confirm .w-flow-head b {
+  font: 700 15px/1.3 var(--tabora-font);
+  white-space: nowrap;
+}
+
+#tabora-drawer .w-confirm .w-flow-head .w-chip {
+  flex: none;
+}
+
+#tabora-drawer .w-chip {
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 7px;
+  background: var(--tabora-chip, var(--tabora-hover));
+  color: var(--tabora-text-dim);
+  font: 700 10.5px/22px var(--tabora-mono);
+  letter-spacing: 0.02em;
+}
+
+#tabora-drawer .w-origin {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--tabora-bg);
+  border: 1px solid var(--tabora-line);
+}
+
+#tabora-drawer .w-origin-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--tabora-panel);
+  border: 1px solid var(--tabora-line);
+  display: grid;
+  place-items: center;
+  flex: none;
+  overflow: hidden;
+}
+
+#tabora-drawer .w-origin-icon img {
+  width: 20px;
+  height: 20px;
+}
+
+#tabora-drawer .w-origin-icon b {
+  font: 700 14px/1 var(--tabora-font);
+  color: var(--tabora-text-strong);
+}
+
+#tabora-drawer .w-origin-icon.small {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+#tabora-drawer .w-origin-icon.small img {
+  width: 16px;
+  height: 16px;
+}
+
+#tabora-drawer .w-origin-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+#tabora-drawer .w-origin-text b {
+  font: 700 13px/1.2 var(--tabora-font);
+  color: var(--tabora-text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#tabora-drawer .w-origin-text span {
+  font: 500 11.5px/1.2 var(--tabora-font);
+  color: var(--tabora-text-dim);
+}
+
+#tabora-drawer .w-confirm-amount {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 0 4px;
+  text-align: center;
+}
+
+#tabora-drawer .w-confirm-amount > span {
+  font: 600 11px/1 var(--tabora-font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tabora-text-dim);
+}
+
+#tabora-drawer .w-confirm-amount > b {
+  font: 600 26px/1.1 var(--tabora-mono);
+  color: var(--tabora-text-strong);
+  letter-spacing: -0.02em;
+}
+
+#tabora-drawer .w-confirm-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#tabora-drawer .w-label {
+  font: 700 11px/1 var(--tabora-font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tabora-text-dim);
+}
+
+#tabora-drawer .w-summary-line {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--tabora-bg);
+  border: 1px solid var(--tabora-line);
+  font: 600 12.5px/1.4 var(--tabora-font);
+  color: var(--tabora-text-strong);
+  overflow-wrap: anywhere;
+}
+
+#tabora-drawer .w-summary-line + .w-summary-line {
+  font-weight: 500;
+  color: var(--tabora-text);
+}
+
+#tabora-drawer .w-details {
+  border-radius: 10px;
+  border: 1px solid var(--tabora-line);
+  background: var(--tabora-bg);
+}
+
+#tabora-drawer .w-details summary {
+  padding: 8px 10px;
+  font: 600 12px/1 var(--tabora-font);
+  color: var(--tabora-text-dim);
+  cursor: pointer;
+  list-style: none;
+}
+
+#tabora-drawer .w-details summary::before {
+  content: "›";
+  display: inline-block;
+  width: 12px;
+  transition: transform 150ms;
+}
+
+#tabora-drawer .w-details[open] summary::before {
+  transform: rotate(90deg);
+}
+
+#tabora-drawer .w-details pre {
+  margin: 0;
+  padding: 0 10px 10px;
+  max-height: 160px;
+  overflow: auto;
+  font: 500 11px/1.45 var(--tabora-mono);
+  color: var(--tabora-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+#tabora-drawer .w-limit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+#tabora-drawer .w-chip-btn {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--tabora-line);
+  background: transparent;
+  color: var(--tabora-text);
+  font: 600 12px/1 var(--tabora-font);
+  cursor: pointer;
+  appearance: none;
+}
+
+#tabora-drawer .w-chip-btn[aria-pressed="true"] {
+  background: var(--tabora-accent);
+  border-color: var(--tabora-accent);
+  color: #0b0c0e;
+}
+
+#tabora-drawer .w-btn.loading {
+  position: relative;
+  color: transparent;
+}
+
+#tabora-drawer .w-btn.loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(11, 12, 14, 0.25);
+  border-top-color: #0b0c0e;
+  animation: w-spin 700ms linear infinite;
+}
+
+@keyframes w-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- Сайты и история ---- */
+#tabora-drawer .w-site {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+#tabora-drawer .w-site .icon-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--tabora-line);
+  background: transparent;
+  color: var(--tabora-text-dim);
+  appearance: none;
+}
+
+#tabora-drawer .w-site .icon-btn:hover {
+  color: var(--w-danger);
+  border-color: var(--w-danger);
+}
+
+#tabora-drawer .w-activity .w-coin img {
+  width: 36px;
+  height: 36px;
+}
+
+#tabora-drawer .w-confirm .w-actions {
+  flex-wrap: nowrap;
+}
+
+#tabora-drawer .w-confirm .w-actions .w-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+#tabora-drawer .w-confirm .w-actions .w-btn.ghost {
+  flex: 0 0 auto;
 }

@@ -43,7 +43,7 @@ export const CHAINS = {
     nodes: ["https://api.mainnet-beta.solana.com", "https://solana-rpc.publicnode.com", "https://rpc.ankr.com/solana"], explorer: "https://solscan.io/account/",
     tokens: [{ symbol: "USDC", logo: LOGO("usdc"), mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6 }, { symbol: "USDT", logo: LOGO("usdt"), mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", decimals: 6 }] },
   tron: { id: "tron", logo: LOGO("tron"), name: "TRON", symbol: "TRX", kind: "tron", decimals: 6, color: "#ff7b7b", path: "m/44'/195'/0'/0/{i}",
-    nodes: ["https://api.trongrid.io", "https://tron-rpc.publicnode.com/jsonrpc"], explorer: "https://tronscan.org/#/address/",
+    nodes: ["https://api.trongrid.io", "https://api.tronstack.io", "https://tron-rpc.publicnode.com/jsonrpc"], explorer: "https://tronscan.org/#/address/",
     tokens: [{ symbol: "USDT", logo: LOGO("usdt"), address: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", decimals: 6 }, { symbol: "USDC", logo: LOGO("usdc"), address: "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8", decimals: 6 }] },
 };
 export const CHAIN_ORDER = ["ethereum", "base", "arbitrum", "polygon", "bitcoin", "solana", "tron"];
@@ -558,6 +558,49 @@ export const WalletStore = {
   tronHex(address) {
     const raw = b58check.decode(address); // 0x41 + 20 байт
     return "0x" + bytesToHex(raw.slice(1));
+  },
+
+  /* ---------- разрешения сайтов ---------- */
+
+  permissionFor(origin, chain) {
+    return this.data?.permissions?.[origin]?.[chain] || null;
+  },
+
+  async grantPermission(origin, chain, grant) {
+    this.data.permissions ||= {};
+    this.data.permissions[origin] ||= { since: new Date().toISOString() };
+    this.data.permissions[origin][chain] = { ...grant, at: new Date().toISOString() };
+    await this.save();
+  },
+
+  async revokePermission(origin, chain) {
+    if (!this.data?.permissions?.[origin]) {
+      return;
+    }
+    if (chain) {
+      delete this.data.permissions[origin][chain];
+    }
+    if (!chain || !["evm", "tron", "sol"].some(c => this.data.permissions[origin][c])) {
+      delete this.data.permissions[origin];
+    }
+    await this.save();
+  },
+
+  get permissions() {
+    return this.data?.permissions || {};
+  },
+
+  /* ---------- история операций ---------- */
+
+  get activity() {
+    return this.data?.activity || [];
+  },
+
+  async addActivity(entry) {
+    this.data.activity ||= [];
+    this.data.activity.unshift({ ...entry, at: new Date().toISOString() });
+    this.data.activity = this.data.activity.slice(0, 200);
+    await this.save();
   },
 
   /* ---------- токены ---------- */

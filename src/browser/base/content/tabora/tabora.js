@@ -35,9 +35,11 @@ var Tabora = {
     Services.scriptloader.loadSubScript("chrome://browser/content/tabora/drawer.js", window);
     Services.scriptloader.loadSubScript("chrome://browser/content/tabora/agent.js", window);
     Services.scriptloader.loadSubScript("chrome://browser/content/tabora/wallet/wallet.js", window);
+    Services.scriptloader.loadSubScript("chrome://browser/content/tabora/wallet/provider.js", window);
+    Services.scriptloader.loadSubScript("chrome://browser/content/tabora/wallet/send.js", window);
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
-      "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "startTimers", "updateTitle", "localizeUrlbar",
+      "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initWalletProvider", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "startTimers", "updateTitle", "localizeUrlbar",
       "routeUrlbarToCommandBar",
     ]) {
       try {
@@ -856,6 +858,24 @@ var Tabora = {
         child: {
           esModuleURI: "chrome://browser/content/tabora/actors/TaboraCookiesChild.sys.mjs",
           events: { DOMContentLoaded: {}, pageshow: {} },
+        },
+        allFrames: true,
+        messageManagerGroups: ["browsers"],
+        safeForUntrustedWebProcess: true,
+      });
+    } catch (e) {
+      // уже зарегистрирован другим окном
+    }
+  },
+
+  /** Провайдер кошелька для сайтов (EIP-1193, TronLink API, Wallet Standard). */
+  initWalletProvider() {
+    try {
+      ChromeUtils.registerWindowActor("TaboraWallet", {
+        parent: { esModuleURI: "chrome://browser/content/tabora/actors/TaboraWalletParent.sys.mjs" },
+        child: {
+          esModuleURI: "chrome://browser/content/tabora/actors/TaboraWalletChild.sys.mjs",
+          events: { DOMWindowCreated: {} },
         },
         allFrames: true,
         messageManagerGroups: ["browsers"],

@@ -16,3 +16,7 @@ export { base58, base58check, bech32, bech32m, base64, hex } from "@scure/base";
 export * as btc from "@scure/btc-signer";
 import qrcodegen from "qrcode-generator";
 export { qrcodegen };
+// EVM: транзакции EIP-1559, personal_sign, EIP-712, разбор calldata
+export { Transaction as EthTransaction, addr as ethAddr, weieth, weigwei } from "micro-eth-signer";
+export { personal as ethPersonal, signTyped as ethSignTyped, verifyTyped as ethVerifyTyped, sigHash as ethTypedHash } from "micro-eth-signer/typed-data.js";
+export { decodeData as ethDecodeData, decodeTx as ethDecodeTx, ERC20 as ERC20_ABI, createContract as ethContract } from "micro-eth-signer/abi.js";

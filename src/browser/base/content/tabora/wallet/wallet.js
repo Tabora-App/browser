@@ -89,6 +89,8 @@ Object.assign(Tabora, {
       node = this.walletSettingsView();
     } else if (w.view === "receive") {
       node = this.walletReceiveView();
+    } else if (w.view === "send") {
+      node = this.walletSendView();
     } else {
       node = this.walletMainView();
     }
@@ -418,7 +420,7 @@ Object.assign(Tabora, {
     const settings = this.iconButton("", "Настройки кошелька", ["M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", "M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"], () => this.walletGo("settings"), 15);
     const receiveBtn = this.wButton("Получить", "", () => { w.receive = "ethereum"; this.walletGo("receive"); });
     receiveBtn.prepend(this.wIcon(["M12 5v14", "M5 12l7 7 7-7"], 14, 2.2));
-    const sendBtn = this.wButton("Отправить", "primary", () => this.notice("Отправка появится следующим шагом: подтверждение, комиссия, пароль"));
+    const sendBtn = this.wButton("Отправить", "primary", () => this.walletSendStart());
     sendBtn.prepend(this.wIcon(["M12 19V5", "M5 12l7-7 7 7"], 14, 2.2));
     const head = h("div", { class: "w-head" }, null, [
       h("div", { class: "w-head-row" }, null, [walletBtn, h("span", { class: "spacer" }), settings, lock]),
@@ -428,7 +430,7 @@ Object.assign(Tabora, {
       WalletStore.passwordless ? h("div", { class: "w-badge-danger" }, "Без пароля · незащищённый режим") : h("span"),
     ]);
 
-    const seg = h("div", { class: "w-seg wide" }, null, [["assets", "Активы"], ["chains", "Сети"]].map(([id, label]) => {
+    const seg = h("div", { class: "w-seg wide" }, null, [["assets", "Активы"], ["chains", "Сети"], ["activity", "История"]].map(([id, label]) => {
       const b = h("button", { type: "button", "aria-pressed": String(w.tab === id) }, label);
       b.addEventListener("click", () => {
         w.tab = id;
@@ -437,8 +439,10 @@ Object.assign(Tabora, {
       return b;
     }));
 
-    const list = h("div", { class: "w-chains" });
-    if (w.tab === "assets") {
+    let list = h("div", { class: "w-chains" });
+    if (w.tab === "activity") {
+      list = this.walletActivityList();
+    } else if (w.tab === "assets") {
       const nonzero = assets.filter(a => a.pending || parseFloat(a.amount) > 0);
       const zero = assets.filter(a => !a.pending && !(parseFloat(a.amount) > 0));
       nonzero.forEach(a => list.append(this.walletAssetRow(a)));
@@ -560,6 +564,7 @@ Object.assign(Tabora, {
     row.addEventListener("contextmenu", e => {
       e.preventDefault();
       const items = [
+        { label: `Отправить ${a.symbol}`, run: () => this.walletSendStart(a.key) },
         { label: `Получить ${a.symbol}`, run: () => { this.wallet.receive = a.chain; this.walletGo("receive"); } },
         { label: "Копировать адрес", run: () => this.copyText(a.address, "Адрес скопирован") },
         { label: "Открыть в обозревателе", run: () => this.openInSpace(CHAINS[a.chain].explorer + a.address, true) },
@@ -636,7 +641,7 @@ Object.assign(Tabora, {
       h("div", { class: "w-actions" }, null, [cancel, ok]),
     ])]);
     box.querySelectorAll("input").forEach(i => i.addEventListener("keydown", e => e.stopPropagation()));
-    this.drawer.body.append(box);
+    this.wSheetShow(box);
     if (window.TaboraSelect) {
       window.TaboraSelect.enhance(chainSel, { compact: true });
     }
@@ -847,7 +852,7 @@ Object.assign(Tabora, {
     if (window.TaboraSelect) {
       window.TaboraSelect.enhance(autolock, { compact: true });
     }
-    return h("div", { class: "w-settings" }, null, [h("div", { class: "w-flow-head" }, null, [h("b", {}, "Настройки кошелька"), back]), security, nodes, chains]);
+    return h("div", { class: "w-settings" }, null, [h("div", { class: "w-flow-head" }, null, [h("b", {}, "Настройки кошелька"), back]), security, this.walletSitesCard(), nodes, chains]);
   },
 
   /** Запрос пароля в панели: колбэк получает пароль, при ошибке показываем текст. */
@@ -875,7 +880,7 @@ Object.assign(Tabora, {
         ok.click();
       }
     });
-    this.drawer.body.append(box);
+    this.wSheetShow(box);
     setTimeout(() => pass.input.focus(), 50);
   },
 
@@ -895,7 +900,7 @@ Object.assign(Tabora, {
         ok.click();
       }
     });
-    this.drawer.body.append(box);
+    this.wSheetShow(box);
     setTimeout(() => {
       input.focus();
       input.select();
@@ -911,7 +916,7 @@ Object.assign(Tabora, {
       grid.addEventListener("copy", e => e.preventDefault());
       const close = this.wButton("Скрыть", "primary", () => sheet.remove());
       const sheet = h("div", { class: "w-sheet" }, null, [h("div", { class: "w-sheet-card" }, null, [h("b", {}, wallet.name), grid, close])]);
-      this.drawer.body.append(sheet);
+      this.wSheetShow(sheet);
       clearTimeout(this.wallet.hideTimer);
       this.wallet.hideTimer = setTimeout(() => sheet.remove(), 60000);
     });
@@ -945,7 +950,7 @@ Object.assign(Tabora, {
     const cancel = this.wButton("Отмена", "ghost", () => box.remove());
     const box = h("div", { class: "w-sheet" }, null, [h("div", { class: "w-sheet-card" }, null, [h("b", {}, WalletStore.passwordless ? "Установить пароль" : "Сменить пароль"), WalletStore.passwordless ? h("span") : old.wrap, p1.wrap, p2.wrap, err, h("div", { class: "w-actions" }, null, [cancel, ok])])]);
     box.querySelectorAll("input").forEach(i => i.addEventListener("keydown", e => e.stopPropagation()));
-    this.drawer.body.append(box);
+    this.wSheetShow(box);
   },
 });
 

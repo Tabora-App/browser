@@ -130,21 +130,21 @@ var require_qrcode = __commonJS({
           }
         };
         var setupTypeNumber = function(test) {
-          var bits = QRUtil.getBCHTypeNumber(_typeNumber);
+          var bits2 = QRUtil.getBCHTypeNumber(_typeNumber);
           for (var i = 0; i < 18; i += 1) {
-            var mod2 = !test && (bits >> i & 1) == 1;
+            var mod2 = !test && (bits2 >> i & 1) == 1;
             _modules[Math.floor(i / 3)][i % 3 + _moduleCount - 8 - 3] = mod2;
           }
           for (var i = 0; i < 18; i += 1) {
-            var mod2 = !test && (bits >> i & 1) == 1;
+            var mod2 = !test && (bits2 >> i & 1) == 1;
             _modules[i % 3 + _moduleCount - 8 - 3][Math.floor(i / 3)] = mod2;
           }
         };
         var setupTypeInfo = function(test, maskPattern) {
           var data = _errorCorrectionLevel << 3 | maskPattern;
-          var bits = QRUtil.getBCHTypeInfo(data);
+          var bits2 = QRUtil.getBCHTypeInfo(data);
           for (var i = 0; i < 15; i += 1) {
-            var mod2 = !test && (bits >> i & 1) == 1;
+            var mod2 = !test && (bits2 >> i & 1) == 1;
             if (i < 6) {
               _modules[i][8] = mod2;
             } else if (i < 8) {
@@ -154,7 +154,7 @@ var require_qrcode = __commonJS({
             }
           }
           for (var i = 0; i < 15; i += 1) {
-            var mod2 = !test && (bits >> i & 1) == 1;
+            var mod2 = !test && (bits2 >> i & 1) == 1;
             if (i < 8) {
               _modules[8][_moduleCount - i - 1] = mod2;
             } else if (i < 9) {
@@ -1817,7 +1817,7 @@ function hexToBytes(hex2) {
   const al = hl / 2;
   if (hl % 2)
     throw new Error("hex string expected, got unpadded hex of length " + hl);
-  const array2 = new Uint8Array(al);
+  const array3 = new Uint8Array(al);
   for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) {
     const n1 = asciiToBase16(hex2.charCodeAt(hi));
     const n2 = asciiToBase16(hex2.charCodeAt(hi + 1));
@@ -1825,9 +1825,9 @@ function hexToBytes(hex2) {
       const char = hex2[hi] + hex2[hi + 1];
       throw new Error('hex string expected, got non-hex character "' + char + '" at index ' + hi);
     }
-    array2[ai] = n1 * 16 + n2;
+    array3[ai] = n1 * 16 + n2;
   }
-  return array2;
+  return array3;
 }
 var nextTick = async () => {
 };
@@ -3709,6 +3709,9 @@ function numberToBytesBE(n, len) {
 function numberToBytesLE(n, len) {
   return numberToBytesBE(n, len).reverse();
 }
+function numberToVarBytesBE(n) {
+  return hexToBytes(numberToHexUnpadded(n));
+}
 function ensureBytes(title, hex2, expectedLength) {
   let res;
   if (typeof hex2 === "string") {
@@ -3807,13 +3810,13 @@ function _validateObject(object, fields, optFields = {}) {
   Object.entries(optFields).forEach(([k, v]) => checkField(k, v, true));
 }
 function memoized(fn) {
-  const map = /* @__PURE__ */ new WeakMap();
+  const map2 = /* @__PURE__ */ new WeakMap();
   return (arg, ...args) => {
-    const val = map.get(arg);
+    const val = map2.get(arg);
     if (val !== void 0)
       return val;
     const computed = fn(arg, ...args);
-    map.set(arg, computed);
+    map2.set(arg, computed);
     return computed;
   };
 }
@@ -3959,9 +3962,9 @@ function validateField(field) {
     BYTES: "number",
     BITS: "number"
   };
-  const opts = FIELD_FIELDS.reduce((map, val) => {
-    map[val] = "function";
-    return map;
+  const opts = FIELD_FIELDS.reduce((map2, val) => {
+    map2[val] = "function";
+    return map2;
   }, initial);
   _validateObject(field, opts);
   return field;
@@ -4127,9 +4130,9 @@ function normalizeZ(c, property, points) {
   const affined = points.map((p, i) => p.toAffine(toInv[i]));
   return affined.map(c.fromAffine);
 }
-function validateW(W, bits) {
-  if (!Number.isSafeInteger(W) || W <= 0 || W > bits)
-    throw new Error("invalid window size, expected [1.." + bits + "], got W=" + W);
+function validateW(W, bits2) {
+  if (!Number.isSafeInteger(W) || W <= 0 || W > bits2)
+    throw new Error("invalid window size, expected [1.." + bits2 + "], got W=" + W);
 }
 function calcWOpts(W, scalarBits) {
   validateW(W, scalarBits);
@@ -4181,7 +4184,7 @@ function assert0(n) {
   if (n !== _0n4)
     throw new Error("invalid wNAF");
 }
-function wNAF(c, bits) {
+function wNAF(c, bits2) {
   return {
     constTimeNegate: negateCt,
     hasPrecomputes(elm) {
@@ -4211,7 +4214,7 @@ function wNAF(c, bits) {
      * @returns precomputed point tables flattened to a single array
      */
     precomputeWindow(elm, W) {
-      const { windows, windowSize } = calcWOpts(W, bits);
+      const { windows, windowSize } = calcWOpts(W, bits2);
       const points = [];
       let p = elm;
       let base = p;
@@ -4236,7 +4239,7 @@ function wNAF(c, bits) {
     wNAF(W, precomputes, n) {
       let p = c.ZERO;
       let f = c.BASE;
-      const wo = calcWOpts(W, bits);
+      const wo = calcWOpts(W, bits2);
       for (let window = 0; window < wo.windows; window++) {
         const { nextN, offset, isZero, isNeg, isNegF, offsetF } = calcOffsets(n, window, wo);
         n = nextN;
@@ -4258,7 +4261,7 @@ function wNAF(c, bits) {
      * @returns point
      */
     wNAFUnsafe(W, precomputes, n, acc = c.ZERO) {
-      const wo = calcWOpts(W, bits);
+      const wo = calcWOpts(W, bits2);
       for (let window = 0; window < wo.windows; window++) {
         if (n === _0n4)
           break;
@@ -4300,7 +4303,7 @@ function wNAF(c, bits) {
     // using windowed method. This specifies window size and
     // stores precomputed values. Usually only base point would be precomputed.
     setWindowSize(P2, W) {
-      validateW(W, bits);
+      validateW(W, bits2);
       pointWindowSizes.set(P2, W);
       pointPrecomputes.delete(P2);
     }
@@ -4406,9 +4409,9 @@ var DER = {
   Err: DERErr,
   // Basic building block is TLV (Tag-Length-Value)
   _tlv: {
-    encode: (tag, data) => {
+    encode: (tag2, data) => {
       const { Err: E } = DER;
-      if (tag < 0 || tag > 256)
+      if (tag2 < 0 || tag2 > 256)
         throw new E("tlv.encode: wrong tag");
       if (data.length & 1)
         throw new E("tlv.encode: unpadded data");
@@ -4417,16 +4420,16 @@ var DER = {
       if (len.length / 2 & 128)
         throw new E("tlv.encode: long form length too big");
       const lenLen = dataLen > 127 ? numberToHexUnpadded(len.length / 2 | 128) : "";
-      const t = numberToHexUnpadded(tag);
+      const t = numberToHexUnpadded(tag2);
       return t + lenLen + len + data;
     },
     // v - value, l - left bytes (unparsed)
-    decode(tag, data) {
+    decode(tag2, data) {
       const { Err: E } = DER;
       let pos = 0;
-      if (tag < 0 || tag > 256)
+      if (tag2 < 0 || tag2 > 256)
         throw new E("tlv.encode: wrong tag");
-      if (data.length < 2 || data[pos++] !== tag)
+      if (data.length < 2 || data[pos++] !== tag2)
         throw new E("tlv.decode: wrong tlv");
       const first = data[pos++];
       const isLong = !!(first & 128);
@@ -4482,7 +4485,7 @@ var DER = {
     }
   },
   toSig(hex2) {
-    const { Err: E, _int: int, _tlv: tlv } = DER;
+    const { Err: E, _int: int2, _tlv: tlv } = DER;
     const data = ensureBytes("signature", hex2);
     const { v: seqBytes, l: seqLeftBytes } = tlv.decode(48, data);
     if (seqLeftBytes.length)
@@ -4491,12 +4494,12 @@ var DER = {
     const { v: sBytes, l: sLeftBytes } = tlv.decode(2, rLeftBytes);
     if (sLeftBytes.length)
       throw new E("invalid signature: left bytes after parsing");
-    return { r: int.decode(rBytes), s: int.decode(sBytes) };
+    return { r: int2.decode(rBytes), s: int2.decode(sBytes) };
   },
   hexFromSig(sig) {
-    const { _tlv: tlv, _int: int } = DER;
-    const rs = tlv.encode(2, int.encode(sig.r));
-    const ss = tlv.encode(2, int.encode(sig.s));
+    const { _tlv: tlv, _int: int2 } = DER;
+    const rs = tlv.encode(2, int2.encode(sig.r));
+    const ss = tlv.encode(2, int2.encode(sig.s));
     const seq = rs + ss;
     return tlv.encode(48, seq);
   }
@@ -4964,8 +4967,8 @@ function weierstrassN(CURVE, curveOpts = {}) {
   Point4.ZERO = new Point4(Fp2.ZERO, Fp2.ONE, Fp2.ZERO);
   Point4.Fp = Fp2;
   Point4.Fn = Fn;
-  const bits = Fn.BITS;
-  const wnaf = wNAF(Point4, curveOpts.endo ? Math.ceil(bits / 2) : bits);
+  const bits2 = Fn.BITS;
+  const wnaf = wNAF(Point4, curveOpts.endo ? Math.ceil(bits2 / 2) : bits2);
   return Point4;
 }
 function pprefix(hasEvenY) {
@@ -5187,13 +5190,13 @@ function ecdsa(Point4, ecdsaOpts, curveOpts = {}) {
   }
   const defaultSigOpts = { lowS: ecdsaOpts.lowS, prehash: false };
   const defaultVerOpts = { lowS: ecdsaOpts.lowS, prehash: false };
-  function sign(msgHash, privKey, opts = defaultSigOpts) {
+  function sign2(msgHash, privKey, opts = defaultSigOpts) {
     const { seed, k2sig } = prepSig(msgHash, privKey, opts);
     const drbg = createHmacDrbg(ecdsaOpts.hash.outputLen, Fn.BYTES, hmac_);
     return drbg(seed, k2sig);
   }
   Point4.BASE.precompute(8);
-  function verify(signature, msgHash, publicKey, opts = defaultVerOpts) {
+  function verify2(signature, msgHash, publicKey, opts = defaultVerOpts) {
     const sg = signature;
     msgHash = ensureBytes("msgHash", msgHash);
     publicKey = ensureBytes("publicKey", publicKey);
@@ -5252,8 +5255,8 @@ function ecdsa(Point4, ecdsaOpts, curveOpts = {}) {
   return Object.freeze({
     getPublicKey,
     getSharedSecret,
-    sign,
-    verify,
+    sign: sign2,
+    verify: verify2,
     utils: utils4,
     Point: Point4,
     Signature
@@ -5386,12 +5389,12 @@ var secp256k1 = createCurve({
   }
 }, sha256);
 var TAGGED_HASH_PREFIXES = {};
-function taggedHash(tag, ...messages) {
-  let tagP = TAGGED_HASH_PREFIXES[tag];
+function taggedHash(tag2, ...messages) {
+  let tagP = TAGGED_HASH_PREFIXES[tag2];
   if (tagP === void 0) {
-    const tagH = sha256(Uint8Array.from(tag, (c) => c.charCodeAt(0)));
+    const tagH = sha256(Uint8Array.from(tag2, (c) => c.charCodeAt(0)));
     tagP = concatBytes(tagH, tagH);
-    TAGGED_HASH_PREFIXES[tag] = tagP;
+    TAGGED_HASH_PREFIXES[tag2] = tagP;
   }
   return sha256(concatBytes(tagP, ...messages));
 }
@@ -5808,7 +5811,7 @@ function eddsa(Point4, eddsaOpts) {
     const msg = concatBytes(...msgs);
     return modN_LE(cHash(domain(msg, ensureBytes("context", context), !!prehash)));
   }
-  function sign(msg, privKey, options = {}) {
+  function sign2(msg, privKey, options = {}) {
     msg = ensureBytes("message", msg);
     if (prehash)
       msg = prehash(msg);
@@ -5823,7 +5826,7 @@ function eddsa(Point4, eddsaOpts) {
     return ensureBytes("result", res, L * 2);
   }
   const verifyOpts = VERIFY_DEFAULT;
-  function verify(sig, msg, publicKey, options = verifyOpts) {
+  function verify2(sig, msg, publicKey, options = verifyOpts) {
     const { context, zip215 } = options;
     const len = Fp2.BYTES;
     sig = ensureBytes("signature", sig, 2 * len);
@@ -5863,7 +5866,7 @@ function eddsa(Point4, eddsaOpts) {
       return point.precompute(windowSize, false);
     }
   };
-  return { getPublicKey, sign, verify, utils: utils4, Point: Point4 };
+  return { getPublicKey, sign: sign2, verify: verify2, utils: utils4, Point: Point4 };
 }
 function _eddsa_legacy_opts_to_new(c) {
   const CURVE = {
@@ -5889,8 +5892,8 @@ function _eddsa_legacy_opts_to_new(c) {
   return { CURVE, curveOpts, eddsaOpts };
 }
 function _eddsa_new_output_to_legacy(c, eddsa2) {
-  const legacy = Object.assign({}, eddsa2, { ExtendedPoint: eddsa2.Point, CURVE: c });
-  return legacy;
+  const legacy2 = Object.assign({}, eddsa2, { ExtendedPoint: eddsa2.Point, CURVE: c });
+  return legacy2;
 }
 function twistedEdwards(c) {
   const { CURVE, curveOpts, eddsaOpts } = _eddsa_legacy_opts_to_new(c);
@@ -5916,19 +5919,19 @@ var ed25519_CURVE = {
   Gy: BigInt("0x6666666666666666666666666666666666666666666666666666666666666658")
 };
 function ed25519_pow_2_252_3(x) {
-  const _10n = BigInt(10), _20n = BigInt(20), _40n = BigInt(40), _80n = BigInt(80);
+  const _10n2 = BigInt(10), _20n = BigInt(20), _40n = BigInt(40), _80n = BigInt(80);
   const P2 = ed25519_CURVE.p;
   const x2 = x * x % P2;
   const b2 = x2 * x % P2;
   const b4 = pow2(b2, _2n6, P2) * b2 % P2;
   const b5 = pow2(b4, _1n8, P2) * x % P2;
   const b10 = pow2(b5, _5n2, P2) * b5 % P2;
-  const b20 = pow2(b10, _10n, P2) * b10 % P2;
+  const b20 = pow2(b10, _10n2, P2) * b10 % P2;
   const b40 = pow2(b20, _20n, P2) * b20 % P2;
   const b80 = pow2(b40, _40n, P2) * b40 % P2;
   const b160 = pow2(b80, _80n, P2) * b80 % P2;
   const b240 = pow2(b160, _80n, P2) * b80 % P2;
-  const b250 = pow2(b240, _10n, P2) * b10 % P2;
+  const b250 = pow2(b240, _10n2, P2) * b10 % P2;
   const pow_p_5_8 = pow2(b250, _2n6, P2) * x % P2;
   return { pow_p_5_8, b2 };
 }
@@ -6080,24 +6083,24 @@ function join(separator = "") {
   };
 }
 // @__NO_SIDE_EFFECTS__
-function padding(bits, chr = "=") {
-  anumber2(bits);
+function padding(bits2, chr = "=") {
+  anumber2(bits2);
   astr("padding", chr);
   return {
     encode(data) {
       astrArr("padding.encode", data);
-      while (data.length * bits % 8)
+      while (data.length * bits2 % 8)
         data.push(chr);
       return data;
     },
     decode(input) {
       astrArr("padding.decode", input);
       let end = input.length;
-      if (end * bits % 8)
+      if (end * bits2 % 8)
         throw new Error("padding: invalid, string should have whole number of bytes");
       for (; end > 0 && input[end - 1] === chr; end--) {
         const last = end - 1;
-        const byte = last * bits;
+        const byte = last * bits2;
         if (byte % 8 === 0)
           throw new Error("padding: invalid, string has too much padding");
       }
@@ -6221,21 +6224,21 @@ function radix(num2) {
   };
 }
 // @__NO_SIDE_EFFECTS__
-function radix2(bits, revPadding = false) {
-  anumber2(bits);
-  if (bits <= 0 || bits > 32)
+function radix2(bits2, revPadding = false) {
+  anumber2(bits2);
+  if (bits2 <= 0 || bits2 > 32)
     throw new Error("radix2: bits should be in (0..32]");
-  if (/* @__PURE__ */ radix2carry(8, bits) > 32 || /* @__PURE__ */ radix2carry(bits, 8) > 32)
+  if (/* @__PURE__ */ radix2carry(8, bits2) > 32 || /* @__PURE__ */ radix2carry(bits2, 8) > 32)
     throw new Error("radix2: carry overflow");
   return {
     encode: (bytes) => {
       if (!isBytes2(bytes))
         throw new Error("radix2.encode input should be Uint8Array");
-      return convertRadix2(Array.from(bytes), 8, bits, !revPadding);
+      return convertRadix2(Array.from(bytes), 8, bits2, !revPadding);
     },
     decode: (digits) => {
       anumArr("radix2.decode", digits);
-      return Uint8Array.from(convertRadix2(digits, bits, 8, revPadding));
+      return Uint8Array.from(convertRadix2(digits, bits2, 8, revPadding));
     }
   };
 }
@@ -9162,20 +9165,20 @@ var _Reader = class __Reader {
     return this.pos >= this.data.length && !this.bitPos;
   }
   // bits are read in BE mode (left to right): (0b1000_0000).readBits(1) == 1
-  bits(bits) {
-    if (bits > 32)
+  bits(bits2) {
+    if (bits2 > 32)
       throw this.err("BitReader: cannot read more than 32 bits in single call");
     let out = 0;
-    while (bits) {
+    while (bits2) {
       if (!this.bitPos) {
         this.bitBuf = this.byte();
         this.bitPos = 8;
       }
-      const take = Math.min(bits, this.bitPos);
+      const take = Math.min(bits2, this.bitPos);
       this.bitPos -= take;
       out = out << take | this.bitBuf >> this.bitPos & 2 ** take - 1;
       this.bitBuf &= 2 ** this.bitPos - 1;
-      bits -= take;
+      bits2 -= take;
     }
     return out >>> 0;
   }
@@ -9272,17 +9275,17 @@ var _Writer = class {
     }
     return buf;
   }
-  bits(value, bits) {
-    if (bits > 32)
+  bits(value, bits2) {
+    if (bits2 > 32)
       throw this.err("writeBits: cannot write more than 32 bits in single call");
-    if (value >= 2 ** bits)
-      throw this.err(`writeBits: value (${value}) >= 2**bits (${bits})`);
-    while (bits) {
-      const take = Math.min(bits, 8 - this.bitPos);
-      this.bitBuf = this.bitBuf << take | value >> bits - take;
+    if (value >= 2 ** bits2)
+      throw this.err(`writeBits: value (${value}) >= 2**bits (${bits2})`);
+    while (bits2) {
+      const take = Math.min(bits2, 8 - this.bitPos);
+      this.bitBuf = this.bitBuf << take | value >> bits2 - take;
       this.bitPos += take;
-      bits -= take;
-      value &= 2 ** bits - 1;
+      bits2 -= take;
+      value &= 2 ** bits2 - 1;
       if (this.bitPos === 8) {
         this.bitPos = 0;
         this.buffers.push(new Uint8Array([this.bitBuf]));
@@ -9292,14 +9295,14 @@ var _Writer = class {
   }
 };
 var swapEndianness = (b) => Uint8Array.from(b).reverse();
-function checkBounds(value, bits, signed) {
+function checkBounds(value, bits2, signed) {
   if (signed) {
-    const signBit = 2n ** (bits - 1n);
+    const signBit = 2n ** (bits2 - 1n);
     if (value < -signBit || value >= signBit)
       throw new Error(`value out of signed bounds. Expected ${-signBit} <= ${value} < ${signBit}`);
   } else {
-    if (0n > value || value >= 2n ** bits)
-      throw new Error(`value out of unsigned bounds. Expected 0 <= ${value} < ${2n ** bits}`);
+    if (0n > value || value >= 2n ** bits2)
+      throw new Error(`value out of unsigned bounds. Expected 0 <= ${value} < ${2n ** bits2}`);
   }
 }
 function _wrap(inner) {
@@ -9428,15 +9431,15 @@ function decimal(precision, round = false) {
       let i = s.length - 1;
       for (; i >= sep && s[i] === "0"; i--)
         ;
-      let int = s.slice(0, sep);
+      let int2 = s.slice(0, sep);
       let frac = s.slice(sep, i + 1);
-      if (!int)
-        int = "0";
+      if (!int2)
+        int2 = "0";
       if (from < 0n)
-        int = "-" + int;
+        int2 = "-" + int2;
       if (!frac)
-        return int;
-      return `${int}.${frac}`;
+        return int2;
+      return `${int2}.${frac}`;
     },
     decode: (to) => {
       if (typeof to !== "string")
@@ -9454,13 +9457,13 @@ function decimal(precision, round = false) {
       sep = sep === -1 ? to.length : sep;
       const intS = to.slice(0, sep);
       const fracS = to.slice(sep + 1).replace(/0+$/, "");
-      const int = BigInt(intS) * decimalMask;
+      const int2 = BigInt(intS) * decimalMask;
       if (!round && fracS.length > precision) {
         throw new Error(`fractional part cannot be represented with this precision (num=${to}, prec=${precision})`);
       }
       const fracLen = Math.min(fracS.length, precision);
       const frac = BigInt(fracS.slice(0, fracLen)) * 10n ** BigInt(precision - fracLen);
-      const value = int + frac;
+      const value = int2 + frac;
       return neg ? -value : value;
     }
   };
@@ -9496,6 +9499,19 @@ var reverse = (coder) => {
   return { encode: coder.decode, decode: coder.encode };
 };
 var coders = { dict, numberBigint, tsEnum, decimal, match, reverse };
+var bits = (len) => {
+  if (!isNum(len))
+    throw new Error(`bits: wrong length ${len} (${typeof len})`);
+  return wrap({
+    encodeStream: (w, value) => w.bits(value, len),
+    decodeStream: (r) => r.bits(len),
+    validate: (value) => {
+      if (!isNum(value))
+        throw new Error(`bits: wrong value ${value}`);
+      return value;
+    }
+  });
+};
 var bigint = (size, le = false, signed = false, sized = true) => {
   if (!isNum(size))
     throw new Error(`bigint/size: wrong value ${size}`);
@@ -9548,6 +9564,19 @@ var bigint = (size, le = false, signed = false, sized = true) => {
 var U256BE = /* @__PURE__ */ bigint(32, false);
 var U64LE = /* @__PURE__ */ bigint(8, true);
 var I64LE = /* @__PURE__ */ bigint(8, true, true);
+var int = (size, le = false, signed = false, sized = true) => {
+  if (!isNum(size))
+    throw new Error(`int/size: wrong value ${size}`);
+  if (typeof le !== "boolean")
+    throw new Error(`int/le: expected boolean, got ${typeof le}`);
+  if (typeof signed !== "boolean")
+    throw new Error(`int/signed: expected boolean, got ${typeof signed}`);
+  if (typeof sized !== "boolean")
+    throw new Error(`int/sized: expected boolean, got ${typeof sized}`);
+  if (size > 6)
+    throw new Error("int supports size up to 6 bytes (48 bits): use bigints instead");
+  return apply(bigint(size, le, signed, sized), coders.numberBigint);
+};
 var view = (len, opts) => wrap({
   size: len,
   encodeStream: (w, value) => w.writeView(len, (view2) => opts.write(view2, value)),
@@ -9561,8 +9590,8 @@ var view = (len, opts) => wrap({
   }
 });
 var intView = (len, signed, opts) => {
-  const bits = len * 8;
-  const signBit = 2 ** (bits - 1);
+  const bits2 = len * 8;
+  const signBit = 2 ** (bits2 - 1);
   const validateSigned = (value) => {
     if (!isNum(value))
       throw new Error(`sintView: value is not safe integer: ${value}`);
@@ -9570,7 +9599,7 @@ var intView = (len, signed, opts) => {
       throw new Error(`sintView: value out of bounds. Expected ${-signBit} <= ${value} < ${signBit}`);
     }
   };
-  const maxVal = 2 ** bits;
+  const maxVal = 2 ** bits2;
   const validateUnsigned = (value) => {
     if (!isNum(value))
       throw new Error(`uintView: value is not safe integer: ${value}`);
@@ -9603,6 +9632,21 @@ var U16LE = /* @__PURE__ */ intView(2, false, {
 var U8 = /* @__PURE__ */ intView(1, false, {
   read: (view2, pos) => view2.getUint8(pos),
   write: (view2, value) => view2.setUint8(0, value)
+});
+var bool = /* @__PURE__ */ wrap({
+  size: 1,
+  encodeStream: (w, value) => w.byte(value ? 1 : 0),
+  decodeStream: (r) => {
+    const value = r.byte();
+    if (value !== 0 && value !== 1)
+      throw r.err(`bool: invalid value ${value}`);
+    return value === 1;
+  },
+  validate: (value) => {
+    if (typeof value !== "boolean")
+      throw new Error(`bool: invalid value ${value}`);
+    return value;
+  }
 });
 var createBytes = (len, le = false) => {
   if (typeof le !== "boolean")
@@ -9689,6 +9733,14 @@ function apply(inner, base) {
         throw r.err("" + e);
       }
     }
+  });
+}
+function lazy(fn) {
+  if (typeof fn !== "function")
+    throw new Error(`lazy: expected function, got ${typeof fn}`);
+  return wrap({
+    encodeStream: (w, value) => fn().encodeStream(w, value),
+    decodeStream: (r) => fn().decodeStream(r)
   });
 }
 var flag = (flagValue, xor = false) => {
@@ -9908,6 +9960,146 @@ function array(len, inner) {
       if (!Array.isArray(value))
         throw new Error(`array: invalid value ${value}`);
       return value;
+    }
+  });
+}
+function map(inner, variants) {
+  if (!isCoder(inner))
+    throw new Error(`map: invalid inner value ${inner}`);
+  if (!isPlainObject(variants))
+    throw new Error(`map: variants should be plain object`);
+  const variantNames = /* @__PURE__ */ new Map();
+  for (const k in variants)
+    variantNames.set(variants[k], k);
+  return wrap({
+    size: inner.size,
+    encodeStream: (w, value) => inner.encodeStream(w, variants[value]),
+    decodeStream: (r) => {
+      const variant = inner.decodeStream(r);
+      const name = variantNames.get(variant);
+      if (name === void 0)
+        throw r.err(`Enum: unknown value: ${variant} ${Array.from(variantNames.keys())}`);
+      return name;
+    },
+    validate: (value) => {
+      if (typeof value !== "string")
+        throw new Error(`map: invalid value ${value}`);
+      if (!(value in variants))
+        throw new Error(`Map: unknown variant: ${value}`);
+      return value;
+    }
+  });
+}
+function tag(tag2, variants) {
+  if (!isCoder(tag2))
+    throw new Error(`tag: invalid tag value ${tag2}`);
+  if (!isPlainObject(variants))
+    throw new Error(`tag: variants should be plain object`);
+  for (const name in variants) {
+    if (!isCoder(variants[name]))
+      throw new Error(`tag: variant ${name} is not CoderType`);
+  }
+  return wrap({
+    size: tag2.size,
+    encodeStream: (w, value) => {
+      const { TAG, data } = value;
+      const dataType = variants[TAG];
+      tag2.encodeStream(w, TAG);
+      dataType.encodeStream(w, data);
+    },
+    decodeStream: (r) => {
+      const TAG = tag2.decodeStream(r);
+      const dataType = variants[TAG];
+      if (!dataType)
+        throw r.err(`Tag: invalid tag ${TAG}`);
+      return { TAG, data: dataType.decodeStream(r) };
+    },
+    validate: (value) => {
+      const { TAG } = value;
+      const dataType = variants[TAG];
+      if (!dataType)
+        throw new Error(`Tag: invalid tag ${TAG.toString()}`);
+      return value;
+    }
+  });
+}
+var ZeroPad = (_) => 0;
+function padLength(blockSize, len) {
+  if (len % blockSize === 0)
+    return 0;
+  return blockSize - len % blockSize;
+}
+function padLeft(blockSize, inner, padFn) {
+  if (!isNum(blockSize) || blockSize <= 0)
+    throw new Error(`padLeft: wrong blockSize=${blockSize}`);
+  if (!isCoder(inner))
+    throw new Error(`padLeft: invalid inner value ${inner}`);
+  if (padFn !== void 0 && typeof padFn !== "function")
+    throw new Error(`padLeft: wrong padFn=${typeof padFn}`);
+  const _padFn = padFn || ZeroPad;
+  if (!inner.size)
+    throw new Error("padLeft cannot have dynamic size");
+  return wrap({
+    size: inner.size + padLength(blockSize, inner.size),
+    encodeStream: (w, value) => {
+      const padBytes = padLength(blockSize, inner.size);
+      for (let i = 0; i < padBytes; i++)
+        w.byte(_padFn(i));
+      inner.encodeStream(w, value);
+    },
+    decodeStream: (r) => {
+      r.bytes(padLength(blockSize, inner.size));
+      return inner.decodeStream(r);
+    }
+  });
+}
+function padRight(blockSize, inner, padFn) {
+  if (!isCoder(inner))
+    throw new Error(`padRight: invalid inner value ${inner}`);
+  if (!isNum(blockSize) || blockSize <= 0)
+    throw new Error(`padLeft: wrong blockSize=${blockSize}`);
+  if (padFn !== void 0 && typeof padFn !== "function")
+    throw new Error(`padRight: wrong padFn=${typeof padFn}`);
+  const _padFn = padFn || ZeroPad;
+  return wrap({
+    size: inner.size ? inner.size + padLength(blockSize, inner.size) : void 0,
+    encodeStream: (w, value) => {
+      const _w = w;
+      const pos = _w.pos;
+      inner.encodeStream(w, value);
+      const padBytes = padLength(blockSize, _w.pos - pos);
+      for (let i = 0; i < padBytes; i++)
+        w.byte(_padFn(i));
+    },
+    decodeStream: (r) => {
+      const start = r.pos;
+      const res = inner.decodeStream(r);
+      r.bytes(padLength(blockSize, r.pos - start));
+      return res;
+    }
+  });
+}
+function pointer(ptr, inner, sized = false) {
+  if (!isCoder(ptr))
+    throw new Error(`pointer: invalid ptr value ${ptr}`);
+  if (!isCoder(inner))
+    throw new Error(`pointer: invalid inner value ${inner}`);
+  if (typeof sized !== "boolean")
+    throw new Error(`pointer/sized: expected boolean, got ${typeof sized}`);
+  if (!ptr.size)
+    throw new Error("unsized pointer");
+  return wrap({
+    size: sized ? ptr.size : void 0,
+    encodeStream: (w, value) => {
+      const _w = w;
+      const start = _w.pos;
+      ptr.encodeStream(w, 0);
+      _w.ptrs.push({ pos: start, ptr, buffer: inner.encode(value) });
+    },
+    decodeStream: (r) => {
+      const ptrVal = ptr.decodeStream(r);
+      r._enablePointers();
+      return inner.decodeStream(r.offsetReader(ptrVal));
     }
   });
 }
@@ -10649,13 +10841,13 @@ function mergeKeyMap(psbtEnum, val, cur, allowedFields, allowUnknown) {
             typeof val2[1] === "string" ? vC.decode(hex.decode(val2[1])) : val2[1]
           ];
         });
-        const map = {};
+        const map2 = {};
         const add2 = (kStr, k2, v) => {
-          if (map[kStr] === void 0) {
-            map[kStr] = [k2, v];
+          if (map2[kStr] === void 0) {
+            map2[kStr] = [k2, v];
             return;
           }
-          const oldVal = hex.encode(vC.encode(map[kStr][1]));
+          const oldVal = hex.encode(vC.encode(map2[kStr][1]));
           const newVal = hex.encode(vC.encode(v));
           if (oldVal !== newVal)
             throw new Error(`keyMap(${key}): same key=${kStr} oldVal=${oldVal} newVal=${newVal}`);
@@ -10669,11 +10861,11 @@ function mergeKeyMap(psbtEnum, val, cur, allowedFields, allowUnknown) {
           if (v === void 0) {
             if (cannotChange)
               throw new Error(`Cannot remove signed field=${key}/${k2}`);
-            delete map[kStr];
+            delete map2[kStr];
           } else
             add2(kStr, k2, v);
         }
-        res[key] = Object.values(map);
+        res[key] = Object.values(map2);
       }
     } else if (typeof res[k] === "string") {
       res[k] = vC.decode(hex.decode(res[k]));
@@ -10936,12 +11128,12 @@ function checkScript(script, redeemScript, witnessScript) {
   }
 }
 function uniqPubkey(pubkeys) {
-  const map = {};
+  const map2 = {};
   for (const pub of pubkeys) {
     const key = hex.encode(pub);
-    if (map[key])
+    if (map2[key])
       throw new Error(`Multisig: non-uniq pubkey: ${pubkeys.map(hex.encode)}`);
-    map[key] = true;
+    map2[key] = true;
   }
 }
 var p2pk = (pubkey, _network = NETWORK) => {
@@ -12249,10 +12441,10 @@ var Transaction = class _Transaction {
       const pubkeys = inputType.last.pubkeys;
       let signatures = [];
       for (const pub of pubkeys) {
-        const sign = input.partialSig.find((s) => equalBytes2(pub, s[0]));
-        if (!sign)
+        const sign2 = input.partialSig.find((s) => equalBytes2(pub, s[0]));
+        if (!sign2)
           continue;
-        signatures.push(sign[1]);
+        signatures.push(sign2[1]);
       }
       signatures = signatures.slice(0, m);
       if (signatures.length !== m) {
@@ -12372,7 +12564,7 @@ var encodeTapBlock = (item) => TaprootControlBlock.encode(item);
 function iterLeafs(tapLeafScript, sigSize, customScripts) {
   if (!tapLeafScript || !tapLeafScript.length)
     throw new Error("no leafs");
-  const empty = () => new Uint8Array(sigSize);
+  const empty2 = () => new Uint8Array(sigSize);
   const leafs = tapLeafScript.sort((a, b) => encodeTapBlock(a[0]).length - encodeTapBlock(b[0]).length);
   for (const [cb, _script] of leafs) {
     const script = _script.slice(0, -1);
@@ -12383,12 +12575,12 @@ function iterLeafs(tapLeafScript, sigSize, customScripts) {
       const m = outs.m;
       const n = outs.pubkeys.length - m;
       for (let i = 0; i < m; i++)
-        signatures.push(empty());
+        signatures.push(empty2());
       for (let i = 0; i < n; i++)
         signatures.push(EMPTY);
     } else if (outs.type === "tr_ns") {
       for (const _pub of outs.pubkeys)
-        signatures.push(empty());
+        signatures.push(empty2());
     } else {
       if (!customScripts)
         throw new Error("Finalize: Unknown tapLeafScript");
@@ -12410,7 +12602,7 @@ function iterLeafs(tapLeafScript, sigSize, customScripts) {
             return false;
           }
         });
-        const finalized = c.finalizeTaproot(script, csEncoded, pubKeys.map((pubKey) => [{ pubKey, leafHash }, empty()]));
+        const finalized = c.finalizeTaproot(script, csEncoded, pubKeys.map((pubKey) => [{ pubKey, leafHash }, empty2()]));
         if (!finalized)
           continue;
         return finalized.concat(encodeTapBlock(cb));
@@ -12432,7 +12624,7 @@ function estimateInput(inputType, input, opts) {
     } else
       throw new Error("estimateInput/taproot: unknown input");
   } else {
-    const empty = () => new Uint8Array(72);
+    const empty2 = () => new Uint8Array(72);
     const emptyPub = () => new Uint8Array(33);
     let inputScript = EMPTY;
     let inputWitness = [];
@@ -12441,15 +12633,15 @@ function estimateInput(inputType, input, opts) {
       const m = inputType.last.m;
       const sig = [0];
       for (let i = 0; i < m; i++)
-        sig.push(empty());
+        sig.push(empty2());
       inputScript = Script.encode(sig);
     } else if (ltype === "pk") {
-      inputScript = Script.encode([empty()]);
+      inputScript = Script.encode([empty2()]);
     } else if (ltype === "pkh") {
-      inputScript = Script.encode([empty(), emptyPub()]);
+      inputScript = Script.encode([empty2(), emptyPub()]);
     } else if (ltype === "wpkh") {
       inputScript = EMPTY;
-      inputWitness = [empty(), emptyPub()];
+      inputWitness = [empty2(), emptyPub()];
     } else if (ltype === "unknown" && !opts.allowUnknownInputs)
       throw new Error("Unknown inputs are not allowed");
     if (inputType.type.includes("wsh-")) {
@@ -12770,8 +12962,1999 @@ var utils3 = {
 
 // entry.mjs
 var import_qrcode_generator = __toESM(require_qrcode(), 1);
+
+// node_modules/micro-eth-signer/esm/utils.js
+var isBytes5 = isBytes;
+var ETH_PRECISION = 18;
+var GWEI_PRECISION = 9;
+var GWEI = BigInt(10) ** BigInt(GWEI_PRECISION);
+var ETHER = BigInt(10) ** BigInt(ETH_PRECISION);
+var amounts = /* @__PURE__ */ (() => ({
+  GWEI_PRECISION,
+  ETH_PRECISION,
+  GWEI,
+  ETHER,
+  // Disabled with "strict=false"
+  maxAmount: BigInt(1e6) * ETHER,
+  // 1M ether for testnets
+  minGasLimit: BigInt(21e3),
+  // 21K wei is used at minimum. Possibly smaller gas limit in 4844 txs?
+  maxGasLimit: BigInt(3e7),
+  // 30M wei. A block limit in 2024 is 30M
+  maxGasPrice: BigInt(1e4) * GWEI,
+  // 10K gwei. Arbitrage HFT bots can use more
+  maxNonce: BigInt(131072),
+  // 2**17, but in spec it's actually 2**64-1
+  maxDataSize: 1e6,
+  // Size of .data field. TODO: research
+  maxInitDataSize: 49152,
+  // EIP-3860
+  maxChainId: BigInt(2 ** 32 - 1),
+  maxUint64: BigInt(2) ** BigInt(64) - BigInt(1),
+  maxUint256: BigInt(2) ** BigInt(256) - BigInt(1)
+}))();
+var leadingZerosRe = /^0+/;
+var genEthHex = (keepLeadingZero = true) => ({
+  decode: (data) => {
+    if (typeof data !== "string")
+      throw new Error("hex data must be a string");
+    let hex2 = strip0x(data);
+    hex2 = hex2.length & 1 ? `0${hex2}` : hex2;
+    return hexToBytes(hex2);
+  },
+  encode: (data) => {
+    let hex2 = bytesToHex(data);
+    if (!keepLeadingZero)
+      hex2 = hex2.replace(leadingZerosRe, "");
+    return add0x(hex2);
+  }
+});
+var ethHex = /* @__PURE__ */ genEthHex(true);
+var ethHexNoLeadingZero = /* @__PURE__ */ genEthHex(false);
+var ethHexStartRe = /^0[xX]/;
+function add0x(hex2) {
+  return ethHexStartRe.test(hex2) ? hex2 : `0x${hex2}`;
+}
+function strip0x(hex2) {
+  return hex2.replace(ethHexStartRe, "");
+}
+function isObject(item) {
+  return item != null && typeof item === "object";
+}
+function astr2(str) {
+  if (typeof str !== "string")
+    throw new Error("string expected");
+}
+function sign(hash, privKey, extraEntropy = true) {
+  const sig = secp256k1.sign(hash, privKey, { extraEntropy });
+  if ([2, 3].includes(sig.recovery))
+    throw new Error("invalid signature rec=2 or 3");
+  return sig;
+}
+function validateRaw(obj) {
+  if (isBytes5(obj))
+    return true;
+  if (typeof obj === "object" && obj && typeof obj.r === "bigint" && typeof obj.s === "bigint")
+    return true;
+  throw new Error("expected valid signature");
+}
+function verify(sig, hash, publicKey) {
+  validateRaw(sig);
+  return secp256k1.verify(sig, hash, publicKey);
+}
+function initSig(sig, bit) {
+  validateRaw(sig);
+  const s = isBytes5(sig) ? secp256k1.Signature.fromCompact(sig) : new secp256k1.Signature(sig.r, sig.s);
+  return s.addRecoveryBit(bit);
+}
+function cloneDeep2(obj) {
+  if (isBytes5(obj)) {
+    return Uint8Array.from(obj);
+  } else if (Array.isArray(obj)) {
+    return obj.map(cloneDeep2);
+  } else if (typeof obj === "bigint") {
+    return BigInt(obj);
+  } else if (typeof obj === "object") {
+    let res = {};
+    for (let key in obj)
+      res[key] = cloneDeep2(obj[key]);
+    return res;
+  } else
+    return obj;
+}
+function omit(obj, ...keys) {
+  let res = Object.assign({}, obj);
+  for (let key of keys)
+    delete res[key];
+  return res;
+}
+function zip(a, b) {
+  let res = [];
+  for (let i = 0; i < Math.max(a.length, b.length); i++)
+    res.push([a[i], b[i]]);
+  return res;
+}
+var createDecimal = coders.decimal;
+var weieth = createDecimal(ETH_PRECISION);
+var weigwei = createDecimal(GWEI_PRECISION);
+
+// node_modules/micro-eth-signer/esm/address.js
+var addr = {
+  RE: /^(0[xX])?([0-9a-fA-F]{40})?$/,
+  parse: (address, allowEmpty = false) => {
+    astr2(address);
+    if (allowEmpty && address === "0x")
+      return { hasPrefix: true, data: "" };
+    const res = address.match(addr.RE) || [];
+    const hasPrefix = res[1] != null;
+    const data = res[2];
+    if (!data) {
+      const len = hasPrefix ? 42 : 40;
+      throw new Error(`address must be ${len}-char hex, got ${address.length}-char ${address}`);
+    }
+    return { hasPrefix, data };
+  },
+  /**
+   * Address checksum is calculated by hashing with keccak_256.
+   * It hashes *string*, not a bytearray: keccak('beef') not keccak([0xbe, 0xef])
+   * @param nonChecksummedAddress
+   * @param allowEmpty - allows '0x'
+   * @returns checksummed address
+   */
+  addChecksum: (nonChecksummedAddress, allowEmpty = false) => {
+    const low = addr.parse(nonChecksummedAddress, allowEmpty).data.toLowerCase();
+    const hash = bytesToHex(keccak_256(low));
+    let checksummed = "";
+    for (let i = 0; i < low.length; i++) {
+      const hi = Number.parseInt(hash[i], 16);
+      const li = low[i];
+      checksummed += hi <= 7 ? li : li.toUpperCase();
+    }
+    return add0x(checksummed);
+  },
+  /**
+   * Creates address from secp256k1 public key.
+   */
+  fromPublicKey: (key) => {
+    if (!key)
+      throw new Error("invalid public key: " + key);
+    const pub65b = secp256k1.ProjectivePoint.fromHex(key).toRawBytes(false);
+    const hashed = keccak_256(pub65b.subarray(1, 65));
+    const address = bytesToHex(hashed).slice(24);
+    return addr.addChecksum(address);
+  },
+  /**
+   * Creates address from ETH private key in hex or ui8a format.
+   */
+  fromPrivateKey: (key) => {
+    if (typeof key === "string")
+      key = strip0x(key);
+    return addr.fromPublicKey(secp256k1.getPublicKey(key, false));
+  },
+  /**
+   * Generates hex string with new random private key and address. Uses CSPRNG internally.
+   */
+  random() {
+    const privateKey = ethHex.encode(secp256k1.utils.randomPrivateKey());
+    return { privateKey, address: addr.fromPrivateKey(privateKey) };
+  },
+  /**
+   * Verifies checksum if the address is checksummed.
+   * Always returns true when the address is not checksummed.
+   * @param allowEmpty - allows '0x'
+   */
+  isValid: (checksummedAddress, allowEmpty = false) => {
+    let parsed;
+    try {
+      parsed = addr.parse(checksummedAddress, allowEmpty);
+    } catch (error) {
+      return false;
+    }
+    const { data: address, hasPrefix } = parsed;
+    if (!hasPrefix)
+      return false;
+    const low = address.toLowerCase();
+    const upp = address.toUpperCase();
+    if (address === low || address === upp)
+      return true;
+    return addr.addChecksum(low, allowEmpty) === checksummedAddress;
+  }
+};
+
+// node_modules/micro-eth-signer/esm/rlp.js
+var RLPLength = wrap({
+  encodeStream(w, value) {
+    if (value < 56)
+      return w.bits(value, 6);
+    w.bits(7, 3);
+    const length = U32BE.encode(value);
+    let pos = 0;
+    for (; pos < length.length; pos++)
+      if (length[pos] !== 0)
+        break;
+    w.bits(4 - pos - 1, 3);
+    w.bytes(length.slice(pos));
+  },
+  decodeStream(r) {
+    const start = r.bits(3);
+    if (start !== 7)
+      return start << 3 | r.bits(3);
+    const len = r.bytes(r.bits(3) + 1);
+    for (let i = 0; i < len.length; i++) {
+      if (len[i])
+        break;
+      throw new Error("Wrong length encoding with leading zeros");
+    }
+    const res = int(len.length).decode(len);
+    if (res <= 55)
+      throw new Error("RLPLength: less than 55, but used multi-byte flag");
+    return res;
+  }
+});
+var rlpInner = tag(map(bits(1), { byte: 0, complex: 1 }), {
+  byte: bits(7),
+  complex: tag(map(bits(1), { string: 0, list: 1 }), {
+    string: createBytes(RLPLength),
+    list: prefix(RLPLength, array(null, lazy(() => rlpInner)))
+  })
+});
+var phex = createHex(null);
+var pstr = string(null);
+var empty = Uint8Array.of();
+var RLP = apply(rlpInner, {
+  encode(from) {
+    if (from.TAG === "byte")
+      return new Uint8Array([from.data]);
+    if (from.TAG !== "complex")
+      throw new Error("RLP.encode: unexpected type");
+    const complex = from.data;
+    if (complex.TAG === "string") {
+      if (complex.data.length === 1 && complex.data[0] < 128)
+        throw new Error("RLP.encode: wrong string length encoding, should use single byte mode");
+      return complex.data;
+    }
+    if (complex.TAG === "list")
+      return complex.data.map((i) => this.encode(i));
+    throw new Error("RLP.encode: unknown TAG");
+  },
+  decode(data) {
+    if (data == null)
+      return this.decode(empty);
+    switch (typeof data) {
+      case "object":
+        if (isBytes5(data)) {
+          if (data.length === 1) {
+            const head = data[0];
+            if (head < 128)
+              return { TAG: "byte", data: head };
+          }
+          return { TAG: "complex", data: { TAG: "string", data } };
+        }
+        if (Array.isArray(data))
+          return { TAG: "complex", data: { TAG: "list", data: data.map((i) => this.decode(i)) } };
+        throw new Error("RLP.encode: unknown type");
+      case "number":
+        if (data < 0)
+          throw new Error("RLP.encode: invalid integer as argument, must be unsigned");
+        if (data === 0)
+          return this.decode(empty);
+        return this.decode(numberToVarBytesBE(data));
+      case "bigint":
+        if (data < BigInt(0))
+          throw new Error("RLP.encode: invalid integer as argument, must be unsigned");
+        return this.decode(numberToVarBytesBE(data));
+      case "string":
+        return this.decode(data.startsWith("0x") ? phex.encode(data) : pstr.encode(data));
+      default:
+        throw new Error("RLP.encode: unknown type");
+    }
+  }
+});
+
+// node_modules/micro-eth-signer/esm/tx.js
+var _0n9 = BigInt(0);
+var createTxMap = (versions) => {
+  const ent = Object.entries(versions);
+  const typeMap = Object.fromEntries(ent.map(([type, coder], ver) => [type, { type, ver, coder }]));
+  const verMap = Object.fromEntries(ent.map(([type, coder], ver) => [ver, { type, ver, coder }]));
+  return wrap({
+    encodeStream(w, value) {
+      const t = value.type;
+      if (!typeMap.hasOwnProperty(t))
+        throw new Error(`txVersion: wrong type=${t}`);
+      const curr = typeMap[t];
+      if (t !== "legacy")
+        w.byte(curr.ver);
+      curr.coder.encodeStream(w, value.data);
+    },
+    decodeStream(r) {
+      const v = r.byte(true);
+      if (v === 255)
+        throw new Error("reserved version 0xff");
+      if (v === 0)
+        throw new Error("version=0 unsupported");
+      if (0 <= v && v <= 127) {
+        if (!verMap.hasOwnProperty(v.toString()))
+          throw new Error(`wrong version=${v}`);
+        const curr = verMap[v];
+        r.byte(false);
+        const d = curr.coder.decodeStream(r);
+        return { type: curr.type, data: d };
+      }
+      return { type: "legacy", data: typeMap.legacy.coder.decodeStream(r) };
+    }
+  });
+};
+var isOptBig = (a) => a === void 0 || typeof a === "bigint";
+var isNullOr0 = (a) => a === void 0 || a === BigInt(0);
+function assertYParityValid(elm) {
+  if (elm === void 0)
+    elm = 0;
+  if (elm !== 0 && elm !== 1)
+    throw new Error(`yParity wrong value=${elm} (${typeof elm})`);
+}
+var addrCoder = ethHex;
+function ensure32(b) {
+  if (!isBytes5(b) || b.length !== 32)
+    throw new Error("expected 32 bytes");
+  return b;
+}
+var Bytes322 = {
+  encode: (from) => ethHex.encode(ensure32(from)),
+  decode: (to) => ensure32(ethHex.decode(to))
+};
+var legacySig = {
+  encode: (data) => {
+    const { v, r, s } = data;
+    if (v === void 0)
+      return { chainId: void 0 };
+    if (typeof v !== "bigint")
+      throw new Error(`invalid v type=${typeof v}`);
+    if (r === void 0 && s === void 0 || r === _0n9 && s === _0n9)
+      return { chainId: v };
+    if (v === BigInt(27))
+      return { yParity: 0, chainId: void 0, r, s };
+    if (v === BigInt(28))
+      return { yParity: 1, chainId: void 0, r, s };
+    if (v < BigInt(35))
+      throw new Error(`wrong v=${v}`);
+    const v2 = v - BigInt(35);
+    return { chainId: v2 >> BigInt(1), yParity: Number(v2 & BigInt(1)), r, s };
+  },
+  decode: (data) => {
+    aobj(data);
+    const { chainId, yParity, r, s } = data;
+    if (!isOptBig(chainId))
+      throw new Error(`wrong chainId type=${typeof chainId}`);
+    if (!isOptBig(r))
+      throw new Error(`wrong r type=${typeof r}`);
+    if (!isOptBig(s))
+      throw new Error(`wrong s type=${typeof s}`);
+    if (yParity !== void 0 && typeof yParity !== "number")
+      throw new Error(`wrong yParity type=${typeof chainId}`);
+    if (yParity === void 0) {
+      if (chainId !== void 0) {
+        if (r !== void 0 && r !== _0n9 || s !== void 0 && s !== _0n9)
+          throw new Error(`wrong unsigned legacy r=${r} s=${s}`);
+        return { v: chainId, r: _0n9, s: _0n9 };
+      }
+      if (r !== void 0 && r !== _0n9 || s !== void 0 && s !== _0n9)
+        throw new Error(`wrong unsigned legacy r=${r} s=${s}`);
+      return {};
+    }
+    if (isNullOr0(r) || isNullOr0(s))
+      throw new Error(`wrong unsigned legacy r=${r} s=${s}`);
+    assertYParityValid(yParity);
+    const v = chainId !== void 0 ? BigInt(yParity) + (chainId * BigInt(2) + BigInt(35)) : BigInt(yParity) + BigInt(27);
+    return { v, r, s };
+  }
+};
+var U64BE = coders.reverse(bigint(8, false, false, false));
+var U256BE2 = coders.reverse(bigint(32, false, false, false));
+var array2 = (coder) => ({
+  encode(from) {
+    if (!Array.isArray(from))
+      throw new Error("expected array");
+    return from.map((i) => coder.encode(i));
+  },
+  decode(to) {
+    if (!Array.isArray(to))
+      throw new Error("expected array");
+    return to.map((i) => coder.decode(i));
+  }
+});
+var struct2 = (fields) => ({
+  encode(from) {
+    if (!Array.isArray(from))
+      throw new Error("expected array");
+    const fNames = Object.keys(fields);
+    if (from.length !== fNames.length)
+      throw new Error("wrong array length");
+    return Object.fromEntries(fNames.map((f, i) => [f, fields[f].encode(from[i])]));
+  },
+  decode(to) {
+    const fNames = Object.keys(fields);
+    if (!isObject(to))
+      throw new Error("wrong struct object");
+    return fNames.map((i) => fields[i].decode(to[i]));
+  }
+});
+var yParityCoder = coders.reverse(validate(int(1, false, false, false), (elm) => {
+  assertYParityValid(elm);
+  return elm;
+}));
+var accessListItem = struct2({ address: addrCoder, storageKeys: array2(Bytes322) });
+var authorizationRequest = struct2({
+  chainId: U256BE2,
+  address: addrCoder,
+  nonce: U64BE
+});
+var authorizationItem = struct2({
+  chainId: U256BE2,
+  address: addrCoder,
+  nonce: U64BE,
+  yParity: yParityCoder,
+  r: U256BE2,
+  s: U256BE2
+});
+var coders2 = {
+  chainId: U256BE2,
+  // Can fit into u64 (curr max is 0x57a238f93bf), but geth uses bigint
+  nonce: U64BE,
+  gasPrice: U256BE2,
+  maxPriorityFeePerGas: U256BE2,
+  maxFeePerGas: U256BE2,
+  gasLimit: U64BE,
+  to: addrCoder,
+  value: U256BE2,
+  // "Decimal" coder can be used, but it's harder to work with
+  data: ethHex,
+  accessList: array2(accessListItem),
+  maxFeePerBlobGas: U256BE2,
+  blobVersionedHashes: array2(Bytes322),
+  yParity: yParityCoder,
+  v: U256BE2,
+  r: U256BE2,
+  s: U256BE2,
+  authorizationList: array2(authorizationItem)
+};
+var signatureFields = /* @__PURE__ */ new Set(["v", "yParity", "r", "s"]);
+function removeSig(raw) {
+  signatureFields.forEach((k) => {
+    delete raw[k];
+  });
+  return raw;
+}
+var txStruct = (reqf, optf) => {
+  const allFields = reqf.concat(optf);
+  allFields.forEach((f) => {
+    if (!coders2.hasOwnProperty(f))
+      throw new Error(`coder for field ${f} is not defined`);
+  });
+  const reqS = struct2(Object.fromEntries(reqf.map((i) => [i, coders2[i]])));
+  const allS = struct2(Object.fromEntries(allFields.map((i) => [i, coders2[i]])));
+  const reql = reqf.length;
+  const optl = reql + optf.length;
+  const optFieldAt = (i) => reql + i;
+  const isEmpty = (item) => item.length === 0;
+  const fcoder = wrap({
+    encodeStream(w, raw) {
+      const hasOptional = optf.some((f) => raw.hasOwnProperty(f));
+      const sCoder = hasOptional ? allS : reqS;
+      RLP.encodeStream(w, sCoder.decode(raw));
+    },
+    decodeStream(r) {
+      const decoded = RLP.decodeStream(r);
+      if (!Array.isArray(decoded))
+        throw new Error("txStruct: expected array from inner coder");
+      const length = decoded.length;
+      if (length !== reql && length !== optl)
+        throw new Error(`txStruct: wrong inner length=${length}`);
+      const sCoder = length === optl ? allS : reqS;
+      if (length === optl && optf.every((_, i) => isEmpty(decoded[optFieldAt(i)])))
+        throw new Error("all optional fields empty");
+      return sCoder.encode(decoded);
+    }
+  });
+  fcoder.fields = reqf;
+  fcoder.optionalFields = optf;
+  fcoder.setOfAllFields = new Set(allFields.concat(["type"]));
+  return fcoder;
+};
+var legacyInternal = txStruct([
+  "nonce",
+  "gasPrice",
+  "gasLimit",
+  "to",
+  "value",
+  "data"
+], ["v", "r", "s"]);
+var legacy = (() => {
+  const res = apply(legacyInternal, {
+    decode: (data) => Object.assign({}, data, legacySig.decode(data)),
+    encode: (data) => {
+      const res2 = Object.assign({}, data);
+      res2.chainId = void 0;
+      if (data.v) {
+        const newV = legacySig.encode(data);
+        removeSig(res2);
+        Object.assign(res2, newV);
+      }
+      return res2;
+    }
+  });
+  res.fields = legacyInternal.fields.concat(["chainId"]);
+  res.optionalFields = ["yParity", "r", "s"];
+  res.setOfAllFields = new Set(res.fields.concat(res.optionalFields, ["type"]));
+  return res;
+})();
+var eip2930 = txStruct([
+  "chainId",
+  "nonce",
+  "gasPrice",
+  "gasLimit",
+  "to",
+  "value",
+  "data",
+  "accessList"
+], ["yParity", "r", "s"]);
+var eip1559 = txStruct([
+  "chainId",
+  "nonce",
+  "maxPriorityFeePerGas",
+  "maxFeePerGas",
+  "gasLimit",
+  "to",
+  "value",
+  "data",
+  "accessList"
+], ["yParity", "r", "s"]);
+var eip4844 = txStruct([
+  "chainId",
+  "nonce",
+  "maxPriorityFeePerGas",
+  "maxFeePerGas",
+  "gasLimit",
+  "to",
+  "value",
+  "data",
+  "accessList",
+  "maxFeePerBlobGas",
+  "blobVersionedHashes"
+], ["yParity", "r", "s"]);
+var eip7702 = txStruct([
+  "chainId",
+  "nonce",
+  "maxPriorityFeePerGas",
+  "maxFeePerGas",
+  "gasLimit",
+  "to",
+  "value",
+  "data",
+  "accessList",
+  "authorizationList"
+], ["yParity", "r", "s"]);
+var TxVersions = {
+  legacy,
+  // 0x00 (kinda)
+  eip2930,
+  // 0x01
+  eip1559,
+  // 0x02
+  eip4844,
+  // 0x03
+  eip7702
+  // 0x04
+};
+var RawTx2 = apply(createTxMap(TxVersions), {
+  // NOTE: we apply checksum to addresses here, since chainId is not available inside coders
+  // By construction 'to' field is decoded before anything about chainId is known
+  encode: (data) => {
+    data.data.to = addr.addChecksum(data.data.to, true);
+    if (data.type !== "legacy" && data.data.accessList) {
+      for (const item of data.data.accessList) {
+        item.address = addr.addChecksum(item.address);
+      }
+    }
+    if (data.type === "eip7702" && data.data.authorizationList) {
+      for (const item of data.data.authorizationList) {
+        item.address = addr.addChecksum(item.address);
+      }
+    }
+    return data;
+  },
+  // Nothing to check here, is validated in validator
+  decode: (data) => data
+});
+var RlpTx = createTxMap(Object.fromEntries(Object.keys(TxVersions).map((k) => [k, RLP])));
+function abig(val) {
+  if (typeof val !== "bigint")
+    throw new Error("value must be bigint");
+}
+function aobj(val) {
+  if (typeof val !== "object" || val == null)
+    throw new Error("object expected");
+}
+function minmax(val, min, max, err) {
+  if (!err)
+    err = `>= ${min} and <= ${max}`;
+  if (Number.isNaN(val) || val < min || val > max)
+    throw new Error(`must be ${err}, not ${val}`);
+}
+var validators = {
+  nonce(num2, { strict }) {
+    abig(num2);
+    if (strict)
+      minmax(num2, _0n9, amounts.maxNonce);
+    else
+      minmax(BigInt(num2), _0n9, BigInt(Number.MAX_SAFE_INTEGER));
+  },
+  maxFeePerGas(num2, { strict }) {
+    abig(num2);
+    if (strict)
+      minmax(num2, BigInt(1), amounts.maxGasPrice, ">= 1 wei and < 10000 gwei");
+    else
+      minmax(num2, _0n9, amounts.maxUint64);
+  },
+  maxPriorityFeePerGas(num2, { strict, data }) {
+    abig(num2);
+    if (strict)
+      minmax(num2, _0n9, amounts.maxGasPrice, ">= 1 wei and < 10000 gwei");
+    else
+      minmax(num2, _0n9, amounts.maxUint64, ">= 1 wei and < 10000 gwei");
+    if (strict && data && typeof data.maxFeePerGas === "bigint" && data.maxFeePerGas < num2) {
+      throw new Error(`cannot be bigger than maxFeePerGas=${data.maxFeePerGas}`);
+    }
+  },
+  gasLimit(num2, { strict }) {
+    abig(num2);
+    if (strict)
+      minmax(num2, amounts.minGasLimit, amounts.maxGasLimit);
+    else
+      minmax(num2, _0n9, amounts.maxUint64);
+  },
+  to(address, { strict, data }) {
+    if (!addr.isValid(address, true))
+      throw new Error("address checksum does not match");
+    if (strict && address === "0x" && !data.data)
+      throw new Error("Empty address (0x) without contract deployment code");
+  },
+  value(num2) {
+    abig(num2);
+    minmax(num2, _0n9, amounts.maxAmount, ">= 0 and < 100M eth");
+  },
+  data(val, { strict, data }) {
+    if (typeof val !== "string")
+      throw new Error("data must be string");
+    if (strict) {
+      if (val.length > amounts.maxDataSize)
+        throw new Error("data is too big: " + val.length);
+    }
+    if (data.to === "0x" && val.length > 2 * amounts.maxInitDataSize)
+      throw new Error(`initcode is too big: ${val.length}`);
+  },
+  chainId(num2, { strict, type }) {
+    if (type === "legacy" && num2 === void 0)
+      return;
+    abig(num2);
+    if (strict)
+      minmax(num2, BigInt(1), amounts.maxChainId, ">= 1 and <= 2**32-1");
+  },
+  accessList(list) {
+    for (const { address } of list) {
+      if (!addr.isValid(address))
+        throw new Error("address checksum does not match");
+    }
+  },
+  authorizationList(list, opts) {
+    for (const { address, nonce, chainId } of list) {
+      if (!addr.isValid(address))
+        throw new Error("address checksum does not match");
+      abig(chainId);
+      if (opts.strict)
+        minmax(chainId, _0n9, amounts.maxChainId, ">= 0 and <= 2**32-1");
+      this.nonce(nonce, opts);
+    }
+  }
+};
+var AggregatedError = class extends Error {
+  constructor(message, errors) {
+    super();
+    this.message = message;
+    this.errors = errors;
+  }
+};
+function validateFields(type, data, strict = true, allowSignatureFields = true) {
+  aobj(data);
+  if (!TxVersions.hasOwnProperty(type))
+    throw new Error(`unknown tx type=${type}`);
+  const txType = TxVersions[type];
+  const dataFields = new Set(Object.keys(data));
+  const dataHas = (field) => dataFields.has(field);
+  function checkField(field) {
+    if (!dataHas(field))
+      return { field, error: `field "${field}" must be present for tx type=${type}` };
+    const val = data[field];
+    try {
+      if (validators.hasOwnProperty(field))
+        validators[field](val, { data, strict, type });
+      if (field === "chainId")
+        return;
+      coders2[field].decode(val);
+    } catch (error) {
+      return { field, error: error.message };
+    }
+    return void 0;
+  }
+  const reqErrs = txType.fields.map(checkField);
+  const optErrs = txType.optionalFields.some(dataHas) ? txType.optionalFields.map(checkField) : [];
+  const unexpErrs = Object.keys(data).map((field) => {
+    if (!txType.setOfAllFields.has(field))
+      return { field, error: `unknown field "${field}" for tx type=${type}` };
+    if (!allowSignatureFields && signatureFields.has(field))
+      return {
+        field,
+        error: `field "${field}" is sig-related and must not be user-specified`
+      };
+    return;
+  });
+  const errors = reqErrs.concat(optErrs, unexpErrs).filter((val) => val !== void 0);
+  if (errors.length > 0)
+    throw new AggregatedError("fields had validation errors", errors);
+}
+var sortedFieldOrder = [
+  "to",
+  "value",
+  "nonce",
+  "maxFeePerGas",
+  "maxFeePerBlobGas",
+  "maxPriorityFeePerGas",
+  "gasPrice",
+  "gasLimit",
+  "accessList",
+  "authorizationList",
+  "blobVersionedHashes",
+  "chainId",
+  "data",
+  "type",
+  "r",
+  "s",
+  "yParity",
+  "v"
+];
+function sortRawData(raw) {
+  const sortedRaw = {};
+  sortedFieldOrder.filter((field) => raw.hasOwnProperty(field)).forEach((field) => {
+    sortedRaw[field] = raw[field];
+  });
+  return sortedRaw;
+}
+function decodeLegacyV(raw) {
+  return legacySig.decode(raw).v;
+}
+
+// node_modules/micro-eth-signer/esm/index.js
+var TX_DEFAULTS = {
+  accessList: [],
+  // needs to be .slice()-d to create new reference
+  authorizationList: [],
+  chainId: BigInt(1),
+  // mainnet
+  data: "",
+  gasLimit: BigInt(21e3),
+  // TODO: investigate if limit is smaller in eip4844 txs
+  maxPriorityFeePerGas: BigInt(1) * amounts.GWEI,
+  // Reduce fingerprinting by using standard, popular value
+  type: "eip1559"
+};
+var Transaction2 = class _Transaction {
+  // Doesn't force any defaults, catches if fields incompatible with type
+  constructor(type, raw, strict = true, allowSignatureFields = true) {
+    this.type = type;
+    this.raw = raw;
+    validateFields(type, raw, strict, allowSignatureFields);
+    this.isSigned = typeof raw.r === "bigint" && typeof raw.s === "bigint";
+  }
+  static prepare(data, strict = true) {
+    const type = data.type !== void 0 ? data.type : TX_DEFAULTS.type;
+    if (!TxVersions.hasOwnProperty(type))
+      throw new Error(`wrong transaction type=${type}`);
+    const coder = TxVersions[type];
+    const fields = new Set(coder.fields);
+    const raw = { type };
+    for (const f in TX_DEFAULTS) {
+      if (f !== "type" && fields.has(f)) {
+        raw[f] = TX_DEFAULTS[f];
+        if (["accessList", "authorizationList"].includes(f))
+          raw[f] = cloneDeep2(raw[f]);
+      }
+    }
+    return new _Transaction(type, sortRawData(Object.assign(raw, data)), strict, false);
+  }
+  /**
+   * Creates transaction which sends whole account balance. Does two things:
+   * 1. `amount = accountBalance - maxFeePerGas * gasLimit`
+   * 2. `maxPriorityFeePerGas = maxFeePerGas`
+   *
+   * Every eth block sets a fee for all its transactions, called base fee.
+   * maxFeePerGas indicates how much gas user is able to spend in the worst case.
+   * If the block's base fee is 5 gwei, while user is able to spend 10 gwei in maxFeePerGas,
+   * the transaction would only consume 5 gwei. That means, base fee is unknown
+   * before the transaction is included in a block.
+   *
+   * By setting priorityFee to maxFee, we make the process deterministic:
+   * `maxFee = 10, maxPriority = 10, baseFee = 5` would always spend 10 gwei.
+   * In the end, the balance would become 0.
+   *
+   * WARNING: using the method would decrease privacy of a transfer, because
+   * payments for services have specific amounts, and not *the whole amount*.
+   * @param accountBalance - account balance in wei
+   * @param burnRemaining - send unspent fee to miners. When false, some "small amount" would remain
+   * @returns new transaction with adjusted amounts
+   */
+  setWholeAmount(accountBalance, burnRemaining = true) {
+    const _0n10 = BigInt(0);
+    if (typeof accountBalance !== "bigint" || accountBalance <= _0n10)
+      throw new Error("account balance must be bigger than 0");
+    const fee = this.fee;
+    const amountToSend = accountBalance - fee;
+    if (amountToSend <= _0n10)
+      throw new Error("account balance must be bigger than fee of " + fee);
+    const raw = { ...this.raw, value: amountToSend };
+    if (!["legacy", "eip2930"].includes(this.type) && burnRemaining) {
+      const r = raw;
+      r.maxPriorityFeePerGas = r.maxFeePerGas;
+    }
+    return new _Transaction(this.type, raw);
+  }
+  static fromRawBytes(bytes, strict = false) {
+    const raw = RawTx2.decode(bytes);
+    return new _Transaction(raw.type, raw.data, strict);
+  }
+  static fromHex(hex2, strict = false) {
+    return _Transaction.fromRawBytes(ethHexNoLeadingZero.decode(hex2), strict);
+  }
+  assertIsSigned() {
+    if (!this.isSigned)
+      throw new Error("expected signed transaction");
+  }
+  /**
+   * Converts transaction to RLP.
+   * @param includeSignature whether to include signature
+   */
+  toRawBytes(includeSignature = this.isSigned) {
+    let data = Object.assign({}, this.raw);
+    if (includeSignature) {
+      this.assertIsSigned();
+    } else {
+      removeSig(data);
+    }
+    return RawTx2.encode({ type: this.type, data });
+  }
+  /**
+   * Converts transaction to hex.
+   * @param includeSignature whether to include signature
+   */
+  toHex(includeSignature = this.isSigned) {
+    return ethHex.encode(this.toRawBytes(includeSignature));
+  }
+  /** Calculates keccak-256 hash of signed transaction. Used in block explorers. */
+  get hash() {
+    this.assertIsSigned();
+    return bytesToHex(this.calcHash(true));
+  }
+  /** Returns sender's address. */
+  get sender() {
+    return this.recoverSender().address;
+  }
+  /**
+   * For legacy transactions, but can be used with libraries when yParity presented as v.
+   */
+  get v() {
+    return decodeLegacyV(this.raw);
+  }
+  calcHash(includeSignature) {
+    return keccak_256(this.toRawBytes(includeSignature));
+  }
+  /** Calculates MAXIMUM fee in wei that could be spent. */
+  get fee() {
+    const { type, raw } = this;
+    let gasFee;
+    if (type === "legacy" || type === "eip2930") {
+      const r = raw;
+      gasFee = r.gasPrice;
+    } else {
+      const r = raw;
+      gasFee = r.maxFeePerGas;
+    }
+    return raw.gasLimit * gasFee;
+  }
+  clone() {
+    return new _Transaction(this.type, cloneDeep2(this.raw));
+  }
+  verifySignature() {
+    this.assertIsSigned();
+    const { r, s } = this.raw;
+    return verify({ r, s }, this.calcHash(false), hexToBytes(this.recoverSender().publicKey));
+  }
+  removeSignature() {
+    return new _Transaction(this.type, removeSig(cloneDeep2(this.raw)));
+  }
+  /**
+   * Signs transaction with a private key.
+   * @param privateKey key in hex or Uint8Array format
+   * @param opts extraEntropy will increase security of sig by mixing rfc6979 randomness
+   * @returns new "same" transaction, but signed
+   */
+  signBy(privateKey, extraEntropy = true) {
+    if (this.isSigned)
+      throw new Error("expected unsigned transaction");
+    const priv = isBytes5(privateKey) ? privateKey : hexToBytes(strip0x(privateKey));
+    const hash = this.calcHash(false);
+    const { r, s, recovery } = sign(hash, priv, extraEntropy);
+    const sraw = Object.assign(cloneDeep2(this.raw), { r, s, yParity: recovery });
+    return new _Transaction(this.type, sraw, false);
+  }
+  /** Calculates public key and address from signed transaction's signature. */
+  recoverSender() {
+    this.assertIsSigned();
+    const { r, s, yParity } = this.raw;
+    const sig = initSig({ r, s }, yParity);
+    if (sig.hasHighS())
+      throw new Error("invalid s");
+    const point = sig.recoverPublicKey(this.calcHash(false));
+    return { publicKey: point.toHex(true), address: addr.fromPublicKey(point.toHex(false)) };
+  }
+};
+
+// node_modules/micro-eth-signer/esm/abi/decoder.js
+function EPad(p) {
+  return padLeft(32, p, ZeroPad);
+}
+function ethArray(inner) {
+  return wrap({
+    size: void 0,
+    encodeStream: (w, value) => {
+      U256BE_LEN.encodeStream(w, value.length);
+      w.bytes(array(value.length, inner).encode(value));
+    },
+    decodeStream: (r) => array(U256BE_LEN.decodeStream(r), inner).decodeStream(r.offsetReader(r.pos))
+  });
+}
+var PTR = EPad(U32BE);
+var ARRAY_RE = /(.+)(\[(\d+)?\])$/;
+var ethInt = (bits2, signed = false) => {
+  if (!Number.isSafeInteger(bits2) || bits2 <= 0 || bits2 % 8 !== 0 || bits2 > 256)
+    throw new Error("ethInt: invalid numeric type");
+  const _bits = BigInt(bits2);
+  const inner = bigint(32, false, signed);
+  return validate(wrap({
+    size: inner.size,
+    encodeStream: (w, value) => inner.encodeStream(w, value),
+    decodeStream: (r) => inner.decodeStream(r)
+  }), (value) => {
+    if (typeof value === "number")
+      value = BigInt(value);
+    utils2.checkBounds(value, _bits, !!signed);
+    return value;
+  });
+};
+function isDyn(args) {
+  let res = false;
+  if (Array.isArray(args)) {
+    for (let arg of args)
+      if (arg.size === void 0)
+        res = true;
+  } else {
+    for (let arg in args)
+      if (args[arg].size === void 0)
+        res = true;
+  }
+  return res;
+}
+var U256BE_LEN = PTR;
+function mapComponent(c) {
+  let m;
+  if (m = ARRAY_RE.exec(c.type)) {
+    const inner = mapComponent({ ...c, type: m[1] });
+    if (inner.size === 0)
+      throw new Error("mapComponent: arrays of zero-size elements disabled (possible DoS attack)");
+    if (m[3] !== void 0) {
+      const m3 = Number.parseInt(m[3]);
+      if (!Number.isSafeInteger(m3))
+        throw new Error(`mapComponent: wrong array size=${m[3]}`);
+      let out = array(m3, inner);
+      if (inner.size === void 0)
+        out = pointer(PTR, out);
+      return out;
+    } else {
+      return pointer(PTR, ethArray(inner));
+    }
+  }
+  if (c.type === "tuple") {
+    const components = c.components;
+    let hasNames = true;
+    const args = [];
+    for (let comp of components) {
+      if (!comp.name)
+        hasNames = false;
+      args.push(mapComponent(comp));
+    }
+    let out;
+    if (hasNames) {
+      const struct3 = {};
+      for (const arg of components) {
+        if (struct3[arg.name])
+          throw new Error(`mapType: same field name=${arg.name}`);
+        struct3[arg.name] = mapComponent(arg);
+      }
+      out = struct(struct3);
+    } else
+      out = tuple(args);
+    if (isDyn(args))
+      out = pointer(PTR, out);
+    return out;
+  }
+  if (c.type === "string")
+    return pointer(PTR, padRight(32, string(U256BE_LEN), ZeroPad));
+  if (c.type === "bytes")
+    return pointer(PTR, padRight(32, createBytes(U256BE_LEN), ZeroPad));
+  if (c.type === "address")
+    return EPad(createHex(20, { isLE: false, with0x: true }));
+  if (c.type === "bool")
+    return EPad(bool);
+  if (m = /^(u?)int([0-9]+)?$/.exec(c.type))
+    return ethInt(m[2] ? +m[2] : 256, m[1] !== "u");
+  if (m = /^bytes([0-9]{1,2})$/.exec(c.type)) {
+    const parsed = +m[1];
+    if (!parsed || parsed > 32)
+      throw new Error("wrong bytes<N> type");
+    return padRight(32, createBytes(parsed), ZeroPad);
+  }
+  throw new Error(`mapComponent: unknown component=${c}`);
+}
+function mapArgs(args) {
+  if (args.length === 1)
+    return mapComponent(args[0]);
+  let hasNames = true;
+  for (const arg of args)
+    if (!arg.name)
+      hasNames = false;
+  if (hasNames) {
+    const out = {};
+    for (const arg of args) {
+      const name = arg.name;
+      if (out[name])
+        throw new Error(`mapArgs: same field name=${name}`);
+      out[name] = mapComponent(arg);
+    }
+    return struct(out);
+  } else
+    return tuple(args.map(mapComponent));
+}
+function fnSignature(o) {
+  if (!o.type)
+    throw new Error("ABI.fnSignature wrong argument");
+  if (o.type === "function" || o.type === "event")
+    return `${o.name || "function"}(${(o.inputs || []).map((i) => fnSignature(i)).join(",")})`;
+  if (o.type.startsWith("tuple")) {
+    if (!o.components || !o.components.length)
+      throw new Error("ABI.fnSignature wrong tuple");
+    return `(${o.components.map((i) => fnSignature(i)).join(",")})${o.type.slice(5)}`;
+  }
+  return o.type;
+}
+function evSigHash(o) {
+  return bytesToHex(keccak_256(fnSignature(o)));
+}
+function fnSigHash(o) {
+  return evSigHash(o).slice(0, 8);
+}
+function createContract(abi, net, contract) {
+  let nameCnt = {};
+  for (let fn of abi) {
+    if (fn.type !== "function")
+      continue;
+    const name = fn.name || "function";
+    if (!nameCnt[name])
+      nameCnt[name] = 1;
+    else
+      nameCnt[name]++;
+  }
+  const res = {};
+  for (let fn of abi) {
+    if (fn.type !== "function")
+      continue;
+    let name = fn.name || "function";
+    if (nameCnt[name] > 1)
+      name = fnSignature(fn);
+    const sh = fnSigHash(fn);
+    const inputs = fn.inputs && fn.inputs.length ? mapArgs(fn.inputs) : void 0;
+    const outputs = fn.outputs ? mapArgs(fn.outputs) : void 0;
+    const decodeOutput = (b) => outputs && outputs.decode(b);
+    const encodeInput = (v) => concatBytes(hexToBytes(sh), inputs ? inputs.encode(v) : Uint8Array.of());
+    res[name] = { decodeOutput, encodeInput };
+    if (!net)
+      continue;
+    res[name].call = async (args, overrides = {}) => {
+      if (!contract && !overrides.to)
+        throw new Error("No contract address");
+      const data = add0x(bytesToHex(encodeInput(args)));
+      const callArgs = Object.assign({ to: contract, data }, overrides);
+      return decodeOutput(hexToBytes(strip0x(await net.ethCall(callArgs))));
+    };
+    res[name].estimateGas = async (args, overrides = {}) => {
+      if (!contract && !overrides.to)
+        throw new Error("No contract address");
+      const data = add0x(bytesToHex(encodeInput(args)));
+      const callArgs = Object.assign({ to: contract, data }, overrides);
+      return await net.estimateGas(callArgs);
+    };
+  }
+  return res;
+}
+function events(abi) {
+  let res = {};
+  for (let elm of abi) {
+    if (elm.type !== "event" || !elm.name)
+      continue;
+    const inputs = elm.inputs || [];
+    let hasNames = true;
+    for (let i of inputs)
+      if (!i.name)
+        hasNames = false;
+    const plainInp = inputs.filter((i) => !i.indexed);
+    const indexedInp = inputs.filter((i) => i.indexed);
+    const indexed = indexedInp.map((i) => !["string", "bytes", "tuple"].includes(i.type) && !ARRAY_RE.exec(i.type) ? mapArgs([i]) : null);
+    const parser = mapArgs(hasNames ? plainInp : plainInp.map((i) => omit(i, "name")));
+    const sigHash2 = evSigHash(elm);
+    res[elm.name] = {
+      decode(topics, _data) {
+        const data = hexToBytes(strip0x(_data));
+        if (!elm.anonymous) {
+          if (!topics[0])
+            throw new Error("No signature on non-anonymous event");
+          if (strip0x(topics[0]).toLowerCase() !== sigHash2)
+            throw new Error("Wrong signature");
+          topics = topics.slice(1);
+        }
+        if (topics.length !== indexed.length)
+          throw new Error("Wrong topics length");
+        let parsed = parser ? parser.decode(data) : hasNames ? {} : [];
+        const indexedParsed = indexed.map((p, i) => p ? p.decode(hexToBytes(strip0x(topics[i]))) : topics[i]);
+        if (plainInp.length === 1)
+          parsed = hasNames ? { [plainInp[0].name]: parsed } : [parsed];
+        if (hasNames) {
+          let res2 = { ...parsed };
+          for (let [a, p] of zip(indexedInp, indexedParsed))
+            res2[a.name] = p;
+          return res2;
+        } else
+          return inputs.map((i) => (!i.indexed ? parsed : indexedParsed).shift());
+      },
+      topics(values) {
+        let res2 = [];
+        if (!elm.anonymous)
+          res2.push(add0x(sigHash2));
+        if ((hasNames ? Object.keys(values) : values).length !== inputs.length)
+          throw new Error("Wrong topics args");
+        for (let i = 0, ii = 0; i < inputs.length && ii < indexed.length; i++) {
+          const [input, packer] = [inputs[i], indexed[ii]];
+          if (!input.indexed)
+            continue;
+          const value = values[Array.isArray(values) ? i : inputs[i].name];
+          if (value === null) {
+            res2.push(null);
+            continue;
+          }
+          let topic;
+          if (packer)
+            topic = bytesToHex(packer.encode(value));
+          else if (["string", "bytes"].includes(input.type))
+            topic = bytesToHex(keccak_256(value));
+          else {
+            let m, parts;
+            if (m = ARRAY_RE.exec(input.type))
+              parts = value.map((j) => mapComponent({ type: m[1] }).encode(j));
+            else if (input.type === "tuple" && input.components)
+              parts = input.components.map((j) => mapArgs([j]).encode(value[j.name]));
+            else
+              throw new Error("Unknown unsized type");
+            topic = bytesToHex(keccak_256(concatBytes(...parts)));
+          }
+          res2.push(add0x(topic));
+          ii++;
+        }
+        return res2;
+      }
+    };
+  }
+  return res;
+}
+var Decoder = class {
+  constructor() {
+    this.contracts = {};
+    this.sighashes = {};
+    this.evContracts = {};
+    this.evSighashes = {};
+  }
+  add(contract, abi) {
+    const ev = events(abi);
+    contract = strip0x(contract).toLowerCase();
+    if (!this.contracts[contract])
+      this.contracts[contract] = {};
+    if (!this.evContracts[contract])
+      this.evContracts[contract] = {};
+    for (let fn of abi) {
+      if (fn.type === "function") {
+        const selector = fnSigHash(fn);
+        const value = {
+          name: fn.name || "function",
+          signature: fnSignature(fn),
+          packer: fn.inputs && fn.inputs.length ? mapArgs(fn.inputs) : void 0,
+          hint: fn.hint,
+          hook: fn.hook
+        };
+        this.contracts[contract][selector] = value;
+        if (!this.sighashes[selector])
+          this.sighashes[selector] = [];
+        this.sighashes[selector].push(value);
+      } else if (fn.type === "event") {
+        if (fn.anonymous || !fn.name)
+          continue;
+        const selector = evSigHash(fn);
+        const value = {
+          name: fn.name,
+          signature: fnSignature(fn),
+          decoder: ev[fn.name]?.decode,
+          hint: fn.hint
+        };
+        this.evContracts[contract][selector] = value;
+        if (!this.evSighashes[selector])
+          this.evSighashes[selector] = [];
+        this.evSighashes[selector].push(value);
+      }
+    }
+  }
+  method(contract, data) {
+    contract = strip0x(contract).toLowerCase();
+    const sh = bytesToHex(data.slice(0, 4));
+    if (!this.contracts[contract] || !this.contracts[contract][sh])
+      return;
+    const { name } = this.contracts[contract][sh];
+    return name;
+  }
+  // Returns: exact match, possible options of matches (array) or undefined.
+  // Note that empty value possible if there is no arguments in call.
+  decode(contract, _data, opt) {
+    contract = strip0x(contract).toLowerCase();
+    const sh = bytesToHex(_data.slice(0, 4));
+    const data = _data.slice(4);
+    if (this.contracts[contract] && this.contracts[contract][sh]) {
+      let { name, signature, packer, hint, hook } = this.contracts[contract][sh];
+      const value = packer ? packer.decode(data) : void 0;
+      let res2 = { name, signature, value };
+      if (hook)
+        res2 = hook(this, contract, res2, opt);
+      try {
+        if (hint)
+          res2.hint = hint(value, Object.assign({ contract: add0x(contract) }, opt));
+      } catch (e) {
+      }
+      return res2;
+    }
+    if (!this.sighashes[sh] || !this.sighashes[sh].length)
+      return;
+    let res = [];
+    for (let { name, signature, packer } of this.sighashes[sh]) {
+      try {
+        res.push({ name, signature, value: packer ? packer.decode(data) : void 0 });
+      } catch (err) {
+      }
+    }
+    if (res.length)
+      return res;
+    return;
+  }
+  decodeEvent(contract, topics, data, opt) {
+    contract = strip0x(contract).toLowerCase();
+    if (!topics.length)
+      return;
+    const sh = strip0x(topics[0]);
+    const event = this.evContracts[contract];
+    if (event && event[sh]) {
+      let { name, signature, decoder, hint } = event[sh];
+      const value = decoder(topics, data);
+      let res2 = { name, signature, value };
+      try {
+        if (hint)
+          res2.hint = hint(value, Object.assign({ contract: add0x(contract) }, opt));
+      } catch (e) {
+      }
+      return res2;
+    }
+    if (!this.evSighashes[sh] || !this.evSighashes[sh].length)
+      return;
+    let res = [];
+    for (let { name, signature, decoder } of this.evSighashes[sh]) {
+      try {
+        res.push({ name, signature, value: decoder(topics, data) });
+      } catch (err) {
+      }
+    }
+    if (res.length)
+      return res;
+    return;
+  }
+};
+
+// node_modules/micro-eth-signer/esm/typed-data.js
+function getSigner(version, msgFn) {
+  if (version < 0 || version >= 256 || !Number.isSafeInteger(version))
+    throw new Error("Wrong version byte");
+  const getHash = (message) => keccak_256(concatBytes(new Uint8Array([25, version]), msgFn(message)));
+  return {
+    _getHash: (message) => ethHex.encode(getHash(message)),
+    sign(message, privateKey, extraEntropy = true) {
+      const hash = getHash(message);
+      if (typeof privateKey === "string")
+        privateKey = ethHex.decode(privateKey);
+      const sig = sign(hash, privateKey, extraEntropy);
+      const end = sig.recovery === 0 ? "1b" : "1c";
+      return add0x(sig.toCompactHex() + end);
+    },
+    recoverPublicKey(signature, message) {
+      astr2(signature);
+      const hash = getHash(message);
+      signature = strip0x(signature);
+      if (signature.length !== 65 * 2)
+        throw new Error("invalid signature length");
+      const sigh = signature.slice(0, -2);
+      const end = signature.slice(-2);
+      if (!["1b", "1c"].includes(end))
+        throw new Error("invalid recovery bit");
+      const sig = initSig(hexToBytes(sigh), end === "1b" ? 0 : 1);
+      const pub = sig.recoverPublicKey(hash).toRawBytes(false);
+      if (!verify(sig, hash, pub))
+        throw new Error("invalid signature");
+      return addr.fromPublicKey(pub);
+    },
+    verify(signature, message, address) {
+      const recAddr = this.recoverPublicKey(signature, message);
+      const low = recAddr.toLowerCase();
+      const upp = recAddr.toUpperCase();
+      if (address === low || address === upp)
+        return true;
+      return recAddr === address;
+    }
+  };
+}
+var personal = getSigner(69, (msg) => {
+  if (typeof msg === "string")
+    msg = utf8ToBytes(msg);
+  return concatBytes(utf8ToBytes(`thereum Signed Message:
+${msg.length}`), msg);
+});
+function parseType(s) {
+  let m = s.match(/^([^\[]+)(?:.*\[(.*?)\])?$/);
+  if (!m)
+    throw new Error(`parseType: wrong type: ${s}`);
+  const base = m[1];
+  const isArray = m[2] !== void 0;
+  const arrayLen = m[2] !== void 0 && m[2] !== "" ? Number(m[2]) : void 0;
+  if (arrayLen !== void 0 && (!Number.isSafeInteger(arrayLen) || arrayLen.toString() !== m[2]))
+    throw new Error(`parseType: wrong array length: ${s}`);
+  let type = "struct";
+  if (["string", "bytes"].includes(base))
+    type = "dynamic";
+  else if (["bool", "address"].includes(base))
+    type = "atomic";
+  else if (m = /^(u?)int([0-9]+)?$/.exec(base)) {
+    const bits2 = m[2] ? +m[2] : 256;
+    if (!Number.isSafeInteger(bits2) || bits2 <= 0 || bits2 % 8 !== 0 || bits2 > 256)
+      throw new Error("parseType: invalid numeric type");
+    type = "atomic";
+  } else if (m = /^bytes([0-9]{1,2})$/.exec(base)) {
+    const bytes = +m[1];
+    if (!bytes || bytes > 32)
+      throw new Error(`parseType: wrong bytes<N=${bytes}> type`);
+    type = "atomic";
+  }
+  const item = s.replace(/\[[^\]]*\]$/, "");
+  return { base, item, type, arrayLen, isArray };
+}
+function getDependencies(types) {
+  if (typeof types !== "object" || types === null)
+    throw new Error("wrong types object");
+  const res = {};
+  for (const [name, fields] of Object.entries(types)) {
+    const cur = /* @__PURE__ */ new Set();
+    for (const { type } of fields) {
+      const p = parseType(type);
+      if (p.type !== "struct")
+        continue;
+      if (p.base === name)
+        continue;
+      if (!types[p.base])
+        throw new Error(`getDependencies: wrong struct type name=${type}`);
+      cur.add(p.base);
+    }
+    res[name] = cur;
+  }
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const [name, curDeps] of Object.entries(res)) {
+      const trDeps = Array.from(curDeps).map((i) => res[i]);
+      for (const d of trDeps) {
+        for (const td of d) {
+          if (td === name || curDeps.has(td))
+            continue;
+          curDeps.add(td);
+          changed = true;
+        }
+      }
+    }
+  }
+  return res;
+}
+function getTypes(types) {
+  const deps = getDependencies(types);
+  const names = {};
+  for (const type in types)
+    names[type] = `${type}(${types[type].map(({ name, type: type2 }) => `${type2} ${name}`).join(",")})`;
+  const fullNames = {};
+  for (const [name, curDeps] of Object.entries(deps)) {
+    const n = [name].concat(Array.from(curDeps).sort());
+    fullNames[name] = n.map((i) => names[i]).join("");
+  }
+  const hashes = Object.fromEntries(Object.entries(fullNames).map(([k, v]) => [k, keccak_256(v)]));
+  const fields = {};
+  for (const type in types) {
+    const res = /* @__PURE__ */ new Set();
+    for (const { name } of types[type]) {
+      if (res.has(name))
+        throw new Error(`field ${name} included multiple times in type ${type}`);
+      res.add(name);
+    }
+    fields[type] = res;
+  }
+  return { names, fullNames, hashes, fields };
+}
+function encoder(types, domain) {
+  if (!isObject(domain))
+    throw Error(`wrong domain=${domain}`);
+  if (!isObject(types))
+    throw Error(`wrong types=${types}`);
+  const info = getTypes(types);
+  const encodeField = (type, data, withHash = true) => {
+    const p = parseType(type);
+    if (p.isArray) {
+      if (!Array.isArray(data))
+        throw new Error(`expected array, got: ${data}`);
+      if (p.arrayLen !== void 0 && data.length !== p.arrayLen)
+        throw new Error(`wrong array length: expected ${p.arrayLen}, got ${data}`);
+      return keccak_256(concatBytes(...data.map((i) => encodeField(p.item, i))));
+    }
+    if (p.type === "struct") {
+      const def2 = types[type];
+      if (!def2)
+        throw new Error(`wrong type: ${type}`);
+      const fieldNames = info.fields[type];
+      if (!isObject(data))
+        throw new Error(`encoding non-object as custom type ${type}`);
+      for (const k in data)
+        if (!fieldNames.has(k))
+          throw new Error(`unexpected field ${k} in ${type}`);
+      const fields = [];
+      for (const { name, type: type2 } of def2) {
+        if (types[type2] && data[name] === void 0) {
+          fields.push(new Uint8Array(32));
+          continue;
+        }
+        fields.push(encodeField(type2, data[name]));
+      }
+      const res = concatBytes(info.hashes[p.base], ...fields);
+      return withHash ? keccak_256(res) : res;
+    }
+    if (type === "string" || type === "bytes") {
+      if (type === "bytes" && typeof data === "string")
+        data = ethHex.decode(data);
+      return keccak_256(data);
+    }
+    if (type.startsWith("bytes") && typeof data === "string")
+      data = ethHex.decode(data);
+    if ((type.startsWith("int") || type.startsWith("uint")) && typeof data === "string")
+      data = BigInt(data);
+    return mapComponent({ type }).encode(data);
+  };
+  const encodeData = (type, data) => {
+    astr2(type);
+    if (!types[type])
+      throw new Error(`Unknown type: ${type}`);
+    if (!isObject(data))
+      throw new Error("wrong data object");
+    return encodeField(type, data, false);
+  };
+  const structHash = (type, data) => keccak_256(encodeData(type, data));
+  const domainHash = structHash("EIP712Domain", domain);
+  const signer = getSigner(1, (msg) => {
+    if (typeof msg.primaryType !== "string")
+      throw Error(`wrong primaryType=${msg.primaryType}`);
+    if (!isObject(msg.message))
+      throw Error(`wrong message=${msg.message}`);
+    if (msg.primaryType === "EIP712Domain")
+      return domainHash;
+    return concatBytes(domainHash, structHash(msg.primaryType, msg.message));
+  });
+  return {
+    encodeData: (type, message) => ethHex.encode(encodeData(type, message)),
+    structHash: (type, message) => ethHex.encode(structHash(type, message)),
+    // Signer
+    _getHash: (primaryType, message) => signer._getHash({ primaryType, message }),
+    sign: (primaryType, message, privateKey, extraEntropy) => signer.sign({ primaryType, message }, privateKey, extraEntropy),
+    verify: (primaryType, signature, message, address) => signer.verify(signature, { primaryType, message }, address),
+    recoverPublicKey: (primaryType, signature, message) => signer.recoverPublicKey(signature, { primaryType, message })
+  };
+}
+var EIP712Domain = [
+  { name: "name", type: "string" },
+  // the user readable name of signing domain, i.e. the name of the DApp or the protocol.
+  { name: "version", type: "string" },
+  // the current major version of the signing domain. Signatures from different versions are not compatible.
+  { name: "chainId", type: "uint256" },
+  // the EIP-155 chain id. The user-agent should refuse signing if it does not match the currently active chain.
+  { name: "verifyingContract", type: "address" },
+  // the address of the contract that will verify the signature. The user-agent may do contract specific phishing prevention.
+  { name: "salt", type: "bytes32" }
+  // an disambiguating salt for the protocol. This can be used as a domain separator of last resort.
+];
+function getDomainType(domain) {
+  return EIP712Domain.filter(({ name }) => domain[name] !== void 0);
+}
+var getTypedTypes = (typed) => ({
+  EIP712Domain: getDomainType(typed.domain),
+  ...typed.types
+});
+function validateTyped(t) {
+  if (!isObject(t.message))
+    throw new Error("wrong message");
+  if (!isObject(t.domain))
+    throw new Error("wrong domain");
+  if (!isObject(t.types))
+    throw new Error("wrong types");
+  if (typeof t.primaryType !== "string" || !t.types[t.primaryType])
+    throw new Error("wrong primaryType");
+}
+function sigHash(typed) {
+  validateTyped(typed);
+  return encoder(getTypedTypes(typed), typed.domain)._getHash(typed.primaryType, typed.message);
+}
+function signTyped(typed, privateKey, extraEntropy) {
+  validateTyped(typed);
+  return encoder(getTypedTypes(typed), typed.domain).sign(typed.primaryType, typed.message, privateKey, extraEntropy);
+}
+function verifyTyped(signature, typed, address) {
+  validateTyped(typed);
+  return encoder(getTypedTypes(typed), typed.domain).verify(typed.primaryType, signature, typed.message, address);
+}
+
+// node_modules/micro-eth-signer/esm/abi/common.js
+function addHints(abi, map2) {
+  const res = [];
+  for (const elm of abi) {
+    if (["event", "function"].includes(elm.type) && elm.name && map2[elm.name]) {
+      res.push({ ...elm, hint: map2[elm.name] });
+    } else
+      res.push(elm);
+  }
+  return res;
+}
+function addHook(abi, name, fn) {
+  const res = [];
+  for (const elm of abi) {
+    if (elm.type === "function" && elm.name === name)
+      res.push({ ...elm, hook: fn });
+    else
+      res.push(elm);
+  }
+  return res;
+}
+
+// node_modules/micro-eth-signer/esm/abi/erc20.js
+var ABI = [
+  { type: "function", name: "name", outputs: [{ type: "string" }] },
+  { type: "function", name: "totalSupply", outputs: [{ type: "uint256" }] },
+  { type: "function", name: "decimals", outputs: [{ type: "uint8" }] },
+  { type: "function", name: "symbol", outputs: [{ type: "string" }] },
+  { type: "function", name: "approve", inputs: [{ name: "spender", type: "address" }, { name: "value", type: "uint256" }], outputs: [{ name: "success", type: "bool" }] },
+  { type: "function", name: "transferFrom", inputs: [{ name: "from", type: "address" }, { name: "to", type: "address" }, { name: "value", type: "uint256" }], outputs: [{ name: "success", type: "bool" }] },
+  { type: "function", name: "balances", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "allowed", inputs: [{ type: "address" }, { type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "balanceOf", inputs: [{ name: "owner", type: "address" }], outputs: [{ name: "balance", type: "uint256" }] },
+  { type: "function", name: "transfer", inputs: [{ name: "to", type: "address" }, { name: "value", type: "uint256" }], outputs: [{ name: "success", type: "bool" }] },
+  { type: "function", name: "allowance", inputs: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }], outputs: [{ name: "remaining", type: "uint256" }] },
+  { name: "Approval", type: "event", anonymous: false, inputs: [{ indexed: true, name: "owner", type: "address" }, { indexed: true, name: "spender", type: "address" }, { indexed: false, name: "value", type: "uint256" }] },
+  { name: "Transfer", type: "event", anonymous: false, inputs: [{ indexed: true, name: "from", type: "address" }, { indexed: true, name: "to", type: "address" }, { indexed: false, name: "value", type: "uint256" }] }
+];
+var hints = {
+  approve(v, opt) {
+    if (!opt.contractInfo || !opt.contractInfo.decimals || !opt.contractInfo.symbol)
+      throw new Error("Not enough info");
+    return `Allow spending ${createDecimal(opt.contractInfo.decimals).encode(v.value)} ${opt.contractInfo.symbol} by ${v.spender}`;
+  },
+  transferFrom(v, opt) {
+    if (!opt.contractInfo || !opt.contractInfo.decimals || !opt.contractInfo.symbol)
+      throw new Error("Not enough info");
+    return `Transfer ${createDecimal(opt.contractInfo.decimals).encode(v.value)} ${opt.contractInfo.symbol} from ${v.from} to ${v.to}`;
+  },
+  transfer(v, opt) {
+    if (!opt.contractInfo || !opt.contractInfo.decimals || !opt.contractInfo.symbol)
+      throw new Error("Not enough info");
+    return `Transfer ${createDecimal(opt.contractInfo.decimals).encode(v.value)} ${opt.contractInfo.symbol} to ${v.to}`;
+  },
+  Approval(v, opt) {
+    if (!opt.contractInfo || !opt.contractInfo.decimals || !opt.contractInfo.symbol)
+      throw new Error("Not enough info");
+    return `Allow ${v.spender} spending up to ${createDecimal(opt.contractInfo.decimals).encode(v.value)} ${opt.contractInfo.symbol} from ${v.owner}`;
+  },
+  Transfer(v, opt) {
+    if (!opt.contractInfo || !opt.contractInfo.decimals || !opt.contractInfo.symbol)
+      throw new Error("Not enough info");
+    return `Transfer ${createDecimal(opt.contractInfo.decimals).encode(v.value)} ${opt.contractInfo.symbol} from ${v.from} to ${v.to}`;
+  }
+};
+var ERC20ABI = /* @__PURE__ */ addHints(ABI, hints);
+var erc20_default = ERC20ABI;
+
+// node_modules/micro-eth-signer/esm/abi/erc721.js
+var ABI2 = [
+  { type: "function", name: "approve", inputs: [{ name: "approved", type: "address" }, { name: "tokenId", type: "uint256" }] },
+  { type: "function", name: "balanceOf", inputs: [{ name: "owner", type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "ownerOf", inputs: [{ name: "tokenId", type: "uint256" }], outputs: [{ name: "owner", type: "address" }] },
+  { type: "function", name: "getApproved", inputs: [{ name: "tokenId", type: "uint256" }], outputs: [{ type: "address" }] },
+  { type: "function", name: "isApprovedForAll", inputs: [{ name: "owner", type: "address" }, { name: "operator", type: "address" }], outputs: [{ type: "bool" }] },
+  { type: "function", name: "safeTransferFrom", inputs: [{ name: "from", type: "address" }, { name: "to", type: "address" }, { name: "tokenId", type: "uint256" }] },
+  { type: "function", name: "safeTransferFrom", inputs: [{ name: "from", type: "address" }, { name: "to", type: "address" }, { name: "tokenId", type: "uint256" }, { name: "data", type: "bytes" }] },
+  { type: "function", name: "setApprovalForAll", inputs: [{ name: "operator", type: "address" }, { name: "approved", type: "bool" }] },
+  { type: "function", name: "supportsInterface", inputs: [{ name: "interfaceID", type: "bytes4" }], outputs: [{ type: "bool" }] },
+  { type: "function", name: "transferFrom", inputs: [{ name: "from", type: "address" }, { name: "to", type: "address" }, { name: "tokenId", type: "uint256" }] },
+  { type: "function", name: "tokenByIndex", inputs: [{ name: "index", type: "uint256" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "tokenOfOwnerByIndex", inputs: [{ name: "owner", type: "address" }, { name: "index", type: "uint256" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "totalSupply", outputs: [{ type: "uint256" }] },
+  { type: "function", name: "name", outputs: [{ name: "name", type: "string" }] },
+  { type: "function", name: "symbol", outputs: [{ name: "symbol", type: "string" }] },
+  { type: "function", name: "tokenURI", inputs: [{ name: "tokenId", type: "uint256" }], outputs: [{ type: "string" }] },
+  { name: "Transfer", type: "event", inputs: [{ indexed: true, name: "from", type: "address" }, { indexed: true, name: "to", type: "address" }, { indexed: true, name: "tokenId", type: "uint256" }] },
+  { name: "Approval", type: "event", inputs: [{ indexed: true, name: "owner", type: "address" }, { indexed: true, name: "spender", type: "address" }, { indexed: true, name: "tokenId", type: "uint256" }] },
+  { name: "ApprovalForAll", type: "event", inputs: [{ indexed: true, name: "owner", type: "address" }, { indexed: true, name: "spender", type: "address" }, { indexed: false, name: "approved", type: "bool" }] }
+];
+var erc721_default = ABI2;
+
+// node_modules/micro-eth-signer/esm/abi/kyber.js
+var _ABI = [
+  { type: "function", name: "getExpectedRate", inputs: [{ name: "src", type: "address" }, { name: "dest", type: "address" }, { name: "srcQty", type: "uint256" }], outputs: [{ name: "expectedRate", type: "uint256" }, { name: "worstRate", type: "uint256" }] },
+  { type: "function", name: "getExpectedRateAfterFee", inputs: [{ name: "src", type: "address" }, { name: "dest", type: "address" }, { name: "srcQty", type: "uint256" }, { name: "platformFeeBps", type: "uint256" }, { name: "hint", type: "bytes" }], outputs: [{ name: "expectedRate", type: "uint256" }] },
+  { type: "function", name: "trade", inputs: [{ name: "src", type: "address" }, { name: "srcAmount", type: "uint256" }, { name: "dest", type: "address" }, { name: "destAddress", type: "address" }, { name: "maxDestAmount", type: "uint256" }, { name: "minConversionRate", type: "uint256" }, { name: "platformWallet", type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "tradeWithHint", inputs: [{ name: "src", type: "address" }, { name: "srcAmount", type: "uint256" }, { name: "dest", type: "address" }, { name: "destAddress", type: "address" }, { name: "maxDestAmount", type: "uint256" }, { name: "minConversionRate", type: "uint256" }, { name: "walletId", type: "address" }, { name: "hint", type: "bytes" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "tradeWithHintAndFee", inputs: [{ name: "src", type: "address" }, { name: "srcAmount", type: "uint256" }, { name: "dest", type: "address" }, { name: "destAddress", type: "address" }, { name: "maxDestAmount", type: "uint256" }, { name: "minConversionRate", type: "uint256" }, { name: "platformWallet", type: "address" }, { name: "platformFeeBps", type: "uint256" }, { name: "hint", type: "bytes" }], outputs: [{ name: "destAmount", type: "uint256" }] }
+];
+var _10n = BigInt(10);
+var hints2 = {
+  tradeWithHintAndFee(v, opt) {
+    if (!opt.contracts)
+      throw Error("Not enough info");
+    const tokenInfo = (c) => c === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" ? { symbol: "ETH", decimals: 18 } : opt.contracts[c];
+    const formatToken = (amount, info) => `${createDecimal(info.decimals).encode(amount)} ${info.symbol}`;
+    const [srcInfo, destInfo] = [tokenInfo(v.src), tokenInfo(v.dest)];
+    if (!srcInfo || !destInfo)
+      throw Error("Not enough info");
+    const destAmount = v.srcAmount * v.minConversionRate * _10n ** BigInt(destInfo.decimals) / _10n ** (BigInt(srcInfo.decimals) + BigInt(18));
+    const fee = formatToken(BigInt(v.platformFeeBps) * BigInt(v.srcAmount) / BigInt(1e4), srcInfo);
+    return `Swap ${formatToken(v.srcAmount, srcInfo)} For ${formatToken(destAmount, destInfo)} (with platform fee: ${fee})`;
+  }
+};
+var ABI3 = /* @__PURE__ */ addHints(_ABI, hints2);
+var kyber_default = ABI3;
+var KYBER_NETWORK_PROXY_CONTRACT = "0x9aab3f75489902f3a48495025729a0af77d4b11e";
+
+// node_modules/micro-eth-signer/esm/abi/uniswap-v2.js
+var _ABI2 = [
+  { inputs: [{ internalType: "address", name: "_factory", type: "address" }, { internalType: "address", name: "_WETH", type: "address" }], stateMutability: "nonpayable", type: "constructor" },
+  { inputs: [], name: "WETH", outputs: [{ internalType: "address", name: "", type: "address" }], stateMutability: "view", type: "function" },
+  { inputs: [{ internalType: "address", name: "tokenA", type: "address" }, { internalType: "address", name: "tokenB", type: "address" }, { internalType: "uint256", name: "amountADesired", type: "uint256" }, { internalType: "uint256", name: "amountBDesired", type: "uint256" }, { internalType: "uint256", name: "amountAMin", type: "uint256" }, { internalType: "uint256", name: "amountBMin", type: "uint256" }, { internalType: "address", name: "to", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }], name: "addLiquidity", outputs: [{ internalType: "uint256", name: "amountA", type: "uint256" }, { internalType: "uint256", name: "amountB", type: "uint256" }, { internalType: "uint256", name: "liquidity", type: "uint256" }], stateMutability: "nonpayable", type: "function" },
+  { inputs: [{ internalType: "address", name: "token", type: "address" }, { internalType: "uint256", name: "amountTokenDesired", type: "uint256" }, { internalType: "uint256", name: "amountTokenMin", type: "uint256" }, { internalType: "uint256", name: "amountETHMin", type: "uint256" }, { internalType: "address", name: "to", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }], name: "addLiquidityETH", outputs: [{ internalType: "uint256", name: "amountToken", type: "uint256" }, { internalType: "uint256", name: "amountETH", type: "uint256" }, { internalType: "uint256", name: "liquidity", type: "uint256" }], stateMutability: "payable", type: "function" },
+  { inputs: [], name: "factory", outputs: [{ internalType: "address", name: "", type: "address" }], stateMutability: "view", type: "function" },
+  { inputs: [{ internalType: "uint256", name: "amountOut", type: "uint256" }, { internalType: "uint256", name: "reserveIn", type: "uint256" }, { internalType: "uint256", name: "reserveOut", type: "uint256" }], name: "getAmountIn", outputs: [{ internalType: "uint256", name: "amountIn", type: "uint256" }], stateMutability: "pure", type: "function" },
+  { inputs: [{ internalType: "uint256", name: "amountIn", type: "uint256" }, { internalType: "uint256", name: "reserveIn", type: "uint256" }, { internalType: "uint256", name: "reserveOut", type: "uint256" }], name: "getAmountOut", outputs: [{ internalType: "uint256", name: "amountOut", type: "uint256" }], stateMutability: "pure", type: "function" },
+  { inputs: [{ internalType: "uint256", name: "amountOut", type: "uint256" }, { internalType: "address[]", name: "path", type: "address[]" }], name: "getAmountsIn", outputs: [{ internalType: "uint256[]", name: "amounts", type: "uint256[]" }], stateMutability: "view", type: "function" },
+  { inputs: [{ internalType: "uint256", name: "amountIn", type: "uint256" }, { internalType: "address[]", name: "path", type: "address[]" }], name: "getAmountsOut", outputs: [{ internalType: "uint256[]", name: "amounts", type: "uint256[]" }], stateMutability: "view", type: "function" },
+  { inputs: [{ internalType: "uint256", name: "amountA", type: "uint256" }, { internalType: "uint256", name: "reserveA", type: "uint256" }, { internalType: "uint256", name: "reserveB", type: "uint256" }], name: "quote", outputs: [{ internalType: "uint256", name: "amountB", type: "uint256" }], stateMutability: "pure", type: "function" },
+  { inputs: [{ internalType: "address", name: "tokenA", type: "address" }, { internalType: "address", name: "tokenB", type: "address" }, { internalType: "uint256", name: "liquidity", type: "uint256" }, { internalType: "uint256", name: "amountAMin", type: "uint256" }, { internalType: "uint256", name: "amountBMin", type: "uint256" }, { internalType: "address", name: "to", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }], name: "removeLiquidity", outputs: [{ internalType: "uint256", name: "amountA", type: "uint256" }, { internalType: "uint256", name: "amountB", type: "uint256" }], stateMutability: "nonpayable", type: "function" },
+  { inputs: [{ internalType: "address", name: "token", type: "address" }, { internalType: "uint256", name: "liquidity", type: "uint256" }, { internalType: "uint256", name: "amountTokenMin", type: "uint256" }, { internalType: "uint256", name: "amountETHMin", type: "uint256" }, { internalType: "address", name: "to", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }], name: "removeLiquidityETH", outputs: [{ internalType: "uint256", name: "amountToken", type: "uint256" }, { internalType: "uint256", name: "amountETH", type: "uint256" }], stateMutability: "nonpayable", type: "function" },
+  { inputs: [{ internalType: "address", name: "token", type: "address" }, { internalType: "uint256", name: "liquidity", type: "uint256" }, { internalType: "uint256", name: "amountTokenMin", type: "uint256" }, { internalType: "uint256", name: "amountETHMin", type: "uint256" }, { internalType: "address", name: "to", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }], name: "removeLiquidityETHSupportingFeeOnTransferTokens", outputs: [{ internalType: "uint256", name: "amountETH", type: "uint256" }], stateMutability: "nonpayable", type: "function" },
+  { inputs: [{ internalType: "address", name: "token", type: "address" }, { internalType: "uint256", name: "liquidity", type: "uint256" }, { internalType: "uint256", name: "amountTokenMin", type: "uint256" }, { internalType: "uint256", name: "amountETHMin", type: "uint256" }, { internalType: "address", name: "to", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }, { internalType: "bool", name: "approveMax", type: "bool" }, { internalType: "uint8", name: "v", type: "uint8" }, { internalType: "bytes32", name: "r", type: "bytes32" }, { internalType: "bytes32", name: "s", type: "bytes32" }], name: "removeLiquidityETHWithPermit", outputs: [{ internalType: "uint256", name: "amountToken", type: "uint256" }, { internalType: "uint256", name: "amountETH", type: "uint256" }], stateMutability: "nonpayable", type: "function" },
+  { inputs: [{ internalType: "address", name: "token", type: "address" }, { internalType: "uint256", name: "liquidity", type: "uint256" }, { internalType: "uint256", name: "amountTokenMin", type: "uint256" }, { internalType: "uint256", name: "amountETHMin", type: "uint256" }, { internalType: "address", name: "to", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }, { internalType: "bool", name: "approveMax", type: "bool" }, { internalType: "uint8", name: "v", type: "uint8" }, { internalType: "bytes32", name: "r", type: "bytes32" }, { internalType: "bytes32", name: "s", type: "bytes32" }], name: "removeLiquidityETHWithPermitSupportingFeeOnTransferTokens", outputs: [{ internalType: "uint256", name: "amountETH", type: "uint256" }], stateMutability: "nonpayable", type: "function" },
+  { inputs: [{ internalType: "address", name: "tokenA", type: "address" }, { internalType: "address", name: "tokenB", type: "address" }, { internalType: "uint256", name: "liquidity", type: "uint256" }, { internalType: "uint256", name: "amountAMin", type: "uint256" }, { internalType: "uint256", name: "amountBMin", type: "uint256" }, { internalType: "address", name: "to", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }, { internalType: "bool", name: "approveMax", type: "bool" }, { internalType: "uint8", name: "v", type: "uint8" }, { internalType: "bytes32", name: "r", type: "bytes32" }, { internalType: "bytes32", name: "s", type: "bytes32" }], name: "removeLiquidityWithPermit", outputs: [{ internalType: "uint256", name: "amountA", type: "uint256" }, { internalType: "uint256", name: "amountB", type: "uint256" }], stateMutability: "nonpayable", type: "function" },
+  { inputs: [{ internalType: "uint256", name: "amountOut", type: "uint256" }, { internalType: "address[]", name: "path", type: "address[]" }, { internalType: "address", name: "to", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }], name: "swapETHForExactTokens", outputs: [{ internalType: "uint256[]", name: "amounts", type: "uint256[]" }], stateMutability: "payable", type: "function" },
+  { inputs: [{ internalType: "uint256", name: "amountOutMin", type: "uint256" }, { internalType: "address[]", name: "path", type: "address[]" }, { internalType: "address", name: "to", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }], name: "swapExactETHForTokens", outputs: [{ internalType: "uint256[]", name: "amounts", type: "uint256[]" }], stateMutability: "payable", type: "function" },
+  { inputs: [{ internalType: "uint256", name: "amountOutMin", type: "uint256" }, { internalType: "address[]", name: "path", type: "address[]" }, { internalType: "address", name: "to", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }], name: "swapExactETHForTokensSupportingFeeOnTransferTokens", outputs: [], stateMutability: "payable", type: "function" },
+  { inputs: [{ internalType: "uint256", name: "amountIn", type: "uint256" }, { internalType: "uint256", name: "amountOutMin", type: "uint256" }, { internalType: "address[]", name: "path", type: "address[]" }, { internalType: "address", name: "to", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }], name: "swapExactTokensForETH", outputs: [{ internalType: "uint256[]", name: "amounts", type: "uint256[]" }], stateMutability: "nonpayable", type: "function" },
+  { inputs: [{ internalType: "uint256", name: "amountIn", type: "uint256" }, { internalType: "uint256", name: "amountOutMin", type: "uint256" }, { internalType: "address[]", name: "path", type: "address[]" }, { internalType: "address", name: "to", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }], name: "swapExactTokensForETHSupportingFeeOnTransferTokens", outputs: [], stateMutability: "nonpayable", type: "function" },
+  { inputs: [{ internalType: "uint256", name: "amountIn", type: "uint256" }, { internalType: "uint256", name: "amountOutMin", type: "uint256" }, { internalType: "address[]", name: "path", type: "address[]" }, { internalType: "address", name: "to", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }], name: "swapExactTokensForTokens", outputs: [{ internalType: "uint256[]", name: "amounts", type: "uint256[]" }], stateMutability: "nonpayable", type: "function" },
+  { inputs: [{ internalType: "uint256", name: "amountIn", type: "uint256" }, { internalType: "uint256", name: "amountOutMin", type: "uint256" }, { internalType: "address[]", name: "path", type: "address[]" }, { internalType: "address", name: "to", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }], name: "swapExactTokensForTokensSupportingFeeOnTransferTokens", outputs: [], stateMutability: "nonpayable", type: "function" },
+  { inputs: [{ internalType: "uint256", name: "amountOut", type: "uint256" }, { internalType: "uint256", name: "amountInMax", type: "uint256" }, { internalType: "address[]", name: "path", type: "address[]" }, { internalType: "address", name: "to", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }], name: "swapTokensForExactETH", outputs: [{ internalType: "uint256[]", name: "amounts", type: "uint256[]" }], stateMutability: "nonpayable", type: "function" },
+  { inputs: [{ internalType: "uint256", name: "amountOut", type: "uint256" }, { internalType: "uint256", name: "amountInMax", type: "uint256" }, { internalType: "address[]", name: "path", type: "address[]" }, { internalType: "address", name: "to", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }], name: "swapTokensForExactTokens", outputs: [{ internalType: "uint256[]", name: "amounts", type: "uint256[]" }], stateMutability: "nonpayable", type: "function" },
+  { stateMutability: "payable", type: "receive" }
+];
+function uniToken(path, opt, amount, first) {
+  const contract = path[first ? 0 : path.length - 1];
+  if (!contract || !opt.contracts || !opt.contracts[contract])
+    return;
+  const info = opt.contracts[contract];
+  if (!info.decimals || !info.symbol)
+    return;
+  return `${createDecimal(info.decimals).encode(amount)} ${info.symbol}`;
+}
+var uniTs = (ts) => `Expires at ${new Date(Number(ts) * 1e3).toUTCString()}`;
+var hints3 = {
+  swapETHForExactTokens(v, opt) {
+    const last = uniToken(v.path, opt, v.amountOut, false);
+    if (!opt.amount || !last)
+      throw new Error("Not enough info");
+    return `Swap up to ${weieth.encode(opt.amount)} ETH for exact ${last}. ${uniTs(v.deadline)}`;
+  },
+  swapExactETHForTokens(v, opt) {
+    const last = uniToken(v.path, opt, v.amountOutMin, false);
+    if (!opt.amount || !last)
+      throw new Error("Not enough info");
+    return `Swap ${weieth.encode(opt.amount)} ETH for at least ${last}. ${uniTs(v.deadline)}`;
+  },
+  swapExactETHForTokensSupportingFeeOnTransferTokens(v, opt) {
+    const last = uniToken(v.path, opt, v.amountOutMin, false);
+    if (!opt.amount || !last)
+      throw new Error("Not enough info");
+    return `Swap ${weieth.encode(opt.amount)} ETH for at least ${last}. ${uniTs(v.deadline)}`;
+  },
+  swapExactTokensForETH(v, opt) {
+    const first = uniToken(v.path, opt, v.amountIn, true);
+    if (!first)
+      throw new Error("Not enough info");
+    return `Swap exact ${first} for at least ${weieth.encode(v.amountOutMin)} ETH. ${uniTs(v.deadline)}`;
+  },
+  swapExactTokensForETHSupportingFeeOnTransferTokens(v, opt) {
+    const first = uniToken(v.path, opt, v.amountIn, true);
+    if (!first)
+      throw new Error("Not enough info");
+    return `Swap exact ${first} for at least ${weieth.encode(v.amountOutMin)} ETH. ${uniTs(v.deadline)}`;
+  },
+  swapTokensForExactETH(v, opt) {
+    const first = uniToken(v.path, opt, v.amountInMax, true);
+    if (!first)
+      throw new Error("Not enough info");
+    return `Swap up to ${first} for exact ${weieth.encode(v.amountOut)} ETH. ${uniTs(v.deadline)}`;
+  },
+  swapExactTokensForTokens(v, opt) {
+    const first = uniToken(v.path, opt, v.amountIn, true);
+    const last = uniToken(v.path, opt, v.amountOutMin, false);
+    if (!first || !last)
+      throw new Error("Not enough info");
+    return `Swap exact ${first} for at least ${last}. ${uniTs(v.deadline)}`;
+  },
+  swapExactTokensForTokensSupportingFeeOnTransferTokens(v, opt) {
+    const first = uniToken(v.path, opt, v.amountIn, true);
+    const last = uniToken(v.path, opt, v.amountOutMin, false);
+    if (!first || !last)
+      throw new Error("Not enough info");
+    return `Swap exact ${first} for at least ${last}. ${uniTs(v.deadline)}`;
+  },
+  swapTokensForExactTokens(v, opt) {
+    const first = uniToken(v.path, opt, v.amountInMax, true);
+    const last = uniToken(v.path, opt, v.amountOut, false);
+    if (!first || !last)
+      throw new Error("Not enough info");
+    return `Swap up to ${first} for exact ${last}. ${uniTs(v.deadline)}`;
+  }
+};
+var ABI4 = /* @__PURE__ */ addHints(_ABI2, hints3);
+var uniswap_v2_default = ABI4;
+var UNISWAP_V2_ROUTER_CONTRACT = "0x7a250d5630b4cf539739df2c5dacb4c659f2488d";
+
+// node_modules/micro-eth-signer/esm/abi/uniswap-v3.js
+var _ABI3 = [
+  { inputs: [{ internalType: "address", name: "_factory", type: "address" }, { internalType: "address", name: "_WETH9", type: "address" }], stateMutability: "nonpayable", type: "constructor" },
+  { inputs: [], name: "WETH9", outputs: [{ internalType: "address", name: "", type: "address" }], stateMutability: "view", type: "function" },
+  { inputs: [{ components: [{ internalType: "bytes", name: "path", type: "bytes" }, { internalType: "address", name: "recipient", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }, { internalType: "uint256", name: "amountIn", type: "uint256" }, { internalType: "uint256", name: "amountOutMinimum", type: "uint256" }], internalType: "struct ISwapRouter.ExactInputParams", name: "params", type: "tuple" }], name: "exactInput", outputs: [{ internalType: "uint256", name: "amountOut", type: "uint256" }], stateMutability: "payable", type: "function" },
+  { inputs: [{ components: [{ internalType: "address", name: "tokenIn", type: "address" }, { internalType: "address", name: "tokenOut", type: "address" }, { internalType: "uint24", name: "fee", type: "uint24" }, { internalType: "address", name: "recipient", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }, { internalType: "uint256", name: "amountIn", type: "uint256" }, { internalType: "uint256", name: "amountOutMinimum", type: "uint256" }, { internalType: "uint160", name: "sqrtPriceLimitX96", type: "uint160" }], internalType: "struct ISwapRouter.ExactInputSingleParams", name: "params", type: "tuple" }], name: "exactInputSingle", outputs: [{ internalType: "uint256", name: "amountOut", type: "uint256" }], stateMutability: "payable", type: "function" },
+  { inputs: [{ components: [{ internalType: "bytes", name: "path", type: "bytes" }, { internalType: "address", name: "recipient", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }, { internalType: "uint256", name: "amountOut", type: "uint256" }, { internalType: "uint256", name: "amountInMaximum", type: "uint256" }], internalType: "struct ISwapRouter.ExactOutputParams", name: "params", type: "tuple" }], name: "exactOutput", outputs: [{ internalType: "uint256", name: "amountIn", type: "uint256" }], stateMutability: "payable", type: "function" },
+  { inputs: [{ components: [{ internalType: "address", name: "tokenIn", type: "address" }, { internalType: "address", name: "tokenOut", type: "address" }, { internalType: "uint24", name: "fee", type: "uint24" }, { internalType: "address", name: "recipient", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }, { internalType: "uint256", name: "amountOut", type: "uint256" }, { internalType: "uint256", name: "amountInMaximum", type: "uint256" }, { internalType: "uint160", name: "sqrtPriceLimitX96", type: "uint160" }], internalType: "struct ISwapRouter.ExactOutputSingleParams", name: "params", type: "tuple" }], name: "exactOutputSingle", outputs: [{ internalType: "uint256", name: "amountIn", type: "uint256" }], stateMutability: "payable", type: "function" },
+  { inputs: [], name: "factory", outputs: [{ internalType: "address", name: "", type: "address" }], stateMutability: "view", type: "function" },
+  { inputs: [{ internalType: "bytes[]", name: "data", type: "bytes[]" }], name: "multicall", outputs: [{ internalType: "bytes[]", name: "results", type: "bytes[]" }], stateMutability: "payable", type: "function" },
+  { inputs: [], name: "refundETH", outputs: [], stateMutability: "payable", type: "function" },
+  { inputs: [{ internalType: "address", name: "token", type: "address" }, { internalType: "uint256", name: "value", type: "uint256" }, { internalType: "uint256", name: "deadline", type: "uint256" }, { internalType: "uint8", name: "v", type: "uint8" }, { internalType: "bytes32", name: "r", type: "bytes32" }, { internalType: "bytes32", name: "s", type: "bytes32" }], name: "selfPermit", outputs: [], stateMutability: "payable", type: "function" },
+  { inputs: [{ internalType: "address", name: "token", type: "address" }, { internalType: "uint256", name: "nonce", type: "uint256" }, { internalType: "uint256", name: "expiry", type: "uint256" }, { internalType: "uint8", name: "v", type: "uint8" }, { internalType: "bytes32", name: "r", type: "bytes32" }, { internalType: "bytes32", name: "s", type: "bytes32" }], name: "selfPermitAllowed", outputs: [], stateMutability: "payable", type: "function" },
+  { inputs: [{ internalType: "address", name: "token", type: "address" }, { internalType: "uint256", name: "nonce", type: "uint256" }, { internalType: "uint256", name: "expiry", type: "uint256" }, { internalType: "uint8", name: "v", type: "uint8" }, { internalType: "bytes32", name: "r", type: "bytes32" }, { internalType: "bytes32", name: "s", type: "bytes32" }], name: "selfPermitAllowedIfNecessary", outputs: [], stateMutability: "payable", type: "function" },
+  { inputs: [{ internalType: "address", name: "token", type: "address" }, { internalType: "uint256", name: "value", type: "uint256" }, { internalType: "uint256", name: "deadline", type: "uint256" }, { internalType: "uint8", name: "v", type: "uint8" }, { internalType: "bytes32", name: "r", type: "bytes32" }, { internalType: "bytes32", name: "s", type: "bytes32" }], name: "selfPermitIfNecessary", outputs: [], stateMutability: "payable", type: "function" },
+  { inputs: [{ internalType: "address", name: "token", type: "address" }, { internalType: "uint256", name: "amountMinimum", type: "uint256" }, { internalType: "address", name: "recipient", type: "address" }], name: "sweepToken", outputs: [], stateMutability: "payable", type: "function" },
+  { inputs: [{ internalType: "address", name: "token", type: "address" }, { internalType: "uint256", name: "amountMinimum", type: "uint256" }, { internalType: "address", name: "recipient", type: "address" }, { internalType: "uint256", name: "feeBips", type: "uint256" }, { internalType: "address", name: "feeRecipient", type: "address" }], name: "sweepTokenWithFee", outputs: [], stateMutability: "payable", type: "function" },
+  { inputs: [{ internalType: "int256", name: "amount0Delta", type: "int256" }, { internalType: "int256", name: "amount1Delta", type: "int256" }, { internalType: "bytes", name: "_data", type: "bytes" }], name: "uniswapV3SwapCallback", outputs: [], stateMutability: "nonpayable", type: "function" },
+  { inputs: [{ internalType: "uint256", name: "amountMinimum", type: "uint256" }, { internalType: "address", name: "recipient", type: "address" }], name: "unwrapWETH9", outputs: [], stateMutability: "payable", type: "function" },
+  { inputs: [{ internalType: "uint256", name: "amountMinimum", type: "uint256" }, { internalType: "address", name: "recipient", type: "address" }, { internalType: "uint256", name: "feeBips", type: "uint256" }, { internalType: "address", name: "feeRecipient", type: "address" }], name: "unwrapWETH9WithFee", outputs: [], stateMutability: "payable", type: "function" },
+  { stateMutability: "payable", type: "receive" }
+];
+var ABI_MULTICALL = /* @__PURE__ */ addHook(_ABI3, "multicall", (d, contract, info, opt) => {
+  const decoded = info.value.map((i) => d.decode(contract, i, opt));
+  info.name = `multicall(${decoded.map((i) => i.name).join(", ")})`;
+  info.signature = `multicall(${decoded.map((i) => i.signature).join(", ")})`;
+  info.value = decoded.map((i) => i.value);
+  let hasHint = false;
+  for (let i of decoded)
+    if (i.hint)
+      hasHint = true;
+  if (hasHint)
+    info.hint = decoded.filter((i) => i.hint).map((i) => i.hint).join(" ");
+  return info;
+});
+var decodePath = (b) => [b.slice(0, 20), b.slice(-20)].map((i) => add0x(bytesToHex(i)));
+function uniToken2(contract, amount, opt) {
+  if (!contract || !opt.contracts || !opt.contracts[contract])
+    return;
+  const info = opt.contracts[contract];
+  if (!info.decimals || !info.symbol)
+    return;
+  return `${createDecimal(info.decimals).encode(amount)} ${info.symbol}`;
+}
+var uniTs2 = (ts) => `Expires at ${new Date(Number(ts) * 1e3).toUTCString()}`;
+var hints4 = {
+  exactInputSingle(v, opt) {
+    const [from, to] = [
+      uniToken2(v.tokenIn, v.amountIn, opt),
+      uniToken2(v.tokenOut, v.amountOutMinimum, opt)
+    ];
+    if (!from || !to)
+      throw new Error("Not enough info");
+    return `Swap exact ${from} for at least ${to}. ${uniTs2(v.deadline)}`;
+  },
+  exactOutputSingle(v, opt) {
+    const [from, to] = [
+      uniToken2(v.tokenIn, v.amountInMaximum, opt),
+      uniToken2(v.tokenOut, v.amountOut, opt)
+    ];
+    if (!from || !to)
+      throw new Error("Not enough info");
+    return `Swap up to ${from} for exact ${to}. ${uniTs2(v.deadline)}`;
+  },
+  exactInput(v, opt) {
+    const [tokenIn, tokenOut] = decodePath(v.path);
+    const [from, to] = [
+      uniToken2(tokenIn, v.amountIn, opt),
+      uniToken2(tokenOut, v.amountOutMinimum, opt)
+    ];
+    if (!from || !to)
+      throw new Error("Not enough info");
+    return `Swap exact ${from} for at least ${to}. ${uniTs2(v.deadline)}`;
+  },
+  exactOutput(v, opt) {
+    const [tokenIn, tokenOut] = decodePath(v.path).reverse();
+    const [from, to] = [
+      uniToken2(tokenIn, v.amountInMaximum, opt),
+      uniToken2(tokenOut, v.amountOut, opt)
+    ];
+    if (!from || !to)
+      throw new Error("Not enough info");
+    return `Swap up to ${from} for exact ${to}. ${uniTs2(v.deadline)}`;
+  }
+};
+var ABI5 = /* @__PURE__ */ addHints(ABI_MULTICALL, hints4);
+var uniswap_v3_default = ABI5;
+var UNISWAP_V3_ROUTER_CONTRACT = "0xe592427a0aece92de3edee1f18e0157c05861564";
+
+// node_modules/micro-eth-signer/esm/abi/weth.js
+var _ABI4 = [
+  { constant: true, inputs: [], name: "name", outputs: [{ name: "", type: "string" }], payable: false, stateMutability: "view", type: "function" },
+  { constant: false, inputs: [{ name: "guy", type: "address" }, { name: "wad", type: "uint256" }], name: "approve", outputs: [{ name: "", type: "bool" }], payable: false, stateMutability: "nonpayable", type: "function" },
+  { constant: true, inputs: [], name: "totalSupply", outputs: [{ name: "", type: "uint256" }], payable: false, stateMutability: "view", type: "function" },
+  { constant: false, inputs: [{ name: "src", type: "address" }, { name: "dst", type: "address" }, { name: "wad", type: "uint256" }], name: "transferFrom", outputs: [{ name: "", type: "bool" }], payable: false, stateMutability: "nonpayable", type: "function" },
+  { constant: false, inputs: [{ name: "wad", type: "uint256" }], name: "withdraw", outputs: [], payable: false, stateMutability: "nonpayable", type: "function" },
+  { constant: true, inputs: [], name: "decimals", outputs: [{ name: "", type: "uint8" }], payable: false, stateMutability: "view", type: "function" },
+  { constant: true, inputs: [{ name: "", type: "address" }], name: "balanceOf", outputs: [{ name: "", type: "uint256" }], payable: false, stateMutability: "view", type: "function" },
+  { constant: true, inputs: [], name: "symbol", outputs: [{ name: "", type: "string" }], payable: false, stateMutability: "view", type: "function" },
+  { constant: false, inputs: [{ name: "dst", type: "address" }, { name: "wad", type: "uint256" }], name: "transfer", outputs: [{ name: "", type: "bool" }], payable: false, stateMutability: "nonpayable", type: "function" },
+  { constant: false, inputs: [], name: "deposit", outputs: [], payable: true, stateMutability: "payable", type: "function" },
+  { constant: true, inputs: [{ name: "", type: "address" }, { name: "", type: "address" }], name: "allowance", outputs: [{ name: "", type: "uint256" }], payable: false, stateMutability: "view", type: "function" },
+  { payable: true, stateMutability: "payable", type: "fallback" },
+  { anonymous: false, inputs: [{ indexed: true, name: "src", type: "address" }, { indexed: true, name: "guy", type: "address" }, { indexed: false, name: "wad", type: "uint256" }], name: "Approval", type: "event" },
+  { anonymous: false, inputs: [{ indexed: true, name: "src", type: "address" }, { indexed: true, name: "dst", type: "address" }, { indexed: false, name: "wad", type: "uint256" }], name: "Transfer", type: "event" },
+  { anonymous: false, inputs: [{ indexed: true, name: "dst", type: "address" }, { indexed: false, name: "wad", type: "uint256" }], name: "Deposit", type: "event" },
+  { anonymous: false, inputs: [{ indexed: true, name: "src", type: "address" }, { indexed: false, name: "wad", type: "uint256" }], name: "Withdrawal", type: "event" }
+];
+var ABI6 = /* @__PURE__ */ addHints(_ABI4, hints);
+var weth_default = ABI6;
+var WETH_CONTRACT = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+
+// node_modules/micro-eth-signer/esm/abi/index.js
+var TOKENS = /* @__PURE__ */ (() => Object.freeze(Object.fromEntries([
+  ["UNI", "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984"],
+  ["BAT", "0x0d8775f648430679a709e98d2b0cb6250d2887ef"],
+  // Required for Uniswap multi-hop routing
+  ["USDT", "0xdac17f958d2ee523a2206206994597c13d831ec7", 6, 1],
+  ["USDC", "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", 6, 1],
+  ["WETH", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"],
+  ["WBTC", "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599", 8],
+  ["DAI", "0x6b175474e89094c44da98b954eedeac495271d0f", 18, 1],
+  ["COMP", "0xc00e94cb662c3520282e6f5717214004a7f26888"],
+  ["MKR", "0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2"],
+  ["AMPL", "0xd46ba6d942050d489dbd938a2c909a5d5039a161", 9]
+].map(([symbol, addr2, decimals, price]) => [
+  addr2,
+  { abi: "ERC20", symbol, decimals: decimals || 18, price }
+]))))();
+var CONTRACTS = /* @__PURE__ */ (() => Object.freeze({
+  [UNISWAP_V2_ROUTER_CONTRACT]: { abi: uniswap_v2_default, name: "UNISWAP V2 ROUTER" },
+  [KYBER_NETWORK_PROXY_CONTRACT]: { abi: kyber_default, name: "KYBER NETWORK PROXY" },
+  [UNISWAP_V3_ROUTER_CONTRACT]: { abi: uniswap_v3_default, name: "UNISWAP V3 ROUTER" },
+  ...TOKENS,
+  [WETH_CONTRACT]: { abi: weth_default, name: "WETH Token", decimals: 18, symbol: "WETH" }
+}))();
+var getABI = (info) => {
+  if (typeof info.abi === "string") {
+    if (info.abi === "ERC20")
+      return erc20_default;
+    else if (info.abi === "ERC721")
+      return erc721_default;
+    else
+      throw new Error(`getABI: unknown abi type=${info.abi}`);
+  }
+  return info.abi;
+};
+var getDecoder = (opt = {}) => {
+  const decoder = new Decoder();
+  const contracts = {};
+  if (!opt.noDefault)
+    Object.assign(contracts, CONTRACTS);
+  if (opt.customContracts) {
+    for (const k in opt.customContracts)
+      contracts[k.toLowerCase()] = opt.customContracts[k];
+  }
+  for (const k in contracts) {
+    if (!addr.isValid(k))
+      throw new Error(`getDecoder: invalid contract address=${k}`);
+    const c = contracts[k];
+    if (c.symbol !== void 0 && typeof c.symbol !== "string")
+      throw new Error(`getDecoder: wrong symbol type=${c.symbol}`);
+    if (c.decimals !== void 0 && !Number.isSafeInteger(c.decimals))
+      throw new Error(`getDecoder: wrong decimals type=${c.decimals}`);
+    if (c.name !== void 0 && typeof c.name !== "string")
+      throw new Error(`getDecoder: wrong name type=${c.name}`);
+    if (c.price !== void 0 && typeof c.price !== "number")
+      throw new Error(`getDecoder: wrong price type=${c.price}`);
+    decoder.add(k, getABI(c));
+  }
+  return { decoder, contracts };
+};
+var decodeData = (to, data, amount, opt = {}) => {
+  if (!addr.isValid(to))
+    throw new Error(`decodeData: wrong to=${to}`);
+  if (amount !== void 0 && typeof amount !== "bigint")
+    throw new Error(`decodeData: wrong amount=${amount}`);
+  const { decoder, contracts } = getDecoder(opt);
+  return decoder.decode(to, ethHex.decode(data), {
+    contract: to,
+    contracts,
+    // NOTE: we need whole contracts list here, since exchanges can use info about other contracts (tokens)
+    contractInfo: contracts[to.toLowerCase()],
+    // current contract info (for tokens)
+    amount
+    // Amount is not neccesary, but some hints won't work without it (exchange eth to some tokens)
+  });
+};
+var decodeTx = (transaction, opt = {}) => {
+  const tx = Transaction2.fromHex(transaction);
+  return decodeData(tx.raw.to, tx.raw.data, tx.raw.value, opt);
+};
 var export_qrcodegen = import_qrcode_generator.default;
 export {
+  erc20_default as ERC20_ABI,
+  Transaction2 as EthTransaction,
   HDKey,
   argon2id,
   base58,
@@ -12784,6 +14967,14 @@ export {
   bytesToHex,
   concatBytes,
   ed25519,
+  addr as ethAddr,
+  createContract as ethContract,
+  decodeData as ethDecodeData,
+  decodeTx as ethDecodeTx,
+  personal as ethPersonal,
+  signTyped as ethSignTyped,
+  sigHash as ethTypedHash,
+  verifyTyped as ethVerifyTyped,
   hex,
   hexToBytes,
   hmac,
@@ -12796,5 +14987,7 @@ export {
   sha256,
   sha512,
   utf8ToBytes,
+  weieth,
+  weigwei,
   wordlist as wordlistEnglish
 };
