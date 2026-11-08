@@ -41,3 +41,17 @@ pref("browser.ml.enable", false);
 pref("browser.aboutwelcome.enabled", false);
 pref("browser.shell.checkDefaultBrowser", false);
 pref("browser.startup.homepage_override.mstone", "ignore");
+
+// Оболочка Tabora: вертикальные вкладки в боковой панели Firefox, без лишних инструментов
+pref("sidebar.revamp", true);
+pref("sidebar.verticalTabs", true);
+pref("sidebar.visibility", "always-show");
+pref("sidebar.expandOnHover", false);
+pref("sidebar.main.tools", "");
+pref("sidebar.position_start", true);
+pref("browser.toolbars.bookmarks.visibility", "never");
+pref("browser.tabs.hoverPreview.enabled", false);
+pref("browser.uidensity", 0);
+pref("browser.theme.content-theme", 0);
+pref("browser.theme.toolbar-theme", 0);
+pref("extensions.activeThemeID", "firefox-compact-dark@mozilla.org");

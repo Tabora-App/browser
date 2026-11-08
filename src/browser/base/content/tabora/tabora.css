@@ -1,0 +1,805 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Оболочка Tabora. Загружается последней в browser.xhtml и перекрывает тему Firefox. */
+
+@import url("chrome://browser/content/tabora/fonts.css");
+
+:root {
+  --tabora-bg: #0b0c0e;
+  --tabora-shell: #121317;
+  --tabora-shell-border: #23262c;
+  --tabora-panel: #17191d;
+  --tabora-panel-border: #262930;
+  --tabora-field: #1b1d22;
+  --tabora-field-border: #2a2d34;
+  --tabora-raised: #23262c;
+  --tabora-raised-2: #2a2d34;
+  --tabora-line: #2e3138;
+  --tabora-text: #ecedef;
+  --tabora-text-2: #c9ccd3;
+  --tabora-text-3: #9a9ea8;
+  --tabora-text-4: #868b95;
+  --tabora-text-5: #6e737d;
+  --tabora-accent: #c8f25a;
+  --tabora-on-accent: #0b0c0e;
+  --tabora-page-bg: #f4f2ed;
+  --tabora-font: "Manrope", -apple-system, system-ui, sans-serif;
+  --tabora-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --tabora-sidebar-width: 236px;
+  --tabora-agent-width: 368px;
+
+  /* Переменные Firefox, которые задают цвета оболочки */
+  --toolbox-background-color: var(--tabora-shell) !important;
+  --toolbox-background-color-inactive: var(--tabora-shell) !important;
+  --toolbox-text-color: var(--tabora-text) !important;
+  --toolbox-text-color-inactive: var(--tabora-text-3) !important;
+  --toolbar-bgcolor: transparent !important;
+  --toolbar-color: var(--tabora-text) !important;
+  --toolbarbutton-icon-fill: var(--tabora-text-3) !important;
+  --toolbarbutton-hover-background: var(--tabora-raised) !important;
+  --toolbarbutton-active-background: var(--tabora-raised-2) !important;
+  --toolbarbutton-border-radius: 8px !important;
+  --toolbar-field-background-color: var(--tabora-field) !important;
+  --toolbar-field-color: var(--tabora-text) !important;
+  --toolbar-field-border-color: var(--tabora-field-border) !important;
+  --toolbar-field-focus-background-color: var(--tabora-field) !important;
+  --toolbar-field-focus-color: var(--tabora-text) !important;
+  --toolbar-field-focus-border-color: var(--tabora-line) !important;
+  --urlbar-box-bgcolor: var(--tabora-field) !important;
+  --urlbar-box-focus-bgcolor: var(--tabora-field) !important;
+  --urlbar-box-hover-bgcolor: var(--tabora-raised) !important;
+  --urlbar-box-text-color: var(--tabora-text) !important;
+  --urlbar-box-hover-text-color: var(--tabora-text) !important;
+  --chrome-content-separator-color: transparent !important;
+  --tabs-navbar-separator-color: transparent !important;
+  --sidebar-background-color: transparent !important;
+  --sidebar-text-color: var(--tabora-text) !important;
+  --sidebar-expanded-launcher-width: 100% !important;
+  --focus-outline-color: var(--tabora-accent) !important;
+  --panel-background: var(--tabora-panel) !important;
+  --panel-color: var(--tabora-text) !important;
+  --panel-border-color: var(--tabora-panel-border) !important;
+  --arrowpanel-background: var(--tabora-panel) !important;
+  --arrowpanel-color: var(--tabora-text) !important;
+  --arrowpanel-border-color: var(--tabora-panel-border) !important;
+  --tab-selected-bgcolor: var(--tabora-raised) !important;
+  --tab-selected-textcolor: #fff !important;
+  --tab-hover-background-color: var(--tabora-panel) !important;
+  --tab-min-height: 40px !important;
+  --tab-border-radius: 10px !important;
+
+  color-scheme: dark;
+  font-family: var(--tabora-font);
+  background-color: var(--tabora-bg) !important;
+}
+
+/* ---- Окно и «оболочка» ------------------------------------------------- */
+
+#browser {
+  margin: 14px;
+  padding: 10px;
+  gap: 10px;
+  background: var(--tabora-shell);
+  border: 1px solid var(--tabora-shell-border);
+  border-radius: 18px;
+  overflow: clip;
+}
+
+:root[inFullscreen] #browser,
+:root[inDOMFullscreen] #browser {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+/* ---- Боковая колонка: панель инструментов Firefox, переставленная в #browser ---- */
+
+#navigator-toolbox {
+  width: var(--tabora-sidebar-width);
+  min-width: var(--tabora-sidebar-width);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 6px 4px 4px 6px;
+  box-sizing: border-box;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  -moz-window-dragging: drag;
+}
+
+#toolbar-menubar,
+#TabsToolbar,
+#PersonalToolbar {
+  display: none !important;
+}
+
+#nav-bar {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  min-height: 0 !important;
+  flex-shrink: 0;
+}
+
+/* Кнопки окна macOS остаются в начале, за ними кнопки навигации, адрес переносится на вторую строку */
+#nav-bar-customization-target {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding-inline: 0 !important;
+}
+
+#nav-bar > .titlebar-buttonbox-container {
+  margin-inline-end: auto;
+}
+
+#navigator-toolbox[tabs-hidden] > #nav-bar > .titlebar-spacer {
+  display: none !important;
+}
+
+#nav-bar-customization-target > :is(toolbarbutton, toolbaritem):first-child {
+  padding-inline-start: 0 !important;
+}
+
+#nav-bar .toolbarbutton-1 {
+  --toolbarbutton-inner-padding: 6px;
+}
+
+#nav-bar .toolbarbutton-1 > .toolbarbutton-icon {
+  width: 28px;
+  height: 28px;
+  padding: 6px;
+  border-radius: 8px;
+  fill: var(--tabora-text-3);
+}
+
+#nav-bar .toolbarbutton-1:not([disabled]):hover > .toolbarbutton-icon {
+  background: var(--tabora-raised);
+  fill: var(--tabora-text);
+}
+
+#urlbar-container {
+  flex-basis: 100%;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 10px 0 0 !important;
+  padding: 0 !important;
+}
+
+#urlbar {
+  --urlbar-height: 42px;
+  --urlbar-border-radius: 12px;
+  --urlbar-background-border-radius: 12px;
+  font-family: var(--tabora-font);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+#urlbar-background {
+  background: var(--tabora-field) !important;
+  border: 1px solid var(--tabora-field-border) !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+}
+
+#urlbar:hover > #urlbar-background,
+#urlbar[focused] > #urlbar-background {
+  border-color: var(--tabora-line) !important;
+}
+
+#urlbar-input {
+  color: var(--tabora-text) !important;
+}
+
+#urlbar-input::placeholder {
+  color: var(--tabora-text-4);
+}
+
+#identity-box,
+#tracking-protection-icon-container {
+  --toolbarbutton-icon-fill: var(--tabora-text-4);
+}
+
+/* Всплывающие результаты адресной строки */
+#urlbar[breakout][breakout-extend] {
+  --urlbar-height: 42px;
+}
+
+.urlbarView {
+  background: var(--tabora-panel) !important;
+  color: var(--tabora-text) !important;
+  border: 1px solid var(--tabora-panel-border) !important;
+  border-radius: 14px !important;
+  font-family: var(--tabora-font);
+}
+
+.urlbarView-row[selected] > .urlbarView-row-inner,
+.urlbarView-row-inner[selected] {
+  background: var(--tabora-raised) !important;
+  color: #fff !important;
+}
+
+/* Пространства (сегментированный переключатель), вставляется скриптом */
+#tabora-spaces {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--tabora-panel);
+  border-radius: 12px;
+  flex-shrink: 0;
+  -moz-window-dragging: no-drag;
+}
+
+.tabora-space {
+  flex: 1;
+  height: 32px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--tabora-text-3);
+  font: 600 12px var(--tabora-font);
+  cursor: pointer;
+}
+
+.tabora-space:hover {
+  color: var(--tabora-text);
+}
+
+.tabora-space[aria-selected="true"] {
+  background: var(--tabora-raised-2);
+  color: #fff;
+  font-weight: 700;
+}
+
+/* Закреплённые приложения */
+#tabora-pinned {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  flex-shrink: 0;
+  -moz-window-dragging: no-drag;
+}
+
+.tabora-pin {
+  height: 48px;
+  border: 1px solid var(--tabora-panel-border);
+  background: #18191e;
+  border-radius: 12px;
+  color: var(--tabora-text-2);
+  font: 800 15px var(--tabora-font);
+  cursor: pointer;
+}
+
+.tabora-pin:hover {
+  border-color: var(--tabora-line);
+  color: #fff;
+}
+
+/* ---- Вертикальные вкладки Firefox внутри колонки ---- */
+
+#sidebar-container {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  background: transparent !important;
+  border: 0 !important;
+  -moz-window-dragging: no-drag;
+}
+
+sidebar-main {
+  width: 100% !important;
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+}
+
+#sidebar-launcher-splitter {
+  display: none !important;
+}
+
+#vertical-tabs {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+#tabora-tabs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px 6px;
+  font: 700 11px var(--tabora-font);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tabora-text-4);
+}
+
+#tabbrowser-tabs[orient="vertical"] {
+  --tab-margin-inline-inner: 0;
+  --tab-padding-block-start: 1px;
+  --tab-padding-block-end: 1px;
+  padding: 0 !important;
+  font-family: var(--tabora-font);
+}
+
+#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab {
+  color: var(--tabora-text-2);
+}
+
+#tabbrowser-tabs[orient="vertical"] .tab-background {
+  border-radius: 10px;
+  outline: none !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+}
+
+#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab:hover > .tab-stack > .tab-background:not([selected]) {
+  background-color: var(--tabora-panel) !important;
+}
+
+#tabbrowser-tabs[orient="vertical"] .tab-background[selected] {
+  background-color: var(--tabora-raised) !important;
+}
+
+#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[selected] {
+  color: #fff;
+}
+
+#tabbrowser-tabs[orient="vertical"] .tab-content {
+  padding-inline: 8px;
+  gap: 10px;
+}
+
+#tabbrowser-tabs[orient="vertical"] .tab-icon-stack {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: #22252b;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[selected] .tab-icon-stack {
+  background: var(--tabora-accent);
+}
+
+#tabbrowser-tabs[orient="vertical"] .tab-icon-image {
+  width: 16px;
+  height: 16px;
+  margin: 0 !important;
+  border-radius: 3px;
+}
+
+#tabbrowser-tabs[orient="vertical"] .tab-label {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[selected] .tab-label {
+  font-weight: 600;
+}
+
+/* Спящие (выгруженные) вкладки */
+#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[pending] {
+  color: var(--tabora-text-4);
+}
+
+#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[pending] .tab-icon-image {
+  opacity: 0.6;
+}
+
+#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[pending] .tab-label-container::after {
+  content: "спит";
+  font: 700 10px var(--tabora-font);
+  color: var(--tabora-text-4);
+  border: 1px solid var(--tabora-line);
+  border-radius: 6px;
+  padding: 1px 6px;
+  margin-inline-start: 6px;
+}
+
+/* Цветная полоска контейнера не нужна: цвет пространства показывает переключатель */
+.tab-context-line {
+  display: none !important;
+}
+
+#tabbrowser-tabs[orient="vertical"] .tab-close-button {
+  border-radius: 6px;
+  --toolbarbutton-icon-fill: var(--tabora-text-3);
+}
+
+#vertical-tabs-newtab-button {
+  margin: 4px 0 0 !important;
+  border-radius: 10px !important;
+  color: var(--tabora-text-3);
+  font: 500 13px var(--tabora-font);
+  min-height: 36px;
+}
+
+#vertical-tabs-newtab-button:hover {
+  background: var(--tabora-panel) !important;
+  color: var(--tabora-text);
+}
+
+/* ---- Карточка памяти и кнопка почты (внизу колонки) ---- */
+
+#tabora-memory {
+  background: var(--tabora-panel);
+  border: 1px solid var(--tabora-shell-border);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+  -moz-window-dragging: no-drag;
+}
+
+#tabora-memory .row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+#tabora-memory .label {
+  font: 600 12px var(--tabora-font);
+  color: var(--tabora-text-3);
+}
+
+#tabora-memory .value {
+  font: 500 15px var(--tabora-mono);
+  color: #fff;
+}
+
+#tabora-memory .bar {
+  height: 6px;
+  background: var(--tabora-panel-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+#tabora-memory .bar > div {
+  height: 6px;
+  width: 0;
+  background: var(--tabora-accent);
+  border-radius: 3px;
+  transition: width 0.4s;
+}
+
+#tabora-memory .note {
+  font: 400 12px var(--tabora-font);
+  color: var(--tabora-text-4);
+}
+
+#tabora-mail {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--tabora-panel-border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--tabora-text);
+  font: 600 13px var(--tabora-font);
+  text-align: left;
+  cursor: pointer;
+  flex-shrink: 0;
+  -moz-window-dragging: no-drag;
+}
+
+#tabora-mail:hover {
+  border-color: var(--tabora-line);
+}
+
+#tabora-mail .pill {
+  margin-inline-start: auto;
+  font: 800 11px var(--tabora-font);
+  color: var(--tabora-on-accent);
+  background: var(--tabora-accent);
+  border-radius: 10px;
+  padding: 2px 8px;
+}
+
+/* ---- Главная область: верхняя строка и страница ---- */
+
+#tabbrowser-tabbox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 !important;
+  background: transparent !important;
+}
+
+#tabora-topbar {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 0 8px;
+  flex-shrink: 0;
+  -moz-window-dragging: drag;
+}
+
+#tabora-topbar .title {
+  flex: 1;
+  min-width: 0;
+  font: 600 13px var(--tabora-font);
+  color: var(--tabora-text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#tabora-topbar .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 9px;
+  background: var(--tabora-field);
+  font: 600 12px var(--tabora-font);
+  color: var(--tabora-text-2);
+}
+
+#tabora-topbar .chip:empty {
+  display: none;
+}
+
+#tabora-topbar .icon-btn {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--tabora-text-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  -moz-window-dragging: no-drag;
+}
+
+#tabora-topbar .icon-btn:hover {
+  background: var(--tabora-field);
+  color: var(--tabora-text);
+}
+
+#tabora-agent-toggle {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--tabora-line);
+  background: var(--tabora-field);
+  color: #fff;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: 700 13px var(--tabora-font);
+  cursor: pointer;
+  -moz-window-dragging: no-drag;
+}
+
+#tabora-agent-toggle[aria-pressed="true"] {
+  border-color: var(--tabora-accent);
+}
+
+#tabora-agent-toggle .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tabora-accent);
+}
+
+#tabora-agent-toggle .kbd {
+  font: 400 11px var(--tabora-mono);
+  color: var(--tabora-text-4);
+}
+
+#tabbrowser-tabpanels {
+  border-radius: 14px;
+  overflow: clip;
+  background: var(--tabora-page-bg) !important;
+}
+
+/* Разделители боковых панелей Firefox не нужны */
+#sidebar-splitter,
+#ai-window-splitter {
+  display: none !important;
+}
+
+/* ---- Панель агента ---- */
+
+#tabora-agent {
+  width: var(--tabora-agent-width);
+  min-width: var(--tabora-agent-width);
+  background: var(--tabora-panel);
+  border: 1px solid var(--tabora-panel-border);
+  border-radius: 14px;
+  padding: 16px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-family: var(--tabora-font);
+  color: var(--tabora-text);
+  -moz-window-dragging: no-drag;
+}
+
+#tabora-agent[hidden] {
+  display: none;
+}
+
+#tabora-agent .head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#tabora-agent .orb {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--tabora-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#tabora-agent .orb::after {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--tabora-on-accent);
+}
+
+#tabora-agent .who {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+#tabora-agent .name {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+#tabora-agent .where {
+  font-size: 12px;
+  color: var(--tabora-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+
+#tabora-agent .close {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  background: transparent;
+  color: var(--tabora-text-3);
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+#tabora-agent .close:hover {
+  background: var(--tabora-raised);
+  color: #fff;
+}
+
+#tabora-agent .log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#tabora-agent .msg {
+  max-width: 280px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+#tabora-agent .msg.user {
+  align-self: flex-end;
+  background: var(--tabora-raised-2);
+  border-bottom-right-radius: 4px;
+}
+
+#tabora-agent .msg.agent {
+  align-self: flex-start;
+  background: #1d2025;
+  border: 1px solid var(--tabora-field-border);
+  border-bottom-left-radius: 4px;
+  color: var(--tabora-text-2);
+}
+
+#tabora-agent .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+#tabora-agent .chips button {
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--tabora-line);
+  border-radius: 15px;
+  background: transparent;
+  color: var(--tabora-text-2);
+  font: 600 12px var(--tabora-font);
+  cursor: pointer;
+}
+
+#tabora-agent .chips button:hover {
+  border-color: var(--tabora-text-5);
+  color: #fff;
+}
+
+#tabora-agent .composer {
+  background: #1d2025;
+  border: 1px solid var(--tabora-line);
+  border-radius: 14px;
+  padding: 6px 6px 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#tabora-agent .composer input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  border: 0;
+  background: transparent;
+  outline: none;
+  color: var(--tabora-text);
+  font: 400 14px var(--tabora-font);
+}
+
+#tabora-agent .composer input::placeholder {
+  color: var(--tabora-text-4);
+}
+
+#tabora-agent .send {
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--tabora-accent);
+  color: var(--tabora-on-accent);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+/* ---- Меню и панели в цветах Tabora ---- */
+
+menupopup,
+panel {
+  --panel-background: var(--tabora-panel);
+  --panel-color: var(--tabora-text);
+  --panel-border-color: var(--tabora-panel-border);
+}
+
+.panel-subview-body,
+#appMenu-popup {
+  font-family: var(--tabora-font);
+}

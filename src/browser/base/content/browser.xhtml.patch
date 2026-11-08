@@ -1,0 +1,14 @@
+diff --git a/browser/base/content/browser.xhtml b/browser/base/content/browser.xhtml
+index 0f62dce976..9e7d86b805 100644
+--- a/browser/base/content/browser.xhtml
++++ b/browser/base/content/browser.xhtml
+@@ -112,7 +112,9 @@
+   <title data-l10n-id="browser-main-window-default-title"></title>
+ 
+   <script src="chrome://browser/content/global-scripts.js"></script>
++  <link rel="stylesheet" href="chrome://browser/content/tabora/tabora.css" />
+   <script src="chrome://browser/content/browser-main.js"></script>
++  <script src="chrome://browser/content/tabora/tabora.js"></script>
+ </head>
+ <html:body xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+ # All sets except for popupsets (commands, keys, and stringbundles)

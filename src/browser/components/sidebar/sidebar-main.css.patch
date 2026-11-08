@@ -1,0 +1,15 @@
+diff --git a/browser/components/sidebar/sidebar-main.css b/browser/components/sidebar/sidebar-main.css
+index 03a750d324..63f23bca33 100644
+--- a/browser/components/sidebar/sidebar-main.css
++++ b/browser/components/sidebar/sidebar-main.css
+@@ -219,3 +219,10 @@
+ .bottom-actions {
+   align-self: end;
+ }
++
++/* tabora: нижние кнопки и инструменты панели не используются */
++.bottom-actions,
++.buttons-wrapper,
++#sidebar-tools-and-extensions-splitter {
++  display: none !important;
++}

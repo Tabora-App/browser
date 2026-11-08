@@ -1,0 +1,22 @@
+diff --git a/browser/base/jar.mn b/browser/base/jar.mn
+index b2b5db6040..fa093dfae2 100644
+--- a/browser/base/jar.mn
++++ b/browser/base/jar.mn
+@@ -33,6 +33,17 @@ browser.jar:
+         content/browser/aboutTabCrashed.xhtml         (content/aboutTabCrashed.xhtml)
+         content/browser/blanktab.html                 (content/blanktab.html)
+         content/browser/browser.js                    (content/browser.js)
++        content/browser/tabora/tabora.css  (content/tabora/tabora.css)
++        content/browser/tabora/tabora.js  (content/tabora/tabora.js)
++        content/browser/tabora/fonts.css  (content/tabora/fonts.css)
++        content/browser/tabora/fonts/JetBrainsMono-cyrillic-ext.woff2  (content/tabora/fonts/JetBrainsMono-cyrillic-ext.woff2)
++        content/browser/tabora/fonts/JetBrainsMono-cyrillic.woff2  (content/tabora/fonts/JetBrainsMono-cyrillic.woff2)
++        content/browser/tabora/fonts/JetBrainsMono-latin-ext.woff2  (content/tabora/fonts/JetBrainsMono-latin-ext.woff2)
++        content/browser/tabora/fonts/JetBrainsMono-latin.woff2  (content/tabora/fonts/JetBrainsMono-latin.woff2)
++        content/browser/tabora/fonts/Manrope-cyrillic-ext.woff2  (content/tabora/fonts/Manrope-cyrillic-ext.woff2)
++        content/browser/tabora/fonts/Manrope-cyrillic.woff2  (content/tabora/fonts/Manrope-cyrillic.woff2)
++        content/browser/tabora/fonts/Manrope-latin-ext.woff2  (content/tabora/fonts/Manrope-latin-ext.woff2)
++        content/browser/tabora/fonts/Manrope-latin.woff2  (content/tabora/fonts/Manrope-latin.woff2)
+ *       content/browser/browser.xhtml                 (content/browser.xhtml)
+         content/browser/browser-a11yUtils.js          (content/browser-a11yUtils.js)
+         content/browser/browser-addons.js             (content/browser-addons.js)
