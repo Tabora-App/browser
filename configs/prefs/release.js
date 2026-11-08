@@ -55,3 +55,9 @@ pref("browser.uidensity", 0);
 pref("browser.theme.content-theme", 0);
 pref("browser.theme.toolbar-theme", 0);
 pref("extensions.activeThemeID", "firefox-compact-dark@mozilla.org");
+
+// Диалог условий использования Mozilla не показываем: у Tabora свои условия в онбординге
+pref("termsofuse.bypassNotification", true);
+pref("datareporting.policy.dataSubmissionPolicyBypassNotification", true);
+pref("browser.newtabpage.activity-stream.showWeather", false);
+pref("browser.newtabpage.activity-stream.system.showWeather", false);

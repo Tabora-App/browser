@@ -126,26 +126,49 @@
   flex-shrink: 0;
 }
 
-/* Кнопки окна macOS остаются в начале, за ними кнопки навигации, адрес переносится на вторую строку */
-#nav-bar-customization-target {
+/* Строка 1: кнопки окна macOS, назад, вперёд, обновить, меню. Строка 2: адрес на всю ширину.
+   Контейнер настраиваемых кнопок распакован (display: contents), чтобы всё лежало в одном flex. */
+#nav-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 2px;
-  padding-inline: 0 !important;
+}
+
+#nav-bar-customization-target {
+  display: contents;
 }
 
 #nav-bar > .titlebar-buttonbox-container {
+  order: 0;
   margin-inline-end: auto;
 }
 
-#navigator-toolbox[tabs-hidden] > #nav-bar > .titlebar-spacer {
+#navigator-toolbox[tabs-hidden] > #nav-bar > .titlebar-spacer,
+#nav-bar-overflow-button,
+#nav-bar-customization-target > :not(#back-button, #forward-button, #stop-reload-button, #urlbar-container) {
   display: none !important;
 }
+
+#back-button { order: 1; }
+#forward-button { order: 2; }
+#stop-reload-button { order: 3; display: flex !important; }
+#reload-button, #stop-button { display: flex !important; }
+#reload-button[disabled], #stop-button[disabled] { opacity: 0.5; }
+#PanelUI-button { order: 4; }
+#urlbar-container { order: 10; }
 
 #nav-bar-customization-target > :is(toolbarbutton, toolbaritem):first-child {
   padding-inline-start: 0 !important;
 }
+
+/* Порядок блоков в колонке */
+#navigator-toolbox > #nav-bar { order: 0; }
+#navigator-toolbox > #tabora-spaces { order: 1; }
+#navigator-toolbox > #tabora-pinned { order: 2; }
+#navigator-toolbox > #sidebar-container { order: 3 !important; }
+#navigator-toolbox > #tabora-memory { order: 4; }
+#navigator-toolbox > #tabora-mail { order: 5; }
 
 #nav-bar .toolbarbutton-1 {
   --toolbarbutton-inner-padding: 6px;
@@ -189,9 +212,21 @@
   box-shadow: none !important;
 }
 
-#urlbar:hover > #urlbar-background,
-#urlbar[focused] > #urlbar-background {
+#urlbar:hover > #urlbar-background {
   border-color: var(--tabora-line) !important;
+}
+
+#urlbar[focused] > #urlbar-background {
+  border-color: var(--tabora-accent) !important;
+  outline: none !important;
+}
+
+#urlbar[focused] {
+  outline: none !important;
+}
+
+#vertical-tabs-newtab-button:hover {
+  background: var(--tabora-panel) !important;
 }
 
 #urlbar-input {
@@ -200,6 +235,20 @@
 
 #urlbar-input::placeholder {
   color: var(--tabora-text-4);
+}
+
+/* Переключатель поисковика и лишние действия в адресной строке не нужны */
+#urlbar-searchmode-switcher,
+#searchmode-switcher-chicklet,
+#urlbar [class*="searchmode-switcher"],
+#urlbar [id*="searchmode-switcher"],
+#urlbar-go-button,
+#page-action-buttons > :not(#reader-mode-button, #star-button-box) {
+  display: none !important;
+}
+
+#urlbar .urlbar-input-container {
+  padding-inline: 12px 6px !important;
 }
 
 #identity-box,
@@ -311,7 +360,13 @@ sidebar-main {
   margin: 0 !important;
 }
 
+#vertical-tabs {
+  display: flex;
+  flex-direction: column;
+}
+
 #tabora-tabs-head {
+  order: -1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -332,10 +387,18 @@ sidebar-main {
 
 #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab {
   color: var(--tabora-text-2);
+  outline: none !important;
 }
 
-#tabbrowser-tabs[orient="vertical"] .tab-background {
+#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab:focus-visible > .tab-stack > .tab-background {
+  outline: 2px solid var(--tabora-accent) !important;
+  outline-offset: -2px;
+}
+
+#tabbrowser-tabs[orient="vertical"] .tab-background,
+#tabbrowser-tabs[tablist-has-focus] .tabbrowser-tab.tablist-keyboard-focus > .tab-stack > .tab-background {
   border-radius: 10px;
+  border: 0 !important;
   outline: none !important;
   box-shadow: none !important;
   margin: 0 !important;
@@ -606,10 +669,21 @@ sidebar-main {
   color: var(--tabora-text-4);
 }
 
+#tabbrowser-tabbox,
+#tabbrowser-tabpanels,
+.browserSidebarContainer,
+.browserContainer,
+.browserStack {
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
 #tabbrowser-tabpanels {
   border-radius: 14px;
   overflow: clip;
   background: var(--tabora-page-bg) !important;
+  outline: 1px solid var(--tabora-field) !important;
+  outline-offset: -1px;
 }
 
 /* Разделители боковых панелей Firefox не нужны */

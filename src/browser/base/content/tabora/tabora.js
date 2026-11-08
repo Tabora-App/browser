@@ -18,9 +18,11 @@ var Tabora = {
 
   get ContextualIdentityService() {
     if (!this._lazy.cis) {
-      this._lazy.cis = ChromeUtils.importESModule(
-        "resource://gre/modules/ContextualIdentityService.sys.mjs"
-      ).ContextualIdentityService;
+      this._lazy.cis =
+        window.ContextualIdentityService ||
+        ChromeUtils.importESModule(
+          "moz-src:///toolkit/components/contextualidentity/ContextualIdentityService.sys.mjs"
+        ).ContextualIdentityService;
     }
     return this._lazy.cis;
   },
@@ -38,15 +40,56 @@ var Tabora = {
     this.initTabHooks();
     this.startTimers();
     this.updateTitle();
+    this.debugLayout();
   },
 
-  html(tag, attrs = {}, text) {
+  debugLayout() {
+    const q = id => document.getElementById(id);
+    const describe = el => {
+      if (!el) {
+        return "нет";
+      }
+      const cs = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      return `parent=${el.parentNode?.id || el.parentNode?.localName} hidden=${el.hidden} attrs=${[...el.attributes].map(a => a.name + "=" + a.value).join(" ")} display=${cs.display} size=${Math.round(r.width)}x${Math.round(r.height)}`;
+    };
+    console.log("tabora debug sidebar-container:", describe(q("sidebar-container")));
+    console.log("tabora debug sidebar-main:", describe(document.querySelector("sidebar-main")));
+    console.log("tabora debug vertical-tabs:", describe(q("vertical-tabs")), "children=", q("vertical-tabs")?.childElementCount);
+    console.log("tabora debug tabbrowser-tabs:", describe(q("tabbrowser-tabs")));
+    console.log("tabora debug prefs: verticalTabs=", Services.prefs.getBoolPref("sidebar.verticalTabs"), "revamp=", Services.prefs.getBoolPref("sidebar.revamp"), "visibility=", Services.prefs.getStringPref("sidebar.visibility"));
+    console.log("tabora debug toolbox:", describe(q("navigator-toolbox")));
+    console.log("tabora debug stop-reload:", describe(q("stop-reload-button")), "| reload:", describe(q("reload-button")));
+    console.log("tabora debug switcher:", [...document.querySelectorAll('#urlbar [class*="searchmode"], #urlbar [id*="searchmode"]')].map(e => e.id || e.className).join(", "));
+    const def = Services.prefs.getDefaultBranch("");
+    console.log("tabora debug verticalTabs: default=", def.getBoolPref("sidebar.verticalTabs"), "user=", Services.prefs.prefHasUserValue("sidebar.verticalTabs"), "fxa=", Services.prefs.getBoolPref("identity.fxaccounts.enabled"), "bookmarksbar=", Services.prefs.getStringPref("browser.toolbars.bookmarks.visibility"));
+  },
+
+  html(tag, attrs = {}, text, children = []) {
     const el = document.createElementNS(this.HTML_NS, tag);
     for (const [k, v] of Object.entries(attrs)) {
       el.setAttribute(k, v);
     }
-    if (text !== undefined) {
+    if (text !== undefined && text !== null) {
       el.textContent = text;
+    }
+    el.append(...children);
+    return el;
+  },
+
+  svg(paths, size = 16, stroke = 2) {
+    const NS = "http://www.w3.org/2000/svg";
+    const el = document.createElementNS(NS, "svg");
+    for (const [k, v] of Object.entries({
+      width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor",
+      "stroke-width": stroke, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true",
+    })) {
+      el.setAttribute(k, v);
+    }
+    for (const d of paths) {
+      const path = document.createElementNS(NS, "path");
+      path.setAttribute("d", d);
+      el.append(path);
     }
     return el;
   },
@@ -54,6 +97,14 @@ var Tabora = {
   /* ---- Раскладка ------------------------------------------------------- */
 
   moveToolboxIntoBrowser() {
+    // Кнопка «обновить» в Firefox 159 не стоит в панели по умолчанию: ставим её после «вперёд»
+    try {
+      if (!CustomizableUI.getPlacementOfWidget("stop-reload-button")) {
+        CustomizableUI.addWidgetToArea("stop-reload-button", CustomizableUI.AREA_NAVBAR, 2);
+      }
+    } catch (e) {
+      console.error("Tabora: reload button", e);
+    }
     const browser = document.getElementById("browser");
     const toolbox = document.getElementById("navigator-toolbox");
     const sidebar = document.getElementById("sidebar-container");
@@ -96,13 +147,20 @@ var Tabora = {
       verticalTabs.prepend(head);
     }
 
-    const memory = this.html("div", { id: "tabora-memory" });
-    memory.innerHTML = `
-      <div class="row"><span class="label">Память</span><span class="value" id="tabora-memory-value">…</span></div>
-      <div class="bar" aria-hidden="true"><div id="tabora-memory-bar"></div></div>
-      <span class="note" id="tabora-memory-note"></span>`;
-    const mail = this.html("button", { id: "tabora-mail", title: "Почта и алиасы: в разработке" });
-    mail.innerHTML = `<span>Почта и алиасы</span><span class="pill">скоро</span>`;
+    const memory = this.html("div", { id: "tabora-memory" }, null, [
+      this.html("div", { class: "row" }, null, [
+        this.html("span", { class: "label" }, "Память"),
+        this.html("span", { class: "value", id: "tabora-memory-value" }, "…"),
+      ]),
+      this.html("div", { class: "bar", "aria-hidden": "true" }, null, [
+        this.html("div", { id: "tabora-memory-bar" }),
+      ]),
+      this.html("span", { class: "note", id: "tabora-memory-note" }),
+    ]);
+    const mail = this.html("button", { id: "tabora-mail", title: "Почта и алиасы: в разработке" }, null, [
+      this.html("span", {}, "Почта и алиасы"),
+      this.html("span", { class: "pill" }, "скоро"),
+    ]);
     if (sidebar) {
       sidebar.after(memory, mail);
     } else {
@@ -112,53 +170,56 @@ var Tabora = {
 
   buildTopbar() {
     const tabbox = document.getElementById("tabbrowser-tabbox");
-    const bar = this.html("div", { id: "tabora-topbar" });
-    bar.innerHTML = `
-      <span class="title" id="tabora-title"></span>
-      <span class="chip" id="tabora-blocked"></span>
-      <button class="icon-btn" id="tabora-reader" title="Режим чтения" aria-label="Режим чтения">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
-      </button>
-      <button id="tabora-agent-toggle" aria-pressed="false" title="Панель агента (⌘J)">
-        <span class="dot"></span>Агент<span class="kbd">⌘J</span>
-      </button>`;
+    const reader = this.html("button", { class: "icon-btn", id: "tabora-reader", title: "Режим чтения", "aria-label": "Режим чтения" }, null, [
+      this.svg(["M4 6h16M4 12h16M4 18h10"], 17),
+    ]);
+    const toggle = this.html("button", { id: "tabora-agent-toggle", "aria-pressed": "false", title: "Панель агента (⌘J)" }, null, [
+      this.html("span", { class: "dot" }),
+      document.createTextNode("Агент"),
+      this.html("span", { class: "kbd" }, "⌘J"),
+    ]);
+    const bar = this.html("div", { id: "tabora-topbar" }, null, [
+      this.html("span", { class: "title", id: "tabora-title" }),
+      this.html("span", { class: "chip", id: "tabora-blocked" }),
+      reader,
+      toggle,
+    ]);
     tabbox.prepend(bar);
-    bar.querySelector("#tabora-reader").addEventListener("click", () => {
+    reader.addEventListener("click", () => {
       const btn = document.getElementById("reader-mode-button");
       if (btn && !btn.hidden) {
         btn.click();
       }
     });
-    bar.querySelector("#tabora-agent-toggle").addEventListener("click", () =>
-      this.toggleAgent()
-    );
+    toggle.addEventListener("click", () => this.toggleAgent());
   },
 
   buildAgentPanel() {
     const browser = document.getElementById("browser");
-    const panel = this.html("div", { id: "tabora-agent", hidden: "true" });
-    panel.innerHTML = `
-      <div class="head">
-        <span class="orb" aria-hidden="true"></span>
-        <div class="who"><span class="name">Агент</span><span class="where" id="tabora-agent-where"></span></div>
-        <button class="close" aria-label="Скрыть панель агента">×</button>
-      </div>
-      <div class="log" id="tabora-agent-log">
-        <div class="msg agent">Я пока учусь. Регистрация на сайтах, алиасы почты и коды из писем появятся в следующих сборках. Сейчас могу показать, что умею: усыплять вкладки и держать пространства раздельно.</div>
-      </div>
-      <div class="chips">
-        <button data-q="Саммари страницы">Саммари страницы</button>
-        <button data-q="Сравнить вкладки">Сравнить вкладки</button>
-        <button data-q="Тёмная тема для сайта">Тёмная тема для сайта</button>
-      </div>
-      <div class="composer">
-        <input id="tabora-agent-input" placeholder="Спросите или поручите…" aria-label="Сообщение агенту">
-        <button class="send" aria-label="Отправить">→</button>
-      </div>`;
+    const closeBtn = this.html("button", { class: "close", "aria-label": "Скрыть панель агента" }, "×");
+    const input = this.html("input", { id: "tabora-agent-input", placeholder: "Спросите или поручите…", "aria-label": "Сообщение агенту" });
+    const sendBtn = this.html("button", { class: "send", "aria-label": "Отправить" }, "→");
+    const chips = ["Саммари страницы", "Сравнить вкладки", "Тёмная тема для сайта"].map(q =>
+      this.html("button", { "data-q": q }, q)
+    );
+    const panel = this.html("div", { id: "tabora-agent", hidden: "true" }, null, [
+      this.html("div", { class: "head" }, null, [
+        this.html("span", { class: "orb", "aria-hidden": "true" }),
+        this.html("div", { class: "who" }, null, [
+          this.html("span", { class: "name" }, "Агент"),
+          this.html("span", { class: "where", id: "tabora-agent-where" }),
+        ]),
+        closeBtn,
+      ]),
+      this.html("div", { class: "log", id: "tabora-agent-log" }, null, [
+        this.html("div", { class: "msg agent" }, "Я пока учусь. Регистрация на сайтах, алиасы почты и коды из писем появятся в следующих сборках. Сейчас умею усыплять вкладки и держать пространства раздельно."),
+      ]),
+      this.html("div", { class: "chips" }, null, chips),
+      this.html("div", { class: "composer" }, null, [input, sendBtn]),
+    ]);
     browser.append(panel);
-    panel.querySelector(".close").addEventListener("click", () => this.toggleAgent(false));
+    closeBtn.addEventListener("click", () => this.toggleAgent(false));
     const send = () => {
-      const input = panel.querySelector("#tabora-agent-input");
       const text = input.value.trim();
       if (!text) {
         return;
@@ -167,15 +228,15 @@ var Tabora = {
       input.value = "";
       this.agentSay("Принял: «" + text + "». Выполнять задачи я научусь в одной из следующих сборок.", "agent");
     };
-    panel.querySelector(".send").addEventListener("click", send);
-    panel.querySelector("#tabora-agent-input").addEventListener("keydown", e => {
+    sendBtn.addEventListener("click", send);
+    input.addEventListener("keydown", e => {
       if (e.key === "Enter") {
         send();
       }
     });
-    for (const chip of panel.querySelectorAll(".chips button")) {
+    for (const chip of chips) {
       chip.addEventListener("click", () => {
-        panel.querySelector("#tabora-agent-input").value = chip.dataset.q;
+        input.value = chip.getAttribute("data-q");
         send();
       });
     }
