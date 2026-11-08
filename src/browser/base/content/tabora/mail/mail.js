@@ -287,7 +287,7 @@ const App = {
         class: "folder-item", type: "button", role: "tab", "aria-selected": String(selected),
         onclick: () => this.go(`folder/${f.id}`),
       }, [
-        el("span", { class: "folder-icon" }, icon(f.icon, 16, 1.9)),
+        el("span", { class: "folder-icon" }, icon(f.icon, 16, 1.8)),
         el("span", { class: "folder-name", text: f.name }),
         count.unread ? el("span", { class: "badge", text: String(count.unread) }) : count.total ? el("span", { class: "folder-count", text: String(count.total) }) : null,
       ]);

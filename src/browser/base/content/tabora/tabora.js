@@ -57,7 +57,7 @@ var Tabora = {
   buildCompose() {
     Services.scriptloader.loadSubScript("chrome://browser/content/tabora/select.js", window);
     const h = (tag, attrs, text, children) => this.html(tag, attrs, text, children);
-    const iconBtn = (id, title, paths, extra = "") => h("button", { class: `icon-btn ${extra}`.trim(), id, type: "button", title, "aria-label": title }, null, [this.svg(paths, 14, 2.2)]);
+    const iconBtn = (id, title, paths, extra = "") => h("button", { class: `icon-btn ${extra}`.trim(), id, type: "button", title, "aria-label": title }, null, [this.svg(paths, 14, 2)]);
 
     const fromSelect = h("select", { id: "tabora-compose-from", "aria-label": "Отправитель" });
     const toInput = h("input", { id: "tabora-compose-to", type: "text", placeholder: "Адрес, Enter или запятая", autocomplete: "off" });
@@ -907,8 +907,8 @@ var Tabora = {
       h("span", { class: "kbd" }, "⌘⇧J"),
     ]);
     head.addEventListener("click", () => this.openDownloads());
-    const toggle = h("button", { class: "icon-btn", id: "tabora-downloads-toggle", type: "button", title: "Пауза" }, null, [this.svg(["M8 5v14", "M16 5v14"], 13, 2.2)]);
-    const cancel = h("button", { class: "icon-btn", id: "tabora-downloads-cancel", type: "button", title: "Отменить" }, null, [this.svg(["M6 6l12 12", "M18 6 6 18"], 13, 2.2)]);
+    const toggle = h("button", { class: "icon-btn", id: "tabora-downloads-toggle", type: "button", title: "Пауза" }, null, [this.svg(["M8 5v14", "M16 5v14"], 13, 2)]);
+    const cancel = h("button", { class: "icon-btn", id: "tabora-downloads-cancel", type: "button", title: "Отменить" }, null, [this.svg(["M6 6l12 12", "M18 6 6 18"], 13, 2)]);
     toggle.addEventListener("click", e => { e.stopPropagation(); this.downloadsToggle(); });
     cancel.addEventListener("click", e => { e.stopPropagation(); this.downloadsCancel(); });
     const live = h("div", { class: "live", id: "tabora-downloads-live", hidden: "true" }, null, [
@@ -1013,7 +1013,7 @@ var Tabora = {
     const toggle = document.getElementById("tabora-downloads-toggle");
     const pausedMode = !running.length;
     toggle.title = pausedMode ? "Продолжить" : "Пауза";
-    toggle.replaceChildren(pausedMode ? this.svg(["M7 5v14l12-7z"], 13, 2.2) : this.svg(["M8 5v14", "M16 5v14"], 13, 2.2));
+    toggle.replaceChildren(pausedMode ? this.svg(["M7 5v14l12-7z"], 13, 2) : this.svg(["M8 5v14", "M16 5v14"], 13, 2));
   },
 
   downloadsToggle() {
@@ -1555,6 +1555,10 @@ var Tabora = {
   },
 
   hostOf(spec) {
+    if (spec?.startsWith("chrome://") || spec?.startsWith("about:")) {
+      const shown = this.displayUrl(spec);
+      return shown === spec ? "" : shown;
+    }
     try {
       return new URL(spec).hostname.replace(/^www\./, "");
     } catch (e) {
@@ -1676,7 +1680,7 @@ var Tabora = {
           glyph: this.letterOf(t.label),
           icon: t.getAttribute("image") || `page-icon:${t.linkedBrowser?.currentURI?.spec || ""}`,
           title: t.label,
-          note: this.hostOf(t.linkedBrowser?.currentURI?.spec) + (t.hasAttribute("pending") ? " · спит" : ""),
+          note: (this.hostOf(t.linkedBrowser?.currentURI?.spec) || "Стартовая страница") + (t.hasAttribute("pending") ? " · спит" : ""),
           key: "",
           run: () => {
             gBrowser.selectedTab = t;

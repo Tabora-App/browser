@@ -84,17 +84,17 @@ kbd { font: 500 10px/1 var(--mono); color: var(--text-4); border: 1px solid var(
 .head-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
 .ghost {
-  height: 34px;
-  padding: 0 12px;
+  height: 36px;
+  padding: 0 14px;
   border: 1px solid var(--stroke);
-  border-radius: 9px;
+  border-radius: 10px;
   background: transparent;
   color: var(--text-2);
-  font-weight: 700;
-  font-size: 12px;
+  font-weight: 600;
+  font-size: 13px;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   transition: background-color var(--ease), color var(--ease), border-color var(--ease);
 }
 .ghost:hover { background: var(--raised); color: var(--text-strong); }
@@ -189,7 +189,7 @@ kbd { font: 500 10px/1 var(--mono); color: var(--text-4); border: 1px solid var(
 .actions { display: flex; align-items: center; gap: 4px; }
 .act {
   height: 32px; min-width: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: 8px; background: transparent;
-  color: var(--text-3); font-weight: 700; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;
+  color: var(--text-3); font-weight: 600; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;
   transition: background-color var(--ease), color var(--ease);
 }
 .act:hover { background: var(--raised); color: var(--text-strong); }
@@ -225,7 +225,7 @@ kbd { font: 500 10px/1 var(--mono); color: var(--text-4); border: 1px solid var(
   display: flex; align-items: center; gap: 14px; padding: 10px 10px 10px 14px; background: var(--raised-2); border: 1px solid var(--stroke);
   border-radius: 12px; box-shadow: var(--shadow); color: var(--text); font-weight: 600; pointer-events: auto; animation: item-in 160ms cubic-bezier(0.2, 0, 0, 1);
 }
-.toast button { height: 28px; padding: 0 10px; border: 0; border-radius: 7px; background: var(--accent); color: var(--on-accent); font-weight: 800; font-size: 12px; }
+.toast button { height: 28px; padding: 0 10px; border: 0; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-weight: 700; font-size: 12px; }
 @media (prefers-color-scheme: light) { .toast { background: #16171a; color: #fff; border-color: #16171a; } }
 
 @media (max-width: 760px) {

@@ -98,7 +98,7 @@ kbd {
   border-radius: 10px;
   background: var(--accent);
   color: var(--on-accent);
-  font-weight: 800;
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -121,7 +121,7 @@ kbd {
   height: 36px;
   padding: 0 10px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 10px;
   background: transparent;
   color: var(--text-2);
   display: flex;
@@ -206,8 +206,11 @@ kbd {
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
-  height: 26px;
+  height: 28px;
   padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: 1px solid var(--field-border);
   border-radius: 8px;
   background: transparent;
@@ -243,7 +246,7 @@ kbd {
   background: transparent;
   color: var(--text-2);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -408,10 +411,10 @@ kbd {
 .thread-title-row { display: flex; align-items: center; gap: 8px; }
 .thread-title { flex: 1; margin: 0; font: 800 18px/1.25 var(--font); letter-spacing: -0.01em; min-width: 0; overflow-wrap: anywhere; }
 .icon-btn {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border: 1px solid var(--stroke);
-  border-radius: 9px;
+  border-radius: 10px;
   background: transparent;
   color: var(--text-2);
   display: inline-flex;
@@ -424,7 +427,7 @@ kbd {
 .icon-btn:hover { background: var(--raised); color: var(--text-strong); }
 .icon-btn[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
 .icon-btn.danger:hover { color: var(--warn); }
-.icon-btn svg { width: 15px; height: 15px; }
+.icon-btn svg { width: 16px; height: 16px; }
 .thread-labels { display: flex; gap: 6px; flex-wrap: wrap; }
 .label-chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border-radius: 7px; background: var(--card-2); border: 1px solid var(--line-2); font-size: 11px; font-weight: 700; color: var(--text-2); }
 
@@ -546,14 +549,14 @@ kbd {
 .quick-reply .bar { display: flex; align-items: center; gap: 6px; padding: 6px 8px 8px 14px; }
 .quick-reply .bar .hint { flex: 1; font-size: 11px; color: var(--text-5); }
 .btn {
-  height: 32px;
-  padding: 0 12px;
+  height: 36px;
+  padding: 0 14px;
   border: 1px solid var(--stroke);
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
   color: var(--text-2);
-  font-weight: 700;
-  font-size: 12px;
+  font-weight: 600;
+  font-size: 13px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -566,7 +569,8 @@ kbd {
   border-radius: 10px;
   background: var(--accent);
   color: var(--on-accent);
-  font-weight: 800;
+  font-weight: 700;
+  font-size: 13px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -574,7 +578,7 @@ kbd {
 }
 .primary:hover { background: var(--accent-hover); }
 .primary kbd { color: rgba(11, 12, 14, 0.6); border-color: rgba(11, 12, 14, 0.25); }
-.ghost { height: 36px; padding: 0 14px; border: 1px solid var(--stroke); border-radius: 10px; background: transparent; color: var(--text-2); font-weight: 700; }
+.ghost { height: 36px; padding: 0 14px; border: 1px solid var(--stroke); border-radius: 10px; background: transparent; color: var(--text-2); font-weight: 600; font-size: 13px; }
 .ghost:hover { background: var(--raised); color: var(--text-strong); }
 
 /* ---- Алиасы ------------------------------------------------------------ */
