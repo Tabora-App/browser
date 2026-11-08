@@ -34,35 +34,26 @@ var Tabora = {
     this.moveToolboxIntoBrowser();
     this.buildSidebarExtras();
     this.buildTopbar();
+    this.buildStartPage();
     this.buildAgentPanel();
     this.initSpaces();
     this.initKeys();
     this.initTabHooks();
     this.startTimers();
     this.updateTitle();
-    this.debugLayout();
+    this.localizeUrlbar();
   },
 
-  debugLayout() {
-    const q = id => document.getElementById(id);
-    const describe = el => {
-      if (!el) {
-        return "нет";
+  localizeUrlbar() {
+    const apply = () => {
+      const field = gURLBar?.inputField;
+      if (field && field.getAttribute("placeholder") !== "Адрес или поиск") {
+        field.setAttribute("placeholder", "Адрес или поиск");
       }
-      const cs = getComputedStyle(el);
-      const r = el.getBoundingClientRect();
-      return `parent=${el.parentNode?.id || el.parentNode?.localName} hidden=${el.hidden} attrs=${[...el.attributes].map(a => a.name + "=" + a.value).join(" ")} display=${cs.display} size=${Math.round(r.width)}x${Math.round(r.height)}`;
     };
-    console.log("tabora debug sidebar-container:", describe(q("sidebar-container")));
-    console.log("tabora debug sidebar-main:", describe(document.querySelector("sidebar-main")));
-    console.log("tabora debug vertical-tabs:", describe(q("vertical-tabs")), "children=", q("vertical-tabs")?.childElementCount);
-    console.log("tabora debug tabbrowser-tabs:", describe(q("tabbrowser-tabs")));
-    console.log("tabora debug prefs: verticalTabs=", Services.prefs.getBoolPref("sidebar.verticalTabs"), "revamp=", Services.prefs.getBoolPref("sidebar.revamp"), "visibility=", Services.prefs.getStringPref("sidebar.visibility"));
-    console.log("tabora debug toolbox:", describe(q("navigator-toolbox")));
-    console.log("tabora debug stop-reload:", describe(q("stop-reload-button")), "| reload:", describe(q("reload-button")));
-    console.log("tabora debug switcher:", [...document.querySelectorAll('#urlbar [class*="searchmode"], #urlbar [id*="searchmode"]')].map(e => e.id || e.className).join(", "));
-    const def = Services.prefs.getDefaultBranch("");
-    console.log("tabora debug verticalTabs: default=", def.getBoolPref("sidebar.verticalTabs"), "user=", Services.prefs.prefHasUserValue("sidebar.verticalTabs"), "fxa=", Services.prefs.getBoolPref("identity.fxaccounts.enabled"), "bookmarksbar=", Services.prefs.getStringPref("browser.toolbars.bookmarks.visibility"));
+    apply();
+    gBrowser.tabContainer.addEventListener("TabSelect", apply);
+    gURLBar.inputField.addEventListener("blur", apply);
   },
 
   html(tag, attrs = {}, text, children = []) {
@@ -144,6 +135,11 @@ var Tabora = {
     if (verticalTabs) {
       const head = this.html("div", { id: "tabora-tabs-head" });
       head.append(this.html("span", {}, "Сегодня"));
+      const newTab = document.getElementById("vertical-tabs-newtab-button");
+      if (newTab) {
+        newTab.setAttribute("tooltiptext", "Новая вкладка (⌘T)");
+        head.append(newTab);
+      }
       verticalTabs.prepend(head);
     }
 
@@ -170,8 +166,8 @@ var Tabora = {
 
   buildTopbar() {
     const tabbox = document.getElementById("tabbrowser-tabbox");
-    const reader = this.html("button", { class: "icon-btn", id: "tabora-reader", title: "Режим чтения", "aria-label": "Режим чтения" }, null, [
-      this.svg(["M4 6h16M4 12h16M4 18h10"], 17),
+    const reader = this.html("button", { class: "icon-btn", id: "tabora-reader", title: "Режим чтения", "aria-label": "Режим чтения", disabled: "true" }, null, [
+      this.svg(["M6 3h9l5 5v13H6z", "M14 3v6h6", "M9 13h7M9 17h7"], 16, 1.8),
     ]);
     const toggle = this.html("button", { id: "tabora-agent-toggle", "aria-pressed": "false", title: "Панель агента (⌘J)" }, null, [
       this.html("span", { class: "dot" }),
@@ -180,7 +176,10 @@ var Tabora = {
     ]);
     const bar = this.html("div", { id: "tabora-topbar" }, null, [
       this.html("span", { class: "title", id: "tabora-title" }),
-      this.html("span", { class: "chip", id: "tabora-blocked" }),
+      this.html("span", { class: "chip", id: "tabora-blocked", hidden: "true" }, null, [
+        this.svg(["M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"], 13, 2),
+        this.html("span", { id: "tabora-blocked-text" }),
+      ]),
       reader,
       toggle,
     ]);
@@ -194,11 +193,131 @@ var Tabora = {
     toggle.addEventListener("click", () => this.toggleAgent());
   },
 
+  /* ---- Стартовая страница поверх пустой вкладки ------------------------- */
+
+  START_URLS: ["about:blank", "about:newtab", "about:home", "about:welcome", "chrome://browser/content/blanktab.html"],
+
+  buildStartPage() {
+    const tabbox = document.getElementById("tabbrowser-tabbox");
+    const input = this.html("input", { id: "tabora-start-input", placeholder: "Найти, открыть или поручить агенту", "aria-label": "Поиск или адрес" });
+    const search = this.html("div", { class: "search" }, null, [
+      this.html("span", { class: "dot", "aria-hidden": "true" }),
+      input,
+      this.html("span", { class: "kbd" }, "⏎"),
+    ]);
+    const page = this.html("div", { id: "tabora-start", hidden: "true" }, null, [
+      this.html("div", { class: "hero" }, null, [
+        this.html("div", { class: "date", id: "tabora-start-date" }),
+        this.html("h1", { class: "greeting", id: "tabora-start-greeting" }),
+      ]),
+      search,
+      this.html("div", { class: "dial", id: "tabora-start-dial", hidden: "true" }),
+    ]);
+    page.querySelector(".hero").style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0";
+    tabbox.append(page);
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter" && input.value.trim()) {
+        this.go(input.value.trim());
+        input.value = "";
+      }
+    });
+    gBrowser.addTabsProgressListener({
+      onLocationChange: browser => {
+        if (browser === gBrowser.selectedBrowser) {
+          this.updateStart();
+        }
+      },
+    });
+    gBrowser.tabContainer.addEventListener("TabSelect", () => this.updateStart());
+    this.updateStart();
+  },
+
+  go(text) {
+    gURLBar.value = text;
+    gURLBar.handleCommand();
+  },
+
+  isStartUrl(spec) {
+    return this.START_URLS.some(u => spec === u || spec.startsWith(u + "?") || spec.startsWith(u + "#"));
+  },
+
+  updateStart() {
+    const page = document.getElementById("tabora-start");
+    const browser = gBrowser.selectedBrowser;
+    if (!page || !browser) {
+      return;
+    }
+    const spec = browser.currentURI?.spec || "about:blank";
+    const show = this.isStartUrl(spec);
+    page.hidden = !show;
+    if (!show) {
+      return;
+    }
+    if (gBrowser.selectedTab.label !== "Новая вкладка") {
+      gBrowser.selectedTab.label = "Новая вкладка";
+    }
+    const now = new Date();
+    const hour = now.getHours();
+    const name = Services.prefs.getStringPref("tabora.user.name", "");
+    const word = hour < 5 ? "Доброй ночи" : hour < 12 ? "Доброе утро" : hour < 18 ? "Добрый день" : "Добрый вечер";
+    document.getElementById("tabora-start-greeting").textContent = name ? `${word}, ${name}` : word;
+    document.getElementById("tabora-start-date").textContent = new Intl.DateTimeFormat("ru-RU", {
+      weekday: "long", day: "numeric", month: "long",
+    }).format(now);
+    this.fillDial();
+    const input = document.getElementById("tabora-start-input");
+    setTimeout(() => {
+      if (!page.hidden && gBrowser.selectedBrowser === browser) {
+        input.focus();
+      }
+    }, 60);
+  },
+
+  async fillDial() {
+    const dial = document.getElementById("tabora-start-dial");
+    if (!dial || dial.dataset.filledAt > Date.now() - 60_000) {
+      return;
+    }
+    let sites = [];
+    try {
+      const { NewTabUtils } = ChromeUtils.importESModule("resource://gre/modules/NewTabUtils.sys.mjs");
+      sites = await NewTabUtils.activityStreamProvider.getTopFrecentSites({ numItems: 12, includeFavicon: true });
+    } catch (e) {
+      console.error("Tabora dial", e);
+    }
+    dial.replaceChildren();
+    dial.dataset.filledAt = String(Date.now());
+    dial.hidden = !sites.length;
+    for (const site of sites.slice(0, 12)) {
+      let host = "";
+      try {
+        host = new URL(site.url).hostname.replace(/^www\./, "");
+      } catch (e) {}
+      const label = site.title && site.title.length <= 18 ? site.title : host;
+      const glyph = this.html("span", { class: "glyph", "aria-hidden": "true" });
+      if (site.favicon) {
+        glyph.append(this.html("img", { src: site.favicon, alt: "" }));
+      } else {
+        glyph.textContent = (host || "?").charAt(0).toUpperCase();
+      }
+      const a = this.html("a", { href: site.url, title: site.url }, null, [glyph, this.html("span", { class: "label" }, label)]);
+      a.addEventListener("click", e => {
+        e.preventDefault();
+        this.go(site.url);
+      });
+      dial.append(a);
+    }
+  },
+
   buildAgentPanel() {
     const browser = document.getElementById("browser");
-    const closeBtn = this.html("button", { class: "close", "aria-label": "Скрыть панель агента" }, "×");
+    const closeBtn = this.html("button", { class: "close", "aria-label": "Скрыть панель агента" }, null, [
+      this.svg(["M6 6l12 12M18 6L6 18"], 14, 2.2),
+    ]);
     const input = this.html("input", { id: "tabora-agent-input", placeholder: "Спросите или поручите…", "aria-label": "Сообщение агенту" });
-    const sendBtn = this.html("button", { class: "send", "aria-label": "Отправить" }, "→");
+    const sendBtn = this.html("button", { class: "send", "aria-label": "Отправить" }, null, [
+      this.svg(["M5 12h14M13 6l6 6-6 6"], 16, 2.2),
+    ]);
     const chips = ["Саммари страницы", "Сравнить вкладки", "Тёмная тема для сайта"].map(q =>
       this.html("button", { "data-q": q }, q)
     );
@@ -407,10 +526,13 @@ var Tabora = {
       return;
     }
     let host = "";
-    try {
-      host = new URL(gBrowser.selectedBrowser.currentURI.spec).hostname.replace(/^www\./, "");
-    } catch (e) {}
-    const label = tab.label || "";
+    const spec = gBrowser.selectedBrowser.currentURI?.spec || "";
+    if (!this.isStartUrl(spec)) {
+      try {
+        host = new URL(spec).hostname.replace(/^www\./, "");
+      } catch (e) {}
+    }
+    const label = this.isStartUrl(spec) ? "Новая вкладка" : tab.label || "";
     title.textContent = host && !label.includes(host) ? `${label} · ${host}` : label;
     document.getElementById("tabora-agent-where").textContent = host ? `Работает на ${host}` : "Готов к задачам";
     this.updateBlocked();
@@ -436,7 +558,15 @@ var Tabora = {
     if (browser !== gBrowser.selectedBrowser) {
       return;
     }
-    chip.textContent = count ? `${count} ${this.plural(count, "трекер заблокирован", "трекера заблокировано", "трекеров заблокировано")}` : "";
+    chip.hidden = !count;
+    document.getElementById("tabora-blocked-text").textContent = count
+      ? `${count} ${this.plural(count, "трекер заблокирован", "трекера заблокировано", "трекеров заблокировано")}`
+      : "";
+    const readerBtn = document.getElementById("tabora-reader");
+    if (readerBtn) {
+      const native = document.getElementById("reader-mode-button");
+      readerBtn.toggleAttribute("disabled", !(native && !native.hidden));
+    }
   },
 
   startTimers() {

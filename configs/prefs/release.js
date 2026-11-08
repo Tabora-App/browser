@@ -61,3 +61,9 @@ pref("termsofuse.bypassNotification", true);
 pref("datareporting.policy.dataSubmissionPolicyBypassNotification", true);
 pref("browser.newtabpage.activity-stream.showWeather", false);
 pref("browser.newtabpage.activity-stream.system.showWeather", false);
+
+// Стартовая страница своя (накладывается на пустую вкладку), страница Firefox не нужна
+pref("browser.newtabpage.enabled", false);
+pref("browser.startup.page", 1);
+pref("browser.startup.homepage", "about:blank");
+pref("browser.newtab.preload", false);
