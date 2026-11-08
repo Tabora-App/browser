@@ -1,6 +1,6 @@
 name: Build
 
-# Сборка на раннерах Blacksmith. macOS собирается кросс-компиляцией на Linux
+# Сборка на Linux-раннерах GitHub или Blacksmith. macOS собирается кросс-компиляцией
 # с тулчейнами Mozilla. Запуск только вручную, чтобы не тратить минуты на каждый коммит.
 
 on:
@@ -17,10 +17,10 @@ on:
         type: boolean
         default: false
       runner:
-        description: "Раннер Blacksmith"
+        description: "Раннер: GitHub (бесплатно для публичного репозитория, 4 vCPU) или Blacksmith"
         type: choice
-        default: blacksmith-8vcpu-ubuntu-2404
-        options: [blacksmith-4vcpu-ubuntu-2404, blacksmith-8vcpu-ubuntu-2404, blacksmith-16vcpu-ubuntu-2404]
+        default: ubuntu-24.04
+        options: [ubuntu-24.04, ubuntu-24.04-arm, blacksmith-4vcpu-ubuntu-2404, blacksmith-8vcpu-ubuntu-2404, blacksmith-16vcpu-ubuntu-2404]
 
 permissions:
   contents: read
@@ -60,7 +60,7 @@ jobs:
       - name: Cache macOS cross toolchain
         if: env.TARGET_PLATFORM == 'darwin'
         id: cache-mac-cross
-        uses: useblacksmith/cache@v5
+        uses: actions/cache@v4
         with:
           path: ~/mac-cross
           key: mac-cross-v1
