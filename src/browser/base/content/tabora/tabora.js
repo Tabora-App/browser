@@ -55,6 +55,8 @@ var Tabora = {
     apply();
     gBrowser.tabContainer.addEventListener("TabSelect", apply);
     gURLBar.inputField.addEventListener("blur", apply);
+    // Firefox переписывает подпись после инициализации поиска: возвращаем свою.
+    new MutationObserver(apply).observe(gURLBar.inputField, { attributes: true, attributeFilter: ["placeholder"] });
   },
 
   html(tag, attrs = {}, text, children = []) {
@@ -250,6 +252,12 @@ var Tabora = {
     return this.START_URLS.some(u => spec === u || spec.startsWith(u + "?") || spec.startsWith(u + "#"));
   },
 
+  /** Стартовые вкладки получают атрибут tabora-start: свой значок вместо глобуса Firefox. */
+  markStartTab(tab) {
+    const spec = tab?.linkedBrowser?.currentURI?.spec || "about:blank";
+    tab?.toggleAttribute("tabora-start", this.isStartUrl(spec));
+  },
+
   updateStart() {
     const page = document.getElementById("tabora-start");
     const browser = gBrowser.selectedBrowser;
@@ -259,12 +267,14 @@ var Tabora = {
     const spec = browser.currentURI?.spec || "about:blank";
     const show = this.isStartUrl(spec);
     page.hidden = !show;
+    this.markStartTab(gBrowser.selectedTab);
     if (!show) {
       return;
     }
     if (gBrowser.selectedTab.label !== "Новая вкладка") {
       gBrowser.selectedTab.label = "Новая вкладка";
     }
+    this.markStartTab(gBrowser.selectedTab);
     const now = new Date();
     const hour = now.getHours();
     const name = Services.prefs.getStringPref("tabora.user.name", "");
@@ -907,6 +917,9 @@ var Tabora = {
     });
     gBrowser.tabContainer.addEventListener("TabAttrModified", e => {
       const tab = e.target;
+      if (e.detail?.changed?.some(a => a === "image" || a === "label" || a === "busy")) {
+        this.markStartTab(tab);
+      }
       if (
         e.detail?.changed?.includes("label") &&
         tab.label !== "Новая вкладка" &&
@@ -1010,11 +1023,11 @@ var Tabora = {
     }
     let mb = 0;
     try {
+      // Весь браузер: главный процесс и все дочерние, иначе на пустой вкладке было бы «0 МБ».
       const info = await ChromeUtils.requestProcInfo();
+      mb = info.memory / (1024 * 1024);
       for (const child of info.children) {
-        if (child.type.startsWith("web") || child.type === "privilegedabout" || child.type === "file") {
-          mb += child.memory / (1024 * 1024);
-        }
+        mb += child.memory / (1024 * 1024);
       }
     } catch (e) {}
     const sleeping = gBrowser.tabs.filter(t => t.hasAttribute("pending") && !t.closing).length;

@@ -505,6 +505,13 @@ sidebar-main {
   border-radius: 3px;
 }
 
+/* Стартовая вкладка: фирменная точка вместо глобуса */
+#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[tabora-start] .tab-icon-image {
+  /* значок вкладки — html:img, поэтому подменяем через content */
+  content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23c8f25a'/%3E%3Ccircle cx='8' cy='8' r='3' fill='%230b0c0e'/%3E%3C/svg%3E") !important;
+  opacity: 1;
+}
+
 #tabbrowser-tabs[orient="vertical"] .tab-throbber {
   margin: 0 !important;
 }
