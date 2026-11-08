@@ -38,6 +38,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--app", default=str(ROOT / ".build" / "Tabora.app"))
     ap.add_argument("--no-run", action="store_true")
+    ap.add_argument("--marionette", action="store_true", help="включить Marionette для tools/chrome_ctl.py")
     args = ap.parse_args()
     app = Path(args.app) / "Contents" / "Resources"
     omni = app / "browser" / "omni.ja"
@@ -92,10 +93,12 @@ def main() -> None:
     shutil.rmtree(profile, ignore_errors=True)
     profile.mkdir(parents=True)
     log = open(ROOT / ".build" / "run.log", "w")
-    subprocess.Popen(
-        [str(Path(args.app) / "Contents/MacOS/tabora"), "--profile", str(profile), "-purgecaches"],
-        stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
-    )
+    cmd = [str(Path(args.app) / "Contents/MacOS/tabora"), "--profile", str(profile), "-purgecaches"]
+    env = dict(os.environ)
+    if args.marionette:
+        cmd.append("--marionette")
+        env["MOZ_REMOTE_ALLOW_SYSTEM_ACCESS"] = "1"
+    subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=env)
     print("запущено с чистым профилем, лог в .build/run.log")
 
 

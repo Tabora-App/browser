@@ -32,16 +32,16 @@ var Tabora = {
       return;
     }
     this.moveToolboxIntoBrowser();
-    this.buildSidebarExtras();
-    this.buildTopbar();
-    this.buildStartPage();
-    this.buildAgentPanel();
-    this.initSpaces();
-    this.initKeys();
-    this.initTabHooks();
-    this.startTimers();
-    this.updateTitle();
-    this.localizeUrlbar();
+    for (const step of [
+      "buildSidebarExtras", "buildTopbar", "buildStartPage", "buildAgentPanel", "buildCommandBar",
+      "searchEngineName", "initSpaces", "initKeys", "initTabHooks", "startTimers", "updateTitle", "localizeUrlbar",
+    ]) {
+      try {
+        this[step]();
+      } catch (e) {
+        console.error(`Tabora: ${step}`, e);
+      }
+    }
   },
 
   localizeUrlbar() {
@@ -215,10 +215,18 @@ var Tabora = {
     ]);
     page.querySelector(".hero").style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0";
     tabbox.append(page);
+    input.setAttribute("readonly", "true");
+    input.addEventListener("mousedown", e => {
+      e.preventDefault();
+      this.openCommandBar();
+    });
     input.addEventListener("keydown", e => {
-      if (e.key === "Enter" && input.value.trim()) {
-        this.go(input.value.trim());
-        input.value = "";
+      if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        this.openCommandBar(e.key);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        this.openCommandBar();
       }
     });
     gBrowser.addTabsProgressListener({
@@ -339,13 +347,9 @@ var Tabora = {
     browser.append(panel);
     closeBtn.addEventListener("click", () => this.toggleAgent(false));
     const send = () => {
-      const text = input.value.trim();
-      if (!text) {
-        return;
+      if (this.agentSend(input.value)) {
+        input.value = "";
       }
-      this.agentSay(text, "user");
-      input.value = "";
-      this.agentSay("Принял: «" + text + "». Выполнять задачи я научусь в одной из следующих сборок.", "agent");
     };
     sendBtn.addEventListener("click", send);
     input.addEventListener("keydown", e => {
@@ -359,6 +363,17 @@ var Tabora = {
         send();
       });
     }
+  },
+
+  agentSend(raw) {
+    const text = (raw || "").trim();
+    if (!text) {
+      return false;
+    }
+    this.toggleAgent(true);
+    this.agentSay(text, "user");
+    this.agentSay("Принял: «" + text + "». Выполнять задачи я научусь в одной из следующих сборок.", "agent");
+    return true;
   },
 
   agentSay(text, who) {
@@ -376,6 +391,349 @@ var Tabora = {
       ?.setAttribute("aria-pressed", String(show));
     if (show) {
       document.getElementById("tabora-agent-input")?.focus();
+    }
+  },
+
+  /* ---- Командная строка ⌘K --------------------------------------------- */
+
+  cmd: { items: [], sel: 0, seq: 0 },
+
+  hint(key, label) {
+    return this.html("span", { class: "hint" }, null, [
+      this.html("span", { class: "k" }, key),
+      document.createTextNode(" " + label),
+    ]);
+  },
+
+  buildCommandBar() {
+    const browser = document.getElementById("browser");
+    const input = this.html("input", {
+      id: "tabora-cmd-input",
+      placeholder: "Команда, адрес или задача агенту",
+      "aria-label": "Команда, адрес или задача агенту",
+      autocomplete: "off",
+      spellcheck: "false",
+    });
+    const dialog = this.html("div", { class: "dialog", role: "dialog", "aria-label": "Командная строка" }, null, [
+      this.html("div", { class: "head" }, null, [
+        this.html("span", { class: "dot", "aria-hidden": "true" }),
+        input,
+        this.html("span", { class: "kbd" }, "esc"),
+      ]),
+      this.html("div", { class: "body", id: "tabora-cmd-body", role: "listbox" }),
+      this.html("div", { class: "foot" }, null, [
+        this.hint("↑↓", "выбрать"),
+        this.hint("⏎", "выполнить"),
+        this.hint("⇥", "поручить агенту"),
+        this.html("span", { class: "spacer" }),
+        this.html("span", {}, "Адрес или запрос открываются по ⏎, задача агенту по ⇥"),
+      ]),
+    ]);
+    const overlay = this.html("div", { id: "tabora-cmd", hidden: "true" }, null, [dialog]);
+    browser.append(overlay);
+
+    overlay.addEventListener("mousedown", e => {
+      if (e.target === overlay) {
+        this.closeCommandBar();
+      }
+    });
+    input.addEventListener("input", () => this.cmdUpdate());
+    input.addEventListener("keydown", e => {
+      switch (e.key) {
+        case "Escape":
+          this.closeCommandBar();
+          break;
+        case "ArrowDown":
+          this.cmdMove(1);
+          break;
+        case "ArrowUp":
+          this.cmdMove(-1);
+          break;
+        case "Enter":
+          this.cmdRun(this.cmd.items[this.cmd.sel]);
+          break;
+        case "Tab": {
+          const text = input.value.trim();
+          this.closeCommandBar();
+          this.toggleAgent(true);
+          const agentInput = document.getElementById("tabora-agent-input");
+          if (agentInput) {
+            agentInput.value = text;
+            agentInput.focus();
+          }
+          break;
+        }
+        default:
+          return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+    });
+  },
+
+  openCommandBar(prefill = "") {
+    const overlay = document.getElementById("tabora-cmd");
+    const input = document.getElementById("tabora-cmd-input");
+    if (!overlay || !input) {
+      return;
+    }
+    overlay.hidden = false;
+    input.value = prefill;
+    input.focus();
+    input.setSelectionRange(prefill.length, prefill.length);
+    this.cmdUpdate();
+  },
+
+  closeCommandBar() {
+    const overlay = document.getElementById("tabora-cmd");
+    if (!overlay || overlay.hidden) {
+      return;
+    }
+    overlay.hidden = true;
+    this.cmd.seq++;
+    gBrowser.selectedBrowser?.focus();
+  },
+
+  looksLikeUrl(text) {
+    if (/\s/.test(text)) {
+      return null;
+    }
+    if (/^(about|chrome|file|moz-extension):/.test(text)) {
+      return { host: text, path: "" };
+    }
+    try {
+      const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`);
+      const host = url.hostname;
+      if (!host || (!host.includes(".") && host !== "localhost")) {
+        return null;
+      }
+      if (!/^[a-z0-9.-]+$/i.test(host) || /\.$/.test(host) || /^\./.test(host)) {
+        return null;
+      }
+      return { host: host.replace(/^www\./, ""), path: url.pathname === "/" ? "" : url.pathname + url.search };
+    } catch (e) {
+      return null;
+    }
+  },
+
+  letterOf(text) {
+    const s = (text || "").replace(/^(https?:\/\/)?(www\.)?/, "").trim();
+    return s ? s[0].toUpperCase() : "•";
+  },
+
+  hostOf(spec) {
+    try {
+      return new URL(spec).hostname.replace(/^www\./, "");
+    } catch (e) {
+      return spec || "";
+    }
+  },
+
+  _engineName: "",
+
+  searchEngineName() {
+    if (!this._engineName) {
+      this._engineName = "Поиск";
+      const { SearchService } = ChromeUtils.importESModule("moz-src:///toolkit/components/search/SearchService.sys.mjs");
+      SearchService.getDefault()
+        .then(engine => {
+          if (engine?.name) {
+            this._engineName = engine.name;
+          }
+        })
+        .catch(() => {});
+    }
+    return this._engineName;
+  },
+
+  commands() {
+    const others = gBrowser.tabs.filter(t => t !== gBrowser.selectedTab && !t.closing && !t.hasAttribute("pending"));
+    return [
+      { glyph: "+", title: "Новая вкладка", note: "В текущем пространстве", key: "⌘T", tags: "new tab создать", run: () => BrowserCommands.openTab() },
+      {
+        glyph: "Z",
+        title: "Усыпить все вкладки, кроме текущей",
+        note: others.length
+          ? `${others.length} ${this.plural(others.length, "вкладка освободит", "вкладки освободят", "вкладок освободят")} память`
+          : "Все остальные вкладки уже спят",
+        key: "",
+        tags: "sleep память ram спать",
+        run: () => {
+          for (const tab of others) {
+            gBrowser.discardBrowser(tab);
+          }
+          this.updateMemory();
+        },
+      },
+      ...this.spaces.map((s, i) => ({
+        glyph: s.name[0],
+        title: `Пространство: ${s.name}`,
+        note: s.id === this.activeSpaceId ? "Текущее" : "Переключить",
+        key: `⌘${i + 1}`,
+        tags: "space пространство",
+        run: () => this.switchSpace(s.id),
+      })),
+      { glyph: "●", title: "Панель агента", note: "Показать или скрыть", key: "⌘J", tags: "agent ai", run: () => this.toggleAgent() },
+      { glyph: "P", title: "Приватное окно", note: "Без истории и cookies", key: "⌘⇧P", tags: "private инкогнито", run: () => OpenBrowserWindow({ private: true }) },
+      { glyph: "↓", title: "Загрузки", note: "Файлы, которые вы скачали", key: "⌘⇧J", tags: "downloads", run: () => switchToTabHavingURI("about:downloads", true) },
+      { glyph: "⚙", title: "Настройки", note: "Поведение, приватность, внешний вид", key: "⌘,", tags: "settings preferences", run: () => openPreferences() },
+    ];
+  },
+
+  async cmdHistory(q) {
+    try {
+      const { PlacesUtils } = ChromeUtils.importESModule("resource://gre/modules/PlacesUtils.sys.mjs");
+      const like = "%" + q.replace(/[%_\\]/g, "\\$&") + "%";
+      const rows = await PlacesUtils.withConnectionWrapper("Tabora command bar", db =>
+        db.executeCached(
+          `SELECT url, title FROM moz_places
+           WHERE hidden = 0 AND frecency > 0 AND url NOT LIKE 'place:%'
+             AND (title LIKE :q ESCAPE '\\' OR url LIKE :q ESCAPE '\\')
+           ORDER BY frecency DESC LIMIT 5`,
+          { q: like }
+        )
+      );
+      return rows.map(r => {
+        const url = r.getResultByName("url");
+        const title = r.getResultByName("title") || this.hostOf(url);
+        return { glyph: this.letterOf(title), icon: `page-icon:${url}`, title, note: this.hostOf(url), key: "", run: () => this.go(url) };
+      });
+    } catch (e) {
+      console.error("Tabora cmd history", e);
+      return [];
+    }
+  },
+
+  async cmdUpdate() {
+    const seq = ++this.cmd.seq;
+    const q = document.getElementById("tabora-cmd-input").value.trim();
+    const lower = q.toLowerCase();
+    const groups = [];
+
+    if (q) {
+      const url = this.looksLikeUrl(q);
+      groups.push({
+        name: "Открыть",
+        items: [
+          url
+            ? { glyph: this.letterOf(url.host), icon: `page-icon:https://${url.host}/`, title: url.host + url.path, note: "Открыть адрес", key: "⏎", run: () => this.go(q) }
+            : { glyph: this.svg(["M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z", "M20 20l-4-4"], 15, 2), title: `Искать «${q}»`, note: this.searchEngineName(), key: "⏎", run: () => this.go(q) },
+        ],
+      });
+      groups.push({
+        name: "Агенту",
+        agent: true,
+        items: [{ glyph: "●", title: q, note: "Поручить агенту. Он уточнит, если чего-то не хватает", key: "⇥", run: () => this.agentSend(q) }],
+      });
+    }
+
+    const tabs = gBrowser.tabs
+      .filter(t => t !== gBrowser.selectedTab && !t.closing && !t.hidden)
+      .filter(t => !q || (t.label || "").toLowerCase().includes(lower) || (t.linkedBrowser?.currentURI?.spec || "").toLowerCase().includes(lower))
+      .sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0))
+      .slice(0, q ? 4 : 3);
+    if (tabs.length) {
+      groups.push({
+        name: "Вкладки",
+        items: tabs.map(t => ({
+          glyph: this.letterOf(t.label),
+          icon: t.getAttribute("image") || `page-icon:${t.linkedBrowser?.currentURI?.spec || ""}`,
+          title: t.label,
+          note: this.hostOf(t.linkedBrowser?.currentURI?.spec) + (t.hasAttribute("pending") ? " · спит" : ""),
+          key: "",
+          run: () => {
+            gBrowser.selectedTab = t;
+          },
+        })),
+      });
+    }
+
+    const cmds = this.commands().filter(c => !q || c.title.toLowerCase().includes(lower) || (c.tags || "").includes(lower));
+    if (cmds.length) {
+      groups.push({ name: "Команды", items: cmds.slice(0, q ? 4 : 7) });
+    }
+
+    if (q.length >= 2) {
+      const hist = await this.cmdHistory(q);
+      if (seq !== this.cmd.seq) {
+        return;
+      }
+      if (hist.length) {
+        groups.push({ name: "История", items: hist });
+      }
+    }
+    this.cmdRender(groups);
+  },
+
+  cmdRender(groups) {
+    const body = document.getElementById("tabora-cmd-body");
+    body.textContent = "";
+    this.cmd.items = [];
+    this.cmd.sel = 0;
+    if (!groups.length) {
+      body.append(this.html("div", { class: "empty" }, "Ничего не нашлось"));
+      return;
+    }
+    for (const g of groups) {
+      const list = this.html("div", { class: "group" }, null, [this.html("span", { class: "name" }, g.name)]);
+      for (const item of g.items) {
+        const index = this.cmd.items.length;
+        const glyph = this.html("span", { class: "glyph", "aria-hidden": "true" });
+        if (item.glyph instanceof Node) {
+          glyph.append(item.glyph);
+        } else {
+          glyph.textContent = item.glyph;
+        }
+        if (item.icon) {
+          const img = this.html("img", { src: item.icon, alt: "" });
+          img.addEventListener("load", () => glyph.classList.add("has-icon"), { once: true });
+          img.addEventListener("error", () => img.remove(), { once: true });
+          glyph.append(img);
+        }
+        const row = this.html("button", { class: "row" + (g.agent ? " agent" : ""), role: "option", type: "button" }, null, [
+          glyph,
+          this.html("span", { class: "text" }, null, [
+            this.html("span", { class: "title" }, item.title),
+            this.html("span", { class: "note" }, item.note || ""),
+          ]),
+          this.html("span", { class: "key" }, item.key || ""),
+        ]);
+        row.addEventListener("mousemove", () => this.cmdSelect(index));
+        row.addEventListener("click", () => this.cmdRun(item));
+        this.cmd.items.push({ ...item, row });
+        list.append(row);
+      }
+      body.append(list);
+    }
+    this.cmdSelect(0);
+  },
+
+  cmdSelect(index) {
+    const items = this.cmd.items;
+    if (!items.length) {
+      return;
+    }
+    this.cmd.sel = (index + items.length) % items.length;
+    items.forEach((it, i) => {
+      it.row.toggleAttribute("selected", i === this.cmd.sel);
+      it.row.setAttribute("aria-selected", String(i === this.cmd.sel));
+    });
+  },
+
+  cmdMove(delta) {
+    this.cmdSelect(this.cmd.sel + delta);
+    this.cmd.items[this.cmd.sel]?.row.scrollIntoView({ block: "nearest" });
+  },
+
+  cmdRun(item) {
+    if (!item) {
+      return;
+    }
+    this.closeCommandBar();
+    try {
+      item.run();
+    } catch (e) {
+      console.error("Tabora cmd run", e);
     }
   },
 
@@ -507,7 +865,15 @@ var Tabora = {
       this.updateTitle();
     });
     gBrowser.tabContainer.addEventListener("TabAttrModified", e => {
-      if (e.target === gBrowser.selectedTab) {
+      const tab = e.target;
+      if (
+        e.detail?.changed?.includes("label") &&
+        tab.label !== "Новая вкладка" &&
+        this.isStartUrl(tab.linkedBrowser?.currentURI?.spec || "")
+      ) {
+        tab.label = "Новая вкладка";
+      }
+      if (tab === gBrowser.selectedTab) {
         this.updateTitle();
       }
     });
@@ -647,6 +1013,10 @@ var Tabora = {
           }
         } else if (!e.shiftKey && e.key.toLowerCase() === "j") {
           this.toggleAgent();
+          e.preventDefault();
+          e.stopPropagation();
+        } else if (!e.shiftKey && e.key.toLowerCase() === "k") {
+          this.openCommandBar();
           e.preventDefault();
           e.stopPropagation();
         }
