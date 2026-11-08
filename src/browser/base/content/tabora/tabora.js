@@ -36,7 +36,7 @@ var Tabora = {
     Services.scriptloader.loadSubScript("chrome://browser/content/tabora/agent.js", window);
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
-      "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initKeys", "initTabHooks", "initDownloads", "startTimers", "updateTitle", "localizeUrlbar",
+      "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initKeys", "initTabHooks", "initDownloads", "startTimers", "updateTitle", "localizeUrlbar",
       "routeUrlbarToCommandBar",
     ]) {
       try {
@@ -847,6 +847,43 @@ var Tabora = {
     Services.prefs.setStringPref(PREF, `${base} ${tail}`);
   },
 
+  /** Баннеры cookie: актор страницы нажимает «Отклонить» за пользователя (см. actors/TaboraCookiesChild). */
+  initCookieBanners() {
+    try {
+      ChromeUtils.registerWindowActor("TaboraCookies", {
+        parent: { esModuleURI: "chrome://browser/content/tabora/actors/TaboraCookiesParent.sys.mjs" },
+        child: {
+          esModuleURI: "chrome://browser/content/tabora/actors/TaboraCookiesChild.sys.mjs",
+          events: { DOMContentLoaded: {}, pageshow: {} },
+        },
+        allFrames: true,
+        messageManagerGroups: ["browsers"],
+        safeForUntrustedWebProcess: true,
+      });
+    } catch (e) {
+      // уже зарегистрирован другим окном
+    }
+  },
+
+  cookieBannerHandled(data, topContext) {
+    const count = Services.prefs.getIntPref("tabora.cookies.handledCount", 0) + 1;
+    Services.prefs.setIntPref("tabora.cookies.handledCount", count);
+    this._cookieLast = { ...data, at: Date.now() };
+    if (!Services.prefs.getBoolPref("tabora.cookies.notify", true)) {
+      return;
+    }
+    const tab = gBrowser.getTabForBrowser(topContext?.embedderElement);
+    if (tab && tab !== gBrowser.selectedTab) {
+      return; // фоновые вкладки не отвлекают
+    }
+    const now = Date.now();
+    if (this._cookieNoticeAt && now - this._cookieNoticeAt < 4000) {
+      return;
+    }
+    this._cookieNoticeAt = now;
+    this.notice(`Cookie-баннер закрыт: «${data.text}» · ${data.host}`);
+  },
+
   /* ---- Раскладка ------------------------------------------------------- */
 
   moveToolboxIntoBrowser() {
@@ -1140,6 +1177,14 @@ var Tabora = {
 
   /** Как показывать адрес человеку: внутренние страницы получают короткие имена. */
   displayUrl(spec) {
+    const ens = spec.match(new RegExp(`^https?://([a-z0-9-]+(?:\\.[a-z0-9-]+)*)\\.${this.ensGateway().replace(/\./g, "\\.")}(/.*)?$`, "i"));
+    if (ens) {
+      return `${ens[1]}.eth` + (ens[2] && ens[2] !== "/" ? ens[2] : "");
+    }
+    const ipfs = spec.match(new RegExp(`^https?://([a-z0-9]+)\\.(ipfs|ipns)\\.${this.ipfsGateway().replace(/\./g, "\\.")}(/.*)?$`, "i"));
+    if (ipfs) {
+      return `${ipfs[2]}://${ipfs[1]}${ipfs[3] && ipfs[3] !== "/" ? ipfs[3] : ""}`;
+    }
     if (this.isMailUrl(spec)) {
       const hash = spec.split("#")[1] || "";
       return hash === "aliases" ? "tabora://mail/aliases" : "tabora://mail";
@@ -1248,8 +1293,42 @@ var Tabora = {
   },
 
   go(text) {
+    const web3 = this.web3Url(text);
+    if (web3) {
+      this.openUrl(web3);
+      return;
+    }
     gURLBar.value = text;
     gURLBar.handleCommand();
+  },
+
+  /* ---- Web3-адреса: имя.eth и ipfs:// через публичные шлюзы (настраиваются) -------- */
+
+  ensGateway() {
+    return Services.prefs.getStringPref("tabora.web3.ensGateway", "eth.limo").replace(/^https?:\/\//, "").replace(/\/$/, "");
+  },
+
+  ipfsGateway() {
+    return Services.prefs.getStringPref("tabora.web3.ipfsGateway", "dweb.link").replace(/^https?:\/\//, "").replace(/\/$/, "");
+  },
+
+  /** «vitalik.eth/path» → https://vitalik.eth.limo/path; ipfs://cid/path → https://cid.ipfs.dweb.link/path */
+  web3Url(text) {
+    const t = String(text || "").trim();
+    let m = t.match(/^(?:https?:\/\/)?([a-z0-9-]+(?:\.[a-z0-9-]+)*\.eth)(\/.*)?$/i);
+    if (m) {
+      // шлюзы вида eth.limo / eth.link: vitalik.eth → vitalik.eth.limo
+      return `https://${m[1].toLowerCase().replace(/\.eth$/, "")}.${this.ensGateway()}${m[2] || "/"}`;
+    }
+    m = t.match(/^ipfs:\/\/([a-z0-9]+)(\/.*)?$/i);
+    if (m) {
+      return `https://${m[1].toLowerCase()}.ipfs.${this.ipfsGateway()}${m[2] || "/"}`;
+    }
+    m = t.match(/^ipns:\/\/([a-z0-9.-]+)(\/.*)?$/i);
+    if (m) {
+      return `https://${m[1].toLowerCase()}.ipns.${this.ipfsGateway()}${m[2] || "/"}`;
+    }
+    return null;
   },
 
   isStartUrl(spec) {
@@ -1564,6 +1643,10 @@ var Tabora = {
     }
     if (/^(about|chrome|file|moz-extension):/.test(text)) {
       return { host: text, path: "" };
+    }
+    if (this.web3Url(text)) {
+      const m = text.match(/^(?:[a-z]+:\/\/)?([^/]+)(\/.*)?$/i);
+      return { host: m[1], path: m[2] || "" };
     }
     try {
       const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`);

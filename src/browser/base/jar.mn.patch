@@ -2,7 +2,7 @@ diff --git a/browser/base/jar.mn b/browser/base/jar.mn
 index b2b5db6040..fbeefdc452 100644
 --- a/browser/base/jar.mn
 +++ b/browser/base/jar.mn
-@@ -33,6 +33,34 @@ browser.jar:
+@@ -33,6 +33,37 @@ browser.jar:
          content/browser/aboutTabCrashed.xhtml         (content/aboutTabCrashed.xhtml)
          content/browser/blanktab.html                 (content/blanktab.html)
          content/browser/browser.js                    (content/browser.js)
@@ -20,6 +20,9 @@ index b2b5db6040..fbeefdc452 100644
 +        content/browser/tabora/select.js  (content/tabora/select.js)
 +        content/browser/tabora/drawer.js  (content/tabora/drawer.js)
 +        content/browser/tabora/agent.js  (content/tabora/agent.js)
++        content/browser/tabora/preferences.js  (content/tabora/preferences.js)
++        content/browser/tabora/actors/TaboraCookiesChild.sys.mjs  (content/tabora/actors/TaboraCookiesChild.sys.mjs)
++        content/browser/tabora/actors/TaboraCookiesParent.sys.mjs  (content/tabora/actors/TaboraCookiesParent.sys.mjs)
 +        content/browser/tabora/drawer.css  (content/tabora/drawer.css)
 +        content/browser/tabora/actors/TaboraMediaChild.sys.mjs  (content/tabora/actors/TaboraMediaChild.sys.mjs)
 +        content/browser/tabora/actors/TaboraMediaParent.sys.mjs  (content/tabora/actors/TaboraMediaParent.sys.mjs)

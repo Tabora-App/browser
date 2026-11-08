@@ -10,3 +10,11 @@ index e8da75f2c2..74985e952f 100644
  
    <link rel="localization" href="branding/brand.ftl"/>
    <link rel="localization" href="browser/browser.ftl"/>
+@@ -85,6 +86,7 @@
+   <script src="chrome://browser/content/preferences/preferences.js"/>
+   <script src="chrome://browser/content/preferences/extensionControlled.js"/>
+   <script src="chrome://browser/content/preferences/findInPage.js"/>
++  <script src="chrome://browser/content/tabora/preferences.js"/>
+   <script src="chrome://browser/content/migration/migration-wizard.mjs" type="module"></script>
+   <script type="module" src="chrome://browser/content/backup/backup-settings.mjs"></script>
+   <script type="module" src="chrome://browser/content/preferences/widgets/dialog-button.mjs"></script>

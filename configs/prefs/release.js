@@ -81,3 +81,12 @@ pref("browser.profiles.enabled", false);
 
 // Закрытие последней вкладки не закрывает окно: остаётся пустая вкладка
 pref("browser.tabs.closeWindowWithLastTab", false);
+
+// Баннеры cookie закрываем сами: отклоняем необязательные (reject | accept | off)
+pref("tabora.cookies.banners", "reject");
+pref("tabora.cookies.notify", true);
+pref("tabora.cookies.handledCount", 0);
+
+// Web3: имя.eth и ipfs:// открываются через публичные шлюзы; оба можно сменить
+pref("tabora.web3.ensGateway", "eth.limo");
+pref("tabora.web3.ipfsGateway", "dweb.link");

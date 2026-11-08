@@ -199,3 +199,27 @@ img[src*="fox"] {
     --border-color-deemphasized: #ebe8e1;
   }
 }
+
+/* Карточки Tabora в настройках */
+.tabora-card {
+  margin-block: 8px 16px;
+}
+
+.tabora-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tabora-card-sub {
+  margin: 0;
+  color: var(--text-color-deemphasized);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.tabora-card-stat {
+  margin: 0;
+  font: 500 12px/1 var(--tabora-mono, "JetBrains Mono", monospace);
+  color: var(--text-color-deemphasized);
+}
