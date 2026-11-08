@@ -939,7 +939,10 @@ var Tabora = {
         host = new URL(spec).hostname.replace(/^www\./, "");
       } catch (e) {}
     }
-    const label = this.isStartUrl(spec) ? "Новая вкладка" : tab.label || "";
+    let label = this.isStartUrl(spec) ? "Новая вкладка" : tab.label || "";
+    if (/^[\w.-]+\/$/.test(label)) {
+      label = label.slice(0, -1); // у страницы без заголовка Firefox пишет «host/»
+    }
     title.textContent = host && !label.includes(host) ? `${label} · ${host}` : label;
     document.getElementById("tabora-agent-where").textContent = host ? `Работает на ${host}` : "Готов к задачам";
     this.updateBlocked();

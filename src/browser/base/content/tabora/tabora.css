@@ -249,6 +249,12 @@
 #urlbar-input {
   color: var(--tabora-text) !important;
   padding-inline: 2px !important;
+  /* длинный адрес растворяется у правого края, а не обрезается */
+  mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
+}
+
+#urlbar[focused] #urlbar-input {
+  mask-image: none;
 }
 
 #urlbar-input::placeholder {
