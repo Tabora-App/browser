@@ -695,6 +695,20 @@ sidebar-main {
   background: var(--tabora-panel);
 }
 
+#tabora-mail svg {
+  color: var(--tabora-text-3);
+  flex-shrink: 0;
+}
+
+#tabora-mail > span:first-of-type {
+  flex: 1;
+}
+
+#tabora-mail .kbd {
+  font: 500 10px/1 var(--tabora-mono);
+  color: var(--tabora-text-5);
+}
+
 #tabora-mail .pill {
   margin-inline-start: auto;
   font: 800 11px/1 var(--tabora-font);

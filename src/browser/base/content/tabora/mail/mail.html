@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+<html lang="ru" dir="ltr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="color-scheme" content="dark" />
+  <title>Почта · Tabora</title>
+  <link rel="icon" href="chrome://browser/content/tabora/mail/icon.svg" />
+  <link rel="stylesheet" href="chrome://browser/content/tabora/mail/mail.css" />
+</head>
+<body>
+  <div id="app" class="app" data-view="mail">
+
+    <!-- Папки -->
+    <nav class="folders" aria-label="Папки и алиасы">
+      <button class="compose-btn" id="compose-btn" type="button">
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        Написать
+        <kbd>C</kbd>
+      </button>
+      <div class="folder-list" id="folder-list" role="tablist" aria-label="Папки"></div>
+      <div class="folder-section">
+        <div class="folder-section-title">Ярлыки</div>
+        <div class="folder-list" id="label-list"></div>
+      </div>
+      <div class="folder-spacer"></div>
+      <button class="folder-item aliases-link" id="aliases-link" type="button">
+        <span class="folder-name">Алиасы</span>
+        <span class="folder-count mono" id="aliases-count"></span>
+      </button>
+      <div class="account-card">
+        <div class="account-label">Адрес</div>
+        <div class="account-address mono" id="account-address"></div>
+        <div class="account-quota" id="account-quota"></div>
+        <div class="account-quota-bar"><span id="account-quota-bar"></span></div>
+      </div>
+      <div class="demo-note" id="demo-note">Демонстрационные письма. Почта на вашем домене подключится в одной из следующих сборок.</div>
+    </nav>
+
+    <!-- Список писем -->
+    <section class="list" id="list-pane" aria-label="Список писем">
+      <header class="list-head">
+        <div class="list-title-row">
+          <h1 class="list-title" id="list-title">Входящие</h1>
+          <span class="list-sub" id="list-sub"></span>
+        </div>
+        <div class="search" id="search">
+          <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="search-input" type="search" placeholder="Поиск по письмам" autocomplete="off" aria-label="Поиск по письмам" />
+          <kbd>/</kbd>
+        </div>
+        <div class="chips" id="filter-chips" role="group" aria-label="Фильтры">
+          <button class="chip" data-filter="unread" type="button">Непрочитанные</button>
+          <button class="chip" data-filter="attachments" type="button">С вложениями</button>
+          <button class="chip" data-filter="codes" type="button">Коды</button>
+          <button class="chip" data-filter="starred" type="button">Со звездой</button>
+        </div>
+      </header>
+      <div class="bulk-bar" id="bulk-bar" hidden>
+        <span class="bulk-count" id="bulk-count"></span>
+        <button class="tool" data-bulk="read" type="button" title="Прочитано">Прочитано</button>
+        <button class="tool" data-bulk="archive" type="button" title="В архив (E)">В архив</button>
+        <button class="tool" data-bulk="trash" type="button" title="Удалить (#)">Удалить</button>
+        <button class="tool" data-bulk="clear" type="button" title="Снять выделение (Esc)">Снять</button>
+      </div>
+      <div class="messages" id="messages" role="listbox" aria-label="Письма" tabindex="0"></div>
+    </section>
+
+    <!-- Письмо -->
+    <section class="reader" id="reader" aria-label="Письмо">
+      <div class="reader-empty" id="reader-empty">
+        <div class="reader-empty-mark"><span></span></div>
+        <div class="reader-empty-title">Выберите письмо</div>
+        <div class="reader-empty-sub">J и K листают список, Enter открывает, E отправляет в архив, C пишет новое.</div>
+      </div>
+      <div class="thread" id="thread" hidden></div>
+    </section>
+
+    <!-- Алиасы -->
+    <section class="aliases" id="aliases-pane" aria-label="Алиасы" hidden>
+      <header class="aliases-head">
+        <div class="aliases-title-row">
+          <div>
+            <h1 class="aliases-title">Алиасы</h1>
+            <p class="aliases-sub">Каждый сайт получает свой адрес. Выключили алиас: письма с него больше не приходят, а сайт не узнаёт ваш настоящий.</p>
+          </div>
+          <button class="primary" id="new-alias-btn" type="button">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            Новый алиас
+          </button>
+        </div>
+        <div class="stats" id="alias-stats"></div>
+        <div class="aliases-tools">
+          <div class="search small">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input id="alias-search" type="search" placeholder="Сайт или адрес" aria-label="Поиск по алиасам" />
+          </div>
+          <div class="chips" id="alias-filters" role="group" aria-label="Фильтр алиасов">
+            <button class="chip" data-afilter="all" type="button" aria-pressed="true">Все</button>
+            <button class="chip" data-afilter="on" type="button">Включённые</button>
+            <button class="chip" data-afilter="off" type="button">Выключенные</button>
+            <button class="chip" data-afilter="agent" type="button">Созданы агентом</button>
+          </div>
+        </div>
+      </header>
+      <div class="alias-table-head">
+        <span class="col-glyph"></span><span class="col-address">Алиас</span><span class="col-site">Сайт</span><span class="col-num">Писем</span><span class="col-date">Создан</span><span class="col-space">Простр.</span><span class="col-toggle">Вкл.</span>
+      </div>
+      <div class="alias-rows" id="alias-rows"></div>
+    </section>
+
+    <!-- Написать письмо -->
+    <div class="compose" id="compose" hidden role="dialog" aria-label="Новое письмо">
+      <header class="compose-head">
+        <span class="compose-title" id="compose-title">Новое письмо</span>
+        <button class="icon-btn" id="compose-min" type="button" title="Свернуть" aria-label="Свернуть"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+        <button class="icon-btn" id="compose-close" type="button" title="Закрыть (Esc)" aria-label="Закрыть"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </header>
+      <div class="compose-body">
+        <div class="field">
+          <label for="compose-from">От</label>
+          <select id="compose-from" aria-label="Отправитель"></select>
+        </div>
+        <div class="field">
+          <label for="compose-to">Кому</label>
+          <div class="chips-input" id="compose-to-chips">
+            <input id="compose-to" type="text" placeholder="Адрес, Enter или запятая" autocomplete="off" />
+          </div>
+          <button class="link-btn" id="compose-cc-toggle" type="button">Копия</button>
+        </div>
+        <div class="field" id="compose-cc-field" hidden>
+          <label for="compose-cc">Копия</label>
+          <input id="compose-cc" type="text" placeholder="Через запятую" />
+        </div>
+        <div class="field">
+          <label for="compose-subject">Тема</label>
+          <input id="compose-subject" type="text" placeholder="О чём письмо" />
+        </div>
+        <textarea id="compose-text" class="compose-text" placeholder="Текст письма" aria-label="Текст письма"></textarea>
+        <div class="compose-attachments" id="compose-attachments"></div>
+      </div>
+      <footer class="compose-foot">
+        <button class="primary" id="compose-send" type="button">Отправить <kbd>⌘⏎</kbd></button>
+        <button class="icon-btn" id="compose-attach" type="button" title="Прикрепить файл" aria-label="Прикрепить файл"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 12-8.5 8.5a5 5 0 0 1-7-7L14 5a3.3 3.3 0 0 1 4.7 4.7L10.5 18a1.7 1.7 0 0 1-2.4-2.4L16 7.7"/></svg></button>
+        <input id="compose-file" type="file" multiple hidden />
+        <span class="compose-status" id="compose-status">Черновик сохраняется автоматически</span>
+        <button class="icon-btn danger" id="compose-discard" type="button" title="Удалить черновик" aria-label="Удалить черновик"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
+      </footer>
+    </div>
+
+    <!-- Новый алиас -->
+    <div class="modal-backdrop" id="alias-modal" hidden>
+      <div class="modal" role="dialog" aria-labelledby="alias-modal-title">
+        <h2 id="alias-modal-title">Новый алиас</h2>
+        <p class="modal-sub">Адрес для одного сайта. Письма с него попадают во входящие, пока алиас включён.</p>
+        <label class="modal-field">
+          <span>Сайт или назначение</span>
+          <input id="alias-site" type="text" placeholder="например, aliexpress.com" autocomplete="off" />
+        </label>
+        <label class="modal-field">
+          <span>Адрес</span>
+          <div class="alias-preview mono"><input id="alias-local" type="text" spellcheck="false" /><span id="alias-domain">@tabora.app</span><button class="link-btn" id="alias-regen" type="button">Другой</button></div>
+        </label>
+        <label class="modal-field">
+          <span>Пространство</span>
+          <select id="alias-space"><option>Личное</option><option>Работа</option><option>Проекты</option></select>
+        </label>
+        <div class="modal-actions">
+          <button class="ghost" id="alias-cancel" type="button">Отмена</button>
+          <button class="primary" id="alias-create" type="button">Создать и скопировать</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+  </div>
+  <script src="chrome://browser/content/tabora/mail/mail.js"></script>
+</body>
+</html>

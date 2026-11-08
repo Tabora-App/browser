@@ -172,10 +172,12 @@ var Tabora = {
       ]),
       this.html("span", { class: "note", id: "tabora-memory-note" }),
     ]);
-    const mail = this.html("button", { id: "tabora-mail", title: "Почта и алиасы: в разработке" }, null, [
+    const mail = this.html("button", { id: "tabora-mail", title: "Почта и алиасы (⌘⇧M)" }, null, [
+      this.svg(["M3.5 6.5h17v11h-17z", "M3.5 7l8.5 6 8.5-6"], 16, 1.8),
       this.html("span", {}, "Почта и алиасы"),
-      this.html("span", { class: "pill" }, "скоро"),
+      this.html("span", { class: "kbd" }, "⌘⇧M"),
     ]);
+    mail.addEventListener("click", () => this.openMail());
     if (sidebar) {
       sidebar.after(memory, mail);
     } else {
@@ -215,6 +217,45 @@ var Tabora = {
   /* ---- Стартовая страница поверх пустой вкладки ------------------------- */
 
   START_URLS: ["about:blank", "about:newtab", "about:home", "about:welcome", "about:privatebrowsing", "chrome://browser/content/blanktab.html"],
+  MAIL_URL: "chrome://browser/content/tabora/mail/mail.html",
+
+  isMailUrl(spec) {
+    return (spec || "").startsWith(this.MAIL_URL);
+  },
+
+  /** Как показывать адрес человеку: внутренние страницы получают короткие имена. */
+  displayUrl(spec) {
+    if (this.isMailUrl(spec)) {
+      const hash = spec.split("#")[1] || "";
+      return hash === "aliases" ? "tabora://mail/aliases" : "tabora://mail";
+    }
+    if (spec.startsWith("about:preferences")) {
+      return "tabora://settings";
+    }
+    return spec;
+  },
+
+  openMail(hash = "") {
+    const url = this.MAIL_URL + (hash ? `#${hash}` : "");
+    const existing = gBrowser.tabs.find(t => this.isMailUrl(t.linkedBrowser?.currentURI?.spec) && !t.hidden);
+    if (existing) {
+      gBrowser.selectedTab = existing;
+      if (hash) {
+        existing.linkedBrowser.loadURI(Services.io.newURI(url), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+      }
+      return;
+    }
+    gBrowser.selectedTab = gBrowser.addTab(url, { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+  },
+
+  /** Внутренние страницы показывают в адресной строке своё имя вместо chrome:// и about:. */
+  syncUrlbarDisplay() {
+    const spec = gBrowser.selectedBrowser?.currentURI?.spec || "";
+    const shown = this.displayUrl(spec);
+    if (shown !== spec && !gURLBar.focused && gURLBar.value !== shown) {
+      gURLBar.value = shown;
+    }
+  },
 
   buildStartPage() {
     const tabbox = document.getElementById("tabbrowser-tabbox");
@@ -252,10 +293,14 @@ var Tabora = {
       onLocationChange: browser => {
         if (browser === gBrowser.selectedBrowser) {
           this.updateStart();
+          this.syncUrlbarDisplay();
         }
       },
     });
-    gBrowser.tabContainer.addEventListener("TabSelect", () => this.updateStart());
+    gBrowser.tabContainer.addEventListener("TabSelect", () => {
+      this.updateStart();
+      this.syncUrlbarDisplay();
+    });
     this.updateStart();
   },
 
@@ -540,8 +585,8 @@ var Tabora = {
         document.getElementById("tabora-start-input")?.focus();
         return;
       }
-      let prefill = "";
-      {
+      let prefill = this.displayUrl(spec);
+      if (prefill === spec) {
         try {
           prefill = decodeURI(spec);
         } catch (e) {
@@ -650,6 +695,7 @@ var Tabora = {
       { glyph: "●", title: "Панель агента", note: "Показать или скрыть", key: "⌘J", tags: "agent ai", run: () => this.toggleAgent() },
       { glyph: "P", title: "Приватное окно", note: "Без истории и cookies", key: "⌘⇧P", tags: "private инкогнито", run: () => OpenBrowserWindow({ private: true }) },
       { glyph: "↓", title: "Загрузки", note: "Файлы, которые вы скачали", key: "⌘⇧J", tags: "downloads", run: () => switchToTabHavingURI("about:downloads", true) },
+      { glyph: "✉", title: "Почта и алиасы", note: "Входящие, коды подтверждения, алиасы", key: "⌘⇧M", tags: "mail почта email письма алиасы inbox", run: () => this.openMail() },
       { glyph: "⚙", title: "Настройки", note: "Поведение, приватность, внешний вид", key: "⌘,", tags: "settings preferences", run: () => openPreferences() },
     ];
   },
@@ -972,7 +1018,7 @@ var Tabora = {
     }
     let host = "";
     const spec = gBrowser.selectedBrowser.currentURI?.spec || "";
-    if (!this.isStartUrl(spec)) {
+    if (!this.isStartUrl(spec) && /^https?:/.test(spec)) {
       try {
         host = new URL(spec).hostname.replace(/^www\./, "");
       } catch (e) {}
@@ -1112,6 +1158,10 @@ var Tabora = {
           e.stopPropagation();
         } else if (!e.shiftKey && e.key.toLowerCase() === "k") {
           this.openCommandBar();
+          e.preventDefault();
+          e.stopPropagation();
+        } else if (e.shiftKey && e.code === "KeyM") {
+          this.openMail();
           e.preventDefault();
           e.stopPropagation();
         }
