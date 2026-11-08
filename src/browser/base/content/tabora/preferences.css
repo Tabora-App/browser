@@ -1,0 +1,179 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Страница настроек (about:preferences) в палитре Tabora.
+ * Firefox 159 красит её дизайн-токенами в @layer, поэтому объявления здесь,
+ * вне слоёв, перекрывают их. Макет: Settings.dc.html из Claude Design. */
+
+@import url("chrome://browser/content/tabora/fonts.css");
+
+:root {
+  --tabora-bg: #0f1013;
+  --tabora-card: #121317;
+  --tabora-card-border: #23262c;
+  --tabora-field: #1b1d22;
+  --tabora-field-border: #2a2d34;
+  --tabora-raised: #23262c;
+  --tabora-raised-2: #2a2d34;
+  --tabora-line: #2e3138;
+  --tabora-text: #ecedef;
+  --tabora-text-2: #c9ccd3;
+  --tabora-text-3: #9a9ea8;
+  --tabora-text-4: #868b95;
+  --tabora-accent: #c8f25a;
+  --tabora-accent-hover: #d4f87a;
+  --tabora-accent-active: #bce64c;
+  --tabora-on-accent: #0b0c0e;
+  --tabora-font: "Manrope", -apple-system, system-ui, sans-serif;
+
+  color-scheme: dark;
+  font-family: var(--tabora-font);
+
+  /* Поверхности */
+  --background-color-canvas: var(--tabora-bg);
+  --background-color-box: var(--tabora-card);
+  --card-background-color: var(--tabora-card);
+  --card-border: 1px solid var(--tabora-card-border);
+  --card-border-radius: 14px;
+  --border-color: var(--tabora-line);
+  --border-color-interactive: var(--tabora-field-border);
+  --border-color-deemphasized: #1b1d22;
+  --border-color-transparent: transparent;
+
+  /* Текст и значки */
+  --text-color: var(--tabora-text);
+  --text-color-deemphasized: var(--tabora-text-3);
+  --icon-color: var(--tabora-text-2);
+  --link-color: var(--tabora-text-2);
+  --link-color-hover: #fff;
+  --link-color-active: #fff;
+
+  /* Акцент */
+  --color-accent-primary: var(--tabora-accent);
+  --color-accent-primary-hover: var(--tabora-accent-hover);
+  --color-accent-primary-active: var(--tabora-accent-active);
+  --focus-outline-color: var(--tabora-accent);
+  --text-color-accent-primary-selected: var(--tabora-on-accent);
+  --button-background-color-primary: var(--tabora-accent);
+  --button-background-color-primary-hover: var(--tabora-accent-hover);
+  --button-background-color-primary-active: var(--tabora-accent-active);
+  --button-text-color-primary: var(--tabora-on-accent);
+  --button-text-color-primary-hover: var(--tabora-on-accent);
+  --button-text-color-primary-active: var(--tabora-on-accent);
+
+  /* Обычные кнопки и поля */
+  --button-background-color: var(--tabora-raised);
+  --button-background-color-hover: var(--tabora-raised-2);
+  --button-background-color-active: var(--tabora-line);
+  --button-background-color-ghost-hover: var(--tabora-field);
+  --button-background-color-ghost-active: var(--tabora-raised);
+  --button-text-color: var(--tabora-text);
+  --button-text-color-hover: #fff;
+  --button-border-color: transparent;
+  --button-border-radius: 9px;
+  --input-bgcolor: var(--tabora-field);
+  --input-color: var(--tabora-text);
+  --input-border-color: var(--tabora-field-border);
+
+  --page-nav-hr-background-color: var(--tabora-card-border);
+  --page-nav-gap: 14px;
+
+  /* Выпадающие списки внутри страницы */
+  --panel-background-color: var(--tabora-card);
+  --panel-border-color: var(--tabora-field-border);
+  --panel-text-color: var(--tabora-text);
+  --panel-border-radius: 12px;
+  --button-background-color-menu-hover: var(--tabora-raised);
+  --button-text-color-menu-hover: #fff;
+}
+
+body {
+  font-family: var(--tabora-font);
+  font-size: 13px;
+  letter-spacing: -0.003em;
+}
+
+h1,
+h2,
+.pane-container h1,
+.page-nav-heading {
+  font-family: var(--tabora-font);
+  font-weight: 800;
+  letter-spacing: -0.015em;
+}
+
+/* Левая навигация. Переменные заданы на самих элементах: правила :host внутри
+ * теневого дерева иначе перекрыли бы унаследованные от :root. */
+moz-page-nav,
+moz-page-nav-button {
+  --page-nav-button-background-color: transparent;
+  --page-nav-button-background-color-hover: var(--tabora-field);
+  --page-nav-button-background-color-active: var(--tabora-raised);
+  --page-nav-button-background-color-selected: var(--tabora-raised);
+  --page-nav-button-text-color: var(--tabora-text-2);
+  --page-nav-button-text-color-hover: var(--tabora-text);
+  --page-nav-button-text-color-active: var(--tabora-text);
+  --page-nav-button-text-color-selected: #fff;
+  --page-nav-button-border-color: transparent;
+  --page-nav-button-border-radius: 9px;
+  --page-nav-button-border-radius-focused: 9px;
+  --page-nav-button-padding: 8px 10px;
+  --page-nav-button-padding-small: 8px;
+  --page-nav-button-gap: 2px;
+  --page-nav-button-indicator-width: 0;
+  --page-nav-hr-background-color: var(--tabora-card-border);
+  font-weight: 500;
+  font-size: 13px;
+}
+
+/* Поиск по настройкам: пилюля как в адресной строке */
+#searchInput,
+.search-textbox,
+input[type="search"] {
+  background-color: var(--tabora-field) !important;
+  border: 1px solid var(--tabora-field-border) !important;
+  border-radius: 12px !important;
+  color: var(--tabora-text) !important;
+  box-shadow: none !important;
+}
+
+#searchInput:focus-visible,
+.search-textbox:focus-visible,
+input[type="search"]:focus-visible {
+  border-color: var(--tabora-accent) !important;
+  outline: none !important;
+}
+
+/* Разделы Mozilla, которых в Tabora нет: аккаунт Firefox, Labs, управление ИИ,
+ * «Ещё от Mozilla», профили, резервные копии, VPN, подсказки Firefox. */
+#category-sync,
+#category-ai-features,
+#category-experimental,
+#category-more-from-mozilla,
+setting-group[groupid="profiles"],
+setting-group[groupid="backup"],
+setting-group[groupid="referrals"],
+setting-group[groupid="ipprotection"],
+setting-group[groupid="vpnSiteRules"],
+setting-group[groupid="firefoxSuggest"],
+setting-group[groupid="recommendations"],
+setting-group[groupid="firefoxLabsFeatures"],
+setting-group[groupid="manageMemories"],
+setting-group[groupid="memoriesGroup"],
+setting-group[groupid="assistantDefaultGroup"],
+setting-group[groupid="assistantModelGroup"],
+setting-group[groupid="aiControlsDescription"],
+setting-group[groupid="aiFeatures"],
+setting-group[groupid="aiStatesDescription"],
+setting-group[groupid="dataCollection"],
+setting-group[groupid="securityPrivacyStatus"],
+setting-group[groupid="securityPrivacyWarnings"] {
+  display: none !important;
+}
+
+/* Лиса Firefox в баннере «браузер по умолчанию» */
+img[src$="fox-ai.svg"],
+img[src*="fox"] {
+  display: none !important;
+}

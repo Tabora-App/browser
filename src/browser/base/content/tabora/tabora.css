@@ -81,6 +81,38 @@
   background-color: var(--tabora-bg) !important;
 }
 
+/* ---- Приватное окно: фиолетовый акцент и холодный оттенок оболочки ------ */
+
+:root[tabora-private] {
+  --tabora-bg: #0c0b11;
+  --tabora-shell: #141319;
+  --tabora-shell-border: #262239;
+  --tabora-panel: #19181f;
+  --tabora-panel-border: #272533;
+  --tabora-field: #1d1c25;
+  --tabora-field-border: #2d2b3a;
+  --tabora-raised: #26242f;
+  --tabora-raised-2: #2e2b3a;
+  --tabora-line: #332f42;
+  --tabora-accent: #b9a6ff;
+  --tabora-accent-dim: rgba(185, 166, 255, 0.16);
+  --tabora-on-accent: #0b0c0e;
+}
+
+:root[tabora-private] #tabora-spaces {
+  display: none !important;
+}
+
+#tabora-topbar .chip.private {
+  background: var(--tabora-accent-dim);
+  color: var(--tabora-accent);
+  font-weight: 700;
+}
+
+#tabora-topbar .chip.private svg {
+  color: var(--tabora-accent);
+}
+
 /* ---- Окно и оболочка ------------------------------------------------- */
 
 #browser {
@@ -120,7 +152,11 @@
 
 #toolbar-menubar,
 #TabsToolbar,
-#PersonalToolbar {
+#PersonalToolbar,
+#nav-bar > .private-browsing-indicator-with-label,
+#nav-bar > #private-browsing-indicator-with-label,
+.private-browsing-indicator-with-label,
+.private-browsing-indicator-button {
   display: none !important;
 }
 
@@ -510,6 +546,10 @@ sidebar-main {
   /* значок вкладки — html:img, поэтому подменяем через content */
   content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23c8f25a'/%3E%3Ccircle cx='8' cy='8' r='3' fill='%230b0c0e'/%3E%3C/svg%3E") !important;
   opacity: 1;
+}
+
+:root[tabora-private] #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[tabora-start] .tab-icon-image {
+  content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23b9a6ff'/%3E%3Ccircle cx='8' cy='8' r='3' fill='%230b0c0e'/%3E%3C/svg%3E") !important;
 }
 
 #tabbrowser-tabs[orient="vertical"] .tab-throbber {

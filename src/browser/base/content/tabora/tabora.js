@@ -33,7 +33,7 @@ var Tabora = {
     }
     this.moveToolboxIntoBrowser();
     for (const step of [
-      "buildSidebarExtras", "buildTopbar", "buildStartPage", "buildAgentPanel", "buildCommandBar",
+      "buildSidebarExtras", "buildTopbar", "initPrivate", "buildStartPage", "buildAgentPanel", "buildCommandBar",
       "searchEngineName", "initSpaces", "initKeys", "initTabHooks", "startTimers", "updateTitle", "localizeUrlbar",
       "routeUrlbarToCommandBar",
     ]) {
@@ -43,6 +43,22 @@ var Tabora = {
         console.error(`Tabora: ${step}`, e);
       }
     }
+  },
+
+  /** Приватное окно: фиолетовый акцент, метка в шапке, без пространств (контейнеры там не работают). */
+  initPrivate() {
+    const { PrivateBrowsingUtils } = ChromeUtils.importESModule("resource://gre/modules/PrivateBrowsingUtils.sys.mjs");
+    this.isPrivate = PrivateBrowsingUtils.isWindowPrivate(window);
+    if (!this.isPrivate) {
+      return;
+    }
+    document.documentElement.setAttribute("tabora-private", "true");
+    const chip = this.html("span", { class: "chip private", id: "tabora-private-chip", title: "История, cookies и поиск не сохраняются" }, null, [
+      this.svg(["M4 10c0-2.8 2.2-5 5-5h6c2.8 0 5 2.2 5 5v1.5c0 2.5-2 4.5-4.5 4.5-1.4 0-2.6-.6-3.5-1.6-.9 1-2.1 1.6-3.5 1.6C6 16 4 14 4 11.5z"], 13, 2),
+      this.html("span", {}, "Приватное окно"),
+    ]);
+    const bar = document.getElementById("tabora-topbar");
+    bar.insertBefore(chip, document.getElementById("tabora-blocked"));
   },
 
   localizeUrlbar() {
@@ -198,7 +214,7 @@ var Tabora = {
 
   /* ---- Стартовая страница поверх пустой вкладки ------------------------- */
 
-  START_URLS: ["about:blank", "about:newtab", "about:home", "about:welcome", "chrome://browser/content/blanktab.html"],
+  START_URLS: ["about:blank", "about:newtab", "about:home", "about:welcome", "about:privatebrowsing", "chrome://browser/content/blanktab.html"],
 
   buildStartPage() {
     const tabbox = document.getElementById("tabbrowser-tabbox");
@@ -252,6 +268,10 @@ var Tabora = {
     return this.START_URLS.some(u => spec === u || spec.startsWith(u + "?") || spec.startsWith(u + "#"));
   },
 
+  startLabel() {
+    return this.isPrivate ? "Приватная вкладка" : "Новая вкладка";
+  },
+
   /** Стартовые вкладки получают атрибут tabora-start: свой значок вместо глобуса Firefox. */
   markStartTab(tab) {
     const spec = tab?.linkedBrowser?.currentURI?.spec || "about:blank";
@@ -271,18 +291,23 @@ var Tabora = {
     if (!show) {
       return;
     }
-    if (gBrowser.selectedTab.label !== "Новая вкладка") {
-      gBrowser.selectedTab.label = "Новая вкладка";
+    if (gBrowser.selectedTab.label !== this.startLabel()) {
+      gBrowser.selectedTab.label = this.startLabel();
     }
     this.markStartTab(gBrowser.selectedTab);
     const now = new Date();
     const hour = now.getHours();
     const name = Services.prefs.getStringPref("tabora.user.name", "");
     const word = hour < 5 ? "Доброй ночи" : hour < 12 ? "Доброе утро" : hour < 18 ? "Добрый день" : "Добрый вечер";
-    document.getElementById("tabora-start-greeting").textContent = name ? `${word}, ${name}` : word;
-    document.getElementById("tabora-start-date").textContent = new Intl.DateTimeFormat("ru-RU", {
-      weekday: "long", day: "numeric", month: "long",
-    }).format(now);
+    if (this.isPrivate) {
+      document.getElementById("tabora-start-greeting").textContent = "Приватное окно";
+      document.getElementById("tabora-start-date").textContent = "история, cookies и поиск не сохраняются";
+    } else {
+      document.getElementById("tabora-start-greeting").textContent = name ? `${word}, ${name}` : word;
+      document.getElementById("tabora-start-date").textContent = new Intl.DateTimeFormat("ru-RU", {
+        weekday: "long", day: "numeric", month: "long",
+      }).format(now);
+    }
     this.fillDial();
     const input = document.getElementById("tabora-start-input");
     setTimeout(() => {
@@ -922,10 +947,10 @@ var Tabora = {
       }
       if (
         e.detail?.changed?.includes("label") &&
-        tab.label !== "Новая вкладка" &&
+        tab.label !== this.startLabel() &&
         this.isStartUrl(tab.linkedBrowser?.currentURI?.spec || "")
       ) {
-        tab.label = "Новая вкладка";
+        tab.label = this.startLabel();
       }
       if (tab === gBrowser.selectedTab) {
         this.updateTitle();
@@ -952,7 +977,7 @@ var Tabora = {
         host = new URL(spec).hostname.replace(/^www\./, "");
       } catch (e) {}
     }
-    let label = this.isStartUrl(spec) ? "Новая вкладка" : tab.label || "";
+    let label = this.isStartUrl(spec) ? this.startLabel() : tab.label || "";
     if (/^[\w.-]+\/$/.test(label)) {
       label = label.slice(0, -1); // у страницы без заголовка Firefox пишет «host/»
     }

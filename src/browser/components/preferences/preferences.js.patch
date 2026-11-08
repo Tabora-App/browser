@@ -1,0 +1,18 @@
+diff --git a/browser/components/preferences/preferences.js b/browser/components/preferences/preferences.js
+index 8b3acf475a..ba18a645be 100644
+--- a/browser/components/preferences/preferences.js
++++ b/browser/components/preferences/preferences.js
+@@ -732,10 +732,11 @@ async function gotoPref(
+ ) {
+   let redesignEnabled = srdSectionPrefs.all;
+   let categories = document.getElementById("categories");
++  // Tabora: аккаунт Firefox скрыт, по умолчанию открывается домашняя страница.
+   const kDefaultCategoryInternalName = redesignEnabled
+-    ? "paneSync"
++    ? "paneHome"
+     : "paneGeneral";
+-  const kDefaultCategory = redesignEnabled ? "sync" : "general";
++  const kDefaultCategory = redesignEnabled ? "home" : "general";
+   let hash = document.location.hash;
+   let category = aCategory || hash.substring(1) || kDefaultCategoryInternalName;
+ 

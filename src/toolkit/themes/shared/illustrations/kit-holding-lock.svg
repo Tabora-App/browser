@@ -1,0 +1,7 @@
+<!-- Tabora: нейтральная иллюстрация вместо лисы Firefox. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
+  <rect x="8" y="8" width="64" height="64" rx="18" fill="#1b1d22"/>
+  <rect x="8.5" y="8.5" width="63" height="63" rx="17.5" fill="none" stroke="#2a2d34"/>
+  <circle cx="40" cy="40" r="22" fill="#c8f25a"/>
+  <circle cx="40" cy="40" r="8" fill="#0b0c0e"/>
+</svg>

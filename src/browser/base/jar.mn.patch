@@ -1,12 +1,13 @@
 diff --git a/browser/base/jar.mn b/browser/base/jar.mn
-index b2b5db6040..fa093dfae2 100644
+index b2b5db6040..36071d2e36 100644
 --- a/browser/base/jar.mn
 +++ b/browser/base/jar.mn
-@@ -33,6 +33,17 @@ browser.jar:
+@@ -33,6 +33,18 @@ browser.jar:
          content/browser/aboutTabCrashed.xhtml         (content/aboutTabCrashed.xhtml)
          content/browser/blanktab.html                 (content/blanktab.html)
          content/browser/browser.js                    (content/browser.js)
 +        content/browser/tabora/tabora.css  (content/tabora/tabora.css)
++        content/browser/tabora/preferences.css  (content/tabora/preferences.css)
 +        content/browser/tabora/tabora.js  (content/tabora/tabora.js)
 +        content/browser/tabora/fonts.css  (content/tabora/fonts.css)
 +        content/browser/tabora/fonts/JetBrainsMono-cyrillic-ext.woff2  (content/tabora/fonts/JetBrainsMono-cyrillic-ext.woff2)

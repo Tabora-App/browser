@@ -74,3 +74,7 @@ pref("browser.newtab.preload", false);
 pref("intl.locale.requested", "ru,en-US");
 pref("extensions.langpacks.signatures.required", false);
 pref("extensions.installDistroAddons", true);
+
+// Настройки: без разделов Mozilla (управление ИИ, профили Firefox)
+pref("browser.preferences.aiControls", false);
+pref("browser.profiles.enabled", false);
