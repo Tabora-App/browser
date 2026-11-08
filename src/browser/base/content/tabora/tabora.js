@@ -2055,7 +2055,8 @@ var Tabora = {
     const spec = gBrowser.selectedBrowser.currentURI?.spec || "";
     if (!this.isStartUrl(spec) && /^https?:/.test(spec)) {
       try {
-        host = new URL(spec).hostname.replace(/^www\./, "");
+        const shown = this.displayUrl(spec);
+        host = shown !== spec ? shown.split("/")[0] : new URL(spec).hostname.replace(/^www\./, "");
       } catch (e) {}
     }
     let label = this.isStartUrl(spec) ? this.startLabel() : tab.label || "";
