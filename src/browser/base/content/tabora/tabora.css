@@ -8,6 +8,7 @@
 
 @import url("chrome://browser/content/tabora/fonts.css");
 @import url("chrome://browser/content/tabora/select.css");
+@import url("chrome://browser/content/tabora/drawer.css");
 
 :root {
   --tabora-bg: #0b0c0e;

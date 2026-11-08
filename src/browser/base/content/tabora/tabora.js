@@ -32,9 +32,10 @@ var Tabora = {
       return;
     }
     this.moveToolboxIntoBrowser();
+    Services.scriptloader.loadSubScript("chrome://browser/content/tabora/drawer.js", window);
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
-      "searchEngineName", "initSpaces", "initKeys", "initTabHooks", "initDownloads", "startTimers", "updateTitle", "localizeUrlbar",
+      "searchEngineName", "initSpaces", "buildDrawer", "initKeys", "initTabHooks", "initDownloads", "startTimers", "updateTitle", "localizeUrlbar",
       "routeUrlbarToCommandBar",
     ]) {
       try {
@@ -887,7 +888,7 @@ var Tabora = {
       this.html("span", {}, "Почта и алиасы"),
       this.html("span", { class: "kbd" }, "⌘⇧M"),
     ]);
-    mail.addEventListener("click", () => this.openMail());
+    mail.addEventListener("click", () => this.toggleDrawer("mail"));
     const downloads = this.buildDownloadsCard();
     if (sidebar) {
       sidebar.after(memory, mail, downloads);
@@ -906,7 +907,7 @@ var Tabora = {
       h("span", { class: "pill", id: "tabora-downloads-pill", hidden: "true" }),
       h("span", { class: "kbd" }, "⌘⇧J"),
     ]);
-    head.addEventListener("click", () => this.openDownloads());
+    head.addEventListener("click", () => this.toggleDrawer("downloads"));
     const toggle = h("button", { class: "icon-btn", id: "tabora-downloads-toggle", type: "button", title: "Пауза" }, null, [this.svg(["M8 5v14", "M16 5v14"], 13, 2)]);
     const cancel = h("button", { class: "icon-btn", id: "tabora-downloads-cancel", type: "button", title: "Отменить" }, null, [this.svg(["M6 6l12 12", "M18 6 6 18"], 13, 2)]);
     toggle.addEventListener("click", e => { e.stopPropagation(); this.downloadsToggle(); });
@@ -931,11 +932,15 @@ var Tabora = {
 
   async initDownloads() {
     // Все пути к «Библиотеке → Загрузки» ведут на нашу страницу
-    const self = this;
-    BrowserCommands.downloadsUI = () => self.openDownloads();
+    if (this._dl) {
+      return;
+    }
     const { Downloads } = ChromeUtils.importESModule("resource://gre/modules/Downloads.sys.mjs");
     this._dl = { list: await Downloads.getList(Downloads.ALL), items: new Set(), timer: null };
-    const refresh = () => this.updateDownloadsCard();
+    const refresh = () => {
+      this.updateDownloadsCard();
+      this.drawerDirty?.("downloads");
+    };
     await this._dl.list.addView({
       onDownloadAdded: d => { this._dl.items.add(d); refresh(); },
       onDownloadChanged: d => { this.downloadFinished(d); refresh(); },
@@ -1612,9 +1617,13 @@ var Tabora = {
       })),
       { glyph: "●", title: "Панель агента", note: "Показать или скрыть", key: "⌘J", tags: "agent ai", run: () => this.toggleAgent() },
       { glyph: "P", title: "Приватное окно", note: "Без истории и cookies", key: "⌘⇧P", tags: "private инкогнито", run: () => OpenBrowserWindow({ private: true }) },
-      { glyph: "↓", title: "Загрузки", note: "Прогресс, миниатюры, файлы под рукой", key: "⌘⇧J", tags: "downloads загрузки файлы", run: () => this.openDownloads() },
+      { glyph: "↓", title: "Загрузки", note: "Ящик: прогресс и файлы под рукой", key: "⌘⇧J", tags: "downloads загрузки файлы", run: () => this.openDrawer("downloads") },
+      { glyph: "◷", title: "История", note: "Ящик: посещённые страницы", key: "⌘⇧H", tags: "history история журнал", run: () => this.openDrawer("history") },
+      { glyph: "★", title: "Закладки", note: "Ящик: папки и поиск", key: "⌘⇧B", tags: "bookmarks закладки избранное", run: () => this.openDrawer("bookmarks") },
+      { glyph: "▣", title: "Медиа", note: "Ящик: картинки и видео со вкладок", key: "⌘⇧I", tags: "media медиа картинки видео", run: () => this.openDrawer("media") },
+      { glyph: "◫", title: "Пространства", note: "Полотно: вкладки по пространствам", key: "⌘⇧S", tags: "spaces пространства контейнеры", run: () => this.openDrawer("spaces") },
       { glyph: "✎", title: "Написать письмо", note: "Окно письма поверх любой вкладки", key: "", tags: "compose написать письмо mail new", run: () => this.openCompose() },
-      { glyph: "✉", title: "Почта и алиасы", note: "Входящие, коды подтверждения, алиасы", key: "⌘⇧M", tags: "mail почта email письма алиасы inbox", run: () => this.openMail() },
+      { glyph: "✉", title: "Почта и алиасы", note: "Входящие, коды подтверждения, алиасы", key: "⌘⇧M", tags: "mail почта email письма алиасы inbox", run: () => this.openDrawer("mail") },
       { glyph: "⚙", title: "Настройки", note: "Поведение, приватность, внешний вид", key: "⌘,", tags: "settings preferences", run: () => openPreferences() },
     ];
   },
@@ -1793,11 +1802,14 @@ var Tabora = {
       saved = JSON.parse(Services.prefs.getStringPref("tabora.spaces", "[]"));
     } catch (e) {}
     const known = new Set(cis.getPublicIdentities().map(i => i.userContextId));
-    this.spaces = this.DEFAULT_SPACES.map(def => {
-      const prev = saved.find(s => s.id === def.id);
-      let userContextId = def.userContextId ?? prev?.userContextId;
+    const list = Array.isArray(saved) && saved.length ? saved : this.DEFAULT_SPACES;
+    if (!list.some(s => s.id === "personal")) {
+      list.unshift(this.DEFAULT_SPACES[0]);
+    }
+    this.spaces = list.map(def => {
+      let userContextId = def.id === "personal" ? 0 : def.userContextId;
       if (userContextId === undefined || (userContextId !== 0 && !known.has(userContextId))) {
-        const identity = cis.create(def.name, def.icon, def.color);
+        const identity = cis.create(def.name, def.icon || "circle", def.color || "yellow");
         userContextId = identity.userContextId;
       }
       return { ...def, userContextId };
@@ -1808,16 +1820,7 @@ var Tabora = {
       this.activeSpaceId = "personal";
     }
 
-    const bar = document.getElementById("tabora-spaces");
-    for (const space of this.spaces) {
-      const b = this.html(
-        "button",
-        { class: "tabora-space", role: "tab", "data-space": space.id },
-        space.name
-      );
-      b.addEventListener("click", () => this.switchSpace(space.id));
-      bar.append(b);
-    }
+    this.renderSpacesBar();
 
     const current = this.activeSpaceFor(gBrowser.selectedTab);
     if (current) {
@@ -2079,14 +2082,12 @@ var Tabora = {
           this.openCommandBar();
           e.preventDefault();
           e.stopPropagation();
-        } else if (e.shiftKey && e.code === "KeyM") {
-          this.openMail();
+        } else if (e.shiftKey && this.drawer && { KeyM: "mail", KeyJ: "downloads", KeyH: "history", KeyI: "media", KeyS: "spaces", KeyB: "bookmarks" }[e.code]) {
+          this.toggleDrawer({ KeyM: "mail", KeyJ: "downloads", KeyH: "history", KeyI: "media", KeyS: "spaces", KeyB: "bookmarks" }[e.code]);
           e.preventDefault();
           e.stopPropagation();
-        } else if (e.shiftKey && e.code === "KeyJ") {
-          this.openDownloads();
-          e.preventDefault();
-          e.stopPropagation();
+        } else if (!e.shiftKey && e.key === "Escape" && this.drawer?.open) {
+          this.closeDrawer();
         }
       },
       true

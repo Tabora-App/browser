@@ -1,0 +1,957 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Ящик Tabora (drawer.js): рейка разделов + панель. Выезжает из-за сайдбара,
+ * сдвигая страницу: ширина контейнера анимируется, содержимое едет translateX. */
+
+#tabora-drawer {
+  width: 0;
+  flex: none;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+  transition: width 220ms cubic-bezier(0.2, 0, 0, 1);
+  -moz-window-dragging: no-drag;
+}
+
+#tabora-drawer[hidden] {
+  display: none;
+}
+
+#tabora-drawer > .inner {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 376px;
+  display: flex;
+  gap: 8px;
+  transform: translateX(-24px);
+  opacity: 0;
+  transition: transform 220ms cubic-bezier(0.2, 0, 0, 1), opacity 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+#tabora-drawer[open] > .inner {
+  transform: none;
+  opacity: 1;
+}
+
+/* Полотно пространств: ящик занимает всё место, страница ужимается */
+#browser[tabora-drawer-wide] #tabbrowser-tabbox {
+  flex: 0 0 0 !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+}
+
+#tabbrowser-tabbox {
+  transition: opacity 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ---- Рейка ------------------------------------------------------------ */
+
+#tabora-drawer .rail {
+  width: 56px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 0;
+  position: relative;
+}
+
+#tabora-drawer .rail-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: auto 0;
+}
+
+#tabora-drawer .rail-item {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--tabora-text-3);
+  font: 600 10px/1 var(--tabora-font);
+  cursor: default;
+  transition: background-color var(--tabora-ease), color var(--tabora-ease), border-color var(--tabora-ease);
+}
+
+#tabora-drawer .rail-item span {
+  max-width: 52px;
+  text-align: center;
+  line-height: 1.1;
+  hyphens: manual;
+}
+
+#tabora-drawer .rail-item:hover {
+  background: var(--tabora-panel);
+  color: var(--tabora-text);
+}
+
+#tabora-drawer .rail-item[aria-selected="true"] {
+  background: var(--tabora-raised);
+  color: var(--tabora-text-strong);
+}
+
+#tabora-drawer .rail-item[aria-selected="true"] svg {
+  color: var(--tabora-accent);
+}
+
+#tabora-drawer .rail-item[data-hidden] {
+  opacity: 0.45;
+}
+
+#tabora-drawer .rail-item[dragging] {
+  opacity: 0.4;
+}
+
+#tabora-drawer .rail-item[drop="before"] {
+  box-shadow: 0 -2px 0 0 var(--tabora-accent);
+}
+
+#tabora-drawer .rail-item[drop="after"] {
+  box-shadow: 0 2px 0 0 var(--tabora-accent);
+}
+
+#tabora-drawer .rail-ctl {
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--tabora-raised-2);
+  color: var(--tabora-text);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+#tabora-drawer .rail-ctl:hover {
+  background: var(--tabora-accent);
+  color: var(--tabora-on-accent);
+}
+
+#tabora-drawer[editing] .rail-ctl {
+  display: flex;
+}
+
+#tabora-drawer[editing] .rail-item {
+  border-color: var(--tabora-line);
+  border-style: dashed;
+}
+
+#tabora-drawer .rail-foot {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  padding-top: 8px;
+}
+
+#tabora-drawer .rail-foot .icon-btn,
+#tabora-drawer .dhead .icon-btn,
+#tabora-drawer .dacts .icon-btn,
+#tabora-drawer .dcol .icon-btn {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tabora-text-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: default;
+  transition: background-color var(--tabora-ease), color var(--tabora-ease);
+}
+
+#tabora-drawer .icon-btn:hover {
+  background: var(--tabora-raised);
+  color: var(--tabora-text-strong);
+}
+
+#tabora-drawer .icon-btn.danger:hover {
+  color: #ffb4a3;
+}
+
+#tabora-drawer #tabora-rail-back {
+  display: none;
+}
+
+#tabora-drawer[editing] #tabora-rail-back {
+  display: inline-flex;
+}
+
+#tabora-drawer[editing] #tabora-rail-edit {
+  background: var(--tabora-accent-dim, rgba(200, 242, 90, 0.14));
+  color: var(--tabora-accent);
+}
+
+/* ---- Панель ------------------------------------------------------------ */
+
+#tabora-drawer .dpanel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--tabora-panel);
+  border: 1px solid var(--tabora-panel-border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+#tabora-drawer[wide] .dpanel {
+  background: transparent;
+  border-color: transparent;
+}
+
+#tabora-drawer .dhead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 10px 8px;
+}
+
+#tabora-drawer .dsearch {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 12px;
+  background: var(--tabora-field);
+  border: 1px solid var(--tabora-field-border);
+  border-radius: 10px;
+  color: var(--tabora-text-4);
+  transition: border-color var(--tabora-ease);
+}
+
+#tabora-drawer .dsearch:focus-within {
+  border-color: var(--tabora-accent);
+}
+
+#tabora-drawer .dsearch input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  color: var(--tabora-text);
+  font: 500 13px/1 var(--tabora-font);
+  padding: 0;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+#tabora-drawer .dsearch input::placeholder {
+  color: var(--tabora-text-4);
+}
+
+#tabora-drawer .dsearch kbd {
+  font: 500 10px/1 var(--tabora-mono);
+  color: var(--tabora-text-5);
+  border: 1px solid var(--tabora-field-border);
+  border-radius: 5px;
+  padding: 3px 5px;
+}
+
+#tabora-drawer .dfilter {
+  height: 36px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--tabora-field-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--tabora-text-3);
+  font: 600 12px/1 var(--tabora-font);
+  cursor: default;
+  transition: background-color var(--tabora-ease), color var(--tabora-ease), border-color var(--tabora-ease);
+}
+
+#tabora-drawer .dfilter:hover {
+  color: var(--tabora-text);
+  border-color: var(--tabora-line);
+}
+
+#tabora-drawer .dfilter[aria-pressed="true"] {
+  background: var(--tabora-raised);
+  color: var(--tabora-text-strong);
+  border-color: var(--tabora-raised);
+}
+
+#tabora-drawer .dchips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 10px 8px;
+}
+
+#tabora-drawer .chip {
+  height: 28px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--tabora-field-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tabora-text-3);
+  font: 600 12px/1 var(--tabora-font);
+  cursor: default;
+  transition: background-color var(--tabora-ease), color var(--tabora-ease), border-color var(--tabora-ease);
+}
+
+#tabora-drawer .chip:hover {
+  color: var(--tabora-text);
+  border-color: var(--tabora-line);
+}
+
+#tabora-drawer .chip[aria-pressed="true"] {
+  background: var(--tabora-raised);
+  color: var(--tabora-text-strong);
+  border-color: var(--tabora-raised);
+}
+
+#tabora-drawer .dbody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 6px 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tabora-raised-2) transparent;
+}
+
+#tabora-drawer .dfoot {
+  padding: 6px 10px 10px;
+  border-top: 1px solid var(--tabora-panel-border);
+}
+
+#tabora-drawer .dfull {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--tabora-field-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--tabora-text-2);
+  font: 600 13px/1 var(--tabora-font);
+  cursor: default;
+  transition: background-color var(--tabora-ease), color var(--tabora-ease), border-color var(--tabora-ease);
+}
+
+#tabora-drawer .dfull:hover {
+  background: var(--tabora-raised);
+  color: var(--tabora-text-strong);
+  border-color: var(--tabora-raised);
+}
+
+#tabora-drawer .dfull svg {
+  color: var(--tabora-text-4);
+}
+
+#tabora-drawer .dtoolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 4px 10px;
+}
+
+#tabora-drawer .dnote {
+  font: 500 12px/1 var(--tabora-font);
+  color: var(--tabora-text-4);
+}
+
+#tabora-drawer .dprimary {
+  height: 36px;
+  padding: 0 14px 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--tabora-accent);
+  color: var(--tabora-on-accent);
+  font: 700 13px/1 var(--tabora-font);
+  cursor: default;
+  transition: background-color var(--tabora-ease), opacity var(--tabora-ease);
+}
+
+#tabora-drawer .dprimary:hover {
+  background: var(--tabora-accent-hover, #d6ff6e);
+}
+
+#tabora-drawer .dprimary[disabled] {
+  opacity: 0.4;
+}
+
+#tabora-drawer .dgroup {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 12px 8px 6px;
+  font: 700 11px/1 var(--tabora-font);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tabora-text-4);
+}
+
+#tabora-drawer .dgroup .n {
+  font: 500 11px/1 var(--tabora-mono);
+  color: var(--tabora-text-5);
+  letter-spacing: 0;
+}
+
+#tabora-drawer .dempty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--tabora-text-4);
+  font: 400 12px/1.5 var(--tabora-font);
+}
+
+#tabora-drawer .dempty b {
+  font: 700 14px/1.3 var(--tabora-font);
+  color: var(--tabora-text-2);
+}
+
+/* ---- Строки ------------------------------------------------------------ */
+
+#tabora-drawer .drow {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  grid-template-areas: "icon text meta";
+  align-items: center;
+  column-gap: 10px;
+  min-height: 52px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  color: var(--tabora-text);
+  cursor: default;
+  position: relative;
+  transition: background-color var(--tabora-ease);
+}
+
+#tabora-drawer .drow:hover,
+#tabora-drawer .drow:focus-visible {
+  background: var(--tabora-raised);
+  outline: none;
+}
+
+#tabora-drawer .dicon {
+  grid-area: icon;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--tabora-field);
+  overflow: hidden;
+}
+
+#tabora-drawer .fav {
+  width: 16px;
+  height: 16px;
+}
+
+#tabora-drawer .fileicon {
+  width: 24px;
+  height: 24px;
+}
+
+#tabora-drawer .avatar {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 800 13px/1 var(--tabora-font);
+  color: var(--tabora-text-2);
+}
+
+#tabora-drawer .drow[unread] .avatar {
+  background: var(--tabora-accent);
+  color: var(--tabora-on-accent);
+}
+
+#tabora-drawer .drow[unread] .dtitle {
+  color: var(--tabora-text-strong);
+  font-weight: 700;
+}
+
+#tabora-drawer .dtext {
+  grid-area: text;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+#tabora-drawer .dtitle {
+  font: 600 13px/1.25 var(--tabora-font);
+  color: var(--tabora-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#tabora-drawer .dsub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font: 400 11.5px/1.2 var(--tabora-font);
+  color: var(--tabora-text-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#tabora-drawer .dsub > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#tabora-drawer .dsub .mono {
+  font: 500 11px/1.2 var(--tabora-mono);
+}
+
+#tabora-drawer .dsub .strong {
+  color: var(--tabora-text-2);
+  font-weight: 600;
+}
+
+#tabora-drawer .dsub .warn {
+  color: #ffb4a3;
+}
+
+#tabora-drawer .dsub .tag {
+  font: 700 10px/1 var(--tabora-font);
+  color: var(--tabora-on-accent);
+  background: var(--tabora-accent);
+  border-radius: 5px;
+  padding: 3px 6px;
+  flex-shrink: 0;
+}
+
+#tabora-drawer .dprog {
+  flex: 0 0 90px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--tabora-panel-border);
+  overflow: hidden;
+}
+
+#tabora-drawer .dprog > span {
+  display: block;
+  height: 100%;
+  background: var(--tabora-accent);
+  border-radius: 2px;
+  transition: width 0.5s cubic-bezier(0.2, 0, 0, 1);
+}
+
+#tabora-drawer .dmeta {
+  grid-area: meta;
+  font: 500 11px/1 var(--tabora-mono);
+  color: var(--tabora-text-5);
+  font-variant-numeric: tabular-nums;
+}
+
+#tabora-drawer .dacts {
+  grid-area: meta;
+  display: none;
+  gap: 2px;
+  justify-self: end;
+}
+
+#tabora-drawer .drow:hover .dacts,
+#tabora-drawer .drow:focus-within .dacts {
+  display: flex;
+}
+
+#tabora-drawer .drow:hover .dmeta,
+#tabora-drawer .drow:focus-within .dmeta {
+  visibility: hidden;
+}
+
+#tabora-drawer .dinline {
+  width: 100%;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--tabora-accent);
+  border-radius: 6px;
+  background: var(--tabora-field);
+  color: var(--tabora-text-strong);
+  font: 600 13px/1 var(--tabora-font);
+  outline: none;
+}
+
+/* ---- Закладки ------------------------------------------------------------ */
+
+#tabora-drawer .dlist {
+  padding-inline-start: calc(var(--depth, 0) * 14px);
+}
+
+#tabora-drawer .dfolder {
+  width: 100%;
+  height: 36px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--tabora-text-2);
+  font: 600 13px/1 var(--tabora-font);
+  text-align: left;
+  cursor: default;
+}
+
+#tabora-drawer .dfolder:hover {
+  background: var(--tabora-raised);
+  color: var(--tabora-text-strong);
+}
+
+#tabora-drawer .dfolder > svg:first-child {
+  color: var(--tabora-text-5);
+  transition: transform var(--tabora-ease);
+}
+
+#tabora-drawer .dfolder[aria-expanded="true"] > svg:first-child {
+  transform: rotate(90deg);
+}
+
+#tabora-drawer .dfolder > svg:nth-child(2) {
+  color: var(--tabora-text-4);
+}
+
+#tabora-drawer .dfolder > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#tabora-drawer .dfolder .n {
+  flex: none;
+  font: 500 11px/1 var(--tabora-mono);
+  color: var(--tabora-text-5);
+}
+
+#tabora-drawer .dsep {
+  height: 1px;
+  margin: 6px 10px;
+  background: var(--tabora-panel-border);
+}
+
+/* ---- Медиа ------------------------------------------------------------ */
+
+#tabora-drawer .dgrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 4px 2px;
+}
+
+#tabora-drawer .dtile {
+  position: relative;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 1px solid var(--tabora-panel-border);
+  border-radius: 12px;
+  background: var(--tabora-field);
+  overflow: hidden;
+  cursor: default;
+  transition: border-color var(--tabora-ease), transform var(--tabora-ease);
+}
+
+#tabora-drawer .dtile:hover {
+  border-color: var(--tabora-line);
+  transform: translateY(-1px);
+}
+
+#tabora-drawer .dtile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+#tabora-drawer .dtile .play {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#tabora-drawer .dtile-meta {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  height: 22px;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 7px;
+  background: rgba(11, 12, 14, 0.72);
+  color: #e6e8ec;
+  font: 500 10px/1 var(--tabora-mono);
+  opacity: 0;
+  transition: opacity var(--tabora-ease);
+}
+
+#tabora-drawer .dtile:hover .dtile-meta {
+  opacity: 1;
+}
+
+#tabora-drawer .dtile-meta .fav {
+  width: 12px;
+  height: 12px;
+}
+
+/* ---- Полотно пространств ------------------------------------------------ */
+
+#tabora-drawer .dboard {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 10px 14px 6px;
+  height: 100%;
+  box-sizing: border-box;
+  overflow-x: auto;
+}
+
+#tabora-drawer .dcol {
+  width: 264px;
+  flex: none;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--tabora-panel);
+  border: 1px solid var(--tabora-panel-border);
+  border-radius: 14px;
+  overflow: hidden;
+  transition: border-color var(--tabora-ease), box-shadow var(--tabora-ease), opacity var(--tabora-ease);
+}
+
+#tabora-drawer .dcol[active] {
+  border-color: color-mix(in srgb, var(--space) 45%, var(--tabora-panel-border));
+}
+
+#tabora-drawer .dcol[drop] {
+  border-color: var(--tabora-accent);
+  box-shadow: 0 0 0 1px var(--tabora-accent) inset;
+}
+
+#tabora-drawer .dcol[drop-col="before"] {
+  box-shadow: -3px 0 0 0 var(--tabora-accent);
+}
+
+#tabora-drawer .dcol[drop-col="after"] {
+  box-shadow: 3px 0 0 0 var(--tabora-accent);
+}
+
+#tabora-drawer .dcol[dragging] {
+  opacity: 0.5;
+}
+
+#tabora-drawer .dcol-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 8px 0 14px;
+  border-bottom: 1px solid var(--tabora-panel-border);
+}
+
+#tabora-drawer .dcol-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--space);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--space) 60%, transparent);
+}
+
+#tabora-drawer .dcol-name {
+  flex: 1;
+  min-width: 0;
+  font: 700 13px/1 var(--tabora-font);
+  color: var(--tabora-text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#tabora-drawer .dcol-count {
+  font: 500 11px/1 var(--tabora-mono);
+  color: var(--tabora-text-5);
+}
+
+#tabora-drawer .dcol-list {
+  flex: 1;
+  min-height: 120px;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  scrollbar-width: thin;
+}
+
+#tabora-drawer .dcol-empty {
+  margin: auto;
+  padding: 30px 10px;
+  font: 500 12px/1.4 var(--tabora-font);
+  color: var(--tabora-text-5);
+  text-align: center;
+}
+
+#tabora-drawer .dtab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 6px 0 10px;
+  border-radius: 9px;
+  color: var(--tabora-text-2);
+  cursor: default;
+  transition: background-color var(--tabora-ease), color var(--tabora-ease);
+}
+
+#tabora-drawer .dtab:hover {
+  background: var(--tabora-raised);
+  color: var(--tabora-text-strong);
+}
+
+#tabora-drawer .dtab[selected] {
+  background: var(--tabora-raised);
+  color: var(--tabora-text-strong);
+  box-shadow: inset 2px 0 0 var(--space);
+}
+
+#tabora-drawer .dtab[dragging] {
+  opacity: 0.4;
+}
+
+#tabora-drawer .dtab .start-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  background: var(--tabora-accent);
+  position: relative;
+  flex: none;
+}
+
+#tabora-drawer .dtab .start-dot::after {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: var(--tabora-on-accent);
+}
+
+#tabora-drawer .dtab-title {
+  flex: 1;
+  min-width: 0;
+  font: 500 13px/1.2 var(--tabora-font);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#tabora-drawer .dtab .zz {
+  font: 500 10px/1 var(--tabora-mono);
+  color: var(--tabora-text-5);
+}
+
+#tabora-drawer .dtab .icon-btn {
+  width: 24px;
+  height: 24px;
+  opacity: 0;
+}
+
+#tabora-drawer .dtab:hover .icon-btn {
+  opacity: 1;
+}
+
+#tabora-drawer .dcol-foot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  padding: 0 6px;
+  border-top: 1px solid var(--tabora-panel-border);
+}
+
+#tabora-drawer .dcol-hint {
+  flex: 1;
+  font: 500 11px/1 var(--tabora-mono);
+  color: var(--tabora-text-5);
+  padding-inline-start: 4px;
+}
+
+#tabora-drawer .dgrip {
+  cursor: grab;
+}
+
+#tabora-drawer .dcol-add {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  align-self: center;
+  margin-inline-start: 6px;
+  border: 1px dashed var(--tabora-line);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--tabora-text-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  transition: background-color var(--tabora-ease), color var(--tabora-ease), border-color var(--tabora-ease);
+}
+
+#tabora-drawer .dcol-add:hover {
+  background: var(--tabora-panel);
+  color: var(--tabora-accent);
+  border-color: var(--tabora-accent);
+}
+
+/* Полоса пространств в сайдбаре: больше трёх → компактнее */
+#tabora-spaces[many] .tabora-space {
+  font-size: 11px;
+  padding: 0 4px;
+}
