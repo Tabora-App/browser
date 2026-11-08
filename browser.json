@@ -1,0 +1,31 @@
+{
+  "name": "Browser",
+  "vendor": "Browser Team",
+  "appId": "com.browser.app",
+  "binaryName": "browser",
+  "repository": "https://github.com/faradei-fitch/browser",
+  "firefox": {
+    "version": "159.0.1"
+  },
+  "brand": "release",
+  "updateHost": "",
+  "brands": {
+    "release": {
+      "displayVersion": "0.1.0",
+      "backgroundColor": "#0B0C0E",
+      "shorterName": "Browser",
+      "shortName": "Browser",
+      "fullName": "Browser",
+      "bundleId": "com.browser.app",
+      "urls": {
+        "homepage": "https://github.com/faradei-fitch/browser",
+        "help": "https://github.com/faradei-fitch/browser/issues",
+        "releaseNotes": "https://github.com/faradei-fitch/browser/releases",
+        "download": "https://github.com/faradei-fitch/browser/releases",
+        "whatsnew": "",
+        "welcome": "",
+        "privacy": ""
+      }
+    }
+  }
+}

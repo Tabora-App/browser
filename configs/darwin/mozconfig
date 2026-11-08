@@ -1,13 +1,15 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# macOS. Цель (--target) подставляет tools/build.py.
 
 unset MOZ_STDCXX_COMPAT
 
 ac_add_options --disable-dmd
 ac_add_options --enable-eme=widevine
 
-# Кросс-сборка macOS на Linux-раннере: тулчейн Mozilla лежит в ~/mac-cross
+# Кросс-сборка macOS на Linux-машине: тулчейн Mozilla лежит в ~/mac-cross
 if test "$BROWSER_CROSS_COMPILING"; then
   MAC_CROSS="$HOME/mac-cross"
   mk_add_options "export PATH=$MAC_CROSS/cctools/bin:$PATH"
@@ -21,12 +23,7 @@ if test "$BROWSER_CROSS_COMPILING"; then
   fi
 fi
 
-if test "$SURFER_COMPAT" = "x86_64"; then
-  ac_add_options --target=x86_64-apple-darwin
-else
-  ac_add_options --target=aarch64-apple-darwin
-  if test "$BROWSER_RELEASE"; then
-    export CFLAGS="$CFLAGS -mcpu=apple-m1"
-    export CXXFLAGS="$CXXFLAGS -mcpu=apple-m1"
-  fi
+if test "$TARGET_ARCH" = "aarch64" && test "$BROWSER_RELEASE"; then
+  export CFLAGS="$CFLAGS -mcpu=apple-m1"
+  export CXXFLAGS="$CXXFLAGS -mcpu=apple-m1"
 fi

@@ -1,9 +1,9 @@
 engine/
-.surfer/
-node_modules/
+.build/
 dist/
 *.log
 .DS_Store
 .env
 .env.*
 !.env.example
+__pycache__/
