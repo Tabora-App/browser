@@ -35,7 +35,10 @@
   --font: "Manrope", -apple-system, system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
   --ease: 140ms cubic-bezier(0.2, 0, 0, 1);
-  color-scheme: dark;
+  --text-strong: #fff;
+  --shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  --paper-border: transparent;
+  color-scheme: light dark;
 }
 
 * { box-sizing: border-box; }
@@ -129,7 +132,7 @@ kbd {
   transition: background-color var(--ease), color var(--ease);
 }
 .folder-item:hover { background: var(--card-2); color: var(--text); }
-.folder-item[aria-selected="true"] { background: var(--raised); color: #fff; font-weight: 700; }
+.folder-item[aria-selected="true"] { background: var(--raised); color: var(--text-strong); font-weight: 700; }
 .folder-item .folder-icon { width: 16px; height: 16px; color: var(--text-4); flex-shrink: 0; }
 .folder-item[aria-selected="true"] .folder-icon { color: var(--text); }
 .folder-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -214,7 +217,7 @@ kbd {
   transition: background-color var(--ease), color var(--ease), border-color var(--ease);
 }
 .chip:hover { color: var(--text); border-color: var(--stroke); }
-.chip[aria-pressed="true"] { background: var(--raised); color: #fff; border-color: var(--raised); }
+.chip[aria-pressed="true"] { background: var(--raised); color: var(--text-strong); border-color: var(--raised); }
 
 .bulk-bar {
   display: flex;
@@ -235,7 +238,7 @@ kbd {
   font-size: 12px;
   font-weight: 700;
 }
-.tool:hover { background: var(--raised); color: #fff; }
+.tool:hover { background: var(--raised); color: var(--text-strong); }
 
 .messages { flex: 1; overflow-y: auto; outline: none; }
 .messages:focus-visible { box-shadow: inset 0 0 0 1px var(--accent); }
@@ -304,7 +307,7 @@ kbd {
 .msg .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .msg .row1 { display: flex; align-items: center; gap: 8px; }
 .msg .from { flex: 1; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.msg[data-unread="true"] .from { font-weight: 800; color: #fff; }
+.msg[data-unread="true"] .from { font-weight: 800; color: var(--text-strong); }
 .msg .time { font: 500 11px/1 var(--mono); color: var(--text-4); flex-shrink: 0; }
 .msg[data-unread="true"] .time { color: var(--accent); }
 .msg .subject { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -350,7 +353,7 @@ kbd {
   align-items: center;
   justify-content: center;
 }
-.msg .actions button:hover { background: var(--raised); color: #fff; }
+.msg .actions button:hover { background: var(--raised); color: var(--text-strong); }
 .msg .actions svg { width: 14px; height: 14px; }
 
 .empty {
@@ -401,7 +404,7 @@ kbd {
   flex-shrink: 0;
   transition: background-color var(--ease), color var(--ease), border-color var(--ease);
 }
-.icon-btn:hover { background: var(--raised); color: #fff; }
+.icon-btn:hover { background: var(--raised); color: var(--text-strong); }
 .icon-btn[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
 .icon-btn.danger:hover { color: var(--warn); }
 .icon-btn svg { width: 15px; height: 15px; }
@@ -435,7 +438,7 @@ kbd {
   border-radius: 14px;
 }
 .code-card .label { font: 700 11px/1 var(--font); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-4); }
-.code-card .code { font: 500 26px/1 var(--mono); letter-spacing: 0.22em; color: #fff; margin-top: 6px; }
+.code-card .code { font: 500 26px/1 var(--mono); letter-spacing: 0.22em; color: var(--text-strong); margin-top: 6px; }
 .code-card .spacer { flex: 1; }
 .code-card .note { font-size: 12px; color: var(--text-4); }
 
@@ -452,6 +455,7 @@ kbd {
 .mail-item.collapsed .mail-item-head { cursor: default; opacity: 0.8; }
 
 .paper {
+  border: 1px solid var(--paper-border);
   background: var(--paper);
   color: var(--paper-text);
   border-radius: 12px;
@@ -467,7 +471,7 @@ kbd {
 .paper .big-code { font: 500 32px/1 var(--mono); letter-spacing: 0.2em; color: var(--paper-text); padding: 8px 0; }
 .paper .fine { font-size: 12px; color: #868b95; }
 .paper a { color: #1f5fd0; }
-.paper .paper-btn { display: inline-block; align-self: flex-start; padding: 10px 16px; border-radius: 8px; background: #16171a; color: #fff; font-weight: 700; text-decoration: none; font-size: 13px; }
+.paper .paper-btn { display: inline-block; align-self: flex-start; padding: 10px 16px; border-radius: 8px; background: #16171a; color: var(--text-strong); font-weight: 700; text-decoration: none; font-size: 13px; }
 
 .attachments { display: flex; flex-wrap: wrap; gap: 8px; }
 .attachment {
@@ -537,7 +541,7 @@ kbd {
   align-items: center;
   gap: 6px;
 }
-.btn:hover { background: var(--raised); color: #fff; }
+.btn:hover { background: var(--raised); color: var(--text-strong); }
 .primary {
   height: 36px;
   padding: 0 14px;
@@ -554,7 +558,7 @@ kbd {
 .primary:hover { background: var(--accent-hover); }
 .primary kbd { color: rgba(11, 12, 14, 0.6); border-color: rgba(11, 12, 14, 0.25); }
 .ghost { height: 36px; padding: 0 14px; border: 1px solid var(--stroke); border-radius: 10px; background: transparent; color: var(--text-2); font-weight: 700; }
-.ghost:hover { background: var(--raised); color: #fff; }
+.ghost:hover { background: var(--raised); color: var(--text-strong); }
 
 /* ---- Алиасы ------------------------------------------------------------ */
 
@@ -650,7 +654,7 @@ kbd {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.65);
+  box-shadow: var(--shadow);
   animation: compose-in 160ms cubic-bezier(0.2, 0, 0, 1);
 }
 .modal h2 { margin: 0; font: 800 18px/1.2 var(--font); letter-spacing: -0.01em; }
@@ -686,7 +690,7 @@ kbd {
   background: var(--raised-2);
   border: 1px solid var(--stroke);
   border-radius: 12px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow);
   color: var(--text);
   font-weight: 600;
   pointer-events: auto;
@@ -703,4 +707,32 @@ kbd {
   .app { grid-template-columns: 180px minmax(0, 1fr); }
   .app[data-view="mail"][data-open="false"] .reader { display: none; }
   .app[data-view="mail"][data-open="true"] .list { display: none; }
+}
+
+/* Светлая схема: выбирается в настройках, «Внешний вид веб-сайтов» */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f6f4ef;
+    --card: #ffffff;
+    --card-2: #ffffff;
+    --line: #ebe8e1;
+    --line-2: #e0dcd3;
+    --field: #ffffff;
+    --field-border: #dad6cd;
+    --raised: #e9e6df;
+    --raised-2: #ddd9d0;
+    --stroke: #d6d2c8;
+    --text: #16171a;
+    --text-2: #3d4047;
+    --text-3: #5e626b;
+    --text-4: #868b95;
+    --text-5: #9a9ea8;
+    --text-strong: #16171a;
+    --accent-dim: rgba(200, 242, 90, 0.4);
+    --paper-border: #e0dcd3;
+    --shadow: 0 24px 70px rgba(40, 36, 30, 0.22);
+  }
+  .group-title { background: var(--bg); }
+  .msg[aria-selected="true"] { background: #f1efe9; }
+  .toast { background: #16171a; color: #fff; border-color: #16171a; }
 }

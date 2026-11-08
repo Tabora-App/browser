@@ -27,7 +27,8 @@
   --tabora-on-accent: #0b0c0e;
   --tabora-font: "Manrope", -apple-system, system-ui, sans-serif;
 
-  color-scheme: dark;
+  --tabora-text-strong: #fff;
+  color-scheme: light dark;
   font-family: var(--tabora-font);
 
   /* Поверхности */
@@ -46,8 +47,8 @@
   --text-color-deemphasized: var(--tabora-text-3);
   --icon-color: var(--tabora-text-2);
   --link-color: var(--tabora-text-2);
-  --link-color-hover: #fff;
-  --link-color-active: #fff;
+  --link-color-hover: var(--tabora-text-strong);
+  --link-color-active: var(--tabora-text-strong);
 
   /* Акцент */
   --color-accent-primary: var(--tabora-accent);
@@ -69,7 +70,7 @@
   --button-background-color-ghost-hover: var(--tabora-field);
   --button-background-color-ghost-active: var(--tabora-raised);
   --button-text-color: var(--tabora-text);
-  --button-text-color-hover: #fff;
+  --button-text-color-hover: var(--tabora-text-strong);
   --button-border-color: transparent;
   --button-border-radius: 9px;
   --input-bgcolor: var(--tabora-field);
@@ -85,7 +86,7 @@
   --panel-text-color: var(--tabora-text);
   --panel-border-radius: 12px;
   --button-background-color-menu-hover: var(--tabora-raised);
-  --button-text-color-menu-hover: #fff;
+  --button-text-color-menu-hover: var(--tabora-text-strong);
 }
 
 body {
@@ -114,7 +115,7 @@ moz-page-nav-button {
   --page-nav-button-text-color: var(--tabora-text-2);
   --page-nav-button-text-color-hover: var(--tabora-text);
   --page-nav-button-text-color-active: var(--tabora-text);
-  --page-nav-button-text-color-selected: #fff;
+  --page-nav-button-text-color-selected: var(--tabora-text-strong);
   --page-nav-button-border-color: transparent;
   --page-nav-button-border-radius: 9px;
   --page-nav-button-border-radius-focused: 9px;
@@ -176,4 +177,24 @@ setting-group[groupid="securityPrivacyWarnings"] {
 img[src$="fox-ai.svg"],
 img[src*="fox"] {
   display: none !important;
+}
+
+/* Светлая схема: выбирается в «Внешний вид веб-сайтов» */
+@media (prefers-color-scheme: light) {
+  :root {
+    --tabora-bg: #f6f4ef;
+    --tabora-card: #ffffff;
+    --tabora-card-border: #e0dcd3;
+    --tabora-field: #ffffff;
+    --tabora-field-border: #dad6cd;
+    --tabora-raised: #e9e6df;
+    --tabora-raised-2: #ddd9d0;
+    --tabora-line: #d6d2c8;
+    --tabora-text: #16171a;
+    --tabora-text-2: #3d4047;
+    --tabora-text-3: #5e626b;
+    --tabora-text-4: #868b95;
+    --tabora-text-strong: #16171a;
+    --border-color-deemphasized: #ebe8e1;
+  }
 }

@@ -33,7 +33,7 @@ var Tabora = {
     }
     this.moveToolboxIntoBrowser();
     for (const step of [
-      "buildSidebarExtras", "buildTopbar", "initPrivate", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
+      "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
       "searchEngineName", "initSpaces", "initKeys", "initTabHooks", "startTimers", "updateTitle", "localizeUrlbar",
       "routeUrlbarToCommandBar",
     ]) {
@@ -743,6 +743,22 @@ var Tabora = {
     if (message) {
       this.notice(message);
     }
+  },
+
+  /** Тема оболочки следует выбору «Тема браузера» в настройках Firefox:
+   *  browser.theme.toolbar-theme 0 — тёмная, 1 — светлая, 2 — как в системе. */
+  initTheme() {
+    const PREF = "browser.theme.toolbar-theme";
+    const media = window.matchMedia("(prefers-color-scheme: light)");
+    const apply = () => {
+      const pref = Services.prefs.getIntPref(PREF, 2);
+      const light = pref === 1 || (pref === 2 && media.matches);
+      document.documentElement.setAttribute("tabora-theme", light && !this.isPrivate ? "light" : "dark");
+    };
+    apply();
+    Services.prefs.addObserver(PREF, apply);
+    media.addEventListener("change", apply);
+    window.addEventListener("unload", () => Services.prefs.removeObserver(PREF, apply));
   },
 
   /** Приватное окно: фиолетовый акцент, метка в шапке, без пространств (контейнеры там не работают). */
