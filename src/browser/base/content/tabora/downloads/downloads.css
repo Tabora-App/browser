@@ -199,6 +199,7 @@ kbd { font: 500 10px/1 var(--mono); color: var(--text-4); border: 1px solid var(
 .progress.indeterminate span { width: 30%; animation: slide 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
 @keyframes slide { from { transform: translateX(-120%); } to { transform: translateX(400%); } }
 
+.meta > span, .meta .mono { white-space: nowrap; }
 .actions { display: flex; align-items: center; gap: 6px; }
 .act {
   height: 32px; min-width: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: 8px; background: transparent;
@@ -217,8 +218,8 @@ kbd { font: 500 10px/1 var(--mono); color: var(--text-4); border: 1px solid var(
 
 /* Плитки */
 .page[data-view="grid"] .item { grid-template-columns: 1fr; grid-template-rows: auto auto; gap: 10px; padding: 10px; align-items: start; }
-.page[data-view="grid"] .thumb { width: 100%; height: 132px; border-radius: 10px; }
-.page[data-view="grid"] .plate { gap: 8px; }
+.page[data-view="grid"] .thumb { width: 100%; height: 148px; border-radius: 10px; }
+.page[data-view="grid"] .plate { gap: 8px; padding-top: 34px; box-sizing: border-box; } /* верхняя полоса под кнопки действий */
 .page[data-view="grid"] .plate svg { width: 44px; height: 44px; }
 .page[data-view="grid"] .plate .ext { font-size: 12px; max-width: 120px; }
 .page[data-view="grid"] .actions { position: absolute; top: 14px; right: 14px; padding: 2px; background: var(--card-2); border: 1px solid var(--line-2); border-radius: 9px; opacity: 0; transition: opacity var(--ease); }

@@ -470,6 +470,7 @@ const App = {
         return [
           btn("Открыть", "open", () => this.open(d), "primary"),
           btn("Показать в Finder", "folder", () => d.showContainingDirectory(), "icon-only quiet"),
+          btn("Удалить с файлом", "trash", () => this.deleteFile(d), "icon-only quiet danger"),
           btn("Убрать из списка", "close", () => this.removeFromList(d), "icon-only quiet"),
         ];
       case "missing":

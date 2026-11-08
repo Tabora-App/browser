@@ -36,7 +36,7 @@ var Tabora = {
     Services.scriptloader.loadSubScript("chrome://browser/content/tabora/agent.js", window);
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
-      "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initKeys", "initTabHooks", "initDownloads", "startTimers", "updateTitle", "localizeUrlbar",
+      "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "startTimers", "updateTitle", "localizeUrlbar",
       "routeUrlbarToCommandBar",
     ]) {
       try {
@@ -882,6 +882,137 @@ var Tabora = {
     }
     this._cookieNoticeAt = now;
     this.notice(`Cookie-баннер закрыт: «${data.text}» · ${data.host}`);
+  },
+
+  /* ---- Свёрнутый сайдбар: только значки, подсказка при наведении ---------------- */
+
+  SIDEBAR_PREF: "tabora.sidebar.compact",
+
+  initSidebarCompact() {
+    const toolbox = document.getElementById("navigator-toolbox");
+    const navBar = document.getElementById("nav-bar");
+    // Кнопка поиска вместо адресной строки в свёрнутом виде
+    const search = this.html("button", { class: "icon-btn", id: "tabora-compact-search", type: "button", title: "Адрес или поиск (⌘K)" }, null, [
+      this.svg(["M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z", "M20 20l-4-4"], 16, 2),
+    ]);
+    search.addEventListener("click", () => this.openCommandBar());
+    navBar.append(search);
+    // Ручка сворачивания внизу колонки
+    const toggle = this.html("button", { class: "icon-btn", id: "tabora-sidebar-toggle", type: "button", title: "Свернуть панель (⌘B)" }, null, [
+      this.svg(["m11 17-5-5 5-5", "m18 17-5-5 5-5"], 15, 2),
+    ]);
+    toggle.addEventListener("click", () => this.toggleSidebar());
+    toolbox.append(this.html("div", { id: "tabora-sidebar-foot" }, null, [toggle]));
+    // Подсказка
+    this.tipEl = this.html("div", { id: "tabora-tip", role: "tooltip", hidden: "true" });
+    document.getElementById("browser").append(this.tipEl);
+    toolbox.addEventListener("mouseover", e => this.tipMaybe(e));
+    toolbox.addEventListener("mouseout", e => {
+      if (this.tipTarget && !this.tipTarget.contains(e.relatedTarget)) {
+        this.tipHide();
+      }
+    });
+    toolbox.addEventListener("mousedown", () => this.tipHide(), true);
+    toolbox.addEventListener("wheel", () => this.tipHide(), { passive: true });
+    this.applySidebarCompact(Services.prefs.getBoolPref(this.SIDEBAR_PREF, false), false);
+  },
+
+  applySidebarCompact(on, animate = true) {
+    const root = document.documentElement;
+    root.toggleAttribute("tabora-sidebar-animating", animate);
+    if (on) {
+      root.setAttribute("tabora-sidebar", "compact");
+    } else {
+      root.removeAttribute("tabora-sidebar");
+    }
+    const tabs = document.getElementById("tabbrowser-tabs");
+    if (tabs) {
+      if (on) {
+        if (tabs.getAttribute("tooltip")) {
+          tabs.dataset.tipAttr = tabs.getAttribute("tooltip");
+        }
+        tabs.removeAttribute("tooltip");
+      } else if (tabs.dataset.tipAttr) {
+        tabs.setAttribute("tooltip", tabs.dataset.tipAttr);
+      }
+    }
+    const toggle = document.getElementById("tabora-sidebar-toggle");
+    if (toggle) {
+      toggle.title = on ? "Развернуть панель (⌘B)" : "Свернуть панель (⌘B)";
+    }
+    this.tipHide();
+    if (animate) {
+      setTimeout(() => root.removeAttribute("tabora-sidebar-animating"), 260);
+    }
+    if (this.drawer?.open) {
+      this.sizeDrawer();
+    }
+  },
+
+  toggleSidebar(force) {
+    const on = force ?? document.documentElement.getAttribute("tabora-sidebar") !== "compact";
+    Services.prefs.setBoolPref(this.SIDEBAR_PREF, on);
+    this.applySidebarCompact(on);
+  },
+
+  tipTextFor(target) {
+    const tab = target.closest?.(".tabbrowser-tab");
+    if (tab) {
+      const url = tab.linkedBrowser?.currentURI?.spec || "";
+      const label = this.isStartUrl(url) ? this.startLabel() : tab.label || "";
+      return { title: label + (tab.hasAttribute("pending") ? " · спит" : ""), sub: this.isStartUrl(url) ? "" : this.displayUrl(url).replace(/^https?:\/\//, "").replace(/^www\./, "") };
+    }
+    const space = target.closest?.(".tabora-space");
+    if (space) {
+      const sp = this.spaces.find(s => s.id === space.dataset.space);
+      const n = sp ? gBrowser.tabs.filter(t => !t.closing && !t.pinned && this.contextOf(t) === sp.userContextId).length : 0;
+      return { title: sp?.name || "", sub: `${n} ${this.plural(n, "вкладка", "вкладки", "вкладок")}` };
+    }
+    const map = [
+      ["#tabora-compact-search", "Адрес или поиск", "⌘K"],
+      ["#vertical-tabs-newtab-button", "Новая вкладка", "⌘T"],
+      ["#tabora-mail", "Почта и алиасы", "⌘⇧M"],
+      ["#tabora-downloads", "Загрузки", document.getElementById("tabora-downloads-note")?.textContent || "⌘⇧J"],
+      ["#tabora-memory", `Память · ${document.getElementById("tabora-memory-value")?.textContent || ""}`, document.getElementById("tabora-memory-note")?.textContent || ""],
+      ["#tabora-sidebar-toggle", "Развернуть панель", "⌘B"],
+    ];
+    for (const [sel, title, sub] of map) {
+      if (target.closest?.(sel)) {
+        return { title, sub };
+      }
+    }
+    return null;
+  },
+
+  tipMaybe(e) {
+    if (document.documentElement.getAttribute("tabora-sidebar") !== "compact") {
+      return;
+    }
+    const info = this.tipTextFor(e.target);
+    const el = info ? e.target.closest(".tabbrowser-tab, .tabora-space, #tabora-compact-search, #vertical-tabs-newtab-button, #tabora-mail, #tabora-downloads, #tabora-memory, #tabora-sidebar-toggle") : null;
+    if (!el || el === this.tipTarget) {
+      return;
+    }
+    this.tipHide();
+    this.tipTarget = el;
+    this.tipTimer = setTimeout(() => {
+      const r = el.getBoundingClientRect();
+      const tip = this.tipEl;
+      tip.replaceChildren(this.html("b", {}, info.title), info.sub ? this.html("span", {}, info.sub) : this.html("span"));
+      tip.hidden = false;
+      tip.style.left = `${Math.round(r.right + 10)}px`;
+      tip.style.top = `${Math.round(r.top + r.height / 2)}px`;
+      requestAnimationFrame(() => tip.setAttribute("shown", "true"));
+    }, 220);
+  },
+
+  tipHide() {
+    clearTimeout(this.tipTimer);
+    this.tipTarget = null;
+    if (this.tipEl) {
+      this.tipEl.hidden = true;
+      this.tipEl.removeAttribute("shown");
+    }
   },
 
   /* ---- Раскладка ------------------------------------------------------- */
@@ -1738,6 +1869,7 @@ var Tabora = {
       { glyph: "✎", title: "Написать письмо", note: "Окно письма поверх любой вкладки", key: "", tags: "compose написать письмо mail new", run: () => this.openCompose() },
       { glyph: "✉", title: "Почта и алиасы", note: "Входящие, коды подтверждения, алиасы", key: "⌘⇧M", tags: "mail почта email письма алиасы inbox", run: () => this.openMail() },
       { glyph: "⚙", title: "Настройки", note: "Поведение, приватность, внешний вид", key: "⌘,", tags: "settings preferences", run: () => openPreferences() },
+      { glyph: "⟨", title: document.documentElement.getAttribute("tabora-sidebar") === "compact" ? "Развернуть боковую панель" : "Свернуть боковую панель", note: "Только значки вкладок, названия по наведению", key: "⌘B", tags: "sidebar панель свернуть compact", run: () => this.toggleSidebar() },
     ];
   },
 
@@ -2194,6 +2326,10 @@ var Tabora = {
           e.stopPropagation();
         } else if (!e.shiftKey && e.key.toLowerCase() === "k") {
           this.openCommandBar();
+          e.preventDefault();
+          e.stopPropagation();
+        } else if (!e.shiftKey && e.code === "KeyB") {
+          this.toggleSidebar();
           e.preventDefault();
           e.stopPropagation();
         } else if (e.shiftKey && e.code === "KeyM") {
