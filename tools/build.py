@@ -296,12 +296,18 @@ def apply_branding(config: dict, brand: str) -> None:
         "full": info.get("fullName", config["name"]),
         "vendor": config["vendor"],
     }
+    # Firefox склеивает CFBundleIdentifier как <appId>.<MOZ_MACBUNDLE_ID>,
+    # поэтому в configure.sh идёт только хвост bundleId после appId.
+    bundle_id = info.get("bundleId") or f"{config['appId']}.{config['binaryName']}"
+    prefix = config["appId"] + "."
+    mac_suffix = bundle_id[len(prefix):] if bundle_id.startswith(prefix) else bundle_id.rsplit(".", 1)[-1]
     (dest / "configure.sh").write_text(
         "# This Source Code Form is subject to the terms of the Mozilla Public\n"
         "# License, v. 2.0. If a copy of the MPL was not distributed with this\n"
         "# file, You can obtain one at http://mozilla.org/MPL/2.0/.\n\n"
         f"MOZ_APP_DISPLAYNAME={names['full']}\n"
-        f"MOZ_MACBUNDLE_ID={info.get('bundleId', config['appId'])}\n"
+        f"MOZ_APP_VENDOR={names['vendor']}\n"
+        f"MOZ_MACBUNDLE_ID={mac_suffix}\n"
     )
     locales = dest / "locales" / "en-US"
     (locales / "brand.ftl").write_text(

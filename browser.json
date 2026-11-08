@@ -1,7 +1,7 @@
 {
   "name": "Tabora",
   "vendor": "Tabora",
-  "appId": "app.tabora.browser",
+  "appId": "app.tabora",
   "binaryName": "tabora",
   "repository": "https://github.com/Tabora-App/browser",
   "firefox": {
