@@ -1,9 +1,9 @@
 {
-  "name": "Browser",
-  "vendor": "Browser Team",
-  "appId": "com.browser.app",
-  "binaryName": "browser",
-  "repository": "https://github.com/faradei-fitch/browser",
+  "name": "Tabora",
+  "vendor": "Tabora",
+  "appId": "app.tabora.browser",
+  "binaryName": "tabora",
+  "repository": "https://github.com/Tabora-App/browser",
   "firefox": {
     "version": "159.0.1"
   },
@@ -13,15 +13,15 @@
     "release": {
       "displayVersion": "0.1.0",
       "backgroundColor": "#0B0C0E",
-      "shorterName": "Browser",
-      "shortName": "Browser",
-      "fullName": "Browser",
-      "bundleId": "com.browser.app",
+      "shorterName": "Tabora",
+      "shortName": "Tabora",
+      "fullName": "Tabora",
+      "bundleId": "app.tabora.browser",
       "urls": {
-        "homepage": "https://github.com/faradei-fitch/browser",
-        "help": "https://github.com/faradei-fitch/browser/issues",
-        "releaseNotes": "https://github.com/faradei-fitch/browser/releases",
-        "download": "https://github.com/faradei-fitch/browser/releases",
+        "homepage": "https://tabora.app",
+        "help": "https://github.com/Tabora-App/browser/issues",
+        "releaseNotes": "https://github.com/Tabora-App/browser/releases",
+        "download": "https://tabora.app",
         "whatsnew": "",
         "welcome": "",
         "privacy": ""
