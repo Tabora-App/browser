@@ -78,3 +78,6 @@ pref("extensions.installDistroAddons", true);
 // Настройки: без разделов Mozilla (управление ИИ, профили Firefox)
 pref("browser.preferences.aiControls", false);
 pref("browser.profiles.enabled", false);
+
+// Закрытие последней вкладки не закрывает окно: остаётся пустая вкладка
+pref("browser.tabs.closeWindowWithLastTab", false);

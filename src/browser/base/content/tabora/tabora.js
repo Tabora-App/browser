@@ -33,7 +33,7 @@ var Tabora = {
     }
     this.moveToolboxIntoBrowser();
     for (const step of [
-      "buildSidebarExtras", "buildTopbar", "initPrivate", "buildStartPage", "buildAgentPanel", "buildCommandBar",
+      "buildSidebarExtras", "buildTopbar", "initPrivate", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose",
       "searchEngineName", "initSpaces", "initKeys", "initTabHooks", "startTimers", "updateTitle", "localizeUrlbar",
       "routeUrlbarToCommandBar",
     ]) {
@@ -43,6 +43,388 @@ var Tabora = {
         console.error(`Tabora: ${step}`, e);
       }
     }
+  },
+
+  /* ---- Окно нового письма: живёт в оболочке, видно на любой вкладке ------ */
+
+  mail() {
+    if (!this._mail) {
+      this._mail = ChromeUtils.importESModule("chrome://browser/content/tabora/mail/MailStore.sys.mjs");
+    }
+    return this._mail;
+  },
+
+  buildCompose() {
+    Services.scriptloader.loadSubScript("chrome://browser/content/tabora/select.js", window);
+    const h = (tag, attrs, text, children) => this.html(tag, attrs, text, children);
+    const iconBtn = (id, title, paths, extra = "") => h("button", { class: `icon-btn ${extra}`.trim(), id, type: "button", title, "aria-label": title }, null, [this.svg(paths, 14, 2.2)]);
+
+    const fromSelect = h("select", { id: "tabora-compose-from", "aria-label": "Отправитель" });
+    const toInput = h("input", { id: "tabora-compose-to", type: "text", placeholder: "Адрес, Enter или запятая", autocomplete: "off" });
+    const box = h("div", { id: "tabora-compose", hidden: "true", role: "dialog", "aria-label": "Новое письмо", "data-min": "false" }, null, [
+      h("div", { class: "head", id: "tabora-compose-head" }, null, [
+        h("span", { class: "grip" }),
+        h("span", { class: "title", id: "tabora-compose-title" }, "Новое письмо"),
+        iconBtn("tabora-compose-min", "Свернуть", ["M5 12h14"]),
+        iconBtn("tabora-compose-close", "Закрыть (Esc)", ["M6 6l12 12M18 6 6 18"]),
+      ]),
+      h("div", { class: "body" }, null, [
+        h("div", { class: "field" }, null, [h("label", { for: "tabora-compose-from" }, "От"), fromSelect]),
+        h("div", { class: "field" }, null, [
+          h("label", { for: "tabora-compose-to" }, "Кому"),
+          h("div", { class: "chips", id: "tabora-compose-chips" }, null, [toInput]),
+          h("button", { class: "link", id: "tabora-compose-cc-toggle", type: "button" }, "Копия"),
+        ]),
+        h("div", { class: "field", id: "tabora-compose-cc-field", hidden: "true" }, null, [
+          h("label", { for: "tabora-compose-cc" }, "Копия"),
+          h("input", { id: "tabora-compose-cc", type: "text", placeholder: "Через запятую" }),
+        ]),
+        h("div", { class: "field" }, null, [
+          h("label", { for: "tabora-compose-subject" }, "Тема"),
+          h("input", { id: "tabora-compose-subject", type: "text", placeholder: "О чём письмо" }),
+        ]),
+        h("textarea", { id: "tabora-compose-text", placeholder: "Текст письма", "aria-label": "Текст письма" }),
+        h("div", { class: "attachments", id: "tabora-compose-attachments" }),
+      ]),
+      h("div", { class: "foot" }, null, [
+        h("button", { class: "primary", id: "tabora-compose-send", type: "button" }, null, [document.createTextNode("Отправить"), h("span", { class: "kbd" }, "⌘⏎")]),
+        iconBtn("tabora-compose-attach", "Прикрепить файл", ["m21 12-8.5 8.5a5 5 0 0 1-7-7L14 5a3.3 3.3 0 0 1 4.7 4.7L10.5 18a1.7 1.7 0 0 1-2.4-2.4L16 7.7"]),
+        h("span", { class: "status", id: "tabora-compose-status" }, "Черновик сохраняется автоматически"),
+        iconBtn("tabora-compose-discard", "Удалить черновик", ["M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"], "danger"),
+      ]),
+      h("div", { class: "resize", id: "tabora-compose-resize", "aria-hidden": "true" }),
+    ]);
+    document.getElementById("browser").append(box);
+    window.TaboraSelect.enhance(fromSelect, { inline: true });
+    this.compose = { box, state: null, draftTimer: null };
+
+    const $ = id => document.getElementById(id);
+    $("tabora-compose-close").addEventListener("click", () => this.closeCompose());
+    $("tabora-compose-discard").addEventListener("click", () => this.closeCompose(true));
+    $("tabora-compose-min").addEventListener("click", () => {
+      box.dataset.min = box.dataset.min === "true" ? "false" : "true";
+      this.keepComposeInWindow();
+    });
+    $("tabora-compose-send").addEventListener("click", () => this.sendCompose());
+    $("tabora-compose-cc-toggle").addEventListener("click", () => {
+      $("tabora-compose-cc-field").hidden = false;
+      $("tabora-compose-cc").focus();
+    });
+    toInput.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === "," || (e.key === "Tab" && toInput.value.trim())) {
+        e.preventDefault();
+        this.addRecipient(toInput.value);
+      } else if (e.key === "Backspace" && !toInput.value && this.compose.state?.to.length) {
+        this.compose.state.to.pop();
+        $("tabora-compose-chips").querySelector(".chip:last-of-type")?.remove();
+      }
+    });
+    toInput.addEventListener("blur", () => toInput.value.trim() && this.addRecipient(toInput.value));
+    $("tabora-compose-attach").addEventListener("click", async () => {
+      const picker = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
+      picker.init(window.browsingContext, "Прикрепить файлы", Ci.nsIFilePicker.modeOpenMultiple);
+      const result = await new Promise(resolve => picker.open(resolve));
+      if (result === Ci.nsIFilePicker.returnCancel) {
+        return;
+      }
+      for (const file of picker.files) {
+        this.compose.state.attachments.push({ name: file.leafName, size: file.fileSize, path: file.path });
+      }
+      this.renderComposeAttachments();
+    });
+    for (const id of ["tabora-compose-subject", "tabora-compose-text"]) {
+      $(id).addEventListener("input", () => {
+        clearTimeout(this.compose.draftTimer);
+        $("tabora-compose-status").textContent = "Сохраняется…";
+        this.compose.draftTimer = setTimeout(() => this.saveDraft(), 1200);
+      });
+    }
+    box.addEventListener("keydown", e => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        this.closeCompose();
+      } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        this.sendCompose();
+      }
+    });
+
+    // Перетаскивание за шапку и изменение размера за угол
+    const head = $("tabora-compose-head");
+    head.addEventListener("pointerdown", e => {
+      if (e.button !== 0 || e.target.closest("button")) {
+        return;
+      }
+      const start = { x: e.clientX, y: e.clientY, left: box.offsetLeft, top: box.offsetTop };
+      head.setPointerCapture(e.pointerId);
+      box.dataset.dragging = "true";
+      const move = ev => this.placeCompose(start.left + ev.clientX - start.x, start.top + ev.clientY - start.y);
+      const up = () => {
+        head.removeEventListener("pointermove", move);
+        head.removeEventListener("pointerup", up);
+        delete box.dataset.dragging;
+        this.saveComposeRect();
+      };
+      head.addEventListener("pointermove", move);
+      head.addEventListener("pointerup", up);
+    });
+    head.addEventListener("dblclick", e => {
+      if (!e.target.closest("button")) {
+        $("tabora-compose-min").click();
+      }
+    });
+    const grip = $("tabora-compose-resize");
+    grip.addEventListener("pointerdown", e => {
+      const start = { x: e.clientX, y: e.clientY, w: box.offsetWidth, h: box.offsetHeight };
+      grip.setPointerCapture(e.pointerId);
+      const move = ev => {
+        box.style.width = `${Math.max(380, Math.min(window.innerWidth - box.offsetLeft - 12, start.w + ev.clientX - start.x))}px`;
+        box.style.height = `${Math.max(320, Math.min(window.innerHeight - box.offsetTop - 12, start.h + ev.clientY - start.y))}px`;
+      };
+      const up = () => {
+        grip.removeEventListener("pointermove", move);
+        grip.removeEventListener("pointerup", up);
+        this.saveComposeRect();
+      };
+      grip.addEventListener("pointermove", move);
+      grip.addEventListener("pointerup", up);
+    });
+    window.addEventListener("resize", () => !box.hidden && this.keepComposeInWindow());
+  },
+
+  placeCompose(left, top) {
+    const box = this.compose.box;
+    const maxLeft = window.innerWidth - box.offsetWidth - 8;
+    const maxTop = window.innerHeight - box.offsetHeight - 8;
+    box.style.left = `${Math.round(Math.max(8, Math.min(maxLeft, left)))}px`;
+    box.style.top = `${Math.round(Math.max(8, Math.min(maxTop, top)))}px`;
+  },
+
+  keepComposeInWindow() {
+    this.placeCompose(this.compose.box.offsetLeft, this.compose.box.offsetTop);
+  },
+
+  saveComposeRect() {
+    const box = this.compose.box;
+    Services.prefs.setStringPref("tabora.mail.compose.rect", JSON.stringify({ left: box.offsetLeft, top: box.offsetTop, width: box.offsetWidth, height: box.offsetHeight }));
+  },
+
+  restoreComposeRect() {
+    const box = this.compose.box;
+    let rect = null;
+    try {
+      rect = JSON.parse(Services.prefs.getStringPref("tabora.mail.compose.rect", ""));
+    } catch (e) {}
+    box.style.width = `${rect?.width || 560}px`;
+    box.style.height = `${rect?.height || Math.min(640, window.innerHeight - 40)}px`;
+    this.placeCompose(rect?.left ?? window.innerWidth - box.offsetWidth - 20, rect?.top ?? window.innerHeight - box.offsetHeight - 20);
+  },
+
+  async openCompose(opts = {}) {
+    const { MailStore, ACCOUNT } = this.mail();
+    await MailStore.ready();
+    const $ = id => document.getElementById(id);
+    const box = this.compose.box;
+    const from = $("tabora-compose-from");
+    from.replaceChildren(this.html("option", { value: ACCOUNT.address }, ACCOUNT.address));
+    for (const a of MailStore.aliases.filter(a => a.on)) {
+      from.append(this.html("option", { value: a.address, "data-note": a.site }, a.address));
+    }
+    from._tsel?.refresh();
+    this.compose.state = { to: [], attachments: [], draftId: null, thread: null, labels: [] };
+    $("tabora-compose-chips").querySelectorAll(".chip").forEach(n => n.remove());
+    $("tabora-compose-to").value = "";
+    $("tabora-compose-cc").value = "";
+    $("tabora-compose-cc-field").hidden = true;
+    $("tabora-compose-subject").value = "";
+    $("tabora-compose-text").value = "";
+    $("tabora-compose-attachments").replaceChildren();
+    $("tabora-compose-title").textContent = "Новое письмо";
+    $("tabora-compose-status").textContent = "Черновик сохраняется автоматически";
+
+    const when = iso => new Date(iso).toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+    const text = m => (m.body || []).map(b => b.p || b.h || b.code || "").filter(Boolean).join("\n");
+    if (opts.replyTo) {
+      const m = MailStore.byId(opts.replyTo);
+      if (m) {
+        this.addRecipient(m.from.email);
+        $("tabora-compose-subject").value = m.subject.startsWith("Re:") ? m.subject : `Re: ${m.subject}`;
+        $("tabora-compose-text").value = `\n\n${when(m.date)}, ${m.from.name} <${m.from.email}>:\n> ${text(m).split("\n")[0]}`;
+        $("tabora-compose-title").textContent = `Ответ: ${m.from.name}`;
+        this.compose.state.thread = m.thread;
+        this.compose.state.labels = m.labels;
+        if (m.alias && [...from.options].some(o => o.value === m.alias)) {
+          from.value = m.alias;
+          from._tsel?.refresh();
+        }
+      }
+    } else if (opts.forwardOf) {
+      const m = MailStore.byId(opts.forwardOf);
+      if (m) {
+        $("tabora-compose-subject").value = `Fwd: ${m.subject}`;
+        $("tabora-compose-text").value = `\n\n---------- Пересланное письмо ----------\nОт: ${m.from.name} <${m.from.email}>\nДата: ${when(m.date)}\nТема: ${m.subject}\n\n${text(m)}`;
+        $("tabora-compose-title").textContent = "Переслать";
+        this.compose.state.attachments = (m.attachments || []).map(a => ({ ...a }));
+      }
+    } else if (opts.draftId) {
+      const m = MailStore.byId(opts.draftId);
+      if (m) {
+        m.to.forEach(t => this.addRecipient(t));
+        $("tabora-compose-subject").value = m.subject;
+        $("tabora-compose-text").value = (m.body || []).map(b => b.p).join("\n\n");
+        this.compose.state.draftId = m.id;
+        this.compose.state.attachments = (m.attachments || []).map(a => ({ ...a }));
+        $("tabora-compose-title").textContent = "Черновик";
+      }
+    } else if (opts.to) {
+      this.addRecipient(opts.to);
+    }
+    this.renderComposeAttachments();
+    box.hidden = false;
+    box.dataset.min = "false";
+    this.restoreComposeRect();
+    setTimeout(() => (this.compose.state.to.length ? $("tabora-compose-subject") : $("tabora-compose-to")).focus(), 30);
+  },
+
+  composeHasContent() {
+    const s = this.compose.state;
+    return !!(s && (s.to.length || document.getElementById("tabora-compose-subject").value.trim() || document.getElementById("tabora-compose-text").value.trim() || s.attachments.length));
+  },
+
+  closeCompose(discard = false) {
+    const { MailStore } = this.mail();
+    const box = this.compose.box;
+    if (this.compose.state) {
+      clearTimeout(this.compose.draftTimer);
+      const hasContent = this.composeHasContent();
+      if (discard || !hasContent) {
+        if (this.compose.state.draftId) {
+          MailStore.remove(this.compose.state.draftId);
+        }
+        if (discard && hasContent) {
+          this.notice("Черновик удалён");
+        }
+      } else {
+        this.saveDraft();
+        this.notice("Черновик сохранён в почте");
+      }
+    }
+    box.hidden = true;
+    this.compose.state = null;
+    gBrowser.selectedBrowser?.focus();
+  },
+
+  composeDraft() {
+    const s = this.compose.state;
+    const $ = id => document.getElementById(id);
+    const text = $("tabora-compose-text").value;
+    return {
+      id: s.draftId || `d${Date.now()}`, thread: s.thread || `td${Date.now()}`, folder: "drafts", unread: false, starred: false,
+      labels: s.labels || [], from: { name: "Я", email: $("tabora-compose-from").value }, to: s.to.slice(), alias: $("tabora-compose-from").value,
+      date: new Date().toISOString(), subject: $("tabora-compose-subject").value.trim(), body: text.split(/\n{2,}/).filter(Boolean).map(p => ({ p })),
+      attachments: s.attachments.slice(), draft: true,
+    };
+  },
+
+  saveDraft() {
+    const { MailStore } = this.mail();
+    if (!this.compose.state || !this.composeHasContent()) {
+      return;
+    }
+    const draft = this.composeDraft();
+    if (this.compose.state.draftId) {
+      MailStore.update(draft.id, draft);
+    } else {
+      MailStore.add(draft);
+      this.compose.state.draftId = draft.id;
+    }
+    document.getElementById("tabora-compose-status").textContent = `Черновик сохранён в ${new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`;
+  },
+
+  addRecipient(raw) {
+    const value = raw.trim().replace(/,$/, "");
+    if (!value || !this.compose.state) {
+      return;
+    }
+    const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+    this.compose.state.to.push(value);
+    const chip = this.html("span", { class: "chip", "data-bad": String(!ok), title: ok ? value : "Похоже, адрес с ошибкой" }, null, [
+      document.createTextNode(value),
+      this.html("button", { type: "button", "aria-label": `Убрать ${value}` }, null, [this.svg(["M6 6l12 12M18 6 6 18"], 11, 2.4)]),
+    ]);
+    chip.lastChild.addEventListener("click", () => {
+      this.compose.state.to = this.compose.state.to.filter(v => v !== value);
+      chip.remove();
+    });
+    const input = document.getElementById("tabora-compose-to");
+    input.before(chip);
+    input.value = "";
+  },
+
+  renderComposeAttachments() {
+    const box = document.getElementById("tabora-compose-attachments");
+    box.replaceChildren();
+    const size = b => (b >= 1_000_000 ? `${(b / 1_000_000).toFixed(1).replace(".", ",")} МБ` : `${Math.max(1, Math.round(b / 1000))} КБ`);
+    for (const a of this.compose.state?.attachments || []) {
+      const remove = this.html("button", { type: "button", "aria-label": `Убрать ${a.name}` }, null, [this.svg(["M6 6l12 12M18 6 6 18"], 12, 2.4)]);
+      remove.addEventListener("click", () => {
+        this.compose.state.attachments = this.compose.state.attachments.filter(x => x !== a);
+        this.renderComposeAttachments();
+      });
+      box.append(this.html("span", { class: "attachment" }, null, [
+        this.html("span", { class: "ext" }, a.name.split(".").pop().slice(0, 4)),
+        this.html("span", { class: "info" }, null, [this.html("span", { class: "name" }, a.name), this.html("span", { class: "size" }, size(a.size))]),
+        remove,
+      ]));
+    }
+  },
+
+  sendCompose() {
+    const { MailStore } = this.mail();
+    const s = this.compose.state;
+    if (!s) {
+      return;
+    }
+    const $ = id => document.getElementById(id);
+    const pending = $("tabora-compose-to").value.trim();
+    if (pending) {
+      this.addRecipient(pending);
+    }
+    if (!s.to.length) {
+      $("tabora-compose-to").focus();
+      this.notice("Укажите получателя");
+      return;
+    }
+    const bad = s.to.find(v => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v));
+    if (bad) {
+      this.notice(`Проверьте адрес: ${bad}`);
+      return;
+    }
+    clearTimeout(this.compose.draftTimer);
+    const message = { ...this.composeDraft(), id: `s${Date.now()}`, thread: s.thread || `ts${Date.now()}`, folder: "sent", draft: false };
+    message.subject ||= "(без темы)";
+    if (s.draftId) {
+      MailStore.remove(s.draftId);
+    }
+    MailStore.add(message);
+    this.compose.box.hidden = true;
+    this.compose.state = null;
+    this.notice(`Отправлено: ${message.to.join(", ")}`);
+  },
+
+  /** Короткое уведомление оболочки внизу окна. */
+  notice(text) {
+    let box = document.getElementById("tabora-notices");
+    if (!box) {
+      box = this.html("div", { id: "tabora-notices", "aria-live": "polite" });
+      document.getElementById("browser").append(box);
+    }
+    const node = this.html("div", { class: "notice" }, text);
+    box.append(node);
+    while (box.children.length > 3) {
+      box.firstChild.remove();
+    }
+    setTimeout(() => node.remove(), 3200);
   },
 
   /** Приватное окно: фиолетовый акцент, метка в шапке, без пространств (контейнеры там не работают). */
@@ -695,6 +1077,7 @@ var Tabora = {
       { glyph: "●", title: "Панель агента", note: "Показать или скрыть", key: "⌘J", tags: "agent ai", run: () => this.toggleAgent() },
       { glyph: "P", title: "Приватное окно", note: "Без истории и cookies", key: "⌘⇧P", tags: "private инкогнито", run: () => OpenBrowserWindow({ private: true }) },
       { glyph: "↓", title: "Загрузки", note: "Файлы, которые вы скачали", key: "⌘⇧J", tags: "downloads", run: () => switchToTabHavingURI("about:downloads", true) },
+      { glyph: "✎", title: "Написать письмо", note: "Окно письма поверх любой вкладки", key: "", tags: "compose написать письмо mail new", run: () => this.openCompose() },
       { glyph: "✉", title: "Почта и алиасы", note: "Входящие, коды подтверждения, алиасы", key: "⌘⇧M", tags: "mail почта email письма алиасы inbox", run: () => this.openMail() },
       { glyph: "⚙", title: "Настройки", note: "Поведение, приватность, внешний вид", key: "⌘,", tags: "settings preferences", run: () => openPreferences() },
     ];

@@ -1,0 +1,170 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Фирменный выпадающий список (select.js). Цвета берутся из переменных
+ * страницы, где он используется, с запасными значениями палитры Tabora. */
+
+.tsel {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  width: 100%;
+}
+
+.tsel > select {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  margin: 0;
+}
+
+.tsel-btn {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  padding: 0 10px 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--tabora-field, var(--field, #1b1d22));
+  border: 1px solid var(--tabora-field-border, var(--field-border, #2a2d34));
+  border-radius: 10px;
+  color: var(--tabora-text, var(--text, #ecedef));
+  font: 600 13px/1 var(--tabora-font, var(--font, "Manrope", system-ui, sans-serif));
+  text-align: left;
+  cursor: default;
+  transition: border-color 140ms cubic-bezier(0.2, 0, 0, 1), background-color 140ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.tsel-btn:hover {
+  border-color: var(--tabora-line, var(--stroke, #2e3138));
+}
+
+.tsel-btn:focus-visible,
+.tsel-btn[aria-expanded="true"] {
+  outline: none;
+  border-color: var(--tabora-accent, var(--accent, #c8f25a));
+}
+
+.tsel-btn svg {
+  flex-shrink: 0;
+  color: var(--tabora-text-4, var(--text-4, #868b95));
+  transition: transform 140ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.tsel-btn[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.tsel-value {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Встроенный вариант: без рамки, как строка формы «От» */
+.tsel[data-inline] .tsel-btn {
+  height: 36px;
+  padding: 0 6px 0 0;
+  background: transparent;
+  border-color: transparent;
+}
+
+.tsel[data-inline] .tsel-btn:hover .tsel-value,
+.tsel[data-inline] .tsel-btn[aria-expanded="true"] .tsel-value {
+  color: var(--tabora-accent, var(--accent, #c8f25a));
+}
+
+.tsel[data-compact] .tsel-btn {
+  height: 30px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+.tsel-pop {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--tabora-panel, var(--card-2, #17191d));
+  border: 1px solid var(--tabora-field-border, var(--field-border, #2a2d34));
+  border-radius: 12px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  overflow-y: auto;
+  outline: none;
+  animation: tsel-in 140ms cubic-bezier(0.2, 0, 0, 1);
+  scrollbar-width: thin;
+}
+
+.tsel-pop[data-side="top"] {
+  animation-name: tsel-in-up;
+}
+
+@keyframes tsel-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes tsel-in-up {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.tsel-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tabora-text-2, var(--text-2, #c9ccd3));
+  font: 500 13px/1 var(--tabora-font, var(--font, "Manrope", system-ui, sans-serif));
+  text-align: left;
+  cursor: default;
+  white-space: nowrap;
+}
+
+.tsel-item[data-active] {
+  background: var(--tabora-raised, var(--raised, #23262c));
+  color: #fff;
+}
+
+.tsel-item[aria-selected="true"] {
+  color: #fff;
+  font-weight: 700;
+}
+
+.tsel-item[disabled] {
+  opacity: 0.45;
+}
+
+.tsel-item-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tsel-item-note {
+  font: 500 11px/1 var(--tabora-mono, var(--mono, "JetBrains Mono", monospace));
+  color: var(--tabora-text-4, var(--text-4, #868b95));
+}
+
+.tsel-item svg {
+  flex-shrink: 0;
+  color: var(--tabora-accent, var(--accent, #c8f25a));
+  visibility: hidden;
+}
+
+.tsel-item[aria-selected="true"] svg {
+  visibility: visible;
+}

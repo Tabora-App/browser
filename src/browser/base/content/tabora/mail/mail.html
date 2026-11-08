@@ -111,45 +111,6 @@
       <div class="alias-rows" id="alias-rows"></div>
     </section>
 
-    <!-- Написать письмо -->
-    <div class="compose" id="compose" hidden role="dialog" aria-label="Новое письмо">
-      <header class="compose-head">
-        <span class="compose-title" id="compose-title">Новое письмо</span>
-        <button class="icon-btn" id="compose-min" type="button" title="Свернуть" aria-label="Свернуть"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
-        <button class="icon-btn" id="compose-close" type="button" title="Закрыть (Esc)" aria-label="Закрыть"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
-      </header>
-      <div class="compose-body">
-        <div class="field">
-          <label for="compose-from">От</label>
-          <select id="compose-from" aria-label="Отправитель"></select>
-        </div>
-        <div class="field">
-          <label for="compose-to">Кому</label>
-          <div class="chips-input" id="compose-to-chips">
-            <input id="compose-to" type="text" placeholder="Адрес, Enter или запятая" autocomplete="off" />
-          </div>
-          <button class="link-btn" id="compose-cc-toggle" type="button">Копия</button>
-        </div>
-        <div class="field" id="compose-cc-field" hidden>
-          <label for="compose-cc">Копия</label>
-          <input id="compose-cc" type="text" placeholder="Через запятую" />
-        </div>
-        <div class="field">
-          <label for="compose-subject">Тема</label>
-          <input id="compose-subject" type="text" placeholder="О чём письмо" />
-        </div>
-        <textarea id="compose-text" class="compose-text" placeholder="Текст письма" aria-label="Текст письма"></textarea>
-        <div class="compose-attachments" id="compose-attachments"></div>
-      </div>
-      <footer class="compose-foot">
-        <button class="primary" id="compose-send" type="button">Отправить <kbd>⌘⏎</kbd></button>
-        <button class="icon-btn" id="compose-attach" type="button" title="Прикрепить файл" aria-label="Прикрепить файл"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 12-8.5 8.5a5 5 0 0 1-7-7L14 5a3.3 3.3 0 0 1 4.7 4.7L10.5 18a1.7 1.7 0 0 1-2.4-2.4L16 7.7"/></svg></button>
-        <input id="compose-file" type="file" multiple hidden />
-        <span class="compose-status" id="compose-status">Черновик сохраняется автоматически</span>
-        <button class="icon-btn danger" id="compose-discard" type="button" title="Удалить черновик" aria-label="Удалить черновик"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
-      </footer>
-    </div>
-
     <!-- Новый алиас -->
     <div class="modal-backdrop" id="alias-modal" hidden>
       <div class="modal" role="dialog" aria-labelledby="alias-modal-title">
@@ -176,6 +137,7 @@
 
     <div class="toasts" id="toasts" aria-live="polite"></div>
   </div>
+  <script src="chrome://browser/content/tabora/select.js"></script>
   <script src="chrome://browser/content/tabora/mail/mail.js"></script>
 </body>
 </html>

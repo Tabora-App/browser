@@ -6,6 +6,7 @@
  * Сетка: папки 200, список 380, письмо остальное. Радиусы 14/12/10/9. */
 
 @import url("chrome://browser/content/tabora/fonts.css");
+@import url("chrome://browser/content/tabora/select.css");
 
 :root {
   --bg: #0f1013;
@@ -635,53 +636,6 @@ kbd {
 }
 .toggle[aria-checked="true"] { background: var(--accent); }
 .toggle[aria-checked="true"]::after { transform: translateX(16px); background: var(--on-accent); }
-
-/* ---- Написать ---------------------------------------------------------- */
-
-.compose {
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
-  width: 560px;
-  max-width: calc(100vw - 40px);
-  max-height: calc(100vh - 40px);
-  display: flex;
-  flex-direction: column;
-  background: var(--card-2);
-  border: 1px solid var(--field-border);
-  border-radius: 16px;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
-  z-index: 20;
-  animation: compose-in 180ms cubic-bezier(0.2, 0, 0, 1);
-}
-@keyframes compose-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-.compose[data-min="true"] .compose-body, .compose[data-min="true"] .compose-foot { display: none; }
-.compose[data-min="true"] { width: 320px; }
-.compose-head { display: flex; align-items: center; gap: 6px; height: 48px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--line-2); }
-.compose-title { flex: 1; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.compose-head .icon-btn { width: 30px; height: 30px; border-color: transparent; }
-.compose-body { display: flex; flex-direction: column; padding: 4px 16px 10px; overflow-y: auto; }
-.field { display: flex; align-items: center; gap: 10px; min-height: 40px; border-bottom: 1px solid var(--line-2); }
-.field label { width: 48px; font-size: 12px; color: var(--text-4); flex-shrink: 0; }
-.field input, .field select { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; padding: 0; height: 36px; }
-.field select { appearance: none; color: var(--text); font-weight: 600; }
-.field input::placeholder { color: var(--text-5); }
-.link-btn { border: 0; background: transparent; color: var(--text-4); font-size: 12px; font-weight: 600; padding: 0 2px; }
-.link-btn:hover { color: var(--text); }
-.chips-input { flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 0; min-width: 0; }
-.chips-input input { flex: 1; min-width: 140px; height: 28px; }
-.addr-chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 6px 0 10px; border-radius: 7px; background: var(--raised); font: 500 12px/1 var(--mono); color: var(--text); }
-.addr-chip[data-bad="true"] { outline: 1px solid var(--warn); }
-.addr-chip button { border: 0; background: transparent; color: var(--text-4); width: 18px; height: 18px; border-radius: 4px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
-.addr-chip button:hover { background: var(--raised-2); color: #fff; }
-.compose-text { min-height: 220px; resize: vertical; border: 0; background: transparent; outline: none; padding: 12px 0; line-height: 1.5; color: var(--text); }
-.compose-text::placeholder { color: var(--text-5); }
-.compose-attachments { display: flex; flex-wrap: wrap; gap: 8px; }
-.compose-attachments .attachment { height: 36px; }
-.compose-attachments .attachment button { border: 0; background: transparent; color: var(--text-4); padding: 0; display: inline-flex; }
-.compose-foot { display: flex; align-items: center; gap: 8px; padding: 10px 16px 12px; border-top: 1px solid var(--line-2); }
-.compose-foot .icon-btn { border-color: transparent; }
-.compose-status { flex: 1; font-size: 11px; color: var(--text-5); text-align: right; }
 
 /* ---- Модальное окно ---------------------------------------------------- */
 
