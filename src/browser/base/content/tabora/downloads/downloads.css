@@ -186,7 +186,7 @@ kbd { font: 500 10px/1 var(--mono); color: var(--text-4); border: 1px solid var(
 .progress.indeterminate span { width: 30%; animation: slide 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
 @keyframes slide { from { transform: translateX(-120%); } to { transform: translateX(400%); } }
 
-.actions { display: flex; align-items: center; gap: 4px; }
+.actions { display: flex; align-items: center; gap: 6px; }
 .act {
   height: 32px; min-width: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: 8px; background: transparent;
   color: var(--text-3); font-weight: 600; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;
@@ -199,6 +199,7 @@ kbd { font: 500 10px/1 var(--mono); color: var(--text-4); border: 1px solid var(
 .act svg { width: 15px; height: 15px; }
 .act.icon-only { padding: 0; width: 32px; background: var(--card-2); border-color: var(--line-2); color: var(--text-3); }
 .act.icon-only:hover { background: var(--raised); border-color: var(--stroke); color: var(--text-strong); }
+@media (prefers-color-scheme: light) { .act.icon-only:hover { background: #f1efe9; border-color: var(--stroke); } }
 .item:not(:hover):not(:focus-within) .actions .act.quiet { opacity: 0; }
 
 /* Плитки */
