@@ -153,8 +153,6 @@
 #back-button { order: 1; }
 #forward-button { order: 2; }
 #stop-reload-button { order: 3; display: flex !important; }
-#reload-button, #stop-button { display: flex !important; }
-#reload-button[disabled], #stop-button[disabled] { opacity: 0.5; }
 #PanelUI-button { order: 4; }
 #urlbar-container { order: 10; }
 
