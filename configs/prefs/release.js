@@ -93,3 +93,6 @@ pref("tabora.web3.ipfsGateway", "dweb.link");
 
 // Кошелёк: автоблокировка (минуты), публичные ноды меняются в настройках кошелька
 pref("tabora.wallet.autolockMinutes", 15);
+
+// Перевод страниц: без всплывающего предложения, только по кнопке в адресной строке
+pref("browser.translations.automaticallyPopup", false);

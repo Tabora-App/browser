@@ -493,9 +493,21 @@ Object.assign(Tabora, {
 
     const foot = document.getElementById("tabora-drawer-foot");
     foot.replaceChildren();
-    const refresh = h("button", { class: "dfull", type: "button" }, null, [h("span", {}, "Обновить балансы"), this.svg(["M20 12a8 8 0 1 1-2.3-5.7", "M20 4v5h-5"], 14, 2)]);
+    const refreshing = !!w.refreshing;
+    const refresh = h("button", { class: `dfull${refreshing ? " loading" : ""}`, type: "button" }, null, [
+      h("span", {}, refreshing ? "Обновляем…" : "Обновить балансы"),
+      refreshing ? h("span", { class: "spin" }) : this.svg(["M20 12a8 8 0 1 1-2.3-5.7", "M20 4v5h-5"], 14, 2),
+    ]);
+    refresh.disabled = refreshing;
     refresh.addEventListener("click", () => {
-      w.balances = {};
+      if (w.refreshing) {
+        return;
+      }
+      for (const k of Object.keys(w.balances)) {
+        w.balances[k].at = 0; // старые значения остаются на экране до прихода новых
+      }
+      w.pricesAt = 0;
+      w.refreshing = true;
       this.renderDrawer();
     });
     foot.append(refresh);
@@ -643,8 +655,13 @@ Object.assign(Tabora, {
     });
     const needPrices = !w.pricesAt || Date.now() - w.pricesAt > 120000;
     if (!stale.length && !needPrices) {
+      w.refreshing = false;
       return;
     }
+    if (w.loadingNow) {
+      return; // уже идёт
+    }
+    w.loadingNow = true;
     if (needPrices) {
       w.prices = await WalletStore.prices();
       w.pricesAt = Date.now();
@@ -657,6 +674,8 @@ Object.assign(Tabora, {
         w.balances[`${id}:${addr}`] = { error: e.message, at: Date.now() };
       }
     }));
+    w.loadingNow = false;
+    w.refreshing = false;
     this.updateWalletCard();
     if (seq === this.drawer.seq && this.drawer.open && this.drawer.section === "wallet") {
       this.renderDrawer();
@@ -856,7 +875,7 @@ Object.assign(Tabora, {
         ok.click();
       }
     });
-    this.drawer.this.wAppend(body, box);
+    this.drawer.body.append(box);
     setTimeout(() => pass.input.focus(), 50);
   },
 
@@ -876,7 +895,7 @@ Object.assign(Tabora, {
         ok.click();
       }
     });
-    this.drawer.this.wAppend(body, box);
+    this.drawer.body.append(box);
     setTimeout(() => {
       input.focus();
       input.select();
@@ -892,7 +911,7 @@ Object.assign(Tabora, {
       grid.addEventListener("copy", e => e.preventDefault());
       const close = this.wButton("Скрыть", "primary", () => sheet.remove());
       const sheet = h("div", { class: "w-sheet" }, null, [h("div", { class: "w-sheet-card" }, null, [h("b", {}, wallet.name), grid, close])]);
-      this.drawer.this.wAppend(body, sheet);
+      this.drawer.body.append(sheet);
       clearTimeout(this.wallet.hideTimer);
       this.wallet.hideTimer = setTimeout(() => sheet.remove(), 60000);
     });
@@ -926,7 +945,7 @@ Object.assign(Tabora, {
     const cancel = this.wButton("Отмена", "ghost", () => box.remove());
     const box = h("div", { class: "w-sheet" }, null, [h("div", { class: "w-sheet-card" }, null, [h("b", {}, WalletStore.passwordless ? "Установить пароль" : "Сменить пароль"), WalletStore.passwordless ? h("span") : old.wrap, p1.wrap, p2.wrap, err, h("div", { class: "w-actions" }, null, [cancel, ok])])]);
     box.querySelectorAll("input").forEach(i => i.addEventListener("keydown", e => e.stopPropagation()));
-    this.drawer.this.wAppend(body, box);
+    this.drawer.body.append(box);
   },
 });
 
