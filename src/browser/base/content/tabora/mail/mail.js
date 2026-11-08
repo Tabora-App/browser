@@ -782,7 +782,7 @@ const App = {
         el("span", { class: "site" }, [el("b", { text: a.site }), el("span", { text: `создан: ${a.by}` })]),
         el("span", { class: "num", text: String(a.count) }),
         el("span", { class: "date", text: dateWord(a.created) }),
-        el("span", {}, el("span", { class: "space-pill", text: a.space, style: `color:${SPACE_COLORS[a.space] || "#ecedef"}` })),
+        el("span", {}, el("span", { class: "space-pill", text: a.space, style: `--space-color:${SPACE_COLORS[a.space] || "#ecedef"}` })),
         el("button", {
           class: "toggle", type: "button", role: "switch", "aria-checked": String(a.on),
           "aria-label": `Алиас ${a.address} ${a.on ? "включён" : "выключен"}`,
