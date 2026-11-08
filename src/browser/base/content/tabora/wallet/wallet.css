@@ -765,9 +765,9 @@
 
 #tabora-drawer .w-coin {
   position: relative;
-  width: 34px;
-  height: 34px;
-  border-radius: 11px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
   background: color-mix(in srgb, var(--c) 18%, var(--tabora-field));
   color: color-mix(in srgb, var(--c) 80%, #fff);
   display: flex;
@@ -840,9 +840,9 @@
 
 /* Логотипы сетей и токенов */
 #tabora-drawer .w-coin img {
-  width: 34px;
-  height: 34px;
-  border-radius: 11px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
   object-fit: cover;
   display: block;
 }
@@ -853,11 +853,13 @@
 
 #tabora-drawer .w-coin-chain {
   overflow: hidden;
-  width: 14px;
-  height: 14px;
-  right: -4px;
-  bottom: -4px;
+  width: 16px;
+  height: 16px;
+  right: -3px;
+  bottom: -3px;
+  border: 2px solid var(--tabora-panel);
   background: var(--tabora-panel);
+  box-sizing: border-box;
 }
 
 #tabora-drawer .w-coin-chain img {
