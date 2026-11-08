@@ -726,3 +726,114 @@
 #tabora-drawer .w-sheet-card .w-actions {
   justify-content: flex-end;
 }
+
+/* Активы */
+#tabora-drawer .w-head-actions {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px 0;
+}
+
+#tabora-drawer .w-head-actions .w-btn {
+  flex: 1;
+}
+
+#tabora-drawer .w-seg.wide {
+  align-self: stretch;
+  margin: 0 4px;
+}
+
+#tabora-drawer .w-seg.wide button {
+  flex: 1;
+  height: 30px;
+}
+
+#tabora-drawer .w-asset {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  cursor: default;
+  transition: background-color var(--tabora-ease);
+}
+
+#tabora-drawer .w-asset:hover {
+  background: var(--tabora-raised);
+}
+
+#tabora-drawer .w-coin {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--c) 18%, var(--tabora-field));
+  color: color-mix(in srgb, var(--c) 80%, #fff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 800 14px/1 var(--tabora-font);
+  flex: none;
+}
+
+#tabora-drawer .w-coin-chain {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--c);
+  border: 2px solid var(--tabora-panel);
+}
+
+#tabora-drawer .w-sub-line {
+  font: 500 11px/1.2 var(--tabora-font);
+  color: var(--tabora-text-4);
+}
+
+#tabora-drawer .w-empty {
+  padding: 18px 14px;
+  text-align: center;
+  font: 400 12.5px/1.5 var(--tabora-font);
+  color: var(--tabora-text-4);
+}
+
+#tabora-drawer .w-zero-toggle {
+  display: flex;
+  justify-content: center;
+  padding: 6px 0;
+}
+
+#tabora-drawer .w-add {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  margin: 4px 4px 0;
+  padding: 0 12px;
+  border: 1px dashed var(--tabora-line);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--tabora-text-3);
+  font: 600 12.5px/1 var(--tabora-font);
+  cursor: default;
+  transition: border-color var(--tabora-ease), color var(--tabora-ease), background-color var(--tabora-ease);
+}
+
+#tabora-drawer .w-add:hover {
+  border-color: var(--tabora-accent);
+  color: var(--tabora-accent-ink);
+  background: var(--tabora-field);
+}
+
+#tabora-drawer .w-row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+#tabora-drawer .w-field .tsel {
+  width: 100%;
+}

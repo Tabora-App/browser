@@ -374,20 +374,21 @@ Object.assign(Tabora, {
     const wallet = WalletStore.activeWallet;
     const account = WalletStore.activeAccount;
     const hidden = new Set(WalletStore.data.settings?.hiddenChains || []);
+    const w = this.wallet;
+    w.tab ||= "assets";
 
-    // Шапка: кошелёк, адрес, итог
     const walletBtn = h("button", { class: "w-pick", type: "button" }, null, [h("span", { class: "w-pick-name" }, wallet.name), this.wIcon(["m6 9 6 6 6-6"], 12, 2.2)]);
     walletBtn.addEventListener("click", e => {
       const r = e.currentTarget.getBoundingClientRect();
       this.showMenu([
-        ...WalletStore.wallets.map(w => ({ label: w.name, hint: `${w.accounts.length} адр.`, checked: w.id === wallet.id, run: () => WalletStore.setActive(w.id, 0) })),
+        ...WalletStore.wallets.map(x => ({ label: x.name, hint: `${x.accounts.length} адр.`, checked: x.id === wallet.id, run: () => WalletStore.setActive(x.id, 0) })),
         { separator: true },
         { label: "Добавить кошелёк по фразе…", run: () => this.walletStartFlow("add-import") },
         { label: "Создать новый кошелёк…", run: () => this.walletStartFlow("add-create") },
         { label: "Переименовать", run: () => this.walletPrompt("Название кошелька", wallet.name, v => WalletStore.renameWallet(wallet.id, v)) },
       ], r.left, r.bottom + 6);
     });
-    const accBtn = h("button", { class: "w-pick small", type: "button" }, null, [h("span", {}, account.name), this.wIcon(["m6 9 6 6 6-6"], 11, 2.2)]);
+    const accBtn = h("button", { class: "w-pick small", type: "button" }, null, [h("span", {}, `${account.name} · ${this.shortAddr(account.addresses.ethereum)}`), this.wIcon(["m6 9 6 6 6-6"], 11, 2.2)]);
     accBtn.addEventListener("click", e => {
       const r = e.currentTarget.getBoundingClientRect();
       this.showMenu([
@@ -397,116 +398,256 @@ Object.assign(Tabora, {
         { label: "Переименовать адрес", run: () => this.walletPrompt("Название адреса", account.name, v => WalletStore.renameAccount(wallet.id, account.index, v)) },
       ], r.left, r.bottom + 6);
     });
-    const total = h("div", { class: "w-total", id: "tabora-wallet-total" }, null, [h("span", { class: "w-total-sum" }, "—"), h("span", { class: "w-total-note" }, "обновляем…")]);
+
+    const assets = this.walletAssets();
+    const totalUsd = assets.reduce((n, a) => n + (a.usd || 0), 0);
+    const loaded = assets.filter(a => !a.pending).length;
+    const total = h("div", { class: "w-total" }, null, [
+      h("span", { class: "w-total-sum" }, loaded ? `$${totalUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"),
+      h("span", { class: "w-total-note" }, assets.some(a => a.pending) ? "обновляем…" : `${CHAIN_ORDER.filter(id => !hidden.has(id)).length} сетей · ${new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`),
+    ]);
     const lock = this.iconButton("", "Заблокировать", ["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], () => WalletStore.lock(), 15);
     const settings = this.iconButton("", "Настройки кошелька", ["M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", "M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"], () => this.walletGo("settings"), 15);
+    const receiveBtn = this.wButton("Получить", "", () => { w.receive = "ethereum"; this.walletGo("receive"); });
+    receiveBtn.prepend(this.wIcon(["M12 5v14", "M5 12l7 7 7-7"], 14, 2.2));
+    const sendBtn = this.wButton("Отправить", "primary", () => this.notice("Отправка появится следующим шагом: подтверждение, комиссия, пароль"));
+    sendBtn.prepend(this.wIcon(["M12 19V5", "M5 12l7-7 7 7"], 14, 2.2));
     const head = h("div", { class: "w-head" }, null, [
       h("div", { class: "w-head-row" }, null, [walletBtn, h("span", { class: "spacer" }), settings, lock]),
       accBtn,
       total,
+      h("div", { class: "w-head-actions" }, null, [sendBtn, receiveBtn]),
       WalletStore.passwordless ? h("div", { class: "w-badge-danger" }, "Без пароля · незащищённый режим") : h("span"),
     ]);
 
-    // Сети
+    const seg = h("div", { class: "w-seg wide" }, null, [["assets", "Активы"], ["chains", "Сети"]].map(([id, label]) => {
+      const b = h("button", { type: "button", "aria-pressed": String(w.tab === id) }, label);
+      b.addEventListener("click", () => {
+        w.tab = id;
+        this.renderDrawer();
+      });
+      return b;
+    }));
+
     const list = h("div", { class: "w-chains" });
+    if (w.tab === "assets") {
+      const nonzero = assets.filter(a => a.pending || parseFloat(a.amount) > 0);
+      const zero = assets.filter(a => !a.pending && !(parseFloat(a.amount) > 0));
+      nonzero.forEach(a => list.append(this.walletAssetRow(a)));
+      if (!nonzero.length && !assets.some(a => a.pending)) {
+        list.append(h("div", { class: "w-empty" }, "Пока пусто. Пополните любой адрес: ниже кнопка «Получить»."));
+      }
+      if (zero.length) {
+        const toggle = h("button", { class: "w-link", type: "button" }, w.showZero ? "Скрыть пустые" : `Показать ${zero.length} без баланса`);
+        toggle.addEventListener("click", () => {
+          w.showZero = !w.showZero;
+          this.renderDrawer();
+        });
+        list.append(h("div", { class: "w-zero-toggle" }, null, [toggle]));
+        if (w.showZero) {
+          zero.forEach(a => list.append(this.walletAssetRow(a)));
+        }
+      }
+      const add = h("button", { class: "w-add", type: "button" }, null, [this.wIcon(["M12 5v14", "M5 12h14"], 14, 2.2), h("span", {}, "Добавить токен по адресу контракта")]);
+      add.addEventListener("click", () => this.walletAddTokenSheet());
+      list.append(add);
+    } else {
+      for (const id of CHAIN_ORDER) {
+        if (hidden.has(id)) {
+          continue;
+        }
+        const chain = CHAINS[id];
+        const address = account.addresses[id];
+        const bal = w.balances[`${id}:${address}`];
+        const price = w.prices?.[chain.symbol] || 0;
+        const row = h("div", { class: "w-chain", "data-chain": id, style: `--c:${chain.color}` }, null, [
+          h("span", { class: "w-dot" }),
+          h("div", { class: "w-chain-text" }, null, [h("b", {}, chain.name), h("span", { class: "w-addr mono", title: address }, this.shortAddr(address))]),
+          h("div", { class: "w-chain-bal" }, null, [
+            h("b", { class: `w-native${bal?.error ? " err" : ""}` }, bal ? (bal.error ? "нет связи" : `${bal.native} ${chain.symbol}`) : "…"),
+            h("span", { class: "w-usd" }, bal && !bal.error ? (price ? `$${(parseFloat(bal.native) * price).toFixed(2)}` : "") : bal?.error ? bal.error.slice(0, 36) : ""),
+          ]),
+        ]);
+        row.addEventListener("click", () => { w.receive = id; this.walletGo("receive"); });
+        row.addEventListener("contextmenu", e => {
+          e.preventDefault();
+          this.showMenu([
+            { label: "Копировать адрес", run: () => this.copyText(address, "Адрес скопирован") },
+            { label: "Показать адрес и QR", run: () => { w.receive = id; this.walletGo("receive"); } },
+            { label: "Открыть в обозревателе", run: () => this.openInSpace(chain.explorer + address, true) },
+            { separator: true },
+            { label: "Скрыть сеть", run: async () => { WalletStore.data.settings.hiddenChains = [...hidden, id]; await WalletStore.save(); } },
+          ], e.clientX, e.clientY);
+        });
+        list.append(row);
+      }
+    }
+
+    const foot = document.getElementById("tabora-drawer-foot");
+    foot.replaceChildren();
+    const refresh = h("button", { class: "dfull", type: "button" }, null, [h("span", {}, "Обновить балансы"), this.svg(["M20 12a8 8 0 1 1-2.3-5.7", "M20 4v5h-5"], 14, 2)]);
+    refresh.addEventListener("click", () => {
+      w.balances = {};
+      this.renderDrawer();
+    });
+    foot.append(refresh);
+    foot.hidden = false;
+    return h("div", { class: "w-main" }, null, [head, seg, list]);
+  },
+
+  /** Плоский список активов из кэша балансов: нативные монеты и токены каждой сети. */
+  walletAssets() {
+    const { WalletStore, CHAINS, CHAIN_ORDER } = this.walletStore();
+    const account = WalletStore.activeAccount;
+    const hidden = new Set(WalletStore.data.settings?.hiddenChains || []);
+    const prices = this.wallet.prices || {};
+    const out = [];
     for (const id of CHAIN_ORDER) {
       if (hidden.has(id)) {
         continue;
       }
       const chain = CHAINS[id];
       const address = account.addresses[id];
-      const row = h("div", { class: "w-chain", "data-chain": id, style: `--c:${chain.color}` }, null, [
-        h("span", { class: "w-dot" }),
-        h("div", { class: "w-chain-text" }, null, [
-          h("b", {}, chain.name),
-          h("span", { class: "w-addr mono", title: address }, this.shortAddr(address)),
-        ]),
-        h("div", { class: "w-chain-bal" }, null, [
-          h("b", { class: "w-native" }, "…"),
-          h("span", { class: "w-usd" }, ""),
-        ]),
-      ]);
-      row.addEventListener("click", () => {
-        this.wallet.receive = id;
-        this.walletGo("receive");
-      });
-      row.addEventListener("contextmenu", e => {
-        e.preventDefault();
-        this.showMenu([
-          { label: "Копировать адрес", run: () => this.copyText(address, "Адрес скопирован") },
-          { label: "Показать адрес и QR", run: () => { this.wallet.receive = id; this.walletGo("receive"); } },
-          { label: "Открыть в обозревателе", run: () => this.openInSpace(chain.explorer + address, true) },
-          { separator: true },
-          { label: "Скрыть сеть", run: async () => { WalletStore.data.settings.hiddenChains = [...hidden, id]; await WalletStore.save(); } },
-        ], e.clientX, e.clientY);
-      });
-      list.append(row);
+      const bal = this.wallet.balances[`${id}:${address}`];
+      if (!bal || bal.error) {
+        out.push({ key: `${id}:native`, chain: id, chainName: chain.name, color: chain.color, symbol: chain.symbol, amount: "0", usd: 0, native: true, pending: !bal, error: bal?.error });
+        continue;
+      }
+      out.push({ key: `${id}:native`, chain: id, chainName: chain.name, color: chain.color, symbol: chain.symbol, amount: bal.native, usd: parseFloat(bal.native) * (prices[chain.symbol] || 0), native: true, address });
+      for (const t of bal.tokens || []) {
+        out.push({ key: `${id}:${t.address || t.mint}`, chain: id, chainName: chain.name, color: chain.color, symbol: t.symbol, amount: t.amount, usd: parseFloat(t.amount) * (prices[t.symbol] || 0), token: t, address });
+      }
     }
-    const foot = document.getElementById("tabora-drawer-foot");
-    foot.replaceChildren();
-    const refresh = this.html("button", { class: "dfull", type: "button" }, null, [this.html("span", {}, "Обновить балансы"), this.svg(["M20 12a8 8 0 1 1-2.3-5.7", "M20 4v5h-5"], 14, 2)]);
-    refresh.addEventListener("click", () => {
-      this.wallet.balances = {};
-      this.renderDrawer();
-    });
-    foot.append(refresh);
-    foot.hidden = false;
-    return h("div", { class: "w-main" }, null, [head, list]);
+    out.sort((a, b) => (b.usd || 0) - (a.usd || 0) || (parseFloat(b.amount) || 0) - (parseFloat(a.amount) || 0));
+    return out;
   },
 
-  async walletLoadBalances(seq) {
-    const { WalletStore, CHAINS, CHAIN_ORDER } = this.walletStore();
-    const account = WalletStore.activeAccount;
-    const body = this.drawer.body;
-    const prices = await WalletStore.prices();
-    let totalUsd = 0;
-    let known = 0;
-    const jobs = CHAIN_ORDER.filter(id => !(WalletStore.data.settings?.hiddenChains || []).includes(id)).map(async id => {
-      const chain = CHAINS[id];
-      const addr = account.addresses[id];
-      const cacheKey = `${id}:${addr}`;
-      let bal = this.wallet.balances[cacheKey];
-      if (!bal || Date.now() - bal.at > 60000) {
-        try {
-          bal = { ...(await WalletStore.balance(id, addr)), at: Date.now() };
-        } catch (e) {
-          bal = { error: e.message, at: Date.now() };
-        }
-        this.wallet.balances[cacheKey] = bal;
+  walletAssetRow(a) {
+    const h = (t, x, y, c) => this.html(t, x, y, c);
+    const { WalletStore, CHAINS } = this.walletStore();
+    const row = h("div", { class: "w-asset", style: `--c:${a.color}` }, null, [
+      h("span", { class: "w-coin" }, null, [h("b", {}, a.symbol.slice(0, 1)), h("i", { class: "w-coin-chain" })]),
+      h("div", { class: "w-chain-text" }, null, [h("b", {}, a.symbol), h("span", { class: "w-sub-line" }, a.native ? a.chainName : `${a.chainName}${a.token?.custom ? " · свой токен" : ""}`)]),
+      h("div", { class: "w-chain-bal" }, null, [
+        h("b", { class: `w-native${a.error ? " err" : ""}` }, a.pending ? "…" : a.error ? "нет связи" : a.amount),
+        h("span", { class: "w-usd" }, a.pending || a.error ? "" : a.usd ? `$${a.usd.toFixed(2)}` : ""),
+      ]),
+    ]);
+    row.addEventListener("click", () => { this.wallet.receive = a.chain; this.walletGo("receive"); });
+    row.addEventListener("contextmenu", e => {
+      e.preventDefault();
+      const items = [
+        { label: `Получить ${a.symbol}`, run: () => { this.wallet.receive = a.chain; this.walletGo("receive"); } },
+        { label: "Копировать адрес", run: () => this.copyText(a.address, "Адрес скопирован") },
+        { label: "Открыть в обозревателе", run: () => this.openInSpace(CHAINS[a.chain].explorer + a.address, true) },
+      ];
+      if (a.token) {
+        items.push({ separator: true }, { label: "Скрыть токен", run: async () => { await WalletStore.hideToken(a.chain, a.token); this.wallet.balances = {}; } });
       }
-      if (seq !== this.drawer.seq) {
-        return;
-      }
-      const row = body.querySelector(`.w-chain[data-chain="${id}"]`);
-      if (!row) {
-        return;
-      }
-      const nat = row.querySelector(".w-native");
-      const usd = row.querySelector(".w-usd");
-      if (bal.error) {
-        nat.textContent = "нет связи";
-        nat.classList.add("err");
-        usd.textContent = bal.error.slice(0, 40);
-        return;
-      }
-      nat.textContent = `${bal.native} ${chain.symbol}`;
-      const price = prices[chain.symbol] || 0;
-      let value = parseFloat(bal.native) * price;
-      for (const t of bal.tokens) {
-        value += parseFloat(t.amount) * (prices[t.symbol] || 0);
-      }
-      totalUsd += value;
-      known++;
-      usd.textContent = (bal.tokens.length ? bal.tokens.map(t => `${t.amount} ${t.symbol}`).join(" · ") + " · " : "") + (price ? `$${value.toFixed(2)}` : "");
+      this.showMenu(items, e.clientX, e.clientY);
     });
-    await Promise.all(jobs);
-    if (seq !== this.drawer.seq) {
+    return row;
+  },
+
+  walletAddTokenSheet() {
+    const h = (t, a, x, c) => this.html(t, a, x, c);
+    const { WalletStore, CHAINS, CHAIN_ORDER } = this.walletStore();
+    const chainSel = h("select", {}, null, CHAIN_ORDER.filter(id => CHAINS[id].kind !== "btc").map(id => h("option", { value: id }, CHAINS[id].name)));
+    const addr = this.wField("Адрес контракта или mint", { type: "text", placeholder: "0x… / T… / mint", autocomplete: "off", spellcheck: "false" });
+    const sym = this.wField("Символ", { type: "text", placeholder: "USDT", maxlength: "12" });
+    const dec = this.wField("Знаков после запятой", { type: "number", min: "0", max: "18", placeholder: "6" });
+    const status = h("div", { class: "w-status" });
+    const err = h("div", { class: "w-error", hidden: "true" });
+    let timer = null;
+    const lookup = async () => {
+      const v = addr.input.value.trim();
+      if (v.length < 20) {
+        return;
+      }
+      status.textContent = "Ищем контракт…";
+      try {
+        const info = await WalletStore.tokenInfo(chainSel.value, v);
+        if (info.symbol) {
+          sym.input.value = info.symbol;
+        }
+        dec.input.value = String(info.decimals);
+        status.textContent = info.name ? `Найдено: ${info.name}` : "Контракт найден, укажите символ";
+        status.toggleAttribute("ok", true);
+      } catch (e) {
+        status.textContent = e.message;
+        status.removeAttribute("ok");
+      }
+    };
+    addr.input.addEventListener("input", () => {
+      clearTimeout(timer);
+      timer = setTimeout(lookup, 400);
+    });
+    chainSel.addEventListener("change", lookup);
+    const ok = this.wButton("Добавить", "primary", async () => {
+      const v = addr.input.value.trim();
+      const symbol = sym.input.value.trim().toUpperCase();
+      const decimals = parseInt(dec.input.value, 10);
+      if (!v || !symbol || Number.isNaN(decimals)) {
+        err.textContent = "Заполните адрес, символ и знаки";
+        err.hidden = false;
+        return;
+      }
+      const kind = CHAINS[chainSel.value].kind;
+      try {
+        await WalletStore.addToken(chainSel.value, kind === "sol" ? { mint: v, symbol, decimals } : { address: v, symbol, decimals });
+        box.remove();
+        this.wallet.balances = {};
+        this.notice(`Токен ${symbol} добавлен`);
+        this.renderDrawer();
+      } catch (e) {
+        err.textContent = e.message;
+        err.hidden = false;
+      }
+    });
+    const cancel = this.wButton("Отмена", "ghost", () => box.remove());
+    const box = h("div", { class: "w-sheet" }, null, [h("div", { class: "w-sheet-card" }, null, [
+      h("b", {}, "Добавить токен"),
+      h("p", { class: "w-sub" }, "ERC-20, TRC-20 и SPL. Символ и знаки подставим из контракта, проверьте их перед добавлением."),
+      h("label", { class: "w-field" }, null, [h("span", {}, "Сеть"), chainSel]),
+      addr.wrap, h("div", { class: "w-row2" }, null, [sym.wrap, dec.wrap]), status, err,
+      h("div", { class: "w-actions" }, null, [cancel, ok]),
+    ])]);
+    box.querySelectorAll("input").forEach(i => i.addEventListener("keydown", e => e.stopPropagation()));
+    this.drawer.body.append(box);
+    if (window.TaboraSelect) {
+      window.TaboraSelect.enhance(chainSel, { compact: true });
+    }
+    setTimeout(() => addr.input.focus(), 50);
+  },
+
+  /** Загрузка балансов активного аккаунта: только устаревшие, затем одна перерисовка. */
+  async walletLoadBalances(seq) {
+    const { WalletStore, CHAIN_ORDER } = this.walletStore();
+    const account = WalletStore.activeAccount;
+    const w = this.wallet;
+    const hidden = new Set(WalletStore.data.settings?.hiddenChains || []);
+    const stale = CHAIN_ORDER.filter(id => !hidden.has(id)).filter(id => {
+      const b = w.balances[`${id}:${account.addresses[id]}`];
+      return !b || Date.now() - b.at > 60000;
+    });
+    const needPrices = !w.pricesAt || Date.now() - w.pricesAt > 120000;
+    if (!stale.length && !needPrices) {
       return;
     }
-    const total = body.querySelector("#tabora-wallet-total");
-    if (total) {
-      total.querySelector(".w-total-sum").textContent = `$${totalUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-      total.querySelector(".w-total-note").textContent = `${known} ${this.plural(known, "сеть", "сети", "сетей")} · ${new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`;
+    if (needPrices) {
+      w.prices = await WalletStore.prices();
+      w.pricesAt = Date.now();
+    }
+    await Promise.all(stale.map(async id => {
+      const addr = account.addresses[id];
+      try {
+        w.balances[`${id}:${addr}`] = { ...(await WalletStore.balance(id, addr)), at: Date.now() };
+      } catch (e) {
+        w.balances[`${id}:${addr}`] = { error: e.message, at: Date.now() };
+      }
+    }));
+    if (seq === this.drawer.seq && this.drawer.open && this.drawer.section === "wallet") {
+      this.renderDrawer();
     }
   },
 

@@ -25,10 +25,10 @@ export const CHAINS = {
   ethereum: { id: "ethereum", name: "Ethereum", symbol: "ETH", kind: "evm", chainId: 1, decimals: 18, color: "#8a92ff", path: "m/44'/60'/0'/0/{i}",
     nodes: ["https://ethereum-rpc.publicnode.com", "https://cloudflare-eth.com", "https://rpc.ankr.com/eth", "https://eth.llamarpc.com"],
     explorer: "https://etherscan.io/address/",
-    tokens: [{ symbol: "USDT", address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6 }, { symbol: "USDC", address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6 }] },
+    tokens: [{ symbol: "USDT", address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6 }, { symbol: "USDC", address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6 }, { symbol: "DAI", address: "0x6B175474E89094C44Da98b954EedeAC495271d0F", decimals: 18 }] },
   base: { id: "base", name: "Base", symbol: "ETH", kind: "evm", chainId: 8453, decimals: 18, color: "#4f7bff", path: "m/44'/60'/0'/0/{i}", sameAs: "ethereum",
     nodes: ["https://base-rpc.publicnode.com", "https://mainnet.base.org", "https://base.llamarpc.com"], explorer: "https://basescan.org/address/",
-    tokens: [{ symbol: "USDC", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 }] },
+    tokens: [{ symbol: "USDC", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 }, { symbol: "USDT", address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 }] },
   arbitrum: { id: "arbitrum", name: "Arbitrum", symbol: "ETH", kind: "evm", chainId: 42161, decimals: 18, color: "#6fb6ff", path: "m/44'/60'/0'/0/{i}", sameAs: "ethereum",
     nodes: ["https://arbitrum-one-rpc.publicnode.com", "https://arb1.arbitrum.io/rpc"], explorer: "https://arbiscan.io/address/",
     tokens: [{ symbol: "USDT", address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 }, { symbol: "USDC", address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6 }] },
@@ -42,7 +42,7 @@ export const CHAINS = {
     tokens: [{ symbol: "USDC", mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6 }, { symbol: "USDT", mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", decimals: 6 }] },
   tron: { id: "tron", name: "TRON", symbol: "TRX", kind: "tron", decimals: 6, color: "#ff7b7b", path: "m/44'/195'/0'/0/{i}",
     nodes: ["https://api.trongrid.io", "https://tron-rpc.publicnode.com/jsonrpc"], explorer: "https://tronscan.org/#/address/",
-    tokens: [{ symbol: "USDT", address: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", decimals: 6 }] },
+    tokens: [{ symbol: "USDT", address: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", decimals: 6 }, { symbol: "USDC", address: "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8", decimals: 6 }] },
 };
 export const CHAIN_ORDER = ["ethereum", "base", "arbitrum", "polygon", "bitcoin", "solana", "tron"];
 
@@ -558,6 +558,94 @@ export const WalletStore = {
     return "0x" + bytesToHex(raw.slice(1));
   },
 
+  /* ---------- токены ---------- */
+
+  tokensFor(chainId) {
+    const chain = CHAINS[chainId];
+    const custom = this.data?.settings?.customTokens?.[chainId] || [];
+    const hidden = new Set(this.data?.settings?.hiddenTokens?.[chainId] || []);
+    const key = t => (t.address || t.mint || "").toLowerCase();
+    const all = [...(chain.tokens || []), ...custom.filter(c => !(chain.tokens || []).some(t => key(t) === key(c)))];
+    return all.filter(t => !hidden.has(key(t)));
+  },
+
+  async addToken(chainId, token) {
+    this.data.settings.customTokens ||= {};
+    const list = (this.data.settings.customTokens[chainId] ||= []);
+    const key = (token.address || token.mint || "").toLowerCase();
+    if (!key) {
+      throw new Error("Нужен адрес контракта");
+    }
+    if (!list.some(t => (t.address || t.mint || "").toLowerCase() === key)) {
+      list.push({ symbol: token.symbol, decimals: token.decimals, address: token.address, mint: token.mint, custom: true });
+    }
+    if (this.data.settings.hiddenTokens?.[chainId]) {
+      this.data.settings.hiddenTokens[chainId] = this.data.settings.hiddenTokens[chainId].filter(k => k !== key);
+    }
+    await this.save();
+  },
+
+  async hideToken(chainId, token) {
+    const key = (token.address || token.mint || "").toLowerCase();
+    this.data.settings.hiddenTokens ||= {};
+    const list = (this.data.settings.hiddenTokens[chainId] ||= []);
+    if (!list.includes(key)) {
+      list.push(key);
+    }
+    if (this.data.settings.customTokens?.[chainId]) {
+      this.data.settings.customTokens[chainId] = this.data.settings.customTokens[chainId].filter(t => (t.address || t.mint || "").toLowerCase() !== key);
+    }
+    await this.save();
+  },
+
+  decodeAbiString(hex) {
+    if (!hex || hex === "0x") {
+      return "";
+    }
+    const data = hexToBytes(hex.slice(2));
+    if (data.length === 32) {
+      return new TextDecoder().decode(data).replace(/\0+$/, "");
+    }
+    const offset = Number(BigInt("0x" + bytesToHex(data.slice(0, 32))));
+    const len = Number(BigInt("0x" + bytesToHex(data.slice(offset, offset + 32))));
+    return new TextDecoder().decode(data.slice(offset + 32, offset + 32 + len));
+  },
+
+  /** Метаданные токена по адресу контракта: символ, имя, знаки. */
+  async tokenInfo(chainId, address) {
+    const chain = CHAINS[chainId];
+    if (chain.kind === "evm" || chain.kind === "tron") {
+      let to = address;
+      let opts = {};
+      if (chain.kind === "tron") {
+        const { list } = this.nodesFor(chainId);
+        const url = list.find(u => this.tronIsJsonRpc(u));
+        if (!url) {
+          throw new Error("Нужна JSON-RPC нода TRON");
+        }
+        to = this.tronHex(address);
+        opts = { url };
+      }
+      const [symbol, name, decimals] = await Promise.all([
+        this.evm(chainId, "eth_call", [{ to, data: "0x95d89b41" }, "latest"], opts),
+        this.evm(chainId, "eth_call", [{ to, data: "0x06fdde03" }, "latest"], opts),
+        this.evm(chainId, "eth_call", [{ to, data: "0x313ce567" }, "latest"], opts),
+      ]);
+      if (!decimals || decimals === "0x") {
+        throw new Error("По этому адресу нет токена");
+      }
+      return { symbol: this.decodeAbiString(symbol) || "TOKEN", name: this.decodeAbiString(name), decimals: Number(BigInt(decimals)), address };
+    }
+    if (chain.kind === "sol") {
+      const r = await this.rpc(chainId, { jsonrpc: "2.0", id: 1, method: "getTokenSupply", params: [address] });
+      if (!r.result) {
+        throw new Error("По этому адресу нет SPL-токена");
+      }
+      return { symbol: "", name: "", decimals: r.result.value.decimals, mint: address };
+    }
+    throw new Error("В этой сети нет токенов");
+  },
+
   /* ---------- балансы ---------- */
 
   format(raw, decimals, max = 6) {
@@ -576,16 +664,14 @@ export const WalletStore = {
     if (chain.kind === "evm") {
       const wei = await this.evm(chainId, "eth_getBalance", [address, "latest"]);
       out.native = this.format(BigInt(wei), chain.decimals);
-      for (const t of chain.tokens || []) {
+      await Promise.all(this.tokensFor(chainId).map(async t => {
         try {
           const data = "0x70a08231" + address.slice(2).toLowerCase().padStart(64, "0");
           const hex = await this.evm(chainId, "eth_call", [{ to: t.address, data }, "latest"]);
           const v = BigInt(hex === "0x" ? 0 : hex);
-          if (v > 0n) {
-            out.tokens.push({ symbol: t.symbol, amount: this.format(v, t.decimals, 2), raw: v.toString(), decimals: t.decimals, address: t.address });
-          }
+          out.tokens.push({ symbol: t.symbol, amount: this.format(v, t.decimals, 2), raw: v.toString(), decimals: t.decimals, address: t.address, custom: !!t.custom });
         } catch (e) {}
-      }
+      }));
     } else if (chain.kind === "btc") {
       const info = await this.rpc(chainId, null, `/address/${address}`);
       const sats = BigInt(info.chain_stats.funded_txo_sum - info.chain_stats.spent_txo_sum + info.mempool_stats.funded_txo_sum - info.mempool_stats.spent_txo_sum);
@@ -595,13 +681,10 @@ export const WalletStore = {
       out.native = this.format(BigInt(r.result?.value || 0), 9);
       try {
         const t = await this.rpc(chainId, { jsonrpc: "2.0", id: 2, method: "getTokenAccountsByOwner", params: [address, { programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" }, { encoding: "jsonParsed" }] });
-        for (const acc of t.result?.value || []) {
-          const info = acc.account.data.parsed.info;
-          const known = (chain.tokens || []).find(x => x.mint === info.mint);
-          const ui = info.tokenAmount.uiAmountString;
-          if (known && parseFloat(ui) > 0) {
-            out.tokens.push({ symbol: known.symbol, amount: ui, mint: info.mint, decimals: known.decimals });
-          }
+        const held = new Map((t.result?.value || []).map(acc => [acc.account.data.parsed.info.mint, acc.account.data.parsed.info]));
+        for (const known of this.tokensFor(chainId)) {
+          const info = held.get(known.mint);
+          out.tokens.push({ symbol: known.symbol, amount: info ? info.tokenAmount.uiAmountString : "0", raw: info?.tokenAmount.amount || "0", mint: known.mint, decimals: known.decimals, custom: !!known.custom });
         }
       } catch (e) {}
     } else if (chain.kind === "tron") {
@@ -617,26 +700,26 @@ export const WalletStore = {
             const hex = this.tronHex(address);
             const sun = await this.evm(chainId, "eth_getBalance", [hex, "latest"], { url });
             out.native = this.format(BigInt(sun), 6);
-            for (const t of chain.tokens || []) {
+            for (const t of this.tokensFor(chainId)) {
               try {
                 const data = "0x70a08231" + hex.slice(2).padStart(64, "0");
                 const v = BigInt((await this.evm(chainId, "eth_call", [{ to: this.tronHex(t.address), data }, "latest"], { url })) || 0);
-                if (v > 0n) {
-                  out.tokens.push({ symbol: t.symbol, amount: this.format(v, t.decimals, 2), raw: v.toString(), decimals: t.decimals, address: t.address });
-                }
+                out.tokens.push({ symbol: t.symbol, amount: this.format(v, t.decimals, 2), raw: v.toString(), decimals: t.decimals, address: t.address, custom: !!t.custom });
               } catch (e) {}
             }
           } else {
             const r = await this.rpc(chainId, null, `/v1/accounts/${address}`, { url });
             const acc = r.data?.[0];
             out.native = this.format(BigInt(acc?.balance || 0), 6);
+            const held = new Map();
             for (const entry of acc?.trc20 || []) {
               for (const [contract, amount] of Object.entries(entry)) {
-                const known = (chain.tokens || []).find(x => x.address === contract);
-                if (known && BigInt(amount) > 0n) {
-                  out.tokens.push({ symbol: known.symbol, amount: this.format(BigInt(amount), known.decimals, 2), raw: String(amount), decimals: known.decimals, address: contract });
-                }
+                held.set(contract, String(amount));
               }
+            }
+            for (const known of this.tokensFor(chainId)) {
+              const raw = held.get(known.address) || "0";
+              out.tokens.push({ symbol: known.symbol, amount: this.format(BigInt(raw), known.decimals, 2), raw, decimals: known.decimals, address: known.address, custom: !!known.custom });
             }
           }
           if (i !== index) {
@@ -662,7 +745,7 @@ export const WalletStore = {
     try {
       const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum,bitcoin,solana,tron,polygon-ecosystem-token&vs_currencies=usd");
       const j = await res.json();
-      const data = { ETH: j.ethereum?.usd, BTC: j.bitcoin?.usd, SOL: j.solana?.usd, TRX: j.tron?.usd, POL: j["polygon-ecosystem-token"]?.usd, USDT: 1, USDC: 1 };
+      const data = { ETH: j.ethereum?.usd, BTC: j.bitcoin?.usd, SOL: j.solana?.usd, TRX: j.tron?.usd, POL: j["polygon-ecosystem-token"]?.usd, USDT: 1, USDC: 1, DAI: 1 };
       this._prices = { at: Date.now(), data };
       return data;
     } catch (e) {
