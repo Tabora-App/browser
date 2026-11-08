@@ -7,7 +7,7 @@ unset MOZ_STDCXX_COMPAT
 ac_add_options --disable-dmd
 ac_add_options --enable-eme=widevine
 
-# Кросс-сборка macOS на Linux-раннере (схема Zen): тулчейн лежит в ~/mac-cross
+# Кросс-сборка macOS на Linux-раннере: тулчейн Mozilla лежит в ~/mac-cross
 if test "$BROWSER_CROSS_COMPILING"; then
   MAC_CROSS="$HOME/mac-cross"
   mk_add_options "export PATH=$MAC_CROSS/cctools/bin:$PATH"
