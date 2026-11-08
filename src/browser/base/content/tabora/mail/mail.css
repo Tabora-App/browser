@@ -670,6 +670,8 @@ kbd {
 .alias-preview { display: flex; align-items: center; gap: 2px; height: 38px; padding: 0 12px; background: var(--field); border: 1px solid var(--field-border); border-radius: 10px; font-size: 13px; }
 .alias-preview input { flex: 1; min-width: 0; height: 34px; border: 0; background: transparent; padding: 0; outline: none; font: inherit; color: var(--text); }
 .alias-preview span { color: var(--text-4); }
+.link-btn { border: 0; background: transparent; color: var(--text-4); font-size: 12px; font-weight: 600; padding: 0 2px; }
+.link-btn:hover { color: var(--text); }
 .alias-preview .link-btn { margin-inline-start: 8px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 
