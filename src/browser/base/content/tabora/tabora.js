@@ -35,6 +35,7 @@ var Tabora = {
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "buildStartPage", "buildAgentPanel", "buildCommandBar",
       "searchEngineName", "initSpaces", "initKeys", "initTabHooks", "startTimers", "updateTitle", "localizeUrlbar",
+      "routeUrlbarToCommandBar",
     ]) {
       try {
         this[step]();
@@ -471,7 +472,7 @@ var Tabora = {
     });
   },
 
-  openCommandBar(prefill = "") {
+  openCommandBar(prefill = "", { select = false } = {}) {
     const overlay = document.getElementById("tabora-cmd");
     const input = document.getElementById("tabora-cmd-input");
     if (!overlay || !input) {
@@ -480,8 +481,35 @@ var Tabora = {
     overlay.hidden = false;
     input.value = prefill;
     input.focus();
-    input.setSelectionRange(prefill.length, prefill.length);
+    if (select) {
+      input.select();
+    } else {
+      input.setSelectionRange(prefill.length, prefill.length);
+    }
     this.cmdUpdate();
+  },
+
+  /* Адресная строка в колонке только показывает адрес: фокус в ней
+   * открывает командную строку с текущим адресом, как в Arc. */
+  routeUrlbarToCommandBar() {
+    const field = gURLBar.inputField;
+    field.addEventListener("focus", () => {
+      if (!document.getElementById("tabora-cmd")?.hidden) {
+        return;
+      }
+      const spec = gBrowser.selectedBrowser?.currentURI?.spec || "";
+      let prefill = "";
+      if (!this.isStartUrl(spec)) {
+        try {
+          prefill = decodeURI(spec);
+        } catch (e) {
+          prefill = spec;
+        }
+        prefill = prefill.replace(/^https:\/\/(www\.)?/, "").replace(/\/$/, "");
+      }
+      gURLBar.blur();
+      this.openCommandBar(prefill, { select: true });
+    });
   },
 
   closeCommandBar() {
@@ -510,7 +538,11 @@ var Tabora = {
       if (!/^[a-z0-9.-]+$/i.test(host) || /\.$/.test(host) || /^\./.test(host)) {
         return null;
       }
-      return { host: host.replace(/^www\./, ""), path: url.pathname === "/" ? "" : url.pathname + url.search };
+      let path = url.pathname === "/" ? "" : url.pathname + url.search;
+      try {
+        path = decodeURI(path);
+      } catch (e) {}
+      return { host: host.replace(/^www\./, ""), path };
     } catch (e) {
       return null;
     }
@@ -620,11 +652,13 @@ var Tabora = {
             : { glyph: this.svg(["M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z", "M20 20l-4-4"], 15, 2), title: `Искать «${q}»`, note: this.searchEngineName(), key: "⏎", run: () => this.go(q) },
         ],
       });
-      groups.push({
-        name: "Агенту",
-        agent: true,
-        items: [{ glyph: "●", title: q, note: "Поручить агенту. Он уточнит, если чего-то не хватает", key: "⇥", run: () => this.agentSend(q) }],
-      });
+      if (!url) {
+        groups.push({
+          name: "Агенту",
+          agent: true,
+          items: [{ glyph: "●", title: q, note: "Поручить агенту. Он уточнит, если чего-то не хватает", key: "⇥", run: () => this.agentSend(q) }],
+        });
+      }
     }
 
     const tabs = gBrowser.tabs

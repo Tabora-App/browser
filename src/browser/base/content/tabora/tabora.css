@@ -1198,6 +1198,13 @@ sidebar-main {
   color: var(--tabora-text-4);
 }
 
+#tabora-cmd-input::selection,
+#tabora-start input::selection,
+#tabora-agent input::selection {
+  background: var(--tabora-accent-dim);
+  color: var(--tabora-text);
+}
+
 #tabora-cmd .kbd,
 #tabora-cmd .key,
 #tabora-cmd .foot .k {
