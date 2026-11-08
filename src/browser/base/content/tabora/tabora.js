@@ -33,6 +33,7 @@ var Tabora = {
     }
     this.moveToolboxIntoBrowser();
     Services.scriptloader.loadSubScript("chrome://browser/content/tabora/drawer.js", window);
+    Services.scriptloader.loadSubScript("chrome://browser/content/tabora/agent.js", window);
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
       "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initKeys", "initTabHooks", "initDownloads", "startTimers", "updateTitle", "localizeUrlbar",
@@ -1343,14 +1344,21 @@ var Tabora = {
 
   buildAgentPanel() {
     const browser = document.getElementById("browser");
-    const closeBtn = this.html("button", { class: "close", "aria-label": "Скрыть панель агента" }, null, [
+    const closeBtn = this.html("button", { class: "close", "aria-label": "Скрыть панель агента", title: "Скрыть (⌘J)" }, null, [
       this.svg(["M6 6l12 12M18 6L6 18"], 14, 2.2),
     ]);
+    const moreBtn = this.html("button", { class: "close more", "aria-label": "Настройки агента", title: "Модель, ключ, очистка" }, null, [
+      this.svg(["M5 12h.01", "M12 12h.01", "M19 12h.01"], 16, 2.4),
+    ]);
+    moreBtn.addEventListener("click", e => {
+      const r = e.currentTarget.getBoundingClientRect();
+      this.showMenu(this.agentMenuItems(), r.right - 200, r.bottom + 6);
+    });
     const input = this.html("input", { id: "tabora-agent-input", placeholder: "Спросите или поручите…", "aria-label": "Сообщение агенту" });
     const sendBtn = this.html("button", { class: "send", "aria-label": "Отправить" }, null, [
       this.svg(["M5 12h14M13 6l6 6-6 6"], 16, 2.2),
     ]);
-    const chips = ["Саммари страницы", "Сравнить вкладки", "Тёмная тема для сайта"].map(q =>
+    const chips = ["Саммари этой страницы", "Разложи вкладки по пространствам", "Найди код из последнего письма"].map(q =>
       this.html("button", { "data-q": q }, q)
     );
     const inner = this.html("div", { class: "agent-inner" }, null, [
@@ -1358,12 +1366,13 @@ var Tabora = {
         this.html("span", { class: "orb", "aria-hidden": "true" }),
         this.html("div", { class: "who" }, null, [
           this.html("span", { class: "name" }, "Агент"),
-          this.html("span", { class: "where", id: "tabora-agent-where" }),
+          this.html("span", { class: "where", id: "tabora-agent-where" }, "Готов к задачам"),
         ]),
+        moreBtn,
         closeBtn,
       ]),
       this.html("div", { class: "log", id: "tabora-agent-log" }, null, [
-        this.html("div", { class: "msg agent" }, "Я пока учусь. Регистрация на сайтах, алиасы почты и коды из писем появятся в следующих сборках. Сейчас умею усыплять вкладки и держать пространства раздельно."),
+        this.html("div", { class: "msg agent" }, "Чем помочь? Могу прочитать страницу и сделать саммари, разобрать вкладки по пространствам, найти код из письма, заполнить форму или открыть что угодно."),
       ]),
       this.html("div", { class: "chips" }, null, chips),
       this.html("div", { class: "composer" }, null, [input, sendBtn]),
@@ -1377,6 +1386,10 @@ var Tabora = {
     browser.append(panel);
     closeBtn.addEventListener("click", () => this.toggleAgent(false));
     const send = () => {
+      if (this.agent?.busy && !input.value.trim()) {
+        this.agentStop();
+        return;
+      }
       if (this.agentSend(input.value)) {
         input.value = "";
       }
@@ -1385,6 +1398,8 @@ var Tabora = {
     input.addEventListener("keydown", e => {
       if (e.key === "Enter") {
         send();
+      } else if (e.key === "Escape") {
+        this.toggleAgent(false);
       }
     });
     for (const chip of chips) {
@@ -1393,23 +1408,6 @@ var Tabora = {
         send();
       });
     }
-  },
-
-  agentSend(raw) {
-    const text = (raw || "").trim();
-    if (!text) {
-      return false;
-    }
-    this.toggleAgent(true);
-    this.agentSay(text, "user");
-    this.agentSay("Принял: «" + text + "». Выполнять задачи я научусь в одной из следующих сборок.", "agent");
-    return true;
-  },
-
-  agentSay(text, who) {
-    const log = document.getElementById("tabora-agent-log");
-    log.append(this.html("div", { class: `msg ${who}` }, text));
-    log.scrollTop = log.scrollHeight;
   },
 
   toggleAgent(force) {
