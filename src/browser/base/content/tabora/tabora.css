@@ -434,7 +434,6 @@ sidebar-main {
 }
 
 #tabora-tabs-head {
-  order: -1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1916,4 +1915,203 @@ toolbarseparator {
   color: var(--tabora-text);
   font: 600 13px/1.2 var(--tabora-font);
   animation: tabora-cmd-in 160ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ---- Закреплённые вкладки: плитки 4 в ряд на месте карточек ------------- */
+
+#tabbrowser-tabs[orient="vertical"] #pinned-tabs-container {
+  display: block !important;
+  padding: 0 0 12px !important;
+  margin: 0 !important;
+  width: 100%;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+/* Вкладки лежат внутри теневого scrollbox: сетку задаём ему */
+#tabbrowser-tabs[orient="vertical"] #pinned-tabs-container::part(scrollbox) {
+  display: block;
+  overflow: visible;
+}
+
+#tabbrowser-tabs[orient="vertical"] #pinned-tabs-container::part(items-wrapper) {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+#tabbrowser-tabs[orient="vertical"] #pinned-tabs-container::part(scrollbutton-up),
+#tabbrowser-tabs[orient="vertical"] #pinned-tabs-container::part(scrollbutton-down) {
+  display: none;
+}
+
+#tabbrowser-tabs[orient="vertical"] #pinned-tabs-container:not(:has(tab)) {
+  display: none !important;
+}
+
+#tabbrowser-tabs[orient="vertical"] #drag-to-pin-promo-card,
+#tabbrowser-tabs[orient="vertical"] #vertical-pinned-tabs-splitter,
+#tabbrowser-tabs[orient="vertical"] #pinned-drop-indicator {
+  display: none !important;
+}
+
+#tabbrowser-tabs[orient="vertical"] #pinned-tabs-container .tabbrowser-tab {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: 46px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+#tabbrowser-tabs[orient="vertical"] #pinned-tabs-container .tab-background {
+  border-radius: 12px !important;
+  background: #18191e !important;
+  outline: 1px solid var(--tabora-panel-border) !important;
+  outline-offset: -1px;
+  transition: background-color var(--tabora-ease), outline-color var(--tabora-ease);
+}
+
+#tabbrowser-tabs[orient="vertical"] #pinned-tabs-container .tabbrowser-tab:hover .tab-background {
+  background: var(--tabora-panel) !important;
+  outline-color: var(--tabora-line) !important;
+}
+
+#tabbrowser-tabs[orient="vertical"] #pinned-tabs-container .tab-background[selected] {
+  background: var(--tabora-raised) !important;
+  outline-color: var(--tabora-accent) !important;
+}
+
+#tabbrowser-tabs[orient="vertical"] #pinned-tabs-container .tab-content {
+  padding: 0 !important;
+  justify-content: center;
+}
+
+#tabbrowser-tabs[orient="vertical"] #pinned-tabs-container .tab-icon-stack {
+  width: 24px !important;
+  height: 24px !important;
+  margin: 0 !important;
+  background: transparent !important;
+}
+
+#tabbrowser-tabs[orient="vertical"] #pinned-tabs-container .tab-icon-image {
+  width: 20px !important;
+  height: 20px !important;
+  border-radius: 5px;
+}
+
+#tabbrowser-tabs[orient="vertical"] #pinned-tabs-container .tab-label-container,
+#tabbrowser-tabs[orient="vertical"] #pinned-tabs-container .tab-close-button,
+#tabbrowser-tabs[orient="vertical"] #pinned-tabs-container .tab-context-line {
+  display: none !important;
+}
+
+/* ---- Контекстное меню ----------------------------------------------------- */
+
+#tabora-menu,
+#tabora-submenu {
+  position: fixed;
+  z-index: 70;
+  min-width: 232px;
+  max-width: 320px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--tabora-panel);
+  border: 1px solid var(--tabora-field-border);
+  border-radius: 12px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  font: 500 13px/1 var(--tabora-font);
+  color: var(--tabora-text);
+  animation: tabora-cmd-in 120ms cubic-bezier(0.2, 0, 0, 1);
+  -moz-window-dragging: no-drag;
+  user-select: none;
+}
+
+#tabora-menu[hidden],
+#tabora-submenu[hidden] {
+  display: none;
+}
+
+#tabora-menu .item,
+#tabora-submenu .item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tabora-text-2);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+#tabora-menu .item[data-active],
+#tabora-submenu .item[data-active] {
+  background: var(--tabora-raised);
+  color: #fff;
+}
+
+#tabora-menu .item[disabled],
+#tabora-submenu .item[disabled] {
+  color: var(--tabora-text-5);
+}
+
+#tabora-menu .item.danger[data-active] {
+  color: #ffb4a3;
+}
+
+#tabora-menu .item .icon,
+#tabora-submenu .item .icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tabora-text-4);
+  flex-shrink: 0;
+}
+
+#tabora-menu .item[data-active] .icon {
+  color: var(--tabora-text);
+}
+
+#tabora-menu .item .label,
+#tabora-submenu .item .label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#tabora-menu .item .hint,
+#tabora-submenu .item .hint {
+  font: 500 11px/1 var(--tabora-mono);
+  color: var(--tabora-text-5);
+  margin-inline-start: 12px;
+}
+
+#tabora-menu .item .chevron {
+  color: var(--tabora-text-4);
+  display: inline-flex;
+}
+
+#tabora-menu .sep,
+#tabora-submenu .sep {
+  height: 1px;
+  margin: 5px 6px;
+  background: var(--tabora-panel-border);
+}
+
+#tabora-menu .header {
+  padding: 8px 8px 6px;
+  font: 700 10px/1 var(--tabora-font);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tabora-text-4);
 }

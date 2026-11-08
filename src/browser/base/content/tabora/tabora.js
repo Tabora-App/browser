@@ -33,7 +33,7 @@ var Tabora = {
     }
     this.moveToolboxIntoBrowser();
     for (const step of [
-      "buildSidebarExtras", "buildTopbar", "initPrivate", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose",
+      "buildSidebarExtras", "buildTopbar", "initPrivate", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
       "searchEngineName", "initSpaces", "initKeys", "initTabHooks", "startTimers", "updateTitle", "localizeUrlbar",
       "routeUrlbarToCommandBar",
     ]) {
@@ -427,6 +427,324 @@ var Tabora = {
     setTimeout(() => node.remove(), 3200);
   },
 
+  /* ---- Контекстные меню Tabora: своё меню вместо системного ---------------- */
+
+  buildContextMenu() {
+    const menu = this.html("div", { id: "tabora-menu", role: "menu", hidden: "true" });
+    const sub = this.html("div", { id: "tabora-submenu", role: "menu", hidden: "true" });
+    document.getElementById("browser").append(menu, sub);
+    this.menu = { el: menu, sub, items: [], active: -1, closers: [] };
+
+    const close = e => {
+      if (menu.hidden) {
+        return;
+      }
+      if (e && e.type === "pointerdown" && (menu.contains(e.target) || sub.contains(e.target))) {
+        return;
+      }
+      this.hideMenu();
+    };
+    window.addEventListener("pointerdown", close, true);
+    window.addEventListener("blur", close);
+    window.addEventListener("resize", close);
+    gBrowser.tabContainer.addEventListener("TabSelect", () => this.hideMenu());
+    window.addEventListener(
+      "keydown",
+      e => {
+        if (menu.hidden) {
+          return;
+        }
+        const keys = ["Escape", "ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft", "Enter", " ", "Home", "End"];
+        if (!keys.includes(e.key)) {
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.key === "Escape") {
+          this.hideMenu();
+        } else if (e.key === "ArrowDown") {
+          this.menuMove(1);
+        } else if (e.key === "ArrowUp") {
+          this.menuMove(-1);
+        } else if (e.key === "Home") {
+          this.menuMove(-Infinity);
+        } else if (e.key === "End") {
+          this.menuMove(Infinity);
+        } else if (e.key === "ArrowRight") {
+          const item = this.menu.items[this.menu.active];
+          if (item?.children) {
+            this.openSubmenu(item, this.menu.active, true);
+          }
+        } else if (e.key === "ArrowLeft") {
+          this.closeSubmenu();
+        } else {
+          const node = (this.menu.subActive >= 0 ? sub : menu).querySelector("[data-active]");
+          node?.click();
+        }
+      },
+      true
+    );
+
+    // Правый клик по вкладке или по пустому месту списка вкладок
+    gBrowser.tabContainer.addEventListener(
+      "contextmenu",
+      e => {
+        const tab = e.target.closest?.("tab.tabbrowser-tab");
+        e.preventDefault();
+        e.stopPropagation();
+        this.showMenu(tab ? this.tabMenuItems(tab) : this.tabListMenuItems(), e.clientX, e.clientY);
+      },
+      true
+    );
+  },
+
+  /** items: { label, hint, icon, danger, disabled, checked, children, run } | { separator: true } */
+  showMenu(items, x, y) {
+    const menu = this.menu.el;
+    this.closeSubmenu();
+    menu.replaceChildren();
+    this.menu.items = items;
+    this.menu.active = -1;
+    this.menu.subActive = -1;
+    items.forEach((item, i) => menu.append(this.menuNode(item, i, false)));
+    menu.hidden = false;
+    this.placeMenu(menu, x, y);
+  },
+
+  menuNode(item, index, inSub) {
+    if (item.separator) {
+      return this.html("div", { class: "sep", role: "separator" });
+    }
+    if (item.header) {
+      return this.html("div", { class: "header" }, item.header);
+    }
+    const node = this.html("button", { class: `item${item.danger ? " danger" : ""}`, role: "menuitem", type: "button", "data-index": String(index) }, null, [
+      this.html("span", { class: "icon" }, null, item.icon ? [this.svg(item.icon, 15, 1.9)] : item.checked ? [this.svg(["m5 12 5 5L20 7"], 15, 2.4)] : []),
+      this.html("span", { class: "label" }, item.label),
+      item.hint ? this.html("span", { class: "hint" }, item.hint) : item.children ? this.html("span", { class: "chevron" }, null, [this.svg(["m9 6 6 6-6 6"], 13, 2.2)]) : this.html("span", { class: "hint" }),
+    ]);
+    if (item.disabled) {
+      node.setAttribute("disabled", "true");
+    }
+    node.addEventListener("mouseenter", () => {
+      if (inSub) {
+        this.menuSetActive(index, true);
+      } else {
+        this.menuSetActive(index, false);
+        if (item.children) {
+          this.openSubmenu(item, index, false);
+        } else {
+          this.closeSubmenu();
+        }
+      }
+    });
+    node.addEventListener("click", e => {
+      e.stopPropagation();
+      if (item.disabled) {
+        return;
+      }
+      if (item.children) {
+        this.openSubmenu(item, index, true);
+        return;
+      }
+      this.hideMenu();
+      try {
+        item.run?.();
+      } catch (err) {
+        console.error("Tabora menu", err);
+      }
+    });
+    return node;
+  },
+
+  placeMenu(el, x, y) {
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const left = Math.min(x, window.innerWidth - w - 8);
+    const top = y + h > window.innerHeight - 8 ? Math.max(8, y - h) : y;
+    el.style.left = `${Math.max(8, left)}px`;
+    el.style.top = `${Math.max(8, top)}px`;
+  },
+
+  menuSetActive(index, inSub) {
+    const el = inSub ? this.menu.sub : this.menu.el;
+    for (const n of el.querySelectorAll(".item")) {
+      n.toggleAttribute("data-active", Number(n.dataset.index) === index);
+    }
+    if (inSub) {
+      this.menu.subActive = index;
+    } else {
+      this.menu.active = index;
+      for (const n of this.menu.sub.querySelectorAll(".item")) {
+        n.removeAttribute("data-active");
+      }
+      this.menu.subActive = -1;
+    }
+  },
+
+  menuMove(delta) {
+    const inSub = this.menu.subActive >= 0 || (!this.menu.sub.hidden && this.menu.subActive === -1 && delta > 0 && false);
+    const list = inSub ? this.menu.subItems : this.menu.items;
+    const current = inSub ? this.menu.subActive : this.menu.active;
+    const selectable = list.map((it, i) => (!it.separator && !it.header && !it.disabled ? i : -1)).filter(i => i >= 0);
+    if (!selectable.length) {
+      return;
+    }
+    let next;
+    if (delta === Infinity) {
+      next = selectable.at(-1);
+    } else if (delta === -Infinity) {
+      next = selectable[0];
+    } else {
+      const pos = selectable.indexOf(current);
+      next = selectable[(pos + delta + selectable.length) % selectable.length];
+      if (pos === -1) {
+        next = delta > 0 ? selectable[0] : selectable.at(-1);
+      }
+    }
+    this.menuSetActive(next, inSub);
+  },
+
+  openSubmenu(item, index, focusFirst) {
+    const sub = this.menu.sub;
+    sub.replaceChildren();
+    this.menu.subItems = item.children;
+    item.children.forEach((child, i) => sub.append(this.menuNode(child, i, true)));
+    sub.hidden = false;
+    const parent = this.menu.el.querySelector(`.item[data-index="${index}"]`);
+    const r = parent.getBoundingClientRect();
+    const w = sub.offsetWidth;
+    const left = r.right + 4 + w > window.innerWidth - 8 ? r.left - w - 4 : r.right + 4;
+    const top = Math.min(r.top - 6, window.innerHeight - sub.offsetHeight - 8);
+    sub.style.left = `${Math.max(8, left)}px`;
+    sub.style.top = `${Math.max(8, top)}px`;
+    this.menu.subActive = -1;
+    if (focusFirst) {
+      this.menuMove(1);
+      this.menuSetActive(this.menu.subItems.findIndex(it => !it.separator && !it.disabled), true);
+    }
+  },
+
+  closeSubmenu() {
+    this.menu.sub.hidden = true;
+    this.menu.sub.replaceChildren();
+    this.menu.subItems = [];
+    this.menu.subActive = -1;
+  },
+
+  hideMenu() {
+    if (!this.menu || this.menu.el.hidden) {
+      return;
+    }
+    this.closeSubmenu();
+    this.menu.el.hidden = true;
+    this.menu.el.replaceChildren();
+    this.menu.items = [];
+  },
+
+  /* ---- Меню вкладки ---- */
+
+  tabMenuItems(tab) {
+    const I = {
+      pin: ["M12 17v5", "M8 3h8l-1 7 3 3H6l3-3z"],
+      unpin: ["M12 17v5", "M8 3h8l-1 7 3 3H6l3-3z", "M4 4l16 16"],
+      sleep: ["M21 13a8 8 0 1 1-10-10 6 6 0 0 0 10 10z"],
+      wake: ["M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4", "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"],
+      copy: ["M8 8h12v12H8z", "M4 16V4h12"],
+      reload: ["M20 12a8 8 0 1 1-2.3-5.7", "M20 4v5h-5"],
+      duplicate: ["M7 7h12v12H7z", "M3 17V3h14"],
+      mute: ["M11 5 6 9H2v6h4l5 4z", "M16 9l5 6M21 9l-5 6"],
+      unmute: ["M11 5 6 9H2v6h4l5 4z", "M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"],
+      move: ["M4 8h11l-3-3M20 16H9l3 3"],
+      star: ["m12 3 2.8 5.9 6.4.9-4.6 4.5 1.1 6.4L12 17.7l-5.7 3 1.1-6.4L2.8 9.8l6.4-.9z"],
+      close: ["M6 6l12 12M18 6 6 18"],
+      closeOthers: ["M4 6h10M4 12h16M4 18h10"],
+      closeBelow: ["M4 6h16M4 12h16", "m9 17 3 3 3-3"],
+      restore: ["M4 12a8 8 0 1 0 2.3-5.7", "M4 4v5h5"],
+      newTab: ["M12 5v14M5 12h14"],
+    };
+    const url = tab.linkedBrowser?.currentURI?.spec || "";
+    const pending = tab.hasAttribute("pending");
+    const audible = tab.hasAttribute("soundplaying") || tab.hasAttribute("muted");
+    const muted = tab.hasAttribute("muted");
+    const others = gBrowser.visibleTabs.filter(t => t !== tab && !t.pinned);
+    const below = gBrowser.visibleTabs.slice(gBrowser.visibleTabs.indexOf(tab) + 1).filter(t => !t.pinned);
+    const realUrl = /^https?:/.test(url);
+    const spaces = this.spaces.filter(s => s.userContextId !== this.contextOf(tab));
+    const items = [
+      tab.pinned
+        ? { label: "Открепить", icon: I.unpin, run: () => gBrowser.unpinTab(tab) }
+        : { label: "Закрепить", hint: "в карточки", icon: I.pin, run: () => gBrowser.pinTab(tab) },
+      pending
+        ? { label: "Разбудить", icon: I.wake, run: () => (gBrowser.selectedTab = tab) }
+        : { label: "Усыпить вкладку", hint: "освободить память", icon: I.sleep, disabled: tab.selected || !realUrl, run: () => { gBrowser.discardBrowser(tab); this.updateMemory(); } },
+      { label: "Дублировать", icon: I.duplicate, disabled: !url || this.isStartUrl(url), run: () => gBrowser.duplicateTab(tab) },
+      { label: "Обновить", icon: I.reload, hint: "⌘R", disabled: this.isStartUrl(url), run: () => gBrowser.reloadTab(tab) },
+      audible ? { label: muted ? "Включить звук" : "Выключить звук", icon: muted ? I.unmute : I.mute, run: () => tab.toggleMuteAudio() } : null,
+      { separator: true },
+      spaces.length && !tab.pinned
+        ? {
+            label: "Переместить в пространство",
+            icon: I.move,
+            children: spaces.map(s => ({ label: s.name, run: () => this.moveTabToSpace(tab, s) })),
+          }
+        : null,
+      { label: "Копировать адрес", icon: I.copy, disabled: !realUrl, run: () => this.copyText(url, "Адрес скопирован") },
+      { label: "В закладки", icon: I.star, hint: "⌘D", disabled: !realUrl, run: () => { gBrowser.selectedTab = tab; PlacesCommandHook.bookmarkPage(); } },
+      { separator: true },
+      { label: "Закрыть", icon: I.close, hint: "⌘W", danger: true, run: () => gBrowser.removeTab(tab, { animate: true }) },
+      { label: `Закрыть остальные${others.length ? ` (${others.length})` : ""}`, icon: I.closeOthers, disabled: !others.length, danger: true, run: () => gBrowser.removeAllTabsBut(tab) },
+      { label: `Закрыть ниже${below.length ? ` (${below.length})` : ""}`, icon: I.closeBelow, disabled: !below.length, danger: true, run: () => gBrowser.removeTabsToTheEndFrom(tab) },
+      { separator: true },
+      { label: "Восстановить закрытую", icon: I.restore, hint: "⌘⇧T", disabled: !this.canUndoClose(), run: () => this.undoCloseTab() },
+    ];
+    return items.filter(Boolean);
+  },
+
+  tabListMenuItems() {
+    const sleeping = gBrowser.tabs.filter(t => !t.selected && !t.pinned && !t.hasAttribute("pending") && /^https?:/.test(t.linkedBrowser?.currentURI?.spec || ""));
+    return [
+      { label: "Новая вкладка", icon: ["M12 5v14M5 12h14"], hint: "⌘T", run: () => BrowserCommands.openTab() },
+      { label: "Усыпить все кроме текущей", icon: ["M21 13a8 8 0 1 1-10-10 6 6 0 0 0 10 10z"], disabled: !sleeping.length, run: () => { sleeping.forEach(t => gBrowser.discardBrowser(t)); this.updateMemory(); } },
+      { separator: true },
+      { label: "Восстановить закрытую", icon: ["M4 12a8 8 0 1 0 2.3-5.7", "M4 4v5h5"], hint: "⌘⇧T", disabled: !this.canUndoClose(), run: () => this.undoCloseTab() },
+    ];
+  },
+
+  canUndoClose() {
+    try {
+      return SessionStore.getClosedTabCountForWindow(window) > 0;
+    } catch (e) {
+      return true;
+    }
+  },
+
+  undoCloseTab() {
+    const { SessionWindowUI } = ChromeUtils.importESModule("resource:///modules/sessionstore/SessionWindowUI.sys.mjs");
+    SessionWindowUI.undoCloseTab(window);
+  },
+
+  /** Контейнер вкладки менять нельзя: открываем ту же страницу в другом пространстве и закрываем старую. */
+  moveTabToSpace(tab, space) {
+    const url = tab.linkedBrowser?.currentURI?.spec || "about:blank";
+    const fresh = gBrowser.addTab(url, {
+      userContextId: space.userContextId,
+      triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+      index: tab._tPos + 1,
+    });
+    gBrowser.removeTab(tab);
+    this.switchSpace(space.id);
+    gBrowser.selectedTab = fresh;
+    this.notice(`Перенесено в «${space.name}»`);
+  },
+
+  copyText(text, message) {
+    Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(text);
+    if (message) {
+      this.notice(message);
+    }
+  },
+
   /** Приватное окно: фиолетовый акцент, метка в шапке, без пространств (контейнеры там не работают). */
   initPrivate() {
     const { PrivateBrowsingUtils } = ChromeUtils.importESModule("resource://gre/modules/PrivateBrowsingUtils.sys.mjs");
@@ -516,21 +834,7 @@ var Tabora = {
     const sidebar = document.getElementById("sidebar-container");
 
     const spaces = this.html("div", { id: "tabora-spaces", role: "tablist" });
-    const pinned = this.html("div", { id: "tabora-pinned" });
-    for (const [letter, label] of [
-      ["M", "Почта"],
-      ["C", "Календарь"],
-      ["P", "Пароли"],
-      ["V", "VPN"],
-    ]) {
-      const b = this.html(
-        "button",
-        { class: "tabora-pin", title: `${label}: в разработке` },
-        letter
-      );
-      pinned.append(b);
-    }
-    navBar.after(spaces, pinned);
+    navBar.after(spaces);
 
     const verticalTabs = document.getElementById("vertical-tabs");
     if (verticalTabs) {
@@ -541,7 +845,13 @@ var Tabora = {
         newTab.setAttribute("tooltiptext", "Новая вкладка (⌘T)");
         head.append(newTab);
       }
-      verticalTabs.prepend(head);
+      // Заголовок стоит после плиток закреплённых вкладок, перед прокручиваемым списком
+      const scrollbox = document.getElementById("tabbrowser-arrowscrollbox");
+      if (scrollbox?.parentNode?.id === "tabbrowser-tabs") {
+        scrollbox.before(head);
+      } else {
+        verticalTabs.prepend(head);
+      }
     }
 
     const memory = this.html("div", { id: "tabora-memory" }, null, [
