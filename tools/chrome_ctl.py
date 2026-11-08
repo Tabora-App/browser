@@ -65,6 +65,12 @@ class Marionette:
     def execute(self, script, args=None):
         return self.send("WebDriver:ExecuteScript", {"script": script, "args": args or []})["value"]
 
+    def type_text(self, text):
+        actions = []
+        for ch in text:
+            actions += [{"type": "keyDown", "value": ch}, {"type": "keyUp", "value": ch}]
+        self.send("WebDriver:PerformActions", {"actions": [{"type": "key", "id": "kb", "actions": actions}]})
+
     def screenshot(self, path):
         data = self.send("WebDriver:TakeScreenshot", {"full": False})["value"]
         with open(path, "wb") as f:
@@ -82,6 +88,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=2828)
     ap.add_argument("--script", action="append", default=[], help="JS в контексте окна браузера (можно несколько)")
+    ap.add_argument("--type", help="набрать текст как с клавиатуры (после скриптов)")
     ap.add_argument("--wait", type=float, default=0.6, help="пауза после скриптов перед снимком, с")
     ap.add_argument("--shot", help="куда сохранить PNG окна")
     args = ap.parse_args()
@@ -92,6 +99,8 @@ def main():
             result = m.execute(s)
             if result is not None:
                 print(json.dumps(result, ensure_ascii=False))
+        if args.type:
+            m.type_text(args.type)
         if args.shot:
             time.sleep(args.wait)
             m.screenshot(args.shot)

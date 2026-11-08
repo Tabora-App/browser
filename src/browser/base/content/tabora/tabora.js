@@ -305,6 +305,7 @@ var Tabora = {
       const label = site.title && site.title.length <= 18 ? site.title : host;
       const glyph = this.html("span", { class: "glyph", "aria-hidden": "true" });
       if (site.favicon) {
+        glyph.classList.add("has-icon");
         glyph.append(this.html("img", { src: site.favicon, alt: "" }));
       } else {
         glyph.textContent = (host || "?").charAt(0).toUpperCase();
@@ -498,8 +499,14 @@ var Tabora = {
         return;
       }
       const spec = gBrowser.selectedBrowser?.currentURI?.spec || "";
+      if (this.isStartUrl(spec)) {
+        // Новая вкладка: показываем стартовую страницу, набор текста откроет бар.
+        gURLBar.blur();
+        document.getElementById("tabora-start-input")?.focus();
+        return;
+      }
       let prefill = "";
-      if (!this.isStartUrl(spec)) {
+      {
         try {
           prefill = decodeURI(spec);
         } catch (e) {
@@ -1035,6 +1042,19 @@ var Tabora = {
       "keydown",
       e => {
         const mod = e.metaKey || e.ctrlKey;
+        if (!mod && !e.altKey && e.key.length === 1 && !e.isComposing) {
+          // На стартовой странице любая буква открывает командную строку.
+          const start = document.getElementById("tabora-start");
+          const cmd = document.getElementById("tabora-cmd");
+          const active = document.activeElement;
+          const typing = active && (active.localName === "input" || active.localName === "textarea" || active.isContentEditable);
+          if (start && !start.hidden && cmd?.hidden && !typing) {
+            this.openCommandBar(e.key);
+            e.preventDefault();
+            e.stopPropagation();
+          }
+          return;
+        }
         if (!mod || e.altKey) {
           return;
         }

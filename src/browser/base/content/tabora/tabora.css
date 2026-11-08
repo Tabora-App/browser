@@ -921,9 +921,14 @@ sidebar-main {
   overflow: hidden;
 }
 
+#tabora-start .dial .glyph.has-icon {
+  background: var(--tabora-text);
+}
+
 #tabora-start .dial .glyph img {
   width: 20px;
   height: 20px;
+  border-radius: 4px;
 }
 
 #tabora-start .dial .label {
