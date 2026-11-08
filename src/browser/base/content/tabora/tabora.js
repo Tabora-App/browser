@@ -35,7 +35,7 @@ var Tabora = {
     Services.scriptloader.loadSubScript("chrome://browser/content/tabora/drawer.js", window);
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
-      "searchEngineName", "initSpaces", "buildDrawer", "initKeys", "initTabHooks", "initDownloads", "startTimers", "updateTitle", "localizeUrlbar",
+      "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initKeys", "initTabHooks", "initDownloads", "startTimers", "updateTitle", "localizeUrlbar",
       "routeUrlbarToCommandBar",
     ]) {
       try {
@@ -520,7 +520,11 @@ var Tabora = {
       return this.html("div", { class: "header" }, item.header);
     }
     const node = this.html("button", { class: `item${item.danger ? " danger" : ""}`, role: "menuitem", type: "button", "data-index": String(index) }, null, [
-      this.html("span", { class: "icon" }, null, item.icon ? [this.svg(item.icon, 15, 1.9)] : item.checked ? [this.svg(["m5 12 5 5L20 7"], 15, 2.4)] : []),
+      this.html("span", { class: "icon" }, null, item.icon
+        ? [this.svg(item.icon, 15, 1.9)]
+        : item.swatch
+          ? [this.html("span", { class: "swatch", style: `background:${item.swatch}` }), ...(item.checked ? [this.svg(["m5 12 5 5L20 7"], 11, 2.6)] : [])]
+          : item.checked ? [this.svg(["m5 12 5 5L20 7"], 15, 2.4)] : []),
       this.html("span", { class: "label" }, item.label),
       item.hint ? this.html("span", { class: "hint" }, item.hint) : item.children ? this.html("span", { class: "chevron" }, null, [this.svg(["m9 6 6 6-6 6"], 13, 2.2)]) : this.html("span", { class: "hint" }),
     ]);
@@ -687,7 +691,7 @@ var Tabora = {
         ? {
             label: "Переместить в пространство",
             icon: I.move,
-            children: spaces.map(s => ({ label: s.name, run: () => this.moveTabToSpace(tab, s) })),
+            children: spaces.map(s => ({ label: s.name, swatch: this.spaceHex(s), run: () => this.moveTabToSpace(tab, s) })),
           }
         : null,
       { label: "Копировать адрес", icon: I.copy, disabled: !realUrl, run: () => this.copyText(url, "Адрес скопирован") },
@@ -823,6 +827,25 @@ var Tabora = {
     return el;
   },
 
+  /** User-Agent: сборка подставляет «Tabora/<версия движка>» вместо «Firefox/…». Возвращаем токен
+   * Firefox ради совместимости с сайтами и добавляем «Tabora/<наша версия>», чтобы нас узнавали. */
+  initUserAgent() {
+    const PREF = "general.useragent.override";
+    const version = Services.prefs.getStringPref("tabora.version", "0.1.0");
+    const gecko = Services.appinfo.version.split(".").slice(0, 2).join(".").replace(/\.\d+$/, ".0");
+    const tail = `Firefox/${gecko} Tabora/${version}`;
+    const current = Services.prefs.getStringPref(PREF, "");
+    if (current.endsWith(tail)) {
+      return;
+    }
+    if (current) {
+      Services.prefs.clearUserPref(PREF);
+    }
+    const http = Cc["@mozilla.org/network/protocol;1?name=http"].getService(Ci.nsIHttpProtocolHandler);
+    const base = http.userAgent.replace(/\s+(Tabora|Firefox)\/[\d.]+/g, "");
+    Services.prefs.setStringPref(PREF, `${base} ${tail}`);
+  },
+
   /* ---- Раскладка ------------------------------------------------------- */
 
   moveToolboxIntoBrowser() {
@@ -888,7 +911,7 @@ var Tabora = {
       this.html("span", {}, "Почта и алиасы"),
       this.html("span", { class: "kbd" }, "⌘⇧M"),
     ]);
-    mail.addEventListener("click", () => this.toggleDrawer("mail"));
+    mail.addEventListener("click", () => this.openMail());
     const downloads = this.buildDownloadsCard();
     if (sidebar) {
       sidebar.after(memory, mail, downloads);
@@ -1632,7 +1655,7 @@ var Tabora = {
       { glyph: "▣", title: "Медиа", note: "Ящик: картинки и видео со вкладок", key: "⌘⇧I", tags: "media медиа картинки видео", run: () => this.openDrawer("media") },
       { glyph: "◫", title: "Пространства", note: "Полотно: вкладки по пространствам", key: "⌘⇧S", tags: "spaces пространства контейнеры", run: () => this.openDrawer("spaces") },
       { glyph: "✎", title: "Написать письмо", note: "Окно письма поверх любой вкладки", key: "", tags: "compose написать письмо mail new", run: () => this.openCompose() },
-      { glyph: "✉", title: "Почта и алиасы", note: "Входящие, коды подтверждения, алиасы", key: "⌘⇧M", tags: "mail почта email письма алиасы inbox", run: () => this.openDrawer("mail") },
+      { glyph: "✉", title: "Почта и алиасы", note: "Входящие, коды подтверждения, алиасы", key: "⌘⇧M", tags: "mail почта email письма алиасы inbox", run: () => this.openMail() },
       { glyph: "⚙", title: "Настройки", note: "Поведение, приватность, внешний вид", key: "⌘,", tags: "settings preferences", run: () => openPreferences() },
     ];
   },
@@ -2091,8 +2114,12 @@ var Tabora = {
           this.openCommandBar();
           e.preventDefault();
           e.stopPropagation();
-        } else if (e.shiftKey && this.drawer && { KeyM: "mail", KeyJ: "downloads", KeyH: "history", KeyI: "media", KeyS: "spaces", KeyB: "bookmarks" }[e.code]) {
-          this.toggleDrawer({ KeyM: "mail", KeyJ: "downloads", KeyH: "history", KeyI: "media", KeyS: "spaces", KeyB: "bookmarks" }[e.code]);
+        } else if (e.shiftKey && e.code === "KeyM") {
+          this.openMail();
+          e.preventDefault();
+          e.stopPropagation();
+        } else if (e.shiftKey && this.drawer && { KeyJ: "downloads", KeyH: "history", KeyI: "media", KeyS: "spaces", KeyB: "bookmarks" }[e.code]) {
+          this.toggleDrawer({ KeyJ: "downloads", KeyH: "history", KeyI: "media", KeyS: "spaces", KeyB: "bookmarks" }[e.code]);
           e.preventDefault();
           e.stopPropagation();
         } else if (!e.shiftKey && e.key === "Escape" && this.drawer?.open) {

@@ -352,6 +352,7 @@ def apply_branding(config: dict, brand: str) -> None:
         + 'pref("app.update.checkInstallTime.days", 2);\n'
         + 'pref("app.update.badgeWaitTime", 0);\n'
         + 'pref("devtools.selfxss.count", 5);\n'
+        + pref("tabora.version", info.get("displayVersion", "0.0.0"))
         + product_prefs(brand)
     )
     nsi = dest / "branding.nsi"

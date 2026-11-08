@@ -252,7 +252,6 @@ const App = {
     $("list-pane").hidden = this.view !== "mail";
     $("reader").hidden = this.view !== "mail";
     this.renderFolders();
-    this.renderAccount();
     if (this.view === "mail") {
       this.renderList();
       this.renderReader();
@@ -293,19 +292,6 @@ const App = {
       ]);
       list.append(item);
     }
-    const labels = $("label-list");
-    labels.replaceChildren();
-    for (const l of LABELS) {
-      const total = Store.messages.filter(m => m.labels.includes(l.id) && !["trash", "spam"].includes(m.folder)).length;
-      labels.append(el("button", {
-        class: "folder-item", type: "button", role: "tab", "aria-selected": String(this.view === "mail" && this.label === l.id),
-        onclick: () => this.go(`label/${l.id}`),
-      }, [
-        el("span", { class: "label-dot", style: `background:${l.color}` }),
-        el("span", { class: "folder-name", text: l.name }),
-        total ? el("span", { class: "folder-count", text: String(total) }) : null,
-      ]));
-    }
     $("aliases-count").textContent = String(Store.aliases.filter(a => a.on).length);
     $("aliases-link").setAttribute("aria-selected", String(this.view === "aliases"));
     $("aliases-link").onclick = () => this.go("aliases");
@@ -321,14 +307,6 @@ const App = {
       unread: folderId === "inbox" || folderId === "spam" ? new Set(msgs.filter(m => m.unread).map(m => m.thread)).size : 0,
     };
   },
-
-  renderAccount() {
-    $("account-address").textContent = ACCOUNT.address;
-    $("account-quota").textContent = `${String(ACCOUNT.quotaUsedGb).replace(".", ",")} ГБ из ${ACCOUNT.quotaTotalGb} ГБ`;
-    $("account-quota-bar").style.width = `${(ACCOUNT.quotaUsedGb / ACCOUNT.quotaTotalGb) * 100}%`;
-  },
-
-  /* ---- Список ---- */
 
   threadsForView() {
     let msgs = Store.messages;
@@ -375,7 +353,24 @@ const App = {
     $("list-sub").textContent = threads.length
       ? unread ? `${unread} ${plural(unread, "новое", "новых", "новых")}` : `${threads.length} ${plural(threads.length, "письмо", "письма", "писем")}`
       : "";
-    for (const chip of $("filter-chips").children) {
+    const chips = $("filter-chips");
+    for (const chip of chips.querySelectorAll("[data-label]")) {
+      chip.remove();
+    }
+    for (const l of LABELS) {
+      if (l.id === "codes") {
+        continue; // есть фильтр «Коды»
+      }
+      const total = Store.messages.filter(m => m.labels.includes(l.id) && !["trash", "spam"].includes(m.folder)).length;
+      if (!total && this.label !== l.id) {
+        continue;
+      }
+      chips.append(el("button", {
+        class: "chip", type: "button", dataset: { label: l.id }, "aria-pressed": String(this.label === l.id),
+        onclick: () => this.go(this.label === l.id ? `folder/${this.folder || "inbox"}` : `label/${l.id}`),
+      }, [el("span", { class: "label-dot", style: `background:${l.color};margin:0` }), l.name]));
+    }
+    for (const chip of chips.querySelectorAll("[data-filter]")) {
       chip.setAttribute("aria-pressed", String(this.filters.has(chip.dataset.filter)));
     }
     this.renderBulk();
@@ -619,17 +614,6 @@ const App = {
 
     thread.forEach((m, i) => body.append(this.renderMessage(m, i < thread.length - 1)));
 
-    if (latest.alias && latest.alias !== ACCOUNT.address) {
-      const alias = Store.aliases.find(a => a.address === latest.alias);
-      const local = latest.alias.split("@")[0];
-      body.append(el("div", { class: "alias-note" }, [
-        el("span", { text: alias
-          ? `Алиас ${local} ${alias.agent ? "создан агентом" : "создан вручную"} ${dateWord(alias.created)}. Пойдёт спам: выключите его, и письма перестанут приходить.`
-          : `Письмо пришло на алиас ${local}.` }),
-        el("button", { type: "button", text: "Управлять алиасом", onclick: () => this.go("aliases") }),
-      ]));
-    }
-
     if (!latest.draft) {
       const ta = el("textarea", { placeholder: `Ответить ${latest.from.name}…`, rows: "1", "aria-label": "Быстрый ответ" });
       ta.addEventListener("input", () => {
@@ -671,7 +655,9 @@ const App = {
         el("span", { text: `${m.from.email} · ${longTime(m.date)}` }),
       ]),
       el("span", { class: "spacer" }),
-      el("span", { class: "to-chip", text: m.folder === "sent" || m.draft ? `кому: ${m.to.join(", ")}` : `на ${m.alias || m.to[0]}` }),
+      m.alias && m.alias !== ACCOUNT.address && m.folder !== "sent" && !m.draft
+        ? el("button", { class: "to-chip link", type: "button", title: "Управлять алиасом", onclick: e => { e.stopPropagation(); this.go("aliases"); }, text: `через ${m.alias}` })
+        : el("span", { class: "to-chip", text: m.folder === "sent" || m.draft ? `кому: ${m.to.join(", ")}` : `на ${m.to[0]}` }),
     ]);
     head.addEventListener("click", () => {
       if (item.classList.contains("collapsed")) {

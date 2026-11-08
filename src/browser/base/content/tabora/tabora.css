@@ -1791,6 +1791,67 @@ toolbarseparator {
   color: var(--tabora-line) !important;
 }
 
+/* Панель защиты (щит в адресной строке): без чужого баннера, в наших цветах */
+#protections-popup-message {
+  background-image: none !important;
+  height: auto !important;
+  margin: 10px 12px 4px !important;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background-color: var(--tabora-raised);
+  color: var(--tabora-text);
+}
+
+#protections-popup-message .protections-popup-message-title {
+  margin: 0 0 4px !important;
+  font: 700 13px/1.3 var(--tabora-font) !important;
+  color: var(--tabora-text-strong);
+}
+
+#protections-popup-message .protections-popup-message-body {
+  margin: 0 !important;
+}
+
+#protections-popup-message p {
+  margin: 0;
+  font: 400 12px/1.45 var(--tabora-font);
+  color: var(--tabora-text-2);
+}
+
+#protections-popup-message .text-link {
+  color: var(--tabora-accent-ink) !important;
+}
+
+#protections-popup moz-toggle,
+#identity-popup moz-toggle {
+  --toggle-background-color-pressed: var(--tabora-accent-ink);
+  --toggle-border-color-pressed: var(--tabora-accent-ink);
+  --toggle-dot-background-color-on-pressed: var(--tabora-on-accent);
+}
+
+/* Цветная точка пространства в пунктах меню */
+#tabora-menu .item .swatch,
+#tabora-submenu .item .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 12%, transparent);
+}
+
+#tabora-menu .item .icon,
+#tabora-submenu .item .icon {
+  position: relative;
+}
+
+#tabora-menu .item .icon .swatch + svg,
+#tabora-submenu .item .icon .swatch + svg {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  color: var(--tabora-text-strong);
+}
+
 /* Шапка меню с предложением войти в аккаунт Firefox: заменит аккаунт Tabora. */
 #appMenu-fxa-status2,
 #appMenu-fxa-separator {

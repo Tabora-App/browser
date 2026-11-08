@@ -16,12 +16,11 @@ Object.assign(Tabora, {
   SECTIONS: {
     downloads: { label: "Загрузки", key: "⌘⇧J", icon: ["M12 4v11", "M7 10l5 5 5-5", "M4 19h16"], search: "Имя файла или сайт", full: "Открыть страницу загрузок" },
     history: { label: "История", key: "⌘⇧H", icon: ["M12 7v5l3 2", "M3.5 12a8.5 8.5 0 1 0 2.5-6", "M3 4v4h4"], search: "Поиск в истории" },
-    mail: { label: "Почта", key: "⌘⇧M", icon: ["M3.5 6.5h17v11h-17z", "M3.5 7l8.5 6 8.5-6"], search: "Поиск по письмам", full: "Открыть почту целиком" },
     media: { label: "Медиа", key: "⌘⇧I", icon: ["M4 5h16v14H4z", "M4 15l5-5 4 4 3-3 4 4", "M15.5 9.5h.01"], search: "Поиск по медиа" },
     spaces: { label: "Пространства", short: "Простран\u00adства", key: "⌘⇧S", icon: ["M8 8h12v12H8z", "M4 4h12v12", "M4 4v12h12"], wide: true },
     bookmarks: { label: "Закладки", key: "⌘⇧B", icon: ["M6 4h12v16l-6-4-6 4z"], search: "Поиск по закладкам" },
   },
-  SECTION_ORDER: ["downloads", "history", "mail", "media", "spaces", "bookmarks"],
+  SECTION_ORDER: ["downloads", "history", "media", "spaces", "bookmarks"],
 
   drawer: { open: false, section: "downloads", editing: false, query: "", filter: "all", el: null, inner: null, body: null, timer: null, cache: {} },
 
@@ -756,63 +755,6 @@ Object.assign(Tabora, {
     } else {
       this.openUrl(url);
     }
-  },
-
-  /* ---- Почта ------------------------------------------------------------ */
-
-  async drawer_mail(seq) {
-    const d = this.drawer;
-    const { MailStore } = this.mail();
-    await MailStore.ready();
-    if (seq !== d.seq) {
-      return;
-    }
-    this.drawerChips([["all", "Все"], ["unread", "Непрочитанные"], ["codes", "Коды"], ["starred", "Со звездой"]], d.filter, id => {
-      d.filter = id;
-      this.renderDrawer();
-    });
-    const msgs = MailStore.messages
-      .filter(m => m.folder === "inbox")
-      .filter(m => (d.filter === "unread" ? m.unread : d.filter === "codes" ? m.code || m.labels?.includes("codes") : d.filter === "starred" ? m.starred : true))
-      .filter(m => this.matches(d.query, m.subject, m.from?.name, m.from?.email, m.preview))
-      .sort((a, b) => new Date(b.date) - new Date(a.date))
-      .slice(0, 60);
-    const frag = document.createDocumentFragment();
-    const compose = this.html("button", { class: "dprimary", type: "button" }, null, [this.svg(["M12 5v14", "M5 12h14"], 14, 2.4), this.html("span", {}, "Написать")]);
-    compose.addEventListener("click", () => this.openCompose({}));
-    const unread = MailStore.unreadInbox();
-    frag.append(this.html("div", { class: "dtoolbar" }, null, [compose, this.html("span", { class: "dnote" }, unread ? `${unread} ${this.plural(unread, "новое", "новых", "новых")}` : "всё прочитано")]));
-    if (!msgs.length) {
-      frag.append(this.drawerEmpty(d.query ? "Ничего не найдено" : "Входящие пусты", ""));
-    }
-    let lastDay = "";
-    for (const m of msgs) {
-      const date = new Date(m.date);
-      const day = this.dayLabel(date);
-      if (day !== lastDay) {
-        frag.append(this.groupNode(day));
-        lastDay = day;
-      }
-      const from = m.from?.name || m.from?.email || "";
-      const avatar = this.html("span", { class: "avatar" }, from.slice(0, 1).toUpperCase());
-      const row = this.rowNode({
-        icon: avatar,
-        title: m.subject || "(без темы)",
-        sub: [this.html("span", { class: m.unread ? "strong" : "" }, from), m.code ? this.html("span", { class: "tag" }, `код ${m.code}`) : this.html("span")],
-        meta: this.timeLabel(date),
-        actions: [
-          { title: m.unread ? "Прочитано" : "Отметить непрочитанным", icon: ["M3.5 6.5h17v11h-17z", "M3.5 7l8.5 6 8.5-6"], run: async () => { await MailStore.update(m.id, { unread: !m.unread }); this.renderDrawer(); } },
-          { title: "В архив", icon: ["M4 4h16v4H4z", "M5 8v12h14V8", "M10 12h4"], run: async () => { await MailStore.update(m.id, { folder: "archive" }); this.renderDrawer(); } },
-        ],
-        onClick: () => this.openMail(`msg/${m.thread}`),
-      });
-      if (m.unread) {
-        row.setAttribute("unread", "true");
-      }
-      frag.append(row);
-    }
-    d.body.replaceChildren(frag);
-    this.drawerFoot(this.SECTIONS.mail.full, () => this.openMail());
   },
 
   /* ---- Медиа ------------------------------------------------------------ */

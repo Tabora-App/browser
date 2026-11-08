@@ -221,6 +221,7 @@ kbd {
 }
 .chip:hover { color: var(--text); border-color: var(--stroke); }
 .chip[aria-pressed="true"] { background: var(--raised); color: var(--text-strong); border-color: var(--raised); }
+.chip .label-dot { width: 7px; height: 7px; }
 
 .bulk-bar {
   display: flex;
@@ -470,6 +471,9 @@ kbd {
 .mail-item-head .who b { font-weight: 700; }
 .mail-item-head .who span { font-size: 12px; color: var(--text-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mail-item-head .spacer { flex: 1; }
+.to-chip.link { cursor: default; transition: border-color var(--ease), color var(--ease); }
+.to-chip.link:hover { border-color: var(--stroke); color: var(--text-strong); }
+.to-chip.link::after { content: " · управлять"; color: var(--text-4); font-family: var(--font); font-weight: 600; }
 .to-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 8px; background: var(--field); border: 1px solid var(--field-border); font: 500 11px/1 var(--mono); color: var(--text-2); white-space: nowrap; }
 .mail-item.collapsed .paper, .mail-item.collapsed .attachments { display: none; }
 .mail-item.collapsed .mail-item-head { cursor: default; opacity: 0.8; }
