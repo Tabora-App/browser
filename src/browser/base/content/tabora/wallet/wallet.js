@@ -682,7 +682,8 @@ Object.assign(Tabora, {
     w.loadingNow = false;
     w.refreshing = false;
     this.updateWalletCard();
-    if (seq === this.drawer.seq && this.drawer.open && this.drawer.section === "wallet") {
+    // перерисовываем текущий экран (главный, отправка), если панель кошелька открыта
+    if (this.drawer.open && this.drawer.section === "wallet" && !this.wallet.flow) {
       this.renderDrawer();
     }
   },

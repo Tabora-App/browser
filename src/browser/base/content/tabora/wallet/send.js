@@ -130,7 +130,12 @@ Object.assign(Tabora, {
     const chain = CHAINS[asset.chain];
     const account = WalletStore.activeAccount;
     const decimals = asset.native ? chain.decimals : asset.token.decimals;
-    const available = BigInt(asset.native ? this.wParseAmount(asset.amount, decimals) ?? 0n : asset.token.raw || 0);
+    const pending = !!asset.pending;
+    if (pending) {
+      // балансы ещё не загружены (например, сразу после разблокировки)
+      this.walletLoadBalances(this.drawer.seq);
+    }
+    const available = pending ? null : BigInt(asset.native ? this.wParseAmount(asset.amount, decimals) ?? 0n : asset.token.raw || 0);
     const price = (this.wallet.prices || {})[asset.symbol] || 0;
 
     const back = this.wButton("Отмена", "ghost small", () => this.walletGo("main"));
@@ -138,7 +143,7 @@ Object.assign(Tabora, {
     // Актив
     const assetBtn = h("button", { class: "w-asset-pick", type: "button", style: `--c:${asset.color}` }, null, [
       h("span", { class: "w-coin" }, null, [asset.logo ? h("img", { src: asset.logo, alt: "" }) : h("b", {}, asset.symbol[0]), h("i", { class: "w-coin-chain" }, null, asset.chainLogo ? [h("img", { src: asset.chainLogo, alt: "" })] : [])]),
-      h("span", { class: "w-asset-pick-text" }, null, [h("b", {}, `${asset.symbol} · ${asset.chainName}`), h("span", {}, `доступно ${asset.amount}`)]),
+      h("span", { class: "w-asset-pick-text" }, null, [h("b", {}, `${asset.symbol} · ${asset.chainName}`), h("span", {}, pending ? "баланс загружается…" : `доступно ${asset.amount}`)]),
       this.wIcon(["m6 9 6 6 6-6"], 12, 2.2),
     ]);
     assetBtn.addEventListener("click", e => {
@@ -167,7 +172,7 @@ Object.assign(Tabora, {
 
     // Сумма
     const amount = h("input", { class: "w-input mono", type: "text", inputmode: "decimal", placeholder: "0", value: s.amount });
-    const maxLink = h("button", { class: "w-link small", type: "button" }, `Всё · ${asset.amount}`);
+    const maxLink = h("button", { class: "w-link small", type: "button" }, pending ? "Всё" : `Всё · ${asset.amount}`);
     const amountNote = h("span", { class: "w-note" });
     const refreshAmountNote = () => {
       const raw = this.wParseAmount(amount.value, decimals);
@@ -179,6 +184,11 @@ Object.assign(Tabora, {
       if (raw === null) {
         amountNote.textContent = `Число, не больше ${decimals} знаков после точки`;
         amountNote.className = "w-note bad";
+        return null;
+      }
+      if (available === null) {
+        amountNote.textContent = "Ждём баланс…";
+        amountNote.className = "w-note";
         return null;
       }
       if (raw > available) {
@@ -238,6 +248,9 @@ Object.assign(Tabora, {
     amount.addEventListener("input", () => update());
     [to, amount].forEach(i => i.addEventListener("keydown", e => e.stopPropagation()));
     maxLink.addEventListener("click", async () => {
+      if (available === null) {
+        return;
+      }
       // для нативной монеты вычитаем комиссию
       let raw = available;
       if (asset.native && this.wCheckAddress(asset.chain, to.value).ok) {
