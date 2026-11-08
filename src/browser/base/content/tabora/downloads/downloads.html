@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+<html lang="ru" dir="ltr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Загрузки · Tabora</title>
+  <link rel="icon" href="chrome://browser/content/tabora/downloads/icon.svg" />
+  <link rel="stylesheet" href="chrome://browser/content/tabora/downloads/downloads.css" />
+</head>
+<body>
+  <div class="page" id="page">
+    <header class="head">
+      <div class="head-row">
+        <div class="head-title">
+          <h1>Загрузки</h1>
+          <p class="summary" id="summary">Ничего не скачивается</p>
+        </div>
+        <div class="head-actions">
+          <button class="ghost" id="pause-all" type="button" hidden>Приостановить все</button>
+          <button class="ghost" id="resume-all" type="button" hidden>Возобновить все</button>
+          <button class="ghost" id="open-folder" type="button">
+            <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            Папка загрузок
+          </button>
+          <button class="ghost" id="clear-done" type="button">Очистить завершённые</button>
+        </div>
+      </div>
+      <div class="tools">
+        <div class="search">
+          <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="search" type="search" placeholder="Имя файла или сайт" autocomplete="off" aria-label="Поиск по загрузкам" />
+          <kbd>/</kbd>
+        </div>
+        <div class="chips" id="filters" role="group" aria-label="Тип файлов">
+          <button class="chip" data-filter="all" type="button" aria-pressed="true">Все</button>
+          <button class="chip" data-filter="active" type="button">Идут <span class="count" id="active-count" hidden></span></button>
+          <button class="chip" data-filter="image" type="button">Картинки</button>
+          <button class="chip" data-filter="video" type="button">Видео и звук</button>
+          <button class="chip" data-filter="doc" type="button">Документы</button>
+          <button class="chip" data-filter="archive" type="button">Архивы</button>
+          <button class="chip" data-filter="app" type="button">Программы</button>
+        </div>
+        <div class="view-toggle" role="group" aria-label="Вид">
+          <button class="icon-btn" id="view-list" type="button" aria-pressed="true" title="Список" aria-label="Список"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+          <button class="icon-btn" id="view-grid" type="button" aria-pressed="false" title="Плитки" aria-label="Плитки"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></button>
+        </div>
+      </div>
+    </header>
+
+    <main class="list" id="list" aria-live="polite"></main>
+
+    <div class="empty" id="empty" hidden>
+      <div class="empty-mark">
+        <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5"/><path d="M4 19h16"/></svg>
+      </div>
+      <h2 id="empty-title">Пока ничего не скачано</h2>
+      <p id="empty-sub">Файлы появятся здесь сразу, как начнётся загрузка. Картинки покажем миниатюрой, файлы можно перетаскивать прямо отсюда.</p>
+    </div>
+
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+  </div>
+  <script src="chrome://browser/content/tabora/downloads/downloads.js"></script>
+</body>
+</html>

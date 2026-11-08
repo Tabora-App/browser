@@ -926,6 +926,7 @@ var Tabora = {
 
   START_URLS: ["about:blank", "about:newtab", "about:home", "about:welcome", "about:privatebrowsing", "chrome://browser/content/blanktab.html"],
   MAIL_URL: "chrome://browser/content/tabora/mail/mail.html",
+  DOWNLOADS_URL: "chrome://browser/content/tabora/downloads/downloads.html",
 
   isMailUrl(spec) {
     return (spec || "").startsWith(this.MAIL_URL);
@@ -940,7 +941,35 @@ var Tabora = {
     if (spec.startsWith("about:preferences")) {
       return "tabora://settings";
     }
+    if (spec.startsWith(this.DOWNLOADS_URL)) {
+      return "tabora://downloads";
+    }
     return spec;
+  },
+
+  openDownloads() {
+    this.openInternal(this.DOWNLOADS_URL);
+  },
+
+  openUrl(url) {
+    gBrowser.selectedTab = gBrowser.addTab(url, { triggeringPrincipal: Services.scriptSecurityManager.createNullPrincipal({}) });
+  },
+
+  /** Открыть внутреннюю страницу (одну на окно): уже открытая вкладка переиспользуется. */
+  openInternal(url) {
+    const existing = gBrowser.tabs.find(t => (t.linkedBrowser?.currentURI?.spec || "").startsWith(url) && !t.hidden);
+    if (existing) {
+      gBrowser.selectedTab = existing;
+      return;
+    }
+    gBrowser.selectedTab = gBrowser.addTab(url, { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+  },
+
+  /** Контекстное меню для наших страниц: координаты страницы переводятся в координаты окна. */
+  showMenuFromContent(contentWindow, items, x, y) {
+    const browser = gBrowser.getBrowserForContentWindow?.(contentWindow) || gBrowser.selectedBrowser;
+    const rect = browser.getBoundingClientRect();
+    this.showMenu(items, rect.left + x, rect.top + y);
   },
 
   openMail(hash = "") {
@@ -1402,7 +1431,7 @@ var Tabora = {
       })),
       { glyph: "●", title: "Панель агента", note: "Показать или скрыть", key: "⌘J", tags: "agent ai", run: () => this.toggleAgent() },
       { glyph: "P", title: "Приватное окно", note: "Без истории и cookies", key: "⌘⇧P", tags: "private инкогнито", run: () => OpenBrowserWindow({ private: true }) },
-      { glyph: "↓", title: "Загрузки", note: "Файлы, которые вы скачали", key: "⌘⇧J", tags: "downloads", run: () => switchToTabHavingURI("about:downloads", true) },
+      { glyph: "↓", title: "Загрузки", note: "Прогресс, миниатюры, файлы под рукой", key: "⌘⇧J", tags: "downloads загрузки файлы", run: () => this.openDownloads() },
       { glyph: "✎", title: "Написать письмо", note: "Окно письма поверх любой вкладки", key: "", tags: "compose написать письмо mail new", run: () => this.openCompose() },
       { glyph: "✉", title: "Почта и алиасы", note: "Входящие, коды подтверждения, алиасы", key: "⌘⇧M", tags: "mail почта email письма алиасы inbox", run: () => this.openMail() },
       { glyph: "⚙", title: "Настройки", note: "Поведение, приватность, внешний вид", key: "⌘,", tags: "settings preferences", run: () => openPreferences() },
@@ -1871,6 +1900,10 @@ var Tabora = {
           e.stopPropagation();
         } else if (e.shiftKey && e.code === "KeyM") {
           this.openMail();
+          e.preventDefault();
+          e.stopPropagation();
+        } else if (e.shiftKey && e.code === "KeyJ") {
+          this.openDownloads();
           e.preventDefault();
           e.stopPropagation();
         }
