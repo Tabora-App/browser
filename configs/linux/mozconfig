@@ -1,0 +1,20 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+# Старый ABI libstdc++, как у Firefox, для совместимости со старыми дистрибутивами
+export MOZ_STDCXX_COMPAT=1
+
+if test "$BROWSER_RELEASE"; then
+  if test "$SURFER_COMPAT" = "aarch64"; then
+    ac_add_options --target=aarch64-linux-gnu
+  else
+    ac_add_options --target=x86_64-pc-linux
+    ac_add_options --enable-eme=widevine
+  fi
+  ac_add_options --enable-linker=lld
+  ac_add_options --disable-elf-hack
+  ac_add_options --enable-install-strip
+  ac_add_options --enable-strip
+  export STRIP_FLAGS="--strip-debug --strip-unneeded"
+fi

@@ -1,0 +1,132 @@
+name: Build
+
+# Сборка на раннерах Blacksmith по схеме Zen Browser:
+# macOS собирается кросс-компиляцией на Linux, тулчейн Mozilla берётся через mach.
+# Запуск только вручную, чтобы не тратить минуты на каждый коммит.
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Платформа"
+        required: true
+        type: choice
+        default: macos-aarch64
+        options: [macos-aarch64, macos-x86_64, linux-x86_64, linux-aarch64]
+      lto:
+        description: "Включить LTO (медленнее, но быстрее бинарник)"
+        type: boolean
+        default: false
+      runner:
+        description: "Раннер Blacksmith"
+        type: choice
+        default: blacksmith-8vcpu-ubuntu-2404
+        options: [blacksmith-4vcpu-ubuntu-2404, blacksmith-8vcpu-ubuntu-2404, blacksmith-16vcpu-ubuntu-2404]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ inputs.platform }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 360
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: 0
+      SURFER_PLATFORM: ${{ startsWith(inputs.platform, 'macos') && 'darwin' || 'linux' }}
+      SURFER_COMPAT: ${{ endsWith(inputs.platform, 'aarch64') && 'aarch64' || 'x86_64' }}
+      BROWSER_CROSS_COMPILING: ${{ startsWith(inputs.platform, 'macos') && '1' || '' }}
+      BROWSER_DISABLE_LTO: ${{ inputs.lto && '' || '1' }}
+      BROWSER_RELEASE: 1
+
+    steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: useblacksmith/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-pip zstd yasm nasm build-essential libgtk2.0-dev libpython3-dev m4 uuid \
+            libasound2-dev libcurl4-openssl-dev libdbus-1-dev libdrm-dev libdbus-glib-1-dev libgtk-3-dev libpulse-dev \
+            libx11-xcb-dev libxt-dev xvfb --fix-missing
+
+      - name: Surfer CI setup
+        run: npm run surfer -- ci --brand release --display-version 0.1.${{ github.run_number }}
+
+      - name: Download Firefox source
+        run: npm run download
+
+      - name: Cache macOS cross toolchain
+        if: env.BROWSER_CROSS_COMPILING == '1'
+        id: cache-mac-cross
+        uses: useblacksmith/cache@v5
+        with:
+          path: ~/mac-cross
+          key: mac-cross-v1
+
+      - name: Fetch macOS cross toolchain (cctools, dmg, hfsplus)
+        if: env.BROWSER_CROSS_COMPILING == '1' && steps.cache-mac-cross.outputs.cache-hit != 'true'
+        run: |
+          set -ex
+          mkdir -p ~/mac-cross
+          cd engine
+          ./mach artifact toolchain --from-build linux64-cctools-port linux64-libdmg linux64-hfsplus
+          mv cctools dmg hfsplus ~/mac-cross/
+          ls ~/mac-cross/cctools/bin/aarch64-apple-darwin-ld ~/mac-cross/dmg/dmg ~/mac-cross/hfsplus/newfs_hfs
+
+      - name: Setup Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain $(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)
+          source "$HOME/.cargo/env"
+          case "${{ inputs.platform }}" in
+            macos-aarch64) rustup target add aarch64-apple-darwin ;;
+            macos-x86_64)  rustup target add x86_64-apple-darwin ;;
+            linux-aarch64) rustup target add aarch64-unknown-linux-gnu ;;
+          esac
+
+      - name: Import patches and branding
+        run: |
+          . "$HOME/.cargo/env"
+          npm run import -- --verbose
+
+      - name: Bootstrap Mozilla toolchains
+        run: npm run bootstrap
+
+      - name: Build
+        run: |
+          set -x
+          . "$HOME/.cargo/env"
+          if [ -z "$BROWSER_CROSS_COMPILING" ] && [ -d "$HOME/.mozbuild/clang/bin" ]; then
+            export CC="$HOME/.mozbuild/clang/bin/clang"
+            export CXX="$HOME/.mozbuild/clang/bin/clang++"
+          fi
+          ulimit -n 4096
+          npm run build
+
+      - name: Package
+        run: |
+          . "$HOME/.cargo/env"
+          npm run package
+          ls -la dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-${{ inputs.platform }}
+          retention-days: 7
+          path: |
+            dist/*.dmg
+            dist/*.tar.xz
+            dist/*.tar.bz2

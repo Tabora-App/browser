@@ -1,0 +1,32 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+unset MOZ_STDCXX_COMPAT
+
+ac_add_options --disable-dmd
+ac_add_options --enable-eme=widevine
+
+# Кросс-сборка macOS на Linux-раннере (схема Zen): тулчейн лежит в ~/mac-cross
+if test "$BROWSER_CROSS_COMPILING"; then
+  MAC_CROSS="$HOME/mac-cross"
+  mk_add_options "export PATH=$MAC_CROSS/cctools/bin:$PATH"
+  mk_add_options "export LD_LIBRARY_PATH=$HOME/.mozbuild/clang/lib:$LD_LIBRARY_PATH"
+  export MKFSHFS=$MAC_CROSS/hfsplus/newfs_hfs
+  export DMG_TOOL=$MAC_CROSS/dmg/dmg
+  export HFS_TOOL=$MAC_CROSS/dmg/hfsplus
+  if test "$BROWSER_RELEASE"; then
+    export MOZ_LD64_KNOWN_GOOD=1
+    ac_add_options --enable-linker=ld64
+  fi
+fi
+
+if test "$SURFER_COMPAT" = "x86_64"; then
+  ac_add_options --target=x86_64-apple-darwin
+else
+  ac_add_options --target=aarch64-apple-darwin
+  if test "$BROWSER_RELEASE"; then
+    export CFLAGS="$CFLAGS -mcpu=apple-m1"
+    export CXXFLAGS="$CXXFLAGS -mcpu=apple-m1"
+  fi
+fi
