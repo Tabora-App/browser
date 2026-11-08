@@ -1694,6 +1694,75 @@ sidebar-main {
   cursor: default;
 }
 
+/* Быстрые ответы на вопрос агента */
+#tabora-agent .quick {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--tabora-accent) 45%, var(--tabora-panel-border));
+  background: var(--tabora-field);
+  transition: opacity var(--tabora-ease);
+}
+
+#tabora-agent .quick.answered {
+  opacity: 0.55;
+}
+
+#tabora-agent .quick .q {
+  font: 600 13px/1.4 var(--tabora-font);
+  color: var(--tabora-text-strong);
+}
+
+#tabora-agent .quick .opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+#tabora-agent .quick button {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--tabora-line);
+  border-radius: 10px;
+  background: var(--tabora-panel);
+  color: var(--tabora-text);
+  font: 600 12px/1 var(--tabora-font);
+  cursor: default;
+  transition: background-color var(--tabora-ease), border-color var(--tabora-ease), color var(--tabora-ease);
+}
+
+#tabora-agent .quick button.rec {
+  background: var(--tabora-accent);
+  border-color: var(--tabora-accent);
+  color: var(--tabora-on-accent);
+  font-weight: 700;
+}
+
+#tabora-agent .quick button.other {
+  color: var(--tabora-text-3);
+  border-style: dashed;
+}
+
+#tabora-agent .quick button:hover:not([disabled]) {
+  border-color: var(--tabora-text-5);
+  background: var(--tabora-raised);
+}
+
+#tabora-agent .quick button.rec:hover:not([disabled]) {
+  background: var(--tabora-accent-hover, #d6ff6e);
+  border-color: var(--tabora-accent-hover, #d6ff6e);
+}
+
+#tabora-agent .quick button[disabled] {
+  pointer-events: none;
+}
+
+#tabora-agent .chips[hidden] {
+  display: none;
+}
+
 #tabora-agent input::selection {
   background: var(--tabora-accent-dim);
   color: var(--tabora-text);

@@ -33,6 +33,8 @@ Object.assign(Tabora, {
       "Ты агент браузера Tabora. Отвечай по-русски, коротко и по делу, без лишних вступлений. Markdown допустим: абзацы, списки, **жирный**, `код`.",
       "У тебя есть инструменты браузера. Если задача требует действия, вызывай инструменты, а не описывай, что «мог бы» сделать. Перед опасными действиями (закрыть много вкладок, отправить форму, удалить историю) кратко подтверди у пользователя, если он не просил явно.",
       "Читай страницу через read_page, прежде чем делать саммари или отвечать по её содержимому. Для форм сначала вызови describe_forms, затем fill_form и click.",
+      "Любой вопрос пользователю задавай ТОЛЬКО инструментом ask_user с 2–4 короткими вариантами ответа (кнопки). Не задавай вопросов обычным текстом. Первый вариант — рекомендуемый.",
+      "Регистрация на сайте: предложи через ask_user адрес почты — новый алиас для этого сайта (create_alias, рекомендуемый вариант), основной адрес или другой. Пароль не спрашивай: сгенерируй generate_password, заполни форму и после отправки вызови save_login, затем коротко сообщи, что сохранено в браузере. Код подтверждения ищи в почте через mail find_code.",
       `Сейчас ${now.toLocaleString("ru-RU")}. Пространство: «${space?.name || "Личное"}». Активная вкладка: ${this.displayUrl(url)} — «${tab.label}».`,
       `Открытые вкладки:\n${tabs.join("\n")}`,
       "Адрес почты пользователя: " + (this._mail ? this.mail().ACCOUNT.address : "felix@tabora.app") + ". Алиасы вида site-xxxx@tabora.app создаются для регистраций.",
@@ -249,6 +251,48 @@ Object.assign(Tabora, {
         }
         return msgs.slice(0, 15).map(m => ({ from: m.from?.name, subject: m.subject, unread: m.unread, code: m.code || undefined, when: m.date }));
       }),
+      tool("ask_user", "Задать пользователю вопрос с вариантами ответа в виде кнопок. После вызова дождись ответа: ничего больше не делай в этом ходе.", P({ question: str("Короткий вопрос"), options: { type: "array", items: { type: "string" }, description: "2–4 варианта, первый — рекомендуемый" }, allow_custom: { type: "boolean", description: "Показать поле «Другое…»" } }, ["question", "options"]), async ({ question, options, allow_custom }) => {
+        this.agentAsk(question, options || [], allow_custom !== false);
+        return { shown: true, note: "варианты показаны пользователю, ответ придёт следующим сообщением" };
+      }),
+      tool("create_alias", "Создать новый почтовый алиас вида site-xxxx@tabora.app для сайта. Письма на него попадут во входящие.", P({ site: str("Домен сайта, например getantik.com") }, ["site"]), async ({ site }) => {
+        const { MailStore, ACCOUNT } = this.mail();
+        await MailStore.ready();
+        const host = String(site || "").replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].toLowerCase();
+        const base = (host.split(".")[0] || "site").replace(/[^a-z0-9]/g, "").slice(0, 12) || "site";
+        const existing = MailStore.aliases.find(a => a.site === host && a.on);
+        if (existing) {
+          return { address: existing.address, existed: true };
+        }
+        const rnd = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => "abcdefghjkmnpqrstuvwxyz23456789"[b % 31]).join("");
+        const address = `${base}-${rnd}@${ACCOUNT.domain}`;
+        MailStore.aliases.unshift({ id: `a${Date.now()}`, address, site: host, by: "агент при регистрации", count: 0, created: new Date().toISOString(), space: space()?.name || "Личное", on: true, agent: true });
+        MailStore.save();
+        return { address, existed: false };
+      }),
+      tool("generate_password", "Сгенерировать надёжный пароль.", P({ length: { type: "integer", description: "По умолчанию 20" } }), async ({ length }) => {
+        const n = Math.min(64, Math.max(12, length || 20));
+        const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*-_=+";
+        const bytes = crypto.getRandomValues(new Uint8Array(n));
+        let pw = Array.from(bytes, b => alphabet[b % alphabet.length]).join("");
+        if (!/[A-Z]/.test(pw) || !/[a-z]/.test(pw) || !/\d/.test(pw) || !/[^A-Za-z0-9]/.test(pw)) {
+          pw = "Tb" + pw.slice(0, n - 4) + "7!";
+        }
+        this._agentLastPassword = pw;
+        return { password: pw };
+      }),
+      tool("save_login", "Сохранить логин и пароль сайта в менеджере паролей браузера.", P({ origin: str("Адрес сайта, например https://account.getantik.com"), username: str(""), password: str("") }, ["origin", "username", "password"]), async ({ origin, username, password }) => {
+        try {
+          const url = new URL(/^https?:/.test(origin) ? origin : `https://${origin}`);
+          const info = Cc["@mozilla.org/login-manager/loginInfo;1"].createInstance(Ci.nsILoginInfo);
+          info.init(url.origin, url.origin, null, username, password, "", "");
+          await Services.logins.addLoginAsync(info);
+          this.notice(`Пароль для ${url.host} сохранён`);
+          return { ok: true, origin: url.origin };
+        } catch (e) {
+          return { error: String(e.message || e) };
+        }
+      }),
       tool("set_theme", "Сменить тему браузера.", P({ theme: str("light | dark | system", { enum: ["light", "dark", "system"] }) }, ["theme"]), async ({ theme }) => {
         Services.prefs.setIntPref("layout.css.prefers-color-scheme.content-override", { dark: 0, light: 1, system: 2 }[theme]);
         return { ok: true };
@@ -280,6 +324,7 @@ Object.assign(Tabora, {
     if (this.agent.busy) {
       this.agentStop();
     }
+    this.agentClearQuick();
     this.agentSay(text, "user");
     this.agent.history.push({ role: "user", content: text });
     this.agentRun();
@@ -346,6 +391,9 @@ Object.assign(Tabora, {
           }
           a.history.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result).slice(0, 60000) });
         }
+        if (toolCalls.some(c => c.name === "ask_user")) {
+          break; // ждём ответа кнопкой или текстом
+        }
       }
     } catch (e) {
       if (e.name !== "AbortError") {
@@ -359,6 +407,48 @@ Object.assign(Tabora, {
         this.agentStatus("Готов к задачам", false);
         log.querySelector(".msg.streaming")?.classList.remove("streaming");
       }
+    }
+  },
+
+  /** Вопрос с кнопками быстрого ответа под сообщением агента. */
+  agentAsk(question, options, allowCustom) {
+    this.agentClearQuick();
+    const log = document.getElementById("tabora-agent-log");
+    const box = this.html("div", { class: "quick", id: "tabora-agent-quick" }, null, [
+      this.html("div", { class: "q" }, question),
+      this.html("div", { class: "opts" }, null, [
+        ...options.slice(0, 4).map((opt, i) => {
+          const b = this.html("button", { type: "button", class: i === 0 ? "rec" : "" }, opt);
+          b.addEventListener("click", () => this.agentSend(opt));
+          return b;
+        }),
+        ...(allowCustom ? [(() => {
+          const b = this.html("button", { type: "button", class: "other" }, "Другое…");
+          b.addEventListener("click", () => {
+            const input = document.getElementById("tabora-agent-input");
+            input.focus();
+            input.placeholder = "Напишите свой вариант…";
+          });
+          return b;
+        })()] : []),
+      ]),
+    ]);
+    log.append(box);
+    log.scrollTop = log.scrollHeight;
+    document.querySelector("#tabora-agent .chips")?.setAttribute("hidden", "true");
+  },
+
+  agentClearQuick() {
+    const quick = document.getElementById("tabora-agent-quick");
+    if (quick) {
+      quick.classList.add("answered");
+      quick.querySelectorAll("button").forEach(b => (b.disabled = true));
+      quick.removeAttribute("id");
+    }
+    document.querySelector("#tabora-agent .chips")?.removeAttribute("hidden");
+    const input = document.getElementById("tabora-agent-input");
+    if (input) {
+      input.placeholder = "Спросите или поручите…";
     }
   },
 
@@ -483,6 +573,10 @@ Object.assign(Tabora, {
       bookmarks: args.action === "add" ? "добавляю закладку" : "ищу в закладках",
       downloads: "смотрю загрузки",
       mail: { inbox: "смотрю входящие", find_code: "ищу код в почте", compose: "открываю письмо" }[args.action] || "почта",
+      ask_user: "уточняю",
+      create_alias: `создаю алиас для ${args.site || "сайта"}`,
+      generate_password: "генерирую пароль",
+      save_login: "сохраняю пароль в браузере",
       set_theme: "меняю тему",
       open_drawer: "открываю ящик",
     };
