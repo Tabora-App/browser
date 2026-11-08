@@ -8,8 +8,8 @@
  * Подключается из tabora.js через loadSubScript и расширяет объект Tabora. */
 
 Object.assign(Tabora, {
-  DRAWER_WIDTH: 376,
-  DRAWER_RAIL: 56,
+  DRAWER_WIDTH: 384,
+  DRAWER_RAIL: 64,
   SECTIONS_PREF: "tabora.drawer.sections",
   SECTION_PREF: "tabora.drawer.section",
 
