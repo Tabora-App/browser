@@ -386,7 +386,7 @@ Object.assign(Tabora, {
     return h("div", { class: "w-locked" }, null, [
       h("div", { class: "w-lock-mark" }, null, [this.wIcon(["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], 22, 1.8)]),
       h("b", {}, "Кошелёк заблокирован"),
-      h("p", { class: "w-sub" }, `${WalletStore.wallets.length} ${this.plural(WalletStore.wallets.length, "кошелёк", "кошелька", "кошельков")} · автоблокировка через ${Services.prefs.getIntPref("tabora.wallet.autolockMinutes", 15)} мин`),
+      h("p", { class: "w-sub" }, `${WalletStore.wallets.length} ${this.plural(WalletStore.wallets.length, "кошелёк", "кошелька", "кошельков")} · ${Services.prefs.getIntPref("tabora.wallet.autolockMinutes", 15) ? `автоблокировка через ${Services.prefs.getIntPref("tabora.wallet.autolockMinutes", 15)} мин` : "без автоблокировки"}`),
       pass.wrap, err, go,
     ]);
   },

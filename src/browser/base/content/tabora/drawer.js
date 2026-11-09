@@ -151,6 +151,29 @@ Object.assign(Tabora, {
     return b;
   },
 
+  REMOVED_PREF: "tabora.drawer.removed",
+
+  /** Разделы, которые пользователь убрал сам. Новые разделы (появившиеся в обновлении) сюда не попадают. */
+  removedSections() {
+    let removed = null;
+    try {
+      removed = JSON.parse(Services.prefs.getStringPref(this.REMOVED_PREF, "null"));
+    } catch (e) {}
+    if (Array.isArray(removed)) {
+      return removed;
+    }
+    // старый профиль: списка убранных нет, считаем убранными только те из прежнего набора, которых нет в сохранённом списке
+    let saved = null;
+    try {
+      saved = JSON.parse(Services.prefs.getStringPref(this.SECTIONS_PREF, "null"));
+    } catch (e) {}
+    if (!Array.isArray(saved) || !saved.length) {
+      return [];
+    }
+    const legacy = ["wallet", "downloads", "history", "media", "spaces", "bookmarks"];
+    return legacy.filter(id => !saved.includes(id));
+  },
+
   visibleSections() {
     let list = null;
     try {
@@ -159,11 +182,22 @@ Object.assign(Tabora, {
     if (!Array.isArray(list) || !list.length) {
       list = [...this.SECTION_ORDER];
     }
-    return list.filter(id => this.SECTIONS[id]);
+    list = list.filter(id => this.SECTIONS[id]);
+    // разделы, появившиеся после сохранения списка, встают на своё место в порядке по умолчанию
+    const removed = this.removedSections();
+    for (const id of this.SECTION_ORDER) {
+      if (list.includes(id) || removed.includes(id)) {
+        continue;
+      }
+      const after = this.SECTION_ORDER.slice(0, this.SECTION_ORDER.indexOf(id)).filter(x => list.includes(x)).pop();
+      list.splice(after ? list.indexOf(after) + 1 : 0, 0, id);
+    }
+    return list;
   },
 
   saveSections(list) {
     Services.prefs.setStringPref(this.SECTIONS_PREF, JSON.stringify(list));
+    Services.prefs.setStringPref(this.REMOVED_PREF, JSON.stringify(this.SECTION_ORDER.filter(id => !list.includes(id))));
     this.renderRail();
   },
 
