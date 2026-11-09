@@ -9,7 +9,8 @@
 
 Object.assign(Tabora, {
   _vaultMod: null,
-  codes: { view: "main" },
+  _otpMod: null,
+  codes: { view: "main", timer: null },
 
   vaultMod() {
     if (!this._vaultMod) {
@@ -49,6 +50,9 @@ Object.assign(Tabora, {
     await Vault.ready();
     if (Vault.exists && !Vault.unlocked) {
       await Vault.unlock(); // тихо, через хранилище ключей системы
+    }
+    if (Vault.unlocked) {
+      await this.otpMod().Otp.ready();
     }
     if (seq !== d.seq) {
       return;
@@ -120,13 +124,425 @@ Object.assign(Tabora, {
     ]);
   },
 
+  otpMod() {
+    if (!this._otpMod) {
+      this._otpMod = ChromeUtils.importESModule("chrome://browser/content/tabora/vault/Otp.sys.mjs");
+      Services.obs.addObserver(() => this.drawerDirty("codes"), this._otpMod.Otp.TOPIC);
+    }
+    return this._otpMod;
+  },
+
+  /** Актор страницы: ссылки otpauth:// и пиксели картинок для QR; пункт в меню картинки. */
+  initVaultActor() {
+    try {
+      ChromeUtils.registerWindowActor("TaboraVault", {
+        parent: { esModuleURI: "chrome://browser/content/tabora/actors/TaboraVaultParent.sys.mjs" },
+        child: {
+          esModuleURI: "chrome://browser/content/tabora/actors/TaboraVaultChild.sys.mjs",
+          events: { click: { capture: true } },
+        },
+        allFrames: true,
+        messageManagerGroups: ["browsers"],
+        safeForUntrustedWebProcess: true,
+      });
+    } catch (e) {
+      // уже зарегистрирован другим окном
+    }
+    this.otpInitContextMenu();
+  },
+
+  /* ---- Список кодов ---------------------------------------------------- */
+
   codesMainView() {
     const h = (t, a, x, c) => this.html(t, a, x, c);
-    return h("div", { class: "w-settings" }, null, [
-      h("div", { class: "w-flow-head" }, null, [h("b", {}, "Коды")]),
-      this.drawerEmpty("Кодов пока нет", "Добавление кодов появится на следующем шаге"),
-      this.vaultCard(),
+    const { Otp } = this.otpMod();
+    const q = (this.drawer.query || "").toLowerCase();
+    const entries = Otp.list()
+      .filter(e => !q || `${e.issuer} ${e.account} ${(e.domains || []).join(" ")}`.toLowerCase().includes(q))
+      .sort((a, b) => (b.usedAt || 0) - (a.usedAt || 0) || (a.issuer || a.account).localeCompare(b.issuer || b.account, "ru"));
+    const add = this.wButton("Добавить", "primary small", e => this.otpAddMenu(e.currentTarget));
+    const head = h("div", { class: "otp-head" }, null, [h("b", {}, "Коды"), add]);
+    const list = h("div", { class: "otp-list" }, null, entries.map(e => this.otpRow(e)));
+    const empty = this.drawerEmpty(q ? "Ничего не найдено" : "Кодов пока нет", q ? "" : "Добавьте код: с QR на странице, по ссылке otpauth:// или вручную");
+    const body = h("div", { class: "w-settings" }, null, [head, entries.length ? list : empty, this.vaultCard()]);
+    if (entries.length) {
+      this.otpStartTicking();
+    }
+    return body;
+  },
+
+  otpRow(e) {
+    const h = (t, a, x, c) => this.html(t, a, x, c);
+    const domain = e.domains?.[0];
+    const icon = h("span", { class: "otp-icon" }, domain ? null : (e.issuer || e.account || "?")[0].toUpperCase(), domain ? [h("img", { src: `page-icon:https://${domain}/`, alt: "" })] : []);
+    const title = e.issuer || e.account;
+    const sub = e.issuer ? e.account || (e.domains || []).join(", ") : (e.domains || []).join(", ");
+    const code = h("span", { class: "otp-code" }, "··· ···");
+    const ring = h("span", { class: "otp-ring", style: "--p:100" });
+    const row = h("div", { class: "otp-row", tabindex: "0", "data-id": e.id, title: "Нажмите, чтобы скопировать код" }, null, [
+      icon, h("div", { class: "otp-text" }, null, [h("b", {}, title), h("span", {}, sub)]), code, ring,
     ]);
+    row.addEventListener("click", () => this.otpCopy(e.id, row));
+    row.addEventListener("keydown", ev => {
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        this.otpCopy(e.id, row);
+      }
+    });
+    row.addEventListener("contextmenu", ev => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      this.showMenu(this.otpRowMenu(e), ev.clientX, ev.clientY);
+    });
+    return row;
+  },
+
+  otpFmt(code) {
+    const s = String(code || "");
+    return s.length === 6 ? `${s.slice(0, 3)} ${s.slice(3)}` : s.length === 8 ? `${s.slice(0, 4)} ${s.slice(4)}` : s;
+  },
+
+  /** Живые коды: раз в секунду, пока раздел открыт. */
+  otpStartTicking() {
+    clearInterval(this.codes.timer);
+    const tick = async () => {
+      const d = this.drawer;
+      if (!d.open || d.section !== "codes") {
+        clearInterval(this.codes.timer);
+        this.codes.timer = null;
+        return;
+      }
+      const { Otp } = this.otpMod();
+      if (!this.vaultMod().Vault.unlocked) {
+        return;
+      }
+      for (const row of d.body.querySelectorAll(".otp-row[data-id]")) {
+        try {
+          const c = await Otp.code(row.dataset.id);
+          row.querySelector(".otp-code").textContent = this.otpFmt(c.code);
+          row.querySelector(".otp-ring").style.setProperty("--p", String(Math.round((c.remaining / c.period) * 100)));
+          row.classList.toggle("ending", c.remaining <= 5);
+          row.title = `Действует ещё ${c.remaining} с · следующий ${this.otpFmt(c.next)} · нажмите, чтобы скопировать`;
+        } catch (err) {
+          row.querySelector(".otp-code").textContent = "—";
+        }
+      }
+    };
+    tick();
+    this.codes.timer = setInterval(tick, 1000);
+  },
+
+  async otpCopy(id, row) {
+    const { Otp } = this.otpMod();
+    try {
+      const c = await Otp.code(id);
+      const useNext = c.remaining <= 3; // на излёте периода копируем следующий, чтобы код не протух при вводе
+      this.copyWithExpiry(useNext ? c.next : c.code, 30000);
+      row?.classList.add("copied");
+      setTimeout(() => row?.classList.remove("copied"), 1200);
+      this.notice(useNext ? "Скопирован следующий код: текущий истекает" : "Код скопирован · буфер очистится через 30 с");
+      Otp.touch(id).catch(() => {});
+    } catch (e) {
+      this.notice(e.message);
+    }
+  },
+
+  /** Копирование с автоочисткой: буфер стирается, если там всё ещё наш текст. */
+  copyWithExpiry(text, ms) {
+    const helper = Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper);
+    helper.copyString(text);
+    clearTimeout(this._clipTimer);
+    this._clipTimer = setTimeout(() => {
+      if (this.readClipboard() === text) {
+        helper.copyString("");
+      }
+    }, ms);
+  },
+
+  readClipboard() {
+    try {
+      const trans = Cc["@mozilla.org/widget/transferable;1"].createInstance(Ci.nsITransferable);
+      trans.init(null);
+      trans.addDataFlavor("text/plain");
+      Services.clipboard.getData(trans, Services.clipboard.kGlobalClipboard, window.browsingContext?.currentWindowContext);
+      const data = {};
+      trans.getTransferData("text/plain", data);
+      return data.value?.QueryInterface(Ci.nsISupportsString)?.data ?? "";
+    } catch (e) {
+      return null;
+    }
+  },
+
+  /* ---- Добавление ---------------------------------------------------------- */
+
+  otpAddMenu(anchor) {
+    const r = anchor.getBoundingClientRect();
+    this.showMenu([
+      { label: "Найти QR на этой странице", icon: ["M4 4h6v6H4z", "M14 4h6v6h-6z", "M4 14h6v6H4z", "M14 14h3v3h-3z", "M20 20h-3"], run: () => this.otpScanPage() },
+      { label: "Сканировать с экрана", icon: ["M4 8V5a1 1 0 0 1 1-1h3", "M16 4h3a1 1 0 0 1 1 1v3", "M20 16v3a1 1 0 0 1-1 1h-3", "M8 20H5a1 1 0 0 1-1-1v-3"], hint: "скоро", disabled: true, run: () => {} },
+      { separator: true },
+      { label: "Вставить ссылку otpauth://", icon: ["M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1", "M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"], run: () => this.otpLinkSheet() },
+      { label: "Ввести вручную", icon: ["M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z", "M13.5 6.5l3 3"], run: () => this.otpManualSheet() },
+    ], r.left, r.bottom + 4);
+  },
+
+  otpParamSelects(prefill = {}) {
+    const h = (t, a, x, c) => this.html(t, a, x, c);
+    const sel = (label, values, current, fmt = v => String(v)) => {
+      const s = h("select", { class: "w-input" }, null, values.map(v => {
+        const o = h("option", { value: String(v) }, fmt(v));
+        if (String(v) === String(current)) {
+          o.selected = true;
+        }
+        return o;
+      }));
+      return { wrap: h("label", { class: "w-field" }, null, [h("span", {}, label), s]), select: s };
+    };
+    const digits = sel("Цифр", [6, 7, 8], prefill.digits || 6);
+    const period = sel("Период", [15, 30, 60, 90, 120], prefill.period || 30, v => `${v} с`);
+    const algorithm = sel("Алгоритм", ["SHA1", "SHA256", "SHA512"], prefill.algorithm || "SHA1");
+    const box = h("details", { class: "w-details" }, null, [h("summary", {}, "Параметры (обычно менять не нужно)"), h("div", { class: "otp-advanced" }, null, [digits.wrap, period.wrap, algorithm.wrap])]);
+    if (prefill.digits && prefill.digits !== 6 || prefill.period && prefill.period !== 30 || prefill.algorithm && prefill.algorithm !== "SHA1") {
+      box.open = true;
+    }
+    return { box, read: () => ({ digits: Number(digits.select.value), period: Number(period.select.value), algorithm: algorithm.select.value }) };
+  },
+
+  otpManualSheet(prefill = {}) {
+    const { Otp } = this.otpMod();
+    const issuer = this.wField("Сервис", { placeholder: "GitHub", value: prefill.issuer || "" });
+    const account = this.wField("Аккаунт", { placeholder: "you@example.com", value: prefill.account || "" });
+    const secret = this.wField("Секрет (Base32)", { placeholder: "JBSW Y3DP EHPK 3PXP", value: prefill.secret || "", autocomplete: "off", spellcheck: "false" });
+    const domains = this.wField("Сайт: подсказка кода в поле входа", { placeholder: "github.com", value: (prefill.domains || []).join(", ") });
+    issuer.input.addEventListener("input", () => {
+      if (!domains.input.value) {
+        const g = Otp.guessDomain(issuer.input.value);
+        if (g.length) {
+          domains.input.value = g.join(", ");
+        }
+      }
+    });
+    const params = this.otpParamSelects(prefill);
+    this.vaultSheet(
+      prefill.secret ? "Добавить код" : "Новый код",
+      prefill.secret ? "Проверьте название и сайт: подсказка с кодом появится только на нём." : null,
+      [issuer.wrap, account.wrap, secret.wrap, domains.wrap, params.box],
+      "Сохранить",
+      async () => {
+        const meta = await Otp.add({ issuer: issuer.input.value, account: account.input.value, secret: secret.input.value, domains: domains.input.value, ...params.read() });
+        this.notice(`Код «${meta.issuer || meta.account}» добавлен`);
+      }
+    );
+  },
+
+  otpLinkSheet() {
+    const link = this.wField("Ссылка", { placeholder: "otpauth://totp/…", autocomplete: "off", spellcheck: "false" });
+    this.vaultSheet(
+      "Код по ссылке",
+      "Сайты дают её под QR-кодом, обычно по ссылке «не можете отсканировать?».",
+      [link.wrap],
+      "Далее",
+      async () => {
+        const parsed = this.otpMod().parseOtpauth(link.input.value);
+        setTimeout(() => this.otpManualSheet(parsed), 0);
+      }
+    );
+  },
+
+  /** Ссылка otpauth:// со страницы или из QR: лист добавления, только для активной вкладки. */
+  otpAddFromUrl(url, { host = "", browser = null } = {}) {
+    const tab = browser && gBrowser.getTabForBrowser(browser);
+    if (tab && tab !== gBrowser.selectedTab) {
+      return;
+    }
+    const { Otp, parseOtpauth } = this.otpMod();
+    if (/^otpauth-migration:/i.test(url)) {
+      this.notice("Экспорт Google Authenticator: импорт появится на следующем шаге");
+      return;
+    }
+    let parsed;
+    try {
+      parsed = parseOtpauth(url);
+    } catch (e) {
+      this.notice(e.message);
+      return;
+    }
+    if (host) {
+      parsed.domains = Otp.normalizeDomains([host]);
+    }
+    if (!parsed.domains?.length) {
+      parsed.domains = Otp.guessDomain(parsed.issuer);
+    }
+    this.openDrawer("codes");
+    setTimeout(async () => {
+      const { Vault } = this.vaultMod();
+      await Vault.ready();
+      if (!Vault.exists || !Vault.unlocked) {
+        this.notice(Vault.exists ? "Разблокируйте сейф и повторите" : "Создайте сейф и повторите");
+        return;
+      }
+      await Otp.ready();
+      this.otpManualSheet(parsed);
+    }, 350);
+  },
+
+  /* ---- QR ------------------------------------------------------------------- */
+
+  /** Текст QR из картинки (data: URL или SVG-разметка), распознавание локально. */
+  async otpDecodeImage(data) {
+    const { jsQR } = ChromeUtils.importESModule("chrome://browser/content/tabora/vault/vendor/qr.sys.mjs");
+    const src = data?.dataURL || (data?.svg ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(data.svg)}` : null);
+    if (!src) {
+      return null;
+    }
+    const img = new Image();
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = () => reject(new Error("image"));
+      img.src = src;
+    });
+    const w = img.naturalWidth || data.w;
+    const h = img.naturalHeight || data.h;
+    if (!w || !h || w * h > 4_000_000) {
+      return null;
+    }
+    const canvas = this.html("canvas", { width: String(w), height: String(h) });
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    const px = ctx.getImageData(0, 0, w, h);
+    const found = jsQR(px.data, w, h, { inversionAttempts: "attemptBoth" });
+    return found?.data || null;
+  },
+
+  async otpScanPage() {
+    const browser = gBrowser.selectedBrowser;
+    let images = [];
+    try {
+      images = (await browser.browsingContext.currentWindowGlobal.getActor("TaboraVault").sendQuery("TaboraVault:PageImages")) || [];
+    } catch (e) {
+      this.notice("Не удалось прочитать картинки страницы");
+      return;
+    }
+    const host = browser.currentURI?.host || "";
+    for (const data of images) {
+      const text = await this.otpDecodeImage(data).catch(() => null);
+      if (text && /^otpauth(-migration)?:\/\//i.test(text)) {
+        this.otpAddFromUrl(text, { host });
+        return;
+      }
+    }
+    this.notice(images.length ? `QR с кодом не найден (картинок проверено: ${images.length})` : "На странице нет подходящих картинок");
+  },
+
+  /** Пункт «Добавить код в аутентификатор» в системном меню картинки. */
+  otpInitContextMenu() {
+    // меню страницы создаётся из шаблона лениво, поэтому слушаем документ, а не само меню
+    const item = document.createXULElement("menuitem");
+    item.id = "tabora-otp-image";
+    item.setAttribute("label", "Добавить код в аутентификатор");
+    item.addEventListener("command", () => this.otpFromContextImage());
+    document.addEventListener("popupshowing", e => {
+      const menu = e.target;
+      if (menu.id !== "contentAreaContextMenu") {
+        return;
+      }
+      const show = !!window.gContextMenu?.onImage;
+      item.hidden = !show;
+      if (show) {
+        const anchor = document.getElementById("context-copyimage") || document.getElementById("context-copyimage-contents");
+        if (anchor?.parentNode === menu) {
+          anchor.after(item);
+        } else {
+          menu.append(item);
+        }
+      }
+    });
+  },
+
+  async otpFromContextImage() {
+    const gc = window.gContextMenu;
+    if (!gc?.actor || !gc.targetIdentifier) {
+      return;
+    }
+    const host = gc.browser?.currentURI?.host || "";
+    try {
+      const actor = gc.actor.manager.getActor("TaboraVault");
+      const data = await actor.sendQuery("TaboraVault:ImageData", { targetIdentifier: gc.targetIdentifier });
+      const text = data ? await this.otpDecodeImage(data) : null;
+      if (text && /^otpauth(-migration)?:\/\//i.test(text)) {
+        this.otpAddFromUrl(text, { host });
+      } else {
+        this.notice(text ? "В этом QR нет кода аутентификатора" : "QR-код не распознан");
+      }
+    } catch (e) {
+      this.notice("Не удалось прочитать картинку");
+    }
+  },
+
+  /* ---- Меню записи ------------------------------------------------------------ */
+
+  otpRowMenu(e) {
+    const { Otp } = this.otpMod();
+    return [
+      { label: "Копировать код", icon: ["M8 8h12v12H8z", "M16 8V4H4v12h4"], run: () => this.otpCopy(e.id) },
+      { label: "Копировать следующий код", icon: ["M5 12h14", "m13 6 6 6-6 6"], run: async () => {
+        try {
+          const c = await Otp.code(e.id);
+          this.copyWithExpiry(c.next, 30000);
+          this.notice("Следующий код скопирован");
+        } catch (err) {
+          this.notice(err.message);
+        }
+      } },
+      { separator: true },
+      { label: "Название и сайт", icon: ["M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z", "M13.5 6.5l3 3"], run: () => this.otpEditSheet(e) },
+      { label: "Ссылка для переноса", icon: ["M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1", "M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"], run: () => this.otpExportSheet(e) },
+      { separator: true },
+      { label: "Удалить", icon: ["M4 7h16", "M10 11v6", "M14 11v6", "M6 7l1 12h10l1-12", "M9 7V4h6v3"], danger: true, run: () => this.otpDeleteSheet(e) },
+    ];
+  },
+
+  otpEditSheet(e) {
+    const { Otp } = this.otpMod();
+    const issuer = this.wField("Сервис", { value: e.issuer || "" });
+    const account = this.wField("Аккаунт", { value: e.account || "" });
+    const domains = this.wField("Сайты через запятую", { value: (e.domains || []).join(", "), placeholder: "github.com" });
+    this.vaultSheet("Название и сайт", "Подсказка с кодом появляется только на указанных сайтах: на похожем домене кода не будет.", [issuer.wrap, account.wrap, domains.wrap], "Сохранить", async () => {
+      await Otp.update(e.id, { issuer: issuer.input.value, account: account.input.value, domains: domains.input.value });
+    });
+  },
+
+  async otpExportSheet(e) {
+    const { Otp } = this.otpMod();
+    const h = (t, a, x, c) => this.html(t, a, x, c);
+    let url;
+    try {
+      url = await Otp.otpauthUrl(e.id);
+    } catch (err) {
+      this.notice(err.message);
+      return;
+    }
+    const pre = h("pre", { class: "mono w-phrase", masked: "true" }, url);
+    const reveal = this.wButton("Показать", "ghost small", () => {
+      pre.toggleAttribute("masked");
+      reveal.textContent = pre.hasAttribute("masked") ? "Показать" : "Скрыть";
+    });
+    const copy = this.wButton("Скопировать ссылку", "ghost small", () => {
+      this.copyWithExpiry(url, 60000);
+      this.notice("Ссылка скопирована · буфер очистится через минуту");
+    });
+    const box = this.vaultSheet("Ссылка для переноса", "В ней секрет кода. Вставьте её в другое приложение-аутентификатор и больше никому не показывайте.", [pre, h("div", { class: "w-actions" }, null, [reveal, copy])], "Готово", async () => {});
+    box.classList.add("w-reveal"); // скрывается при потере фокуса окна, как фраза кошелька
+  },
+
+  otpDeleteSheet(e) {
+    const { Otp } = this.otpMod();
+    this.vaultSheet("Удалить код", `«${e.issuer || e.account}» исчезнет из браузера. Если у сервиса включена двухфакторная защита, отключите её заранее или сохраните ссылку для переноса.`, [], "Удалить", async () => {
+      await Otp.remove(e.id);
+      this.notice("Код удалён");
+    });
   },
 
   /** Карточка состояния сейфа: как хранится ключ и что с этим делать. */
@@ -264,7 +680,7 @@ setTimeout(() => {
   }
 }, 1000);
 
-Tabora.SECTIONS.codes = { label: "Коды", key: "⌘⇧K", noSearch: true, icon: ["M4 7h16v10H4z", "M8 12h.01", "M12 12h.01", "M16 12h.01"], wide: false };
+Tabora.SECTIONS.codes = { label: "Коды", key: "⌘⇧K", search: "Поиск по кодам", icon: ["M4 7h16v10H4z", "M8 12h.01", "M12 12h.01", "M16 12h.01"], wide: false };
 if (!Tabora.SECTION_ORDER.includes("codes")) {
   const at = Tabora.SECTION_ORDER.indexOf("wallet");
   Tabora.SECTION_ORDER.splice(at >= 0 ? at + 1 : 1, 0, "codes");

@@ -1,0 +1,12 @@
+{
+  "name": "tabora-vault-vendor",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Сборка библиотек сейфа Tabora (распознавание QR) в один ESM-модуль",
+  "dependencies": {
+    "jsqr": "1.4.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.5"
+  }
+}

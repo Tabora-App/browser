@@ -2,7 +2,7 @@ diff --git a/browser/base/jar.mn b/browser/base/jar.mn
 index b2b5db6040..fbeefdc452 100644
 --- a/browser/base/jar.mn
 +++ b/browser/base/jar.mn
-@@ -33,6 +33,58 @@ browser.jar:
+@@ -33,6 +33,63 @@ browser.jar:
          content/browser/aboutTabCrashed.xhtml         (content/aboutTabCrashed.xhtml)
          content/browser/blanktab.html                 (content/blanktab.html)
          content/browser/browser.js                    (content/browser.js)
@@ -30,6 +30,11 @@ index b2b5db6040..fbeefdc452 100644
 +        content/browser/tabora/wallet/send.js  (content/tabora/wallet/send.js)
 +        content/browser/tabora/vault/Vault.sys.mjs  (content/tabora/vault/Vault.sys.mjs)
 +        content/browser/tabora/vault/vault.js  (content/tabora/vault/vault.js)
++        content/browser/tabora/vault/vault.css  (content/tabora/vault/vault.css)
++        content/browser/tabora/vault/Otp.sys.mjs  (content/tabora/vault/Otp.sys.mjs)
++        content/browser/tabora/vault/vendor/qr.sys.mjs  (content/tabora/vault/vendor/qr.sys.mjs)
++        content/browser/tabora/actors/TaboraVaultChild.sys.mjs  (content/tabora/actors/TaboraVaultChild.sys.mjs)
++        content/browser/tabora/actors/TaboraVaultParent.sys.mjs  (content/tabora/actors/TaboraVaultParent.sys.mjs)
 +        content/browser/tabora/actors/TaboraWalletChild.sys.mjs  (content/tabora/actors/TaboraWalletChild.sys.mjs)
 +        content/browser/tabora/actors/TaboraWalletParent.sys.mjs  (content/tabora/actors/TaboraWalletParent.sys.mjs)
 +        content/browser/tabora/wallet/logos/ethereum.png  (content/tabora/wallet/logos/ethereum.png)

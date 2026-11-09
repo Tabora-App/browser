@@ -1,0 +1,139 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Раздел «Коды»: список одноразовых кодов, кольцо остатка периода, подсказки. */
+
+#tabora-drawer .otp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px 4px;
+}
+
+#tabora-drawer .otp-head b {
+  font: 700 15px/1.2 var(--tabora-font);
+  color: var(--tabora-text-strong);
+}
+
+#tabora-drawer .otp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 4px 8px;
+}
+
+#tabora-drawer .otp-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background-color var(--tabora-ease);
+}
+
+#tabora-drawer .otp-row:hover,
+#tabora-drawer .otp-row:focus-visible {
+  background: var(--tabora-raised);
+  outline: none;
+}
+
+#tabora-drawer .otp-icon {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--tabora-raised);
+  display: grid;
+  place-items: center;
+  font: 700 14px/1 var(--tabora-font);
+  color: var(--tabora-text-3);
+  overflow: hidden;
+}
+
+#tabora-drawer .otp-icon img {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+#tabora-drawer .otp-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+#tabora-drawer .otp-text b {
+  font: 600 13px/1.2 var(--tabora-font);
+  color: var(--tabora-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#tabora-drawer .otp-text span {
+  font: 500 11px/1.2 var(--tabora-font);
+  color: var(--tabora-text-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#tabora-drawer .otp-code {
+  font: 600 19px/1 var(--tabora-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5px;
+  color: var(--tabora-text-strong);
+  white-space: nowrap;
+  transition: color var(--tabora-ease);
+}
+
+#tabora-drawer .otp-row.ending .otp-code {
+  color: var(--tabora-text-4);
+}
+
+#tabora-drawer .otp-row.copied .otp-code {
+  color: var(--tabora-accent-ink, var(--tabora-accent));
+}
+
+/* кольцо остатка периода: --p от 0 до 100 */
+#tabora-drawer .otp-ring {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: conic-gradient(var(--tabora-accent) calc(var(--p, 100) * 1%), var(--tabora-line) 0);
+  position: relative;
+}
+
+#tabora-drawer .otp-ring::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: var(--tabora-panel);
+}
+
+#tabora-drawer .otp-row.ending .otp-ring {
+  background: conic-gradient(var(--tabora-text-4) calc(var(--p, 100) * 1%), var(--tabora-line) 0);
+}
+
+#tabora-drawer .otp-row .otp-mismatch {
+  color: #e5484d;
+}
+
+#tabora-drawer .otp-advanced {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+#tabora-drawer .otp-next {
+  font: 500 11px/1.2 var(--tabora-mono);
+  color: var(--tabora-text-4);
+}
