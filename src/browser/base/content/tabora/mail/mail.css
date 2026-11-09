@@ -403,7 +403,7 @@ kbd {
   text-align: center;
 }
 .reader-empty-mark { width: 56px; height: 56px; border-radius: 16px; background: var(--card-2); border: 1px solid var(--line-2); display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
-.reader-empty-mark span { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); }
+.reader-empty-mark img { width: 40px; height: 40px; border-radius: 9px; display: block; }
 .reader-empty-title { font: 700 15px/1.2 var(--font); color: var(--text-2); }
 .reader-empty-sub { font-size: 12px; max-width: 360px; line-height: 1.5; }
 
