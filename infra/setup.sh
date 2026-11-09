@@ -198,8 +198,17 @@ systemctl enable tabora-server >/dev/null 2>&1 || true
 # запускать будет deploy.sh после загрузки бинарника
 
 # ---- nginx + сайт ------------------------------------------------------------
+log "Cloudflare: cloudflared и плагин certbot (сам туннель поднимает cloudflare/setup-tunnel.sh после появления домена)"
+if ! command -v cloudflared >/dev/null; then
+  mkdir -p --mode=0755 /usr/share/keyrings
+  curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg
+  echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" > /etc/apt/sources.list.d/cloudflared.list
+  apt-get update -q && apt-get install -y -q cloudflared python3-certbot-dns-cloudflare
+fi
+
 log "nginx: сайт, почтовый хост, API (пока без TLS)"
-mkdir -p /var/www/tabora.app /var/www/letsencrypt
+mkdir -p /var/www/tabora.app /var/www/letsencrypt /var/www/mta-sts/.well-known
+install -m 644 "$HERE/mta-sts/mta-sts.txt" /var/www/mta-sts/.well-known/mta-sts.txt
 [ -f /var/www/tabora.app/index.html ] || cp "$HERE/../site/index.html" /var/www/tabora.app/index.html
 rsync -a --delete "$HERE/../site/" /var/www/tabora.app/
 chown -R www-data:www-data /var/www/tabora.app

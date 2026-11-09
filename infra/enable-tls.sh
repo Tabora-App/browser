@@ -9,19 +9,21 @@ EMAIL=${EMAIL:-postmaster@$DOMAIN}
 HERE=$(cd "$(dirname "$0")" && pwd)
 log() { printf '\033[1;32m›\033[0m %s\n' "$*"; }
 
-for h in $DOMAIN www.$DOMAIN $MAIL_HOST $API_HOST autoconfig.$DOMAIN; do
-  ip=$(dig +short A "$h" | tail -1)
-  [ "$ip" = "$(curl -s -4 ifconfig.me)" ] || { echo "DNS для $h не указывает на этот сервер (сейчас: ${ip:-нет записи})"; exit 1; }
-done
+. /etc/tabora/cloudflare.env
+install -m 600 /dev/null /etc/tabora/certbot-cloudflare.ini
+echo "dns_cloudflare_api_token = $CF_API_TOKEN" > /etc/tabora/certbot-cloudflare.ini
+apt-get install -y -q python3-certbot-dns-cloudflare >/dev/null
 
-log "сертификат сайта"
-certbot certonly --webroot -w /var/www/letsencrypt -d "$DOMAIN" -d "www.$DOMAIN" --non-interactive --agree-tos -m "$EMAIL" --keep-until-expiring
-log "сертификат почты и API"
-certbot certonly --webroot -w /var/www/letsencrypt -d "$MAIL_HOST" -d "$API_HOST" -d "autoconfig.$DOMAIN" -d "autodiscover.$DOMAIN" --non-interactive --agree-tos -m "$EMAIL" --keep-until-expiring
+log "сертификат сайта и API (DNS-01 через Cloudflare, за туннелем он нужен nginx для единообразия)"
+certbot certonly --dns-cloudflare --dns-cloudflare-credentials /etc/tabora/certbot-cloudflare.ini -d "$DOMAIN" -d "www.$DOMAIN" -d "$API_HOST" --non-interactive --agree-tos -m "$EMAIL" --keep-until-expiring
+log "сертификат почтового хоста"
+certbot certonly --dns-cloudflare --dns-cloudflare-credentials /etc/tabora/certbot-cloudflare.ini -d "$MAIL_HOST" -d "autoconfig.$DOMAIN" -d "autodiscover.$DOMAIN" -d "mta-sts.$DOMAIN" --non-interactive --agree-tos -m "$EMAIL" --keep-until-expiring
 
 log "nginx: боевые конфиги"
 install -m 644 "$HERE/nginx/proxy.inc" /etc/nginx/snippets/tabora-proxy.conf
 rm -f /etc/nginx/sites-enabled/tabora.app /etc/nginx/sites-enabled/mx
+# снаружи остаётся только 443 почтового хоста; 80 закрываем
+ufw delete allow 80/tcp >/dev/null 2>&1 || true
 for name in tabora.app mx api; do
   sed -e "s/__DOMAIN__/$DOMAIN/g" -e "s/__MAIL_HOST__/$MAIL_HOST/g" -e "s/__API_HOST__/$API_HOST/g" "$HERE/nginx/$name.conf" > "/etc/nginx/sites-available/$name"
   ln -sf "/etc/nginx/sites-available/$name" "/etc/nginx/sites-enabled/$name"

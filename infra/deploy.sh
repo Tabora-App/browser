@@ -12,5 +12,7 @@ case "$what" in
   setup) ssh "$HOST" 'bash /root/tabora-infra/infra/setup.sh' ;;
   site)  ssh "$HOST" 'rsync -a --delete /root/tabora-infra/site/ /var/www/tabora.app/ && chown -R www-data:www-data /var/www/tabora.app && echo "сайт обновлён"' ;;
   tls)   ssh "$HOST" 'bash /root/tabora-infra/infra/enable-tls.sh' ;;
-  *) echo "setup | site | tls"; exit 1 ;;
+  tunnel) ssh "$HOST" 'bash /root/tabora-infra/infra/cloudflare/setup-tunnel.sh' ;;
+  dns)   ssh "$HOST" 'bash /root/tabora-infra/infra/cloudflare/dns.sh' ;;
+  *) echo "setup | site | tls | tunnel | dns"; exit 1 ;;
 esac

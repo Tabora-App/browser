@@ -13,5 +13,6 @@ API аккаунтов и синхронизации (`tabora-server`, PostgreSQ
 | Сайт | `/var/www/tabora.app` ← `site/` |
 | Пароль админа Stalwart | `/root/.stalwart-init.txt` и `STALWART_ADMIN_PASS` в `server.env` |
 
-Порядок ввода в строй: `deploy.sh setup` → DNS домена (A/AAAA для tabora.app, www, mx, api, autoconfig,
-autodiscover; MX, SPF, DKIM, DMARC из Stalwart) → PTR в консоли Hetzner → `deploy.sh tls` → домен в Stalwart.
+Сеть: сайт и API только через Cloudflare Tunnel (`infra/cloudflare/setup-tunnel.sh`, nginx на 127.0.0.1:8081), почтовые DNS-записи публикует `infra/cloudflare/dns.sh`; наружу открыт только почтовый хост (25/465/587/993/4190 и 443 для JMAP). Сертификаты через DNS-01 Cloudflare. Секреты Cloudflare в `/etc/tabora/cloudflare.env` (CF_API_TOKEN, CF_ACCOUNT_ID, CF_ZONE_ID).
+
+Порядок ввода в строй: `deploy.sh setup` → домен в Cloudflare, `/etc/tabora/cloudflare.env` → `cloudflare/setup-tunnel.sh` (сайт, API) → `cloudflare/dns.sh` (почта) → PTR в Hetzner → `deploy.sh tls`.
