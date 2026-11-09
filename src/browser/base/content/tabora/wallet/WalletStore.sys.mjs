@@ -14,7 +14,7 @@ const C = ChromeUtils.importESModule("chrome://browser/content/tabora/wallet/ven
 const { sha256, keccak_256, hmac, sha512, argon2id, randomBytes, bytesToHex, hexToBytes, utf8ToBytes, secp256k1, ed25519, bip39, wordlistEnglish, HDKey, base58, base58check, base64, btc } = C;
 
 const FILE = () => PathUtils.join(PathUtils.profileDir, "tabora-wallet.json");
-const KDF = { t: 3, m: 32768, p: 1, dkLen: 32 }; // Argon2id: 32 МБ памяти, 3 прохода
+const KDF = { t: 3, m: 65536, p: 1, dkLen: 32 }; // Argon2id: 64 МБ памяти, 3 прохода (старые файлы хранят свои параметры)
 const LOGIN_ORIGIN = "chrome://tabora-wallet";
 const AUTOLOCK_PREF = "tabora.wallet.autolockMinutes";
 const NODES_PREF = "tabora.wallet.nodes";
@@ -225,10 +225,14 @@ export const WalletStore = {
     await this.save();
   },
 
+  SIGNED_PREF: "tabora.wallet.fileSigned",
+
   verifyMac() {
     if (!this.data?.mac) {
-      this.tampered = false; // старый файл без подписи: подпишем при следующем сохранении
-      return true;
+      // Файл без подписи допустим только если он никогда не подписывался (старый формат).
+      // Если подпись уже была, её отсутствие означает подмену файла.
+      this.tampered = Services.prefs.getBoolPref(this.SIGNED_PREF, false);
+      return !this.tampered;
     }
     const ok = this.computeMac() === this.data.mac;
     this.tampered = !ok;
@@ -238,6 +242,7 @@ export const WalletStore = {
   async save() {
     if (this._key && !this.tampered) {
       this.data.mac = this.computeMac();
+      Services.prefs.setBoolPref(this.SIGNED_PREF, true);
     }
     await IOUtils.writeJSON(FILE(), this.data, { tmpPath: FILE() + ".tmp" });
     try {
@@ -279,6 +284,7 @@ export const WalletStore = {
     };
     this._key = raw;
     await this.addWallet({ mnemonic, name });
+    await this.ensurePhishMark();
     this.armAutolock();
     this.notify("unlocked");
     return this.activeWallet;
@@ -386,9 +392,10 @@ export const WalletStore = {
     const raw = await this.masterKey(password);
     this._key = raw;
     this.verifyMac();
-    if (!this.data.mac) {
+    if (!this.data.mac && !this.tampered) {
       await this.save();
     }
+    await this.ensurePhishMark();
     this.armAutolock();
     this.notify("unlocked");
   },
@@ -681,6 +688,24 @@ export const WalletStore = {
 
   get permissions() {
     return this.data?.permissions || {};
+  },
+
+  /* ---------- знак подлинности ---------- */
+
+  /** Три случайных эмодзи, известные только кошельку: показываются на настоящих листах подтверждения. */
+  get phishMark() {
+    return this.data?.settings?.phishMark || "";
+  },
+
+  async ensurePhishMark() {
+    if (!this.data || this.data.settings?.phishMark || !this._key || this.tampered) {
+      return;
+    }
+    const pool = ["🦊", "🐙", "🦉", "🐝", "🍀", "🌙", "⚡", "🔥", "🌊", "🍉", "🎈", "🎯", "🧩", "🪐", "🍄", "🦋", "🐢", "🍋", "🧊", "🎲", "🌵", "🐬", "🍇", "🪁"];
+    const bytes = randomBytes(3);
+    this.data.settings ||= {};
+    this.data.settings.phishMark = Array.from(bytes, b => pool[b % pool.length]).join(" ");
+    await this.save();
   },
 
   /* ---------- контакты ---------- */

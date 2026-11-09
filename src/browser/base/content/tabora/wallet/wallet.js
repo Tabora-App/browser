@@ -347,7 +347,7 @@ Object.assign(Tabora, {
   walletLockedView() {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { WalletStore } = this.walletStore();
-    const pass = this.wField("Пароль", { type: "password", autocomplete: "current-password" });
+    const pass = this.wField("Пароль", { type: "password", autocomplete: "off" });
     const err = h("div", { class: "w-error", hidden: "true" });
     const go = this.wButton("Разблокировать", "primary", async () => {
       go.disabled = true;
@@ -777,6 +777,17 @@ Object.assign(Tabora, {
 
   /* ---- Настройки ------------------------------------------------------------ */
 
+  /** Карточка «Знак подлинности» в настройках. */
+  walletMarkCard() {
+    const h = (t, a, x, c) => this.html(t, a, x, c);
+    const { WalletStore } = this.walletStore();
+    return h("div", { class: "w-group" }, null, [
+      h("b", { class: "w-group-title" }, "Знак подлинности"),
+      h("div", { class: "w-mark big" }, null, [h("span", {}, WalletStore.phishMark || "—")]),
+      h("p", { class: "w-hint" }, "Эти эмодзи показываются на каждом настоящем запросе от сайта. Если на листе подтверждения их нет или они другие, это подделка внутри страницы: ничего не вводите."),
+    ]);
+  },
+
   walletSettingsView() {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { WalletStore, CHAINS, CHAIN_ORDER } = this.walletStore();
@@ -855,7 +866,7 @@ Object.assign(Tabora, {
     if (window.TaboraSelect) {
       window.TaboraSelect.enhance(autolock, { compact: true });
     }
-    return h("div", { class: "w-settings" }, null, [h("div", { class: "w-flow-head" }, null, [h("b", {}, "Настройки кошелька"), back]), security, this.walletContactsCard(), this.walletSitesCard(), nodes, chains]);
+    return h("div", { class: "w-settings" }, null, [h("div", { class: "w-flow-head" }, null, [h("b", {}, "Настройки кошелька"), back]), security, this.walletMarkCard(), this.walletContactsCard(), this.walletSitesCard(), nodes, chains]);
   },
 
   /** Запрос пароля в панели: колбэк получает пароль, при ошибке показываем текст. */

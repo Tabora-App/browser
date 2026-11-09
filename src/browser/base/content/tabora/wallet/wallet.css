@@ -1489,3 +1489,35 @@
 #tabora-drawer .w-confirm .w-actions .spacer {
   flex: 1;
 }
+
+/* Знак подлинности */
+#tabora-drawer .w-mark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--tabora-accent) 12%, var(--tabora-bg));
+  border: 1px dashed color-mix(in srgb, var(--tabora-accent) 50%, transparent);
+}
+
+#tabora-drawer .w-mark span {
+  font-size: 18px;
+  letter-spacing: 4px;
+  line-height: 1.2;
+}
+
+#tabora-drawer .w-mark i {
+  font: 600 11px/1.2 var(--tabora-font);
+  font-style: normal;
+  color: var(--tabora-text-dim);
+}
+
+#tabora-drawer .w-mark.big {
+  justify-content: center;
+}
+
+#tabora-drawer .w-mark.big span {
+  font-size: 28px;
+  letter-spacing: 8px;
+}

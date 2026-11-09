@@ -508,7 +508,7 @@ Object.assign(Tabora, {
     const account = WalletStore.activeAccount;
     const from = account.addresses[asset.chain];
     const decimals = asset.native ? chain.decimals : asset.token.decimals;
-    const amountText = this.wFmt(BigInt(s.raw), decimals, decimals);
+    const amountText = this.wFmt(BigInt(fee.plan.raw), decimals, decimals);
     const price = (this.wallet.prices || {})[asset.symbol] || 0;
     const feeRow = fee.rows.find(r => r[0] === "Комиссия сети");
     this.walletConfirm({
@@ -517,15 +517,15 @@ Object.assign(Tabora, {
       amountNote: `${price ? `≈ ${this.wFmtUsd(parseFloat(amountText) * price)} · ` : ""}сеть ${chain.name}`,
       rows: [
         ["Откуда", `${account.name} · ${this.shortAddr(from)}`],
-        ["Куда", WalletStore.contactFor(asset.chain, s.to) ? `${WalletStore.contactFor(asset.chain, s.to).name} · ${s.to}` : s.to, "mono"],
+        ["Куда", WalletStore.contactFor(asset.chain, fee.plan.to) ? `${WalletStore.contactFor(asset.chain, fee.plan.to).name} · ${fee.plan.to}` : fee.plan.to, "mono"],
         ["Комиссия сети", feeRow ? feeRow[1] : "—"],
         ["Нода", this.hostOf(WalletStore.nodesFor(asset.chain).url)],
       ],
-      warning: WalletStore.contactFor(asset.chain, s.to) ? "Перевод необратим. Получатель из ваших контактов. Подпись выполняется локально, фраза не покидает устройство." : "Перевод необратим. Получатель не в контактах: проверьте первые и последние символы адреса. Подпись выполняется локально, фраза не покидает устройство.",
+      warning: WalletStore.contactFor(asset.chain, fee.plan.to) ? "Перевод необратим. Получатель из ваших контактов. Подпись выполняется локально, фраза не покидает устройство." : "Перевод необратим. Получатель не в контактах: проверьте первые и последние символы адреса. Подпись выполняется локально, фраза не покидает устройство.",
       okLabel: "Подписать и отправить",
       onSign: async pass => {
         const hash = await this.walletExecuteSend(asset, fee.plan, pass);
-        await WalletStore.addActivity({ chain: asset.chain, hash, to: s.to, amount: amountText, symbol: asset.symbol, from, kind: "send" });
+        await WalletStore.addActivity({ chain: asset.chain, hash, to: fee.plan.to, amount: amountText, symbol: asset.symbol, from, kind: "send" });
         this.wallet.send = null;
         this.wallet.balances[`${asset.chain}:${from}`] && (this.wallet.balances[`${asset.chain}:${from}`].at = 0);
         this.walletGo("main");
@@ -603,7 +603,7 @@ Object.assign(Tabora, {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { WalletStore } = this.walletStore();
     return new Promise((resolve, reject) => {
-      const pass = this.wField("Пароль кошелька", { type: "password", autocomplete: "current-password" });
+      const pass = this.wField("Пароль кошелька", { type: "password", autocomplete: "off" });
       const err = h("div", { class: "w-error", hidden: "true" });
       let done = false;
       // Защита от кликджекинга и перехвата ввода: кнопка включается через паузу,
@@ -644,6 +644,7 @@ Object.assign(Tabora, {
       const rows = (opts.rows || []).map(([k, v, cls]) => h("div", { class: "w-fee-row" }, null, [h("span", {}, k), h("span", { class: cls || "" }, v)]));
       const card = h("div", { class: "w-sheet-card w-confirm" }, null, [
         h("div", { class: "w-flow-head" }, null, [h("b", {}, opts.title || "Подтверждение"), opts.badge ? h("span", { class: "w-chip" }, opts.badge) : null].filter(Boolean)),
+        opts.fromSite && WalletStore.phishMark ? h("div", { class: "w-mark", title: "Знак подлинности: его знает только ваш кошелёк, сайт подделать не может" }, null, [h("span", {}, WalletStore.phishMark), h("i", {}, "настоящий лист Tabora")]) : null,
         opts.origin ? this.wOriginCard(opts.origin) : null,
         opts.amount ? h("div", { class: "w-confirm-amount" }, null, [h("span", {}, opts.amountLabel || "Отправляете"), h("b", { class: "mono" }, opts.amount), h("span", {}, opts.amountNote || "")]) : null,
         opts.summary ? h("div", { class: "w-confirm-summary" }, null, [h("span", { class: "w-label" }, "Что произойдёт"), ...[].concat(opts.summary).map(t => h("div", { class: "w-summary-line" }, t))]) : null,

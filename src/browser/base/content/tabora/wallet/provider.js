@@ -20,6 +20,16 @@ Object.assign(Tabora, {
 
   /** Точка входа из TaboraWalletParent. Запросы выстраиваются в очередь: один лист за раз. */
   _walletPending: new Set(),
+  _walletNoticeAt: new Map(),
+
+  /** Уведомление не чаще раза в минуту на origin: сайт не должен спамить всплывашками. */
+  walletNoticeRate(origin, text) {
+    const last = this._walletNoticeAt.get(origin) || 0;
+    if (Date.now() - last > 60000) {
+      this._walletNoticeAt.set(origin, Date.now());
+      this.notice(text);
+    }
+  },
 
   walletHandleRequest(req) {
     const needsUi = !this.walletIsReadOnly(req);
@@ -28,6 +38,9 @@ Object.assign(Tabora, {
     }
     if (this._walletPending.has(req.origin)) {
       return Promise.reject(this.wErr(-32002, "Предыдущий запрос этого сайта ещё ожидает ответа"));
+    }
+    if (this._walletPending.size >= 3) {
+      return Promise.reject(this.wErr(-32002, "Кошелёк занят другими запросами"));
     }
     if (!req.userInteracted) {
       return Promise.reject(this.wErr(4001, "Сначала взаимодействуйте со страницей: запрос без действия пользователя отклонён"));
@@ -104,7 +117,7 @@ Object.assign(Tabora, {
     await WalletStore.ready();
     if (!WalletStore.exists) {
       this.openDrawer("wallet");
-      this.notice(`${req.host} запрашивает кошелёк. Сначала создайте его.`);
+      this.walletNoticeRate(req.origin, `${req.host} запрашивает кошелёк. Сначала создайте его.`);
       throw this.wErr(4100, "Кошелёк не создан");
     }
     if (WalletStore.unlocked) {
@@ -118,7 +131,7 @@ Object.assign(Tabora, {
     }
     this.wallet.view = "main";
     this.openDrawer("wallet");
-    this.notice(`${req.host} запрашивает кошелёк. Разблокируйте его, чтобы продолжить.`);
+    this.walletNoticeRate(req.origin, `${req.host} запрашивает кошелёк. Разблокируйте его, чтобы продолжить.`);
     await new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         Services.obs.removeObserver(obs, WalletStore.TOPIC);
@@ -143,7 +156,7 @@ Object.assign(Tabora, {
       tab = browser && gBrowser.getTabForBrowser(browser);
     } catch (e) {}
     if (tab && tab !== gBrowser.selectedTab) {
-      this.notice(`${req.host} ждёт подтверждения в кошельке: откройте вкладку`);
+      this.walletNoticeRate(req.origin, `${req.host} ждёт подтверждения в кошельке: откройте вкладку`);
       await new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
           gBrowser.tabContainer.removeEventListener("TabSelect", onSelect);
