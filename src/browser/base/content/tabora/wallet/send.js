@@ -540,6 +540,7 @@ Object.assign(Tabora, {
     this.walletConfirm({
       title: "Подтверждение",
       amount: `${amountText} ${asset.symbol}`,
+      usd: price ? parseFloat(amountText) * price : 0,
       amountNote: `${price ? `≈ ${this.wFmtUsd(parseFloat(amountText) * price)} · ` : ""}сеть ${chain.name}`,
       rows: [
         ["Откуда", `${account.name} · ${this.shortAddr(from)}`],
@@ -572,9 +573,6 @@ Object.assign(Tabora, {
       throw new Error("Счёт отправителя изменился: пересчитайте перевод");
     }
     const raw = BigInt(plan.raw);
-    if (!WalletStore.passwordless) {
-      await WalletStore.verifyPassword(pass);
-    }
     return WalletSigner.withKey(wallet.id, account.index, asset.chain, async priv => {
       if (chain.kind === "evm") {
         const signed = WalletSigner.evmSign(plan.prepared, priv);
@@ -639,7 +637,7 @@ Object.assign(Tabora, {
       // Защита от кликджекинга и перехвата ввода: кнопка включается через паузу,
       // клики, начатые до показа, игнорируются, Enter работает только после ввода в этом листе.
       const ARM_MS = opts.fromSite ? 900 : 500;
-      const needPass = !WalletStore.passwordless && !opts.noPassword;
+      const needPass = !opts.noPassword && WalletStore.signPasswordNeeded(opts.usd || 0, !!opts.danger);
       const shownAt = Date.now();
       let armed = false;
       let typedHere = false;
@@ -665,6 +663,9 @@ Object.assign(Tabora, {
         cancel.disabled = true;
         ok.classList.add("loading");
         try {
+          if (needPass) {
+            await WalletStore.verifyPassword(pass.input.value); // проверка здесь, обработчики паролю доверяют
+          }
           const result = await opts.onSign(pass.input.value);
           finish(resolve, result);
         } catch (e) {
@@ -688,7 +689,7 @@ Object.assign(Tabora, {
         opts.extra || null,
         opts.warning ? h("div", { class: `w-warn${opts.danger ? " danger" : ""}` }, opts.warning) : null,
         opts.details ? h("details", { class: "w-details" }, null, [h("summary", {}, opts.detailsLabel || "Данные вызова"), h("pre", { class: "mono" }, opts.details)]) : null,
-        opts.noPassword ? null : WalletStore.passwordless ? h("p", { class: "w-badge-danger" }, "Без пароля · подпись без подтверждения паролем") : pass.wrap,
+        opts.noPassword ? null : WalletStore.passwordless ? h("p", { class: "w-badge-danger" }, "Без пароля · подпись без подтверждения паролем") : needPass ? pass.wrap : h("p", { class: "w-hint" }, "Пароль не нужен: он введён при разблокировке. Крупные суммы и опасные операции спросят его снова."),
         err,
         h("div", { class: "w-actions" }, null, [cancel, ok]),
       ].filter(Boolean));

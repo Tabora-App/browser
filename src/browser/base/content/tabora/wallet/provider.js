@@ -338,9 +338,6 @@ Object.assign(Tabora, {
       okLabel: "Подключить",
       cancelLabel: "Отклонить",
       onSign: async pass => {
-        if (!WalletStore.passwordless) {
-          await WalletStore.verifyPassword(pass);
-        }
         const w = picker._wallet;
         await WalletStore.grantPermission(req.origin, req.chain, { walletId: w.id, index: account.index, chainId: req.chain === "evm" ? evmChainId : nativeChain, host: req.host });
       },
@@ -494,9 +491,6 @@ Object.assign(Tabora, {
           danger: !!known,
           okLabel: "Добавить",
           onSign: async pass => {
-            if (!WalletStore.passwordless) {
-              await WalletStore.verifyPassword(pass);
-            }
             await WalletStore.addToken(chainId, { symbol: known ? `${symbol}?` : symbol, address: opts.address, decimals: info.decimals ?? opts.decimals, logo: /^https:\/\//.test(opts.image || "") ? opts.image : null, custom: true });
             this.wallet.balances = {};
           },
@@ -565,9 +559,6 @@ Object.assign(Tabora, {
           danger: !!siwe || looksLikeTx || safe.hidden > 0,
           okLabel: "Подписать",
           onSign: async pass => {
-            if (!WalletStore.passwordless) {
-              await WalletStore.verifyPassword(pass);
-            }
             const sig = await WalletSigner.withKey(perm.walletId, perm.index, chainId, priv => WalletSigner.evmPersonalSign(message, priv));
             await WalletStore.addActivity({ chain: chainId, kind: "sign", origin: req.host, note: "подпись сообщения" });
             return sig;
@@ -660,9 +651,6 @@ Object.assign(Tabora, {
           detailsLabel: "Сообщение",
           okLabel: "Подписать",
           onSign: async pass => {
-            if (!WalletStore.passwordless) {
-              await WalletStore.verifyPassword(pass);
-            }
             const sig = await WalletSigner.withKey(perm.walletId, perm.index, chainId, priv => WalletSigner.evmSignTyped(data, priv));
             await WalletStore.addActivity({ chain: chainId, kind: "sign", origin: req.host, note: `подпись ${primary}` });
             return sig;
@@ -787,11 +775,18 @@ Object.assign(Tabora, {
       danger,
       extra,
       details: `to: ${tx.to || "—"}\nvalue: ${fmt(value)} ${chain.symbol}\ndata: ${tx.data.slice(0, 400)}${tx.data.length > 400 ? "…" : ""}`,
+      // оценка суммы в долларах для порога пароля: монеты сети плюс стейблкоины в calldata
+      usd: (() => {
+        let u = price ? WalletStore.toNumber(value + est.fee, chain.decimals) * price : 0;
+        if (token && /^(USDT|USDC|DAI)$/i.test(token.symbol) && decoded?.amount !== undefined) {
+          try {
+            u += Number(decoded.amount) / 10 ** token.decimals;
+          } catch (e) {}
+        }
+        return u;
+      })(),
       okLabel: nativeBal < need ? "Отправить всё равно" : "Подписать и отправить",
       onSign: async pass => {
-        if (!WalletStore.passwordless) {
-          await WalletStore.verifyPassword(pass);
-        }
         let prepared = est.prepared;
         if (decodedPlan?.data) {
           prepared = { ...prepared, data: decodedPlan.data };
@@ -912,9 +907,6 @@ Object.assign(Tabora, {
             details: this.wSafe(tx).text,
             detailsLabel: "Сообщение",
             onSign: async pass => {
-              if (!WalletStore.passwordless) {
-                await WalletStore.verifyPassword(pass);
-              }
               return WalletSigner.withKey(perm.walletId, perm.index, "tron", priv => WalletSigner.tronSignMessageV1(tx, priv));
             },
           });
@@ -945,9 +937,6 @@ Object.assign(Tabora, {
           details: safeT.text,
           detailsLabel: "Сообщение",
           onSign: async pass => {
-            if (!WalletStore.passwordless) {
-              await WalletStore.verifyPassword(pass);
-            }
             const sig = await WalletSigner.withKey(perm.walletId, perm.index, "tron", priv => (m === "tron_signMessageV2" ? WalletSigner.tronSignMessageV2(message, priv) : WalletSigner.tronSignMessageV1(message, priv)));
             await WalletStore.addActivity({ chain: "tron", kind: "sign", origin: req.host, note: "подпись сообщения" });
             return sig;
@@ -1073,11 +1062,20 @@ Object.assign(Tabora, {
       warning,
       danger,
       details: JSON.stringify(c, (k, val) => (typeof val === "bigint" ? val.toString() : val), 2).slice(0, 1500),
+      // оценка суммы для порога пароля: TRX перевода или вложенные в вызов плюс стейблкоины TRC-20
+      usd: (() => {
+        let u = prices.TRX ? (Number(c.type === 1 ? c.amount || 0n : c.callValue || 0n) / 1e6) * prices.TRX : 0;
+        if (c.type === 31) {
+          const token = CHAINS.tron.tokens.concat(WalletStore.tokensFor("tron")).find(t => t.address === c.contractAddress);
+          const d = WalletSigner.evmDecode(c.contractAddress, c.data, 0n);
+          if (token && /^(USDT|USDC)$/i.test(token.symbol) && d?.amount !== undefined) {
+            u += Number(d.amount) / 10 ** token.decimals;
+          }
+        }
+        return u;
+      })(),
       okLabel: "Подписать",
       onSign: async pass => {
-        if (!WalletStore.passwordless) {
-          await WalletStore.verifyPassword(pass);
-        }
         const signed = await WalletSigner.withKey(perm.walletId, perm.index, "tron", priv => WalletSigner.tronSignTx({ raw_data_hex: tx.raw_data_hex, visible: tx.visible }, priv));
         (this._tronSigned ||= new Set()).add(signed.txID);
         if (this._tronSigned.size > 500) {
@@ -1168,9 +1166,6 @@ Object.assign(Tabora, {
             details: safe.text,
             detailsLabel: "Сообщение",
             onSign: async pass => {
-              if (!WalletStore.passwordless) {
-                await WalletStore.verifyPassword(pass);
-              }
               return WalletSigner.withKey(perm.walletId, perm.index, "solana", priv => WalletSigner.solSignMessage(bytes, priv));
             },
           });
@@ -1226,6 +1221,7 @@ Object.assign(Tabora, {
     }
     let warning = desc.danger ? "В транзакции есть опасные инструкции (approve, смена владельца, закрытие или сжигание). Убедитесь, что это ожидаемо." : null;
     let danger = desc.danger;
+    let simUsd = 0; // оценка списания для порога пароля: SOL и стейблкоины по симуляции
     // Симуляция: изменение SOL и известных токенов
     try {
       const atas = tokens.map(t => ({ t, ata: WalletSigner.solAta(address, t.mint) }));
@@ -1272,8 +1268,12 @@ Object.assign(Tabora, {
           warning ||= `Баланс SOL уменьшится на ${Math.abs(sol).toLocaleString("en-US", { maximumFractionDigits: 6 })} без явного перевода в инструкциях.`;
         }
         const deltas = [`${sol >= 0 ? "+" : ""}${sol.toLocaleString("en-US", { maximumFractionDigits: 6 })} SOL${prices.SOL ? ` (${this.wFmtUsd(Math.abs(sol) * prices.SOL)})` : ""}`];
+        simUsd = sol < 0 ? Math.abs(sol) * (prices.SOL || 0) : 0;
         atas.forEach(({ t }, i) => {
           const d = tokenAmount(r.accounts[i + 1]) - tokenAmount(cur.result?.value?.[i + 1]);
+          if (d < 0n && /^(USDT|USDC)$/i.test(t.symbol)) {
+            simUsd += Number(-d) / 10 ** t.decimals;
+          }
           if (d !== 0n) {
             deltas.push(`${d > 0n ? "+" : "−"}${WalletStore.format(d < 0n ? -d : d, t.decimals, 6)} ${t.symbol}`);
             if (d < 0n && !desc.lines.some(l => l.includes(t.symbol))) {
@@ -1297,13 +1297,11 @@ Object.assign(Tabora, {
       rows,
       warning,
       danger,
+      usd: simUsd,
       details: parsed.keys.map((k, i) => `${i}: ${k}${k === address ? " (вы)" : ""}`).join("\n"),
       detailsLabel: "Аккаунты",
       okLabel: send ? "Подписать и отправить" : "Подписать",
       onSign: async pass => {
-        if (!WalletStore.passwordless) {
-          await WalletStore.verifyPassword(pass);
-        }
         const signed = await WalletSigner.withKey(perm.walletId, perm.index, "solana", priv => WalletSigner.solSignTransaction(bytes, priv, address));
         if (send) {
           const sig = await WalletSigner.solSend(signed, { ...options, skipPreflight: false });

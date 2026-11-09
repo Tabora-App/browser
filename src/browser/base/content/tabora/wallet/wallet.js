@@ -865,9 +865,29 @@ Object.assign(Tabora, {
       Services.prefs.setIntPref("tabora.wallet.autolockMinutes", parseInt(autolock.value, 10));
       WalletStore.armAutolock();
     });
+    const sp = WalletStore.signPassword;
+    const spCurrent = !sp.skip ? "always" : sp.thresholdUsd ? String(sp.thresholdUsd) : "never";
+    const signSel = h("select", {}, null, [["always", "каждый раз"], ["100", "только от 100 $"], ["500", "только от 500 $"], ["2000", "только от 2000 $"], ["never", "никогда до автоблокировки"]].map(([v, label]) => {
+      const o = h("option", { value: v }, label);
+      if (v === spCurrent) {
+        o.selected = true;
+      }
+      return o;
+    }));
+    signSel.addEventListener("change", async () => {
+      const v = signSel.value;
+      try {
+        await WalletStore.setSignPassword(v === "always" ? { skip: false } : { skip: true, thresholdUsd: v === "never" ? 0 : Number(v) });
+        this.notice(v === "always" ? "Пароль нужен на каждую подпись" : "Пароль только при разблокировке, крупных суммах и опасных операциях");
+      } catch (e) {
+        this.notice(e.message);
+      }
+    });
     const security = h("div", { class: "w-group" }, null, [
       h("b", { class: "w-group-title" }, "Безопасность"),
       h("div", { class: "w-node" }, null, [h("span", { class: "w-node-name" }, "Автоблокировка"), autolock]),
+      h("div", { class: "w-node" }, null, [h("span", { class: "w-node-name" }, "Пароль при подписи"), signSel]),
+      WalletStore.signPassword.skip ? h("p", { class: "w-hint" }, "Пока кошелёк разблокирован, подпись не спрашивает пароль: любой за этим компьютером сможет подписать транзакцию до автоблокировки. Опасные операции и суммы от порога спрашивают пароль всегда.") : null,
       this.wButton(`Показать фразу: ${wallet.name}`, "ghost", () => this.walletRevealFlow(wallet)),
       this.wButton(WalletStore.passwordless ? "Установить пароль" : "Сменить пароль", "ghost", () => this.walletChangePasswordFlow()),
       this.wButton(`Удалить кошелёк «${wallet.name}» из браузера`, "ghost danger", () => this.walletPassword("Удаление кошелька", "Фраза останется только у вас. Введите пароль для подтверждения.", async pass => {
@@ -881,6 +901,7 @@ Object.assign(Tabora, {
     ]);
     if (window.TaboraSelect) {
       window.TaboraSelect.enhance(autolock, { compact: true });
+      window.TaboraSelect.enhance(signSel, { compact: true });
     }
     return h("div", { class: "w-settings" }, null, [h("div", { class: "w-flow-head" }, null, [h("b", {}, "Настройки кошелька"), back]), security, this.walletMarkCard(), this.walletContactsCard(), this.walletSitesCard(), nodes, chains]);
   },

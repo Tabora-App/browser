@@ -307,6 +307,33 @@ export const WalletStore = {
     return !!this.data;
   },
 
+  /** Пароль при подписи: каждый раз (по умолчанию) или только выше порога в долларах (0 — никогда до автоблокировки). */
+  get signPassword() {
+    const s = this.data?.settings?.signPassword;
+    return { skip: !!s?.skip, thresholdUsd: Number(s?.thresholdUsd ?? 500) };
+  },
+
+  async setSignPassword({ skip, thresholdUsd = 500 }) {
+    if (!this.unlocked) {
+      throw new Error("Кошелёк заблокирован");
+    }
+    this.data.settings ||= {};
+    this.data.settings.signPassword = { skip: !!skip, thresholdUsd: Math.max(0, Number(thresholdUsd) || 0) };
+    await this.save();
+  },
+
+  /** Нужен ли пароль для этой подписи: опасные операции и суммы от порога — всегда. */
+  signPasswordNeeded(usd = 0, danger = false) {
+    if (this.passwordless) {
+      return false;
+    }
+    const s = this.signPassword;
+    if (!s.skip || danger) {
+      return true;
+    }
+    return s.thresholdUsd > 0 && Number(usd) >= s.thresholdUsd;
+  },
+
   get unlocked() {
     return !!this._key;
   },
