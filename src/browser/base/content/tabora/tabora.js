@@ -1459,20 +1459,31 @@ var Tabora = {
     const tabbox = document.getElementById("tabbrowser-tabbox");
     const input = this.html("input", { id: "tabora-start-input", placeholder: "Найти, открыть или поручить агенту", "aria-label": "Поиск или адрес" });
     const search = this.html("div", { class: "search" }, null, [
-      this.html("span", { class: "dot", "aria-hidden": "true" }),
+      this.svg(["M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z", "M20 20l-4-4"], 16, 1.8),
       input,
-      this.html("span", { class: "kbd" }, "⏎"),
+      this.html("span", { class: "kbd" }, "⌘K"),
     ]);
+    const edit = this.html("button", { class: "linkish", id: "tabora-dial-edit", type: "button" }, "Изменить");
+    edit.addEventListener("click", () => this.dialToggleEdit());
+    const add = this.html("button", { class: "linkish", id: "tabora-dial-add", type: "button" }, "Добавить сайт");
+    add.addEventListener("click", () => this.dialAddForm());
     const page = this.html("div", { id: "tabora-start", hidden: "true" }, null, [
-      this.html("div", { class: "hero" }, null, [
+      this.html("div", { class: "top" }, null, [
         this.markSvg("start-mark"),
-        this.html("div", { class: "date", id: "tabora-start-date" }),
-        this.html("h1", { class: "greeting", id: "tabora-start-greeting" }),
+        this.html("span", { class: "date", id: "tabora-start-date" }),
       ]),
+      this.html("h1", { class: "greeting", id: "tabora-start-greeting" }),
+      this.html("p", { class: "status", id: "tabora-start-status" }),
       search,
+      this.html("div", { class: "sites-head", id: "tabora-sites-head", hidden: "true" }, null, [
+        this.html("span", { class: "eyebrow" }, "Сайты"),
+        this.html("span", { class: "spacer" }),
+        add,
+        edit,
+      ]),
       this.html("div", { class: "dial", id: "tabora-start-dial", hidden: "true" }),
+      this.html("div", { id: "tabora-start-form", hidden: "true" }),
     ]);
-    page.querySelector(".hero").style.cssText = "display:flex;flex-direction:column;align-items:center;gap:0";
     tabbox.append(page);
     input.setAttribute("readonly", "true");
     input.addEventListener("mousedown", e => {
@@ -1590,6 +1601,7 @@ var Tabora = {
         weekday: "long", day: "numeric", month: "long",
       }).format(now);
     }
+    this.updateStartStatus();
     this.fillDial();
     const input = document.getElementById("tabora-start-input");
     setTimeout(() => {
@@ -1599,41 +1611,304 @@ var Tabora = {
     }, 60);
   },
 
+  /** Строка состояния под приветствием: что реально происходит в браузере. */
+  async updateStartStatus() {
+    const el = document.getElementById("tabora-start-status");
+    if (!el) {
+      return;
+    }
+    const parts = [];
+    try {
+      const { Account } = this.accountMod();
+      await Account.ready();
+      if (Account.signedIn) {
+        const { MailStore } = this.mail();
+        await MailStore.ready();
+        const msgs = MailStore.data?.messages || MailStore.messages || [];
+        const unread = msgs.filter(m => m.folder === "inbox" && m.unread).length;
+        parts.push(unread ? `в почте ${unread} ${this.plural(unread, "новое письмо", "новых письма", "новых писем")}` : "в почте нет нового");
+      }
+    } catch (e) {}
+    const sleeping = gBrowser.tabs.filter(t => t.hasAttribute("pending") && !t.closing).length;
+    const open = gBrowser.tabs.filter(t => !t.closing && !t.hidden).length;
+    parts.push(`${open} ${this.plural(open, "вкладка", "вкладки", "вкладок")}${sleeping ? `, ${sleeping} ${this.plural(sleeping, "спит", "спят", "спят")}` : ""}`);
+    el.textContent = parts.join(" · ");
+  },
+
+  DIAL_PREF: "tabora.start.dial",
+  DIAL_MAX: 12,
+
+  dialState() {
+    try {
+      const s = JSON.parse(Services.prefs.getStringPref(this.DIAL_PREF, "{}"));
+      return { pinned: Array.isArray(s.pinned) ? s.pinned : [], hidden: Array.isArray(s.hidden) ? s.hidden : [] };
+    } catch (e) {
+      return { pinned: [], hidden: [] };
+    }
+  },
+
+  dialSave(state) {
+    Services.prefs.setStringPref(this.DIAL_PREF, JSON.stringify({ pinned: state.pinned.slice(0, 48), hidden: state.hidden.slice(0, 200) }));
+    const dial = document.getElementById("tabora-start-dial");
+    if (dial) {
+      dial.dataset.filledAt = "0";
+    }
+    this.fillDial();
+  },
+
+  dialHost(url) {
+    try {
+      return new URL(url).hostname.replace(/^www\./, "");
+    } catch (e) {
+      return url;
+    }
+  },
+
+  /** Закреплённые пользователем сайты в его порядке, затем часто открываемые, без убранных. */
+  async dialSites() {
+    const state = this.dialState();
+    const hidden = new Set(state.hidden);
+    const hiddenHosts = new Set(state.hidden.map(u => this.dialHost(u)));
+    const out = state.pinned.filter(s => s?.url && !hidden.has(s.url)).map(s => ({ ...s, pinned: true }));
+    const hosts = new Set(out.map(s => this.dialHost(s.url)));
+    try {
+      const { NewTabUtils } = ChromeUtils.importESModule("resource://gre/modules/NewTabUtils.sys.mjs");
+      const top = await NewTabUtils.activityStreamProvider.getTopFrecentSites({ numItems: 30, includeFavicon: false });
+      for (const site of top) {
+        if (out.length >= this.DIAL_MAX) {
+          break;
+        }
+        const host = this.dialHost(site.url || "");
+        if (!site.url || hidden.has(site.url) || hiddenHosts.has(host) || hosts.has(host)) {
+          continue;
+        }
+        out.push({ url: site.url, title: site.title || "", pinned: false });
+        hosts.add(host);
+      }
+    } catch (e) {
+      console.error("Tabora dial", e);
+    }
+    return out.slice(0, this.DIAL_MAX);
+  },
+
   async fillDial() {
     const dial = document.getElementById("tabora-start-dial");
     if (!dial || dial.dataset.filledAt > Date.now() - 60_000) {
       return;
     }
-    let sites = [];
-    try {
-      const { NewTabUtils } = ChromeUtils.importESModule("resource://gre/modules/NewTabUtils.sys.mjs");
-      sites = await NewTabUtils.activityStreamProvider.getTopFrecentSites({ numItems: 12, includeFavicon: true });
-    } catch (e) {
-      console.error("Tabora dial", e);
-    }
-    dial.replaceChildren();
     dial.dataset.filledAt = String(Date.now());
+    const sites = await this.dialSites();
+    dial.replaceChildren();
     dial.hidden = !sites.length;
-    for (const site of sites.slice(0, 12)) {
-      let host = "";
-      try {
-        host = new URL(site.url).hostname.replace(/^www\./, "");
-      } catch (e) {}
-      const label = site.title && site.title.length <= 18 ? site.title : host;
-      const glyph = this.html("span", { class: "glyph", "aria-hidden": "true" });
-      if (site.favicon) {
-        glyph.classList.add("has-icon");
-        glyph.append(this.html("img", { src: site.favicon, alt: "" }));
-      } else {
-        glyph.textContent = (host || "?").charAt(0).toUpperCase();
+    document.getElementById("tabora-sites-head").hidden = false;
+    sites.forEach((site, index) => dial.append(this.dialTile(site, index)));
+  },
+
+  dialTile(site, index) {
+    const host = this.dialHost(site.url);
+    const title = (site.title || "").trim();
+    const placeholder = /just a moment|один момент|attention required|access denied|checking your browser|please wait|^\s*$/i.test(title); // заглушки защиты сайтов
+    const label = title && !placeholder && title.length <= 28 ? title : host;
+    const icon = this.html("span", { class: "icon", "aria-hidden": "true" }, null, [this.html("img", { src: `page-icon:${site.url}`, alt: "" })]);
+    icon.firstChild.addEventListener("error", () => {
+      icon.replaceChildren();
+      icon.textContent = (host || "?").charAt(0).toUpperCase();
+    });
+    const remove = this.html("button", { class: "remove", type: "button", title: "Убрать", "aria-label": `Убрать ${label}` }, null, [this.svg(["M6 6l12 12", "M18 6 6 18"], 10, 2.2)]);
+    remove.addEventListener("click", e => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.dialRemove(site);
+    });
+    const a = this.html("a", { class: `tile${site.pinned ? " pinned" : ""}`, href: site.url, title: site.url, draggable: "true", "data-url": site.url, "data-index": String(index) }, null, [
+      icon,
+      this.html("span", { class: "text" }, null, [this.html("span", { class: "title" }, label), this.html("span", { class: "host" }, label === host ? "" : host)]),
+      remove,
+    ]);
+    a.addEventListener("click", e => {
+      e.preventDefault();
+      if (document.getElementById("tabora-start")?.hasAttribute("editing")) {
+        return;
       }
-      const a = this.html("a", { href: site.url, title: site.url }, null, [glyph, this.html("span", { class: "label" }, label)]);
-      a.addEventListener("click", e => {
-        e.preventDefault();
+      if (e.metaKey || e.ctrlKey || e.button === 1) {
+        gBrowser.addTab(site.url, { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(), inBackground: true });
+      } else {
         this.go(site.url);
-      });
-      dial.append(a);
+      }
+    });
+    a.addEventListener("contextmenu", e => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.showMenu(this.dialMenu(site), e.clientX, e.clientY);
+    });
+    a.addEventListener("dragstart", e => {
+      e.dataTransfer.setData("text/x-tabora-dial", site.url);
+      e.dataTransfer.setData("text/uri-list", site.url);
+      e.dataTransfer.effectAllowed = "move";
+      a.classList.add("dragging");
+    });
+    a.addEventListener("dragend", () => {
+      a.classList.remove("dragging");
+      document.querySelectorAll("#tabora-start-dial .tile.over").forEach(t => t.classList.remove("over"));
+    });
+    a.addEventListener("dragover", e => {
+      if (e.dataTransfer.types.includes("text/x-tabora-dial") || e.dataTransfer.types.includes("text/uri-list")) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        a.classList.add("over");
+      }
+    });
+    a.addEventListener("dragleave", () => a.classList.remove("over"));
+    a.addEventListener("drop", e => {
+      e.preventDefault();
+      a.classList.remove("over");
+      const from = e.dataTransfer.getData("text/x-tabora-dial");
+      if (from) {
+        this.dialMove(from, site.url);
+        return;
+      }
+      const url = (e.dataTransfer.getData("text/uri-list") || "").split("\n")[0].trim();
+      if (/^https?:\/\//.test(url)) {
+        this.dialAdd(url, "", index);
+      }
+    });
+    return a;
+  },
+
+  dialMenu(site) {
+    const pinned = this.dialState().pinned.some(s => s.url === site.url);
+    return [
+      { label: "Открыть", icon: ["M5 12h14", "m13 6 6 6-6 6"], run: () => this.go(site.url) },
+      { label: "Открыть в новой вкладке", icon: ["M12 5v14", "M5 12h14"], run: () => { gBrowser.selectedTab = gBrowser.addTab(site.url, { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() }); } },
+      { separator: true },
+      { label: pinned ? "Открепить" : "Закрепить", icon: ["M12 17v5", "M8 3h8l-1 7 3 3H6l3-3z"], run: () => (pinned ? this.dialUnpin(site) : this.dialAdd(site.url, site.title)) },
+      { label: "Переименовать…", icon: ["M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z", "M13.5 6.5l3 3"], run: () => this.dialRenameForm(site) },
+      { label: "Убрать со стартовой", icon: ["M6 6l12 12", "M18 6 6 18"], danger: true, run: () => this.dialRemove(site) },
+      { separator: true },
+      { label: "Добавить сайт…", icon: ["M12 5v14", "M5 12h14"], run: () => this.dialAddForm() },
+      { label: "Изменить порядок", hint: "перетаскивание", icon: ["M4 8h16", "M4 16h16"], run: () => this.dialToggleEdit(true) },
+    ];
+  },
+
+  dialAdd(url, title = "", index = null) {
+    const state = this.dialState();
+    const clean = String(url || "").trim();
+    if (!/^https?:\/\//.test(clean)) {
+      this.notice("Адрес должен начинаться с http:// или https://");
+      return;
     }
+    state.hidden = state.hidden.filter(u => u !== clean);
+    state.pinned = state.pinned.filter(s => s.url !== clean);
+    const entry = { url: clean, title: String(title || "").trim().slice(0, 60) };
+    if (index === null || index >= state.pinned.length) {
+      state.pinned.push(entry);
+    } else {
+      state.pinned.splice(index, 0, entry);
+    }
+    this.dialSave(state);
+  },
+
+  dialUnpin(site) {
+    const state = this.dialState();
+    state.pinned = state.pinned.filter(s => s.url !== site.url);
+    this.dialSave(state);
+  },
+
+  dialRemove(site) {
+    const state = this.dialState();
+    state.pinned = state.pinned.filter(s => s.url !== site.url);
+    if (!state.hidden.includes(site.url)) {
+      state.hidden.push(site.url);
+    }
+    this.dialSave(state);
+    this.notice("Сайт убран со стартовой");
+  },
+
+  /** Перестановка: видимый список целиком становится закреплённым в новом порядке. */
+  async dialMove(fromUrl, toUrl) {
+    if (fromUrl === toUrl) {
+      return;
+    }
+    const sites = await this.dialSites();
+    const list = sites.map(s => ({ url: s.url, title: s.title || "" }));
+    const from = list.findIndex(s => s.url === fromUrl);
+    const to = list.findIndex(s => s.url === toUrl);
+    if (from < 0 || to < 0) {
+      return;
+    }
+    const [moved] = list.splice(from, 1);
+    list.splice(to, 0, moved);
+    const state = this.dialState();
+    state.pinned = list;
+    this.dialSave(state);
+  },
+
+  dialToggleEdit(force) {
+    const page = document.getElementById("tabora-start");
+    const on = force === undefined ? !page.hasAttribute("editing") : !!force;
+    page.toggleAttribute("editing", on);
+    document.getElementById("tabora-dial-edit").textContent = on ? "Готово" : "Изменить";
+  },
+
+  /** Небольшая форма на стартовой: добавить или переименовать сайт. */
+  startForm(title, fields, okLabel, onOk) {
+    const box = document.getElementById("tabora-start-form");
+    box.replaceChildren();
+    const inputs = fields.map(f => this.html("input", { class: "field", placeholder: f.placeholder, value: f.value || "", "aria-label": f.placeholder, spellcheck: "false" }));
+    const err = this.html("span", { class: "err", hidden: "true" });
+    const ok = this.html("button", { class: "primary", type: "button" }, okLabel);
+    const cancel = this.html("button", { class: "ghost", type: "button" }, "Отмена");
+    const close = () => {
+      box.hidden = true;
+      box.replaceChildren();
+    };
+    cancel.addEventListener("click", close);
+    ok.addEventListener("click", async () => {
+      try {
+        await onOk(inputs.map(i => i.value));
+        close();
+      } catch (e) {
+        err.textContent = e.message;
+        err.hidden = false;
+      }
+    });
+    box.append(this.html("div", { class: "form-head" }, title), ...inputs, err, this.html("div", { class: "form-actions" }, null, [cancel, ok]));
+    box.onkeydown = e => {
+      e.stopPropagation();
+      if (e.key === "Enter") {
+        ok.click();
+      } else if (e.key === "Escape") {
+        close();
+      }
+    };
+    box.hidden = false;
+    setTimeout(() => inputs[0]?.focus(), 30);
+  },
+
+  dialAddForm() {
+    this.startForm("Добавить сайт", [{ placeholder: "https://example.com" }, { placeholder: "Название (необязательно)" }], "Добавить", async ([url, title]) => {
+      let u = url.trim();
+      if (u && !/^https?:\/\//i.test(u)) {
+        u = `https://${u}`;
+      }
+      if (!/^https?:\/\/[^\s/]+\.[^\s/]+/.test(u)) {
+        throw new Error("Укажите адрес сайта, например github.com");
+      }
+      this.dialAdd(u, title);
+    });
+  },
+
+  dialRenameForm(site) {
+    this.startForm("Название сайта", [{ placeholder: "Название", value: site.title || this.dialHost(site.url) }], "Сохранить", async ([title]) => {
+      const state = this.dialState();
+      const idx = state.pinned.findIndex(s => s.url === site.url);
+      if (idx >= 0) {
+        state.pinned[idx].title = title.trim().slice(0, 60);
+      } else {
+        state.pinned.push({ url: site.url, title: title.trim().slice(0, 60) });
+      }
+      this.dialSave(state);
+    });
   },
 
   buildAgentPanel() {

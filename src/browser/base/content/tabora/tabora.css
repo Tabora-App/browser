@@ -1443,11 +1443,10 @@ sidebar-main {
   background: var(--tabora-start-bg);
   outline: 1px solid rgba(255, 255, 255, 0.04);
   outline-offset: -1px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 96px 48px 0;
-  gap: 36px;
+  display: block;
+  overflow: auto;
+  padding: clamp(40px, 9vh, 88px) clamp(24px, 8vw, 120px) 48px;
+  box-sizing: border-box;
   color: var(--tabora-text);
   font-family: var(--tabora-font);
   z-index: 2;
@@ -1458,53 +1457,70 @@ sidebar-main {
   display: none;
 }
 
+#tabora-start > * {
+  max-width: 760px;
+}
+
+/* верхняя строка: знак и дата, как колонтитул */
+#tabora-start .top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+#tabora-start .top .start-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+}
+
 #tabora-start .date {
-  font: 500 13px/1 var(--tabora-mono);
-  color: var(--tabora-text-3);
-  letter-spacing: 0.02em;
+  font: 500 12px/1 var(--tabora-mono);
+  color: var(--tabora-text-4);
+  letter-spacing: 0.04em;
 }
 
 #tabora-start .greeting {
-  margin: 10px 0 0;
-  font: 800 40px/1.1 var(--tabora-font);
+  margin: 0;
+  font: 800 30px/1.15 var(--tabora-font);
   letter-spacing: -0.02em;
   color: var(--tabora-text-strong);
 }
 
+#tabora-start .status {
+  margin: 6px 0 24px;
+  font: 500 13px/1.4 var(--tabora-font);
+  color: var(--tabora-text-3);
+  min-height: 18px;
+}
+
 #tabora-start .search {
-  width: min(640px, 100%);
-  height: 56px;
+  height: 46px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 8px 0 20px;
+  gap: 10px;
+  padding: 0 10px 0 14px;
   background: var(--tabora-field);
   border: 1px solid var(--tabora-field-border);
-  border-radius: 28px;
+  border-radius: 12px;
   box-sizing: border-box;
-  transition: border-color var(--tabora-ease), box-shadow var(--tabora-ease);
+  color: var(--tabora-text-4);
+  transition: border-color var(--tabora-ease);
 }
 
 #tabora-start .search:focus-within {
-  border-color: var(--tabora-accent);
-}
-
-#tabora-start .search .dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--tabora-accent);
-  flex-shrink: 0;
+  border-color: var(--tabora-text-4);
 }
 
 #tabora-start .search input {
   flex: 1;
   min-width: 0;
-  height: 52px;
+  height: 44px;
   border: 0;
   background: transparent;
   color: var(--tabora-text);
-  font: 500 15px var(--tabora-font);
+  font: 500 14px var(--tabora-font);
   outline: none;
 }
 
@@ -1517,72 +1533,241 @@ sidebar-main {
   color: var(--tabora-text-4);
   border: 1px solid var(--tabora-field-border);
   border-radius: 6px;
-  padding: 3px 6px;
+  padding: 4px 6px;
 }
 
-#tabora-start .dial {
-  width: min(760px, 100%);
-  display: grid;
-  grid-template-columns: repeat(auto-fit, 116px);
-  justify-content: center;
+/* сайты: заголовок строки и действия */
+#tabora-start .sites-head {
+  display: flex;
+  align-items: baseline;
   gap: 14px;
+  margin: 36px 0 8px;
+}
+
+#tabora-start .sites-head[hidden] {
+  display: none;
+}
+
+#tabora-start .eyebrow {
+  font: 700 11px/1 var(--tabora-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tabora-text-4);
+}
+
+#tabora-start .spacer {
+  flex: 1;
+}
+
+#tabora-start .linkish {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  font: 600 12px/1 var(--tabora-font);
+  color: var(--tabora-text-3);
+  cursor: pointer;
+}
+
+#tabora-start .linkish:hover {
+  color: var(--tabora-text-strong);
+}
+
+/* ярлыки сайтов: список в три колонки, без коробок */
+#tabora-start .dial {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px 12px;
+  margin-inline: -10px;
 }
 
 #tabora-start .dial[hidden] {
   display: none;
 }
 
-#tabora-start .dial a {
-  height: 104px;
+#tabora-start .dial .tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  height: 56px;
+  padding: 0 10px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--tabora-text);
+  transition: background-color var(--tabora-ease);
+}
+
+#tabora-start .dial .tile:hover,
+#tabora-start .dial .tile.over {
+  background: var(--tabora-raised);
+}
+
+#tabora-start .dial .tile.over {
+  outline: 1px dashed var(--tabora-text-4);
+  outline-offset: -1px;
+}
+
+#tabora-start .dial .tile.dragging {
+  opacity: 0.4;
+}
+
+#tabora-start .dial .icon {
+  flex: none;
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--tabora-raised-2);
+  display: grid;
+  place-items: center;
+  font: 700 13px/1 var(--tabora-font);
+  color: var(--tabora-text-3);
+}
+
+#tabora-start .dial .icon img {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+#tabora-start .dial .text {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  background: var(--tabora-field);
-  border: 1px solid var(--tabora-panel-border);
-  border-radius: 16px;
-  text-decoration: none;
-  color: var(--tabora-text-2);
-  transition: border-color var(--tabora-ease), background-color var(--tabora-ease), transform var(--tabora-ease);
+  gap: 2px;
+  min-width: 0;
 }
 
-#tabora-start .dial a:hover {
-  border-color: var(--tabora-line);
-  background: var(--tabora-raised);
+#tabora-start .dial .title {
+  font: 600 13px/1.2 var(--tabora-font);
   color: var(--tabora-text-strong);
-  transform: translateY(-1px);
-}
-
-#tabora-start .dial .glyph {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: var(--tabora-raised-2);
-  color: var(--tabora-text-strong);
-  font: 800 16px/1 var(--tabora-font);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-#tabora-start .dial .glyph.has-icon {
-  background: var(--tabora-text);
-}
-
-#tabora-start .dial .glyph img {
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
-}
-
-#tabora-start .dial .label {
-  font: 600 12px/1.3 var(--tabora-font);
-  max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+#tabora-start .dial .host {
+  font: 500 11px/1.2 var(--tabora-font);
+  color: var(--tabora-text-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#tabora-start .dial .host:empty {
+  display: none;
+}
+
+/* закреплённый пользователем: лаймовая точка у значка */
+#tabora-start .dial .tile.pinned .icon::after {
+  content: "";
+  position: absolute;
+  right: -3px;
+  top: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tabora-accent);
+  box-shadow: 0 0 0 2px var(--tabora-start-bg);
+}
+
+#tabora-start .dial .remove {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  translate: 0 -50%;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--tabora-field-border);
+  background: var(--tabora-field);
+  color: var(--tabora-text-3);
+  display: none;
+  place-items: center;
+  cursor: pointer;
+}
+
+#tabora-start[editing] .dial .remove {
+  display: grid;
+}
+
+#tabora-start[editing] .dial .tile {
+  cursor: grab;
+  outline: 1px dashed var(--tabora-field-border);
+  outline-offset: -1px;
+}
+
+#tabora-start .dial .remove:hover {
+  color: var(--tabora-text-strong);
+  border-color: var(--tabora-line);
+}
+
+/* форма добавления и переименования */
+#tabora-start-form {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--tabora-field);
+  border: 1px solid var(--tabora-field-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 420px;
+}
+
+#tabora-start-form[hidden] {
+  display: none;
+}
+
+#tabora-start-form .form-head {
+  font: 700 11px/1 var(--tabora-mono);
+  color: var(--tabora-text-4);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+#tabora-start-form .field {
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--tabora-field-border);
+  background: var(--tabora-panel);
+  color: var(--tabora-text);
+  font: 500 13px var(--tabora-font);
+  outline: none;
+}
+
+#tabora-start-form .field:focus {
+  border-color: var(--tabora-text-4);
+}
+
+#tabora-start-form .err {
+  font: 600 12px/1.3 var(--tabora-font);
+  color: #e5484d;
+}
+
+#tabora-start-form .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+#tabora-start-form button {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--tabora-field-border);
+  background: transparent;
+  color: var(--tabora-text);
+  font: 600 12px var(--tabora-font);
+  cursor: pointer;
+}
+
+#tabora-start-form button.primary {
+  background: var(--tabora-accent);
+  border-color: var(--tabora-accent);
+  color: var(--tabora-on-accent);
 }
 
 /* ---- Панель агента ---------------------------------------------------- */
@@ -3053,10 +3238,3 @@ toolbarseparator {
   }
 }
 
-#tabora-start .hero .start-mark {
-  width: 64px;
-  height: 64px;
-  margin-bottom: 22px;
-  border-radius: 15px;
-  box-shadow: 0 14px 40px color-mix(in srgb, var(--tabora-accent) 30%, transparent);
-}
