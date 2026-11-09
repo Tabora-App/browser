@@ -125,11 +125,15 @@ Object.assign(Tabora, {
       }
     };
 
+    // Актор медиа и страницы для агента: только обычные сайты в веб-процессах
+    // (не about:, chrome:, file:, страницы дополнений и привилегированные процессы).
     try {
       ChromeUtils.registerWindowActor("TaboraMedia", {
-        parent: { esModuleURI: "chrome://browser/content/tabora/actors/TaboraMediaParent.sys.mjs" },
-        child: { esModuleURI: "chrome://browser/content/tabora/actors/TaboraMediaChild.sys.mjs" },
+        parent: { esModuleURI: "chrome://tabora/content/actors/TaboraMediaParent.sys.mjs" },
+        child: { esModuleURI: "chrome://tabora/content/actors/TaboraMediaChild.sys.mjs" },
         allFrames: false,
+        matches: ["http://*/*", "https://*/*"],
+        remoteTypes: ["web"],
         messageManagerGroups: ["browsers"],
         safeForUntrustedWebProcess: true,
       });
@@ -780,16 +784,74 @@ Object.assign(Tabora, {
     }, ["M4 7h16", "M10 11v6M14 11v6", "M6 7l1 13h10l1-13", "M9 7V4h6v3"]);
   },
 
+  /** Открыть адрес из истории, закладок или кошелька. Сайты открываются с нулевым принципалом
+   * в контейнере пространства; системный принципал — только для своих внутренних страниц
+   * из закладок (about:, chrome:, file:), которые пользователь сохранил сам. */
   openInSpace(url, newTab) {
+    const spec = String(url || "").trim();
+    if (!spec || /^(javascript|data|blob|view-source|jar):/i.test(spec)) {
+      return;
+    }
     const space = this.activeSpace();
     if (newTab) {
-      gBrowser.selectedTab = gBrowser.addTab(url, {
-        userContextId: space?.userContextId || 0,
-        triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+      const userContextId = space?.userContextId || 0;
+      const web = /^https?:/i.test(spec);
+      gBrowser.selectedTab = gBrowser.addTab(spec, {
+        userContextId,
+        triggeringPrincipal: web ? Services.scriptSecurityManager.createNullPrincipal({ userContextId }) : Services.scriptSecurityManager.getSystemPrincipal(),
       });
     } else {
-      this.openUrl(url);
+      this.openUrl(spec);
     }
+  },
+
+  /** Адрес со страницы: только http(s) и без логина в адресе. Иначе пустая строка. */
+  mediaWebUrl(spec) {
+    try {
+      const u = new URL(String(spec || ""));
+      return (u.protocol === "http:" || u.protocol === "https:") && !u.username && !u.password ? u.href : "";
+    } catch (e) {
+      return "";
+    }
+  },
+
+  /** Элемент медиа от актора страницы: проверяем всё, что пришло из контент-процесса. */
+  mediaItem(raw, tab, principal) {
+    const src = this.mediaWebUrl(raw?.src);
+    if (!src) {
+      return null;
+    }
+    const thumb = typeof raw.thumb === "string" && raw.thumb.length < 400000 && /^data:image\/(?:png|jpeg);base64,[A-Za-z0-9+/]+=*$/.test(raw.thumb) ? raw.thumb : "";
+    const kind = raw.kind === "video" ? "video" : "image";
+    if (kind === "image" && !thumb) {
+      return null;
+    }
+    const num = v => (Number.isFinite(v) && v > 0 ? Math.round(v) : 0);
+    return {
+      kind,
+      src,
+      thumb,
+      page: this.mediaWebUrl(raw.page),
+      title: String(raw.title || "").slice(0, 200),
+      alt: String(raw.alt || "").slice(0, 200),
+      w: num(raw.w),
+      h: num(raw.h),
+      tab,
+      principal,
+    };
+  },
+
+  /** Медиа открывается от имени страницы-источника: её принципал и её контейнер. */
+  openMediaUrl(it) {
+    const url = this.mediaWebUrl(it?.src);
+    if (!url || !it.principal?.isContentPrincipal) {
+      this.notice("Этот адрес нельзя открыть");
+      return;
+    }
+    gBrowser.selectedTab = gBrowser.addTab(url, {
+      userContextId: it.principal.originAttributes.userContextId || 0,
+      triggeringPrincipal: it.principal,
+    });
   },
 
   /* ---- Медиа ------------------------------------------------------------ */
@@ -808,11 +870,13 @@ Object.assign(Tabora, {
         tabs.map(async t => {
           try {
             const wg = t.linkedBrowser.browsingContext?.currentWindowGlobal;
-            if (!wg) {
+            const principal = wg?.documentPrincipal;
+            if (!wg || !principal?.isContentPrincipal) {
               return [];
             }
+            // актор есть только у http(s)-страниц; миниатюры он рисует сам, в процессе страницы
             const items = await wg.getActor("TaboraMedia").sendQuery("TaboraMedia:Collect");
-            return (items || []).map(it => ({ ...it, tab: t }));
+            return (Array.isArray(items) ? items : []).map(it => this.mediaItem(it, t, principal)).filter(Boolean);
           } catch (e) {
             return [];
           }
@@ -841,7 +905,10 @@ Object.assign(Tabora, {
     }
     const grid = this.html("div", { class: "dgrid" });
     for (const it of items) {
-      const img = this.html("img", { src: it.kind === "video" ? it.poster || "" : it.src, alt: it.alt, loading: "lazy", draggable: "false" });
+      // в окне браузера показываем только готовую миниатюру data:image от актора, адреса со страницы не грузим
+      const img = it.thumb
+        ? this.html("img", { src: it.thumb, alt: it.alt, draggable: "false" })
+        : this.html("span", { style: "display:flex;width:100%;height:100%;align-items:center;justify-content:center;color:var(--tabora-text-5)" }, null, [this.svg(["M4 6h16v12H4z", "M10 9.5v5l4.5-2.5z"], 28, 1.6)]);
       const tile = this.html("button", { class: "dtile", type: "button", title: `${it.alt || it.title}\n${this.hostOf(it.page)}${it.w ? ` · ${it.w}×${it.h}` : ""}` }, null, [
         img,
         it.kind === "video" ? this.html("span", { class: "play" }, null, [this.svg(["M8 5v14l11-7z"], 14, 2)]) : this.html("span"),
@@ -855,13 +922,13 @@ Object.assign(Tabora, {
         e.dataTransfer.effectAllowed = "copy";
       });
       const menu = () => [
-        { label: "Открыть в новой вкладке", run: () => this.openInSpace(it.src, true) },
+        { label: "Открыть в новой вкладке", run: () => this.openMediaUrl(it) },
         { label: "Сохранить файл…", run: () => this.saveMedia(it) },
         { label: "Копировать ссылку", run: () => this.copyText(it.src, "Ссылка скопирована") },
         { separator: true },
-        { label: "К странице-источнику", hint: this.hostOf(it.page), run: () => { gBrowser.selectedTab = it.tab; } },
+        { label: "К странице-источнику", hint: this.hostOf(it.page), disabled: it.tab.closing || !it.tab.parentNode, run: () => { gBrowser.selectedTab = it.tab; } },
       ];
-      tile.addEventListener("click", () => this.openInSpace(it.src, true));
+      tile.addEventListener("click", () => this.openMediaUrl(it));
       tile.addEventListener("contextmenu", e => {
         e.preventDefault();
         this.showMenu(menu(), e.clientX, e.clientY);
@@ -880,13 +947,24 @@ Object.assign(Tabora, {
     foot.hidden = false;
   },
 
+  /** Сохранение медиа от имени страницы-источника: её принципал, контейнер и адрес как referrer. */
   saveMedia(it) {
+    const url = this.mediaWebUrl(it?.src);
+    if (!url || !it.principal?.isContentPrincipal) {
+      this.notice("Этот файл нельзя сохранить");
+      return;
+    }
     try {
       const { PrivateBrowsingUtils } = ChromeUtils.importESModule("resource://gre/modules/PrivateBrowsingUtils.sys.mjs");
-      saveURL(it.src, null, null, null, true, true, null, null, null, PrivateBrowsingUtils.isWindowPrivate(window), Services.scriptSecurityManager.getSystemPrincipal());
+      let referrerInfo = null;
+      if (it.page) {
+        const ReferrerInfo = Components.Constructor("@mozilla.org/referrer-info;1", "nsIReferrerInfo", "init");
+        referrerInfo = new ReferrerInfo(Ci.nsIReferrerInfo.STRICT_ORIGIN_WHEN_CROSS_ORIGIN, true, Services.io.newURI(it.page));
+      }
+      saveURL(url, null, null, null, true, true, referrerInfo, null, null, PrivateBrowsingUtils.isWindowPrivate(window), it.principal);
     } catch (e) {
       console.error("Tabora saveMedia", e);
-      this.openInSpace(it.src, true);
+      this.openMediaUrl(it);
     }
   },
 
@@ -1161,9 +1239,14 @@ Object.assign(Tabora, {
         }
         const fromId = e.dataTransfer.getData("tabora/space");
         if (fromId && fromId !== space.id) {
-          const list2 = this.spaces.filter(s => s.id !== fromId);
+          // перетащить можно только существующее пространство на существующее
           const moving = this.spaces.find(s => s.id === fromId);
-          const at = list2.indexOf(space) + (side === "after" ? 1 : 0);
+          const list2 = this.spaces.filter(s => s.id !== fromId);
+          const target = list2.indexOf(space);
+          if (!moving || target < 0) {
+            return;
+          }
+          const at = target + (side === "after" ? 1 : 0);
           list2.splice(at, 0, moving);
           this.spaces = list2;
           this.saveSpaces();
@@ -1309,9 +1392,11 @@ Object.assign(Tabora, {
   moveTabQuiet(tab, space) {
     const url = tab.linkedBrowser?.currentURI?.spec || "about:blank";
     const wasSelected = tab.selected;
+    // сайт заново открывается с нулевым принципалом нового контейнера; системный — только для внутренних страниц
+    const web = /^https?:/i.test(url);
     const fresh = gBrowser.addTab(url, {
       userContextId: space.userContextId,
-      triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+      triggeringPrincipal: web ? Services.scriptSecurityManager.createNullPrincipal({ userContextId: space.userContextId }) : Services.scriptSecurityManager.getSystemPrincipal(),
       index: tab._tPos + 1,
       skipAnimation: true,
     });

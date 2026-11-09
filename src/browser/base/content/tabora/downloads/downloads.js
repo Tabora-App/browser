@@ -29,6 +29,9 @@ function el(tag, attrs = {}, children = []) {
       node.addEventListener(k.slice(2), v);
     } else if (k === "dataset") {
       Object.assign(node.dataset, v);
+    } else if (k === "style") {
+      // через CSSOM: атрибут style запрещён политикой CSP страницы
+      node.style.cssText = v;
     } else {
       node.setAttribute(k, v === true ? "" : v);
     }
@@ -346,8 +349,15 @@ const App = {
     entry.fresh = false;
 
     const thumb = el("div", { class: "thumb" });
-    if (state === "done" && kind === "image" && download.target.path) {
-      const img = el("img", { alt: "", src: `file://${encodeURI(download.target.path)}` });
+    // миниатюра только растровых картинок: SVG из сети в системной странице не рисуем
+    if (state === "done" && kind === "image" && download.target.path && extOf(name) !== "svg" && !/svg/i.test(download.contentType || "")) {
+      let src = "";
+      try {
+        const file = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+        file.initWithPath(download.target.path);
+        src = Services.io.newFileURI(file).spec;
+      } catch (e) {}
+      const img = el("img", { alt: "", src });
       img.addEventListener("error", () => img.replaceWith(this.iconFor(download)));
       thumb.append(img);
     } else {
@@ -731,15 +741,34 @@ const App = {
       }
     });
     document.addEventListener("drop", async e => {
-      const url = e.dataTransfer.getData("text/uri-list").split("\n")[0]?.trim();
-      if (!url || !/^https?:/.test(url) || e.dataTransfer.types.includes("application/x-moz-file")) {
+      const raw = e.dataTransfer.getData("text/uri-list").split("\n")[0]?.trim();
+      if (!raw || e.dataTransfer.types.includes("application/x-moz-file")) {
+        return;
+      }
+      let url;
+      try {
+        url = new URL(raw);
+      } catch (err) {
+        return;
+      }
+      if ((url.protocol !== "http:" && url.protocol !== "https:") || url.username || url.password) {
         return;
       }
       e.preventDefault();
       try {
+        // имя очищаем и не даём перезаписать существующий файл
+        const { DownloadPaths } = ChromeUtils.importESModule("resource://gre/modules/DownloadPaths.sys.mjs");
         const dir = await Downloads.getPreferredDownloadsDirectory();
-        const name = decodeURIComponent(new URL(url).pathname.split("/").pop()) || "download";
-        const d = await Downloads.createDownload({ source: url, target: PathUtils.join(dir, name) });
+        let leaf = url.pathname.split("/").pop() || "";
+        try {
+          leaf = decodeURIComponent(leaf);
+        } catch (err) {}
+        const name = DownloadPaths.sanitize(leaf) || DownloadPaths.sanitize(url.hostname) || "download";
+        const template = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+        template.initWithPath(PathUtils.join(dir, name));
+        const target = DownloadPaths.createNiceUniqueFile(template);
+        const userContextId = Shell?.activeSpace?.()?.userContextId || 0;
+        const d = await Downloads.createDownload({ source: { url: url.href, userContextId }, target: target.path });
         await this.list.add(d);
         d.start().catch(() => {});
       } catch (err) {

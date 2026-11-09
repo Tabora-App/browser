@@ -4,7 +4,10 @@
 
 /* Баннеры cookie: находим окно согласия и нажимаем за пользователя «Отклонить»
  * или «Только необходимые» (режим в pref tabora.cookies.banners: reject | accept | off).
- * Сначала правила известных систем согласия, затем текстовая эвристика. */
+ * Сначала правила известных систем согласия, затем текстовая эвристика.
+ * Работает только на обычных сайтах (контентный принципал, http/https). Нажатие —
+ * недоверенное событие от имени страницы: системный el.click() дал бы странице
+ * доверенный жест пользователя (всплывающие окна и прочее, что требует настоящего клика). */
 
 const PREF = "tabora.cookies.banners";
 const RETRIES_MS = [0, 400, 1200, 2500, 5000, 9000];
@@ -42,11 +45,21 @@ export class TaboraCookiesChild extends JSWindowActorChild {
       return;
     }
     const mode = Services.prefs.getStringPref(PREF, "reject");
-    if (mode === "off" || !/^https?:$/.test(this.document?.location?.protocol || "")) {
+    if (mode === "off" || !this.allowed()) {
       return;
     }
     this._done = false;
     this._timers = RETRIES_MS.map(ms => this.contentWindow.setTimeout(() => this.scan(mode), ms));
+  }
+
+  /** Только обычные сайты: контентный принципал и http(s). */
+  allowed() {
+    try {
+      const doc = this.document;
+      return !!doc?.nodePrincipal?.isContentPrincipal && /^https?:$/.test(doc.location?.protocol || "");
+    } catch (e) {
+      return false;
+    }
   }
 
   didDestroy() {
@@ -91,7 +104,7 @@ export class TaboraCookiesChild extends JSWindowActorChild {
       return;
     }
     const doc = this.document;
-    if (!doc?.body) {
+    if (!doc?.body || !this.allowed()) {
       return;
     }
     const want = mode === "accept" ? 1 : 0;
@@ -102,7 +115,7 @@ export class TaboraCookiesChild extends JSWindowActorChild {
         el = doc.querySelector(sel);
       } catch (e) {}
       if (el && this.visible(el)) {
-        this.press(el, `rule:${sel.split(",")[0].trim()}`);
+        this.press(el, "rule");
         return;
       }
     }
@@ -111,7 +124,7 @@ export class TaboraCookiesChild extends JSWindowActorChild {
     if (uc) {
       const el = uc.querySelector(want ? "[data-testid=uc-accept-all-button]" : "[data-testid=uc-deny-all-button]");
       if (el) {
-        this.press(el, "rule:usercentrics");
+        this.press(el, "rule");
         return;
       }
     }
@@ -142,24 +155,22 @@ export class TaboraCookiesChild extends JSWindowActorChild {
       return;
     }
     candidates.sort((a, b) => b.score - a.score);
-    this.press(candidates[0].el, `text:${candidates[0].text}`);
+    this.press(candidates[0].el, "text");
   }
 
   press(el, how) {
     this._done = true;
+    const win = this.contentWindow;
     for (const t of this._timers || []) {
-      this.contentWindow?.clearTimeout(t);
+      win?.clearTimeout(t);
     }
     try {
-      el.click();
+      // событие создаётся в окне страницы, поэтому isTrusted = false и жеста пользователя нет
+      el.dispatchEvent(new win.MouseEvent("click", { bubbles: true, cancelable: true, composed: true, view: win, button: 0 }));
     } catch (e) {
       return;
     }
-    this.sendAsyncMessage("TaboraCookies:Handled", {
-      host: this.document.location.hostname.replace(/^www\./, ""),
-      how,
-      text: this.textOf(el).slice(0, 40),
-      frame: !!this.browsingContext.parent,
-    });
+    // текст кнопки и адрес не передаём: оболочка берёт сайт из своего browsingContext
+    this.sendAsyncMessage("TaboraCookies:Handled", { how, frame: !!this.browsingContext.parent });
   }
 }

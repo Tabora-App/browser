@@ -5,10 +5,13 @@
 <html lang="ru" dir="ltr">
 <head>
   <meta charset="utf-8" />
+  <!-- Страница работает с системными правами: только свои скрипты и стили из chrome:.
+       Картинки: значки сайтов (page-icon:), миниатюры скачанных картинок (file:), значки файлов (moz-icon:). -->
+  <meta http-equiv="Content-Security-Policy" content="default-src chrome:; script-src chrome:; style-src chrome:; img-src chrome: moz-icon: page-icon: file: data: blob:; font-src chrome:; media-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'" />
   <meta name="color-scheme" content="light dark" />
   <title>Загрузки · Tabora</title>
-  <link rel="icon" href="chrome://browser/content/tabora/downloads/icon.svg" />
-  <link rel="stylesheet" href="chrome://browser/content/tabora/downloads/downloads.css" />
+  <link rel="icon" href="chrome://tabora/content/downloads/icon.svg" />
+  <link rel="stylesheet" href="chrome://tabora/content/downloads/downloads.css" />
 </head>
 <body>
   <div class="page" id="page">
@@ -62,6 +65,6 @@
 
     <div class="toasts" id="toasts" aria-live="polite"></div>
   </div>
-  <script src="chrome://browser/content/tabora/downloads/downloads.js"></script>
+  <script src="chrome://tabora/content/downloads/downloads.js"></script>
 </body>
 </html>
