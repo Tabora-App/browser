@@ -173,6 +173,24 @@ function safeDecimals(v, fallback = null) {
 
 const CHECK_V2 = "tabora-wallet-check";
 const CHECK_V3 = "tabora-wallet-check:v3"; // v3: подпись (mac) открытой части обязательна
+const CHECK_V4 = "tabora-wallet-check:v4"; // v4: каждый шифроблок привязан к назначению (AAD), блоки не взаимозаменяемы
+/** Назначение шифроблока (AAD AES-GCM): check нельзя подставить как seed, seed одного кошелька — другому. */
+const AAD = {
+  check: "tabora-wallet:check",
+  mark: "tabora-wallet:mark",
+  vault: id => `tabora-wallet:vault:${id}`,
+  seed: id => `tabora-wallet:seed:${id}`,
+};
+const DUST_USD = 0.5; // входящие дешевле — пыль (отравление адреса мелкими суммами)
+const BACKUPS = [".pre-v4.bak", ".before-accept.bak"];
+
+/** Порог пыли монеты сети в базовых единицах (wei, сатоши, лампорты, sun): считается по BigInt, без дробей. */
+function dustRaw(chain) {
+  if (!chain?.dust) {
+    return 0n;
+  }
+  return BigInt(Math.round(chain.dust * 1e6)) * 10n ** BigInt(Math.max(0, chain.decimals - 6));
+}
 
 /** Каноничный JSON (ключи отсортированы) для HMAC открытой части файла. */
 function canonical(value) {
@@ -197,16 +215,21 @@ async function aesKey(raw) {
   return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
-async function encrypt(raw, plaintext) {
+/** aad — назначение блока (строка) или null для блоков старого формата (до v4). */
+function gcm(iv, aad) {
+  return aad ? { name: "AES-GCM", iv, additionalData: utf8ToBytes(aad) } : { name: "AES-GCM", iv };
+}
+
+async function encrypt(raw, plaintext, aad = null) {
   const iv = randomBytes(12);
   const key = await aesKey(raw);
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext));
+  const ct = new Uint8Array(await crypto.subtle.encrypt(gcm(iv, aad), key, plaintext));
   return { iv: base64.encode(iv), ct: base64.encode(ct) };
 }
 
-async function decrypt(raw, iv, ct) {
+async function decrypt(raw, iv, ct, aad = null) {
   const key = await aesKey(raw);
-  return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: base64.decode(iv) }, key, base64.decode(ct)));
+  return new Uint8Array(await crypto.subtle.decrypt(gcm(base64.decode(iv), aad), key, base64.decode(ct)));
 }
 
 async function deriveKey(password, salt, kdf) {
@@ -221,15 +244,59 @@ async function deriveKey(password, salt, kdf) {
   return argon2idAsync(utf8ToBytes(password.normalize("NFKC")), salt, { t, m, p, dkLen });
 }
 
-async function removeLoginKey() {
-  try {
-    const logins = await Services.logins.searchLoginsAsync({ origin: LOGIN_ORIGIN });
-    for (const l of logins) {
-      if (l.username === "vault-key") {
-        Services.logins.removeLogin(l);
-      }
+/* Ключ режима «без пароля» в менеджере паролей. Смена ключа идёт в два шага, чтобы сбой между записью файла
+ * и записью ключа не оставил кошелёк без ключа: новый ключ сначала кладётся как vault-key-next, после успешной
+ * записи файла становится vault-key. При разблокировке пробуются оба. */
+const KEY_USER = "vault-key";
+const KEY_NEXT = "vault-key-next";
+
+async function loginFind(username) {
+  const logins = await Services.logins.searchLoginsAsync({ origin: LOGIN_ORIGIN });
+  return logins.find(l => l.username === username) || null;
+}
+
+async function loginGet(username) {
+  const found = await loginFind(username);
+  return found ? base64.decode(found.password) : null;
+}
+
+async function loginSet(username, raw) {
+  const found = await loginFind(username);
+  const value = base64.encode(raw);
+  if (found) {
+    if (found.password !== value) {
+      const n = found.clone();
+      n.password = value;
+      Services.logins.modifyLogin(found, n);
     }
-  } catch (e) {}
+    return;
+  }
+  const info = Cc["@mozilla.org/login-manager/loginInfo;1"].createInstance(Ci.nsILoginInfo);
+  info.init(LOGIN_ORIGIN, null, "Tabora Wallet", username, value, "", "");
+  await Services.logins.addLoginAsync(info);
+}
+
+async function loginRemove(username) {
+  const logins = await Services.logins.searchLoginsAsync({ origin: LOGIN_ORIGIN });
+  for (const l of logins) {
+    if (l.username === username) {
+      Services.logins.removeLogin(l);
+    }
+  }
+}
+
+/** Новый ключ стал основным (файл уже записан этим ключом). */
+async function promoteLoginKey(raw) {
+  await loginSet(KEY_USER, raw);
+  await loginRemove(KEY_NEXT);
+}
+
+async function removeLoginKey() {
+  for (const name of [KEY_USER, KEY_NEXT]) {
+    try {
+      await loginRemove(name);
+    } catch (e) {}
+  }
 }
 
 /** Последняя известная ревизия файла: защита от отката к старой, но подписанной копии.
@@ -266,22 +333,6 @@ async function setRevMarker(rev) {
     info.init(LOGIN_ORIGIN, null, "Tabora Wallet", "file-rev", String(rev), "", "");
     await Services.logins.addLoginAsync(info);
   } catch (e) {}
-}
-
-async function loginKey(create) {
-  const logins = await Services.logins.searchLoginsAsync({ origin: LOGIN_ORIGIN });
-  const found = logins.find(l => l.username === "vault-key");
-  if (found) {
-    return base64.decode(found.password);
-  }
-  if (!create) {
-    return null;
-  }
-  const raw = randomBytes(32);
-  const info = Cc["@mozilla.org/login-manager/loginInfo;1"].createInstance(Ci.nsILoginInfo);
-  info.init(LOGIN_ORIGIN, null, "Tabora Wallet", "vault-key", base64.encode(raw), "", "");
-  await Services.logins.addLoginAsync(info);
-  return raw;
 }
 
 /* ---------- хранилище ---------- */
@@ -361,7 +412,17 @@ export const WalletStore = {
       return false;
     }
     const n = usd === null || usd === undefined ? NaN : Number(usd);
-    return !Number.isFinite(n) || n >= s.thresholdUsd;
+    // порог накопительный: сумма операций без пароля с последнего ввода пароля не должна его превысить
+    return !Number.isFinite(n) || n < 0 || n + this._spentUsd >= s.thresholdUsd;
+  },
+
+  _spentUsd: 0, // сколько долларов подписано без пароля с последнего ввода пароля (разблокировка или подпись)
+
+  /** Операция подписана без пароля: её сумма идёт в накопительный счётчик порога. */
+  noteSpend(usd) {
+    const n = Number(usd);
+    // неизвестная сумма без пароля пройти не может; на всякий случай она исчерпывает порог целиком
+    this._spentUsd += Number.isFinite(n) && n >= 0 ? n : Infinity;
   },
 
   /* ---------- оценка в долларах ---------- */
@@ -440,8 +501,14 @@ export const WalletStore = {
     return !!this.data?.passwordless;
   },
 
+  /** Кошельки, которым можно доверять. У подменённого файла — только те, чьи адреса пересчитаны из seed;
+   * если не проверился ни один, адреса из файла не показываются вовсе. */
   get wallets() {
-    return this.data?.wallets || [];
+    if (this.unverified) {
+      return [];
+    }
+    const all = Array.isArray(this.data?.wallets) ? this.data.wallets : [];
+    return this._bad.size ? all.filter(w => !this._bad.has(w)) : all;
   },
 
   get activeWallet() {
@@ -471,8 +538,71 @@ export const WalletStore = {
   _macRequired: false, // выставляется при расшифровке check: v3 → подпись обязательна
 
   tampered: false,
+  tamperReason: null, // "mac" — подпись не сошлась, "rollback" — старая копия, "unsigned" — старый файл без подписи
 
   _addrFixed: 0, // сколько адресов подменённого файла не совпало с фразой
+  _bad: new Set(), // кошельки подменённого файла, чей seed не расшифровался: не показываются и не используются
+  unverified: false, // ни один кошелёк подменённого файла не проверен: адресов нет, приём и отправка закрыты
+  _legacy: false, // файл старого формата (до v4): шифроблоки без AAD; переводится на v4 при разблокировке
+
+  /** Что именно из неподписанной части файла начнёт действовать после подтверждения паролем (для показа пользователю). */
+  untrustedContent() {
+    const d = this.data || {};
+    const s = d.settings && typeof d.settings === "object" ? d.settings : {};
+    const lines = [];
+    const few = (list, n = 6) => list.slice(0, n).join(", ") + (list.length > n ? ` и ещё ${list.length - n}` : "");
+    const contacts = Array.isArray(d.contacts) ? d.contacts : [];
+    if (contacts.length) {
+      lines.push(`Контакты (${contacts.length}): ${few(contacts.map(c => `${cleanText(c?.name, 24) || "без имени"} → ${Object.values(c?.addresses || {}).map(a => cleanText(a, 64)).join(" / ")}`), 4)}`);
+    }
+    const sites = Object.keys(d.permissions && typeof d.permissions === "object" ? d.permissions : {});
+    if (sites.length) {
+      lines.push(`Подключённые сайты (${sites.length}): ${few(sites.map(o => cleanText(o, 60)))}`);
+    }
+    const nodes = [];
+    for (const [id, entry] of Object.entries(s.nodes && typeof s.nodes === "object" ? s.nodes : {})) {
+      for (const u of Array.isArray(entry?.list) ? entry.list : []) {
+        let builtin = false;
+        try {
+          builtin = !!CHAINS[id] && this.isBuiltinNode(id, this.validateNodeUrl(u));
+        } catch (e) {}
+        if (!builtin) {
+          nodes.push(`${CHAINS[id]?.name || cleanText(id, 16)}: ${cleanText(u, 80)}`);
+        }
+      }
+    }
+    if (nodes.length) {
+      lines.push(`Свои ноды (${nodes.length}): ${few(nodes, 4)}`);
+    }
+    const tokens = [];
+    for (const [id, list] of Object.entries(s.customTokens && typeof s.customTokens === "object" ? s.customTokens : {})) {
+      for (const t of Array.isArray(list) ? list : []) {
+        tokens.push(`${cleanText(t?.symbol, 12) || "?"} (${CHAINS[id]?.name || cleanText(id, 16)}, ${cleanText(t?.address || t?.mint, 64)})`);
+      }
+    }
+    if (tokens.length) {
+      lines.push(`Свои токены (${tokens.length}): ${few(tokens, 4)}`);
+    }
+    if (s.signPassword?.skip) {
+      const t = Number(s.signPassword.thresholdUsd ?? 500);
+      lines.push(`Пароль при подписи: ${t > 0 ? `только от ${t} $` : "не спрашивать до автоблокировки"}`);
+    }
+    const lockMin = s.autolockMinutes;
+    if (lockMin !== undefined && !(Number.isInteger(lockMin) && lockMin > 0 && lockMin <= DEFAULT_AUTOLOCK)) {
+      lines.push(`Автоблокировка: ${lockMin === 0 ? "выключена" : `${cleanText(lockMin, 8)} мин`}`);
+    }
+    const sent = (Array.isArray(d.activity) ? d.activity : []).filter(a => a?.to);
+    if (sent.length) {
+      lines.push(`Локальная история: ${sent.length} отправок, их получатели будут считаться знакомыми адресами`);
+    }
+    if (Array.isArray(s.hiddenChains) && s.hiddenChains.length) {
+      lines.push(`Скрытые сети: ${few(s.hiddenChains.map(c => CHAINS[c]?.name || cleanText(c, 16)))}`);
+    }
+    if (this._bad.size) {
+      lines.push(`Кошельков с нечитаемым шифроблоком: ${this._bad.size} — они будут удалены из файла (копия останется рядом: tabora-wallet.json.before-accept.bak)`);
+    }
+    return lines;
+  },
 
   /** Пользователь подтвердил паролем, что правки файла сделаны им: подписываем текущее содержимое.
    * Адреса к этому моменту уже пересчитаны из seed, поэтому подписываются настоящие. */
@@ -480,15 +610,58 @@ export const WalletStore = {
     if (!this.unlocked) {
       throw new Error("Кошелёк заблокирован");
     }
+    if (this.unverified) {
+      throw new Error("Ни один кошелёк файла не удалось проверить по фразе: принять такой файл нельзя. Восстановите кошелёк по seed-фразе.");
+    }
     await this.verifyPassword(password);
+    await this.backupFile(".before-accept.bak");
+    const reason = this.tamperReason;
+    if (this._bad.size) {
+      // записи без читаемого seed подписывать нельзя: их адреса проверить нечем
+      this.data.wallets = this.wallets;
+      this._bad = new Set();
+      if (!this.data.wallets.some(w => w.id === this.data.active?.wallet)) {
+        this.data.active = { wallet: this.data.wallets[0].id, account: 0 };
+      }
+    }
     this.tampered = false;
+    this.tamperReason = null;
+    try {
+      const known = await getRevMarker();
+      this.data.rev = Math.max(Number(this.data.rev) || 0, known || 0);
+      // старый формат заодно переводится на v4 (новый ключ, AAD); не вышло — хотя бы подписываем как есть
+      if (!this._legacy || !(await this._upgrade(password))) {
+        await this.save();
+      }
+    } catch (e) {
+      this.tampered = true;
+      this.tamperReason = reason;
+      throw e;
+    }
     this._addrFixed = 0;
-    const known = await getRevMarker();
-    this.data.rev = Math.max(this.data.rev || 0, known || 0);
-    await this.save();
     await this.migrateSettings();
-    await this.ensurePhishMark();
+    // знак подлинности из подменённого файла мог подложить тот, кто его правил: выдаём новый
+    await this.ensurePhishMark({ fresh: true });
     this.armAutolock();
+  },
+
+  /** Копия файла рядом с ним (тот же шифртекст, права 0600) перед необратимой перезаписью. */
+  async backupFile(suffix) {
+    try {
+      if (await IOUtils.exists(FILE())) {
+        await IOUtils.copy(FILE(), FILE() + suffix);
+        await IOUtils.setPermissions(FILE() + suffix, 0o600);
+      }
+    } catch (e) {}
+  },
+
+  /** Старые копии зашифрованы прежним паролем: после смены пароля и удаления кошелька их быть не должно. */
+  async removeBackups() {
+    for (const suffix of BACKUPS) {
+      try {
+        await IOUtils.remove(FILE() + suffix);
+      } catch (e) {}
+    }
   },
 
   /** Откат файла к старой подписанной копии: ревизия в файле ниже известной. */
@@ -497,8 +670,9 @@ export const WalletStore = {
       return false;
     }
     const known = await getRevMarker();
-    if (known !== null && (this.data.rev || 0) < known) {
+    if (known !== null && (Number(this.data.rev) || 0) < known) {
       this.tampered = true;
+      this.tamperReason = "rollback";
     }
     return !this.tampered;
   },
@@ -510,20 +684,32 @@ export const WalletStore = {
       // Файл без подписи допустим только если он никогда не подписывался (старый формат).
       // Если подпись уже была, её отсутствие означает подмену файла.
       this.tampered = this._macRequired || Services.prefs.getBoolPref(this.SIGNED_PREF, false);
+      this.tamperReason = this.tampered ? "mac" : null;
       return !this.tampered;
     }
     const ok = this.computeMac() === this.data.mac;
     this.tampered = !ok;
+    this.tamperReason = ok ? null : "mac";
     return ok;
   },
 
   async save() {
+    await this._write();
+    this.notify();
+  },
+
+  /** Запись файла: подпись и ревизия ставятся только доверенному содержимому. */
+  async _write() {
     if (!this._key) {
       // Запись без ключа невозможна: иначе подпись файла разойдётся с содержимым.
       throw new Error("Кошелёк заблокирован");
     }
+    if (this.unverified) {
+      // в памяти нет ни одного проверенного кошелька: запись стёрла бы шифроблоки с диска
+      throw new Error("Файл кошелька не удалось проверить: запись запрещена до восстановления");
+    }
     if (!this.tampered) {
-      this.data.rev = (this.data.rev || 0) + 1;
+      this.data.rev = (Number(this.data.rev) || 0) + 1;
       this.data.mac = this.computeMac();
       Services.prefs.setBoolPref(this.SIGNED_PREF, true);
     }
@@ -534,7 +720,6 @@ export const WalletStore = {
     if (!this.tampered) {
       setRevMarker(this.data.rev);
     }
-    this.notify();
   },
 
   generateMnemonic(words = 12) {
@@ -557,20 +742,30 @@ export const WalletStore = {
   async create({ mnemonic, password, name = "Кошелёк 1" }) {
     const passwordless = !password;
     const salt = randomBytes(16);
-    const raw = passwordless ? await loginKey(true) : await deriveKey(password, salt, KDF);
+    const raw = passwordless ? randomBytes(32) : await deriveKey(password, salt, KDF);
+    if (passwordless) {
+      await removeLoginKey(); // ключ прежнего (удалённого) кошелька не переиспользуется
+      await loginSet(KEY_USER, raw);
+    }
     this.data = {
-      v: 2,
+      v: 4,
       createdAt: new Date().toISOString(),
       passwordless,
       kdf: passwordless ? null : { alg: "argon2id", salt: base64.encode(salt), ...KDF },
-      check: await encrypt(raw, utf8ToBytes(CHECK_V3)),
+      check: await encrypt(raw, utf8ToBytes(CHECK_V4), AAD.check),
       wallets: [],
       active: null,
       settings: { hiddenChains: [], autolockMinutes: DEFAULT_AUTOLOCK, nodes: {} },
     };
     this._key = raw;
     this._macRequired = true;
+    this._legacy = false;
     this.tampered = false;
+    this.tamperReason = null;
+    this.unverified = false;
+    this._bad = new Set();
+    this._addrFixed = 0;
+    this._spentUsd = 0;
     await this._addWallet({ mnemonic, name });
     await this.ensurePhishMark();
     this.armAutolock();
@@ -601,12 +796,16 @@ export const WalletStore = {
     }
     // фраза (для показа) и seed (для подписи) лежат в разных шифртекстах:
     // seed расшифровывается сразу в Uint8Array и не проходит через строки JS
+    let id = `w${Date.now().toString(36)}`;
+    while ((this.data.wallets || []).some(w => w?.id === id)) {
+      id += "x"; // идентификатор входит в AAD шифроблоков: он обязан быть уникальным
+    }
     const plain = utf8ToBytes(JSON.stringify({ mnemonic: phrase }));
-    const vault = await encrypt(this._key, plain);
+    const vault = await this._seal(plain, AAD.vault(id));
     wipe(plain);
-    const vaultSeed = await encrypt(this._key, seed);
+    const vaultSeed = await this._seal(seed, AAD.seed(id));
     const wallet = {
-      id: `w${Date.now().toString(36)}`,
+      id,
       name: name || `Кошелёк ${this.wallets.length + 1}`,
       fingerprint,
       createdAt: new Date().toISOString(),
@@ -664,50 +863,127 @@ export const WalletStore = {
 
   async removeWallet(walletId, password) {
     await this.verifyPassword(password);
-    this.data.wallets = this.wallets.filter(w => w.id !== walletId);
+    this.data.wallets = (this.data.wallets || []).filter(w => w?.id !== walletId);
     if (this.data.active?.wallet === walletId) {
       this.data.active = this.wallets[0] ? { wallet: this.wallets[0].id, account: 0 } : null;
     }
     await this.save();
   },
 
-  async masterKey(password) {
+  /** Версия формата по блоку check: 4 — с AAD, 3 и 2 — старые (без AAD), 0 — ключ не подошёл.
+   * Версия лежит внутри шифроблока, поэтому понизить её правкой файла нельзя. */
+  async _openCheck(raw) {
+    const c = this.data?.check;
+    const read = async aad => {
+      try {
+        const plain = await decrypt(raw, c.iv, c.ct, aad);
+        const text = new TextDecoder().decode(plain);
+        wipe(plain);
+        return text;
+      } catch (e) {
+        return null;
+      }
+    };
+    if ((await read(AAD.check)) === CHECK_V4) {
+      return 4;
+    }
+    const old = await read(null);
+    return old === CHECK_V3 ? 3 : old === CHECK_V2 ? 2 : 0;
+  },
+
+  /** Мастер-ключ и версия формата. Состояние не меняет. */
+  async _masterKey(password) {
     await this.ready();
     if (!this.data) {
       throw new Error("Кошелька нет");
     }
-    const raw = this.data.passwordless ? await loginKey(false) : await deriveKey(password || "", base64.decode(this.data.kdf.salt), this.data.kdf);
-    if (!raw) {
-      throw new Error("Ключ хранилища не найден");
-    }
-    try {
-      const plain = await decrypt(raw, this.data.check.iv, this.data.check.ct);
-      const text = new TextDecoder().decode(plain);
-      wipe(plain);
-      if (text !== CHECK_V2 && text !== CHECK_V3) {
-        throw new Error("bad check");
+    if (this.data.passwordless) {
+      let seen = false;
+      for (const name of [KEY_USER, KEY_NEXT]) {
+        const raw = await loginGet(name);
+        if (!raw) {
+          continue;
+        }
+        seen = true;
+        const ver = raw.length === 32 ? await this._openCheck(raw) : 0;
+        if (ver) {
+          if (name === KEY_NEXT) {
+            await promoteLoginKey(raw).catch(() => {}); // смена ключа оборвалась после записи файла: завершаем
+          }
+          return { raw, ver };
+        }
+        wipe(raw);
       }
-      this._macRequired = text === CHECK_V3;
+      throw new Error(seen ? "Неверный пароль" : "Ключ хранилища не найден");
+    }
+    let raw;
+    try {
+      raw = await deriveKey(password || "", base64.decode(this.data.kdf?.salt || ""), this.data.kdf);
     } catch (e) {
+      if (/KDF/.test(e?.message || "")) {
+        throw e;
+      }
+      throw new Error("Файл кошелька повреждён: параметры KDF вне допустимых границ");
+    }
+    const ver = await this._openCheck(raw);
+    if (!ver) {
       wipe(raw);
       throw new Error("Неверный пароль");
     }
-    return raw;
+    return { raw, ver };
   },
 
-  async unlock(password) {
-    const raw = await this.masterKey(password);
+  async masterKey(password) {
+    return (await this._masterKey(password)).raw;
+  },
+
+  /** Шифроблок по назначению: в файле v4 — только с AAD, в старом — только без него. */
+  _open(blob, aad) {
+    return decrypt(this._key, blob?.iv, blob?.ct, this._legacy ? null : aad);
+  },
+
+  _seal(plaintext, aad) {
+    return encrypt(this._key, plaintext, this._legacy ? null : aad);
+  },
+
+  _unlockQueue: null,
+
+  /** Разблокировки идут строго по очереди: параллельный вызов не должен застать файл посреди перевода на новый формат. */
+  unlock(password) {
+    const run = () => this._unlock(password);
+    const p = (this._unlockQueue || Promise.resolve()).then(run, run);
+    this._unlockQueue = p.catch(() => {});
+    return p;
+  },
+
+  async _unlock(password) {
+    const { raw, ver } = await this._masterKey(password);
     wipe(this._key);
     this._key = raw;
+    this._legacy = ver < 4;
+    this._macRequired = ver >= 3;
+    this._bad = new Set();
+    this.unverified = false;
+    this._addrFixed = 0;
+    this._spentUsd = 0;
     this.verifyMac();
     await this.verifyRev();
     if (this.tampered) {
       await this.rederiveAddresses();
-    } else if (!this._macRequired) {
-      // старый файл: переводим на обязательную подпись (якорь внутри шифроблока)
-      this.data.check = await encrypt(this._key, utf8ToBytes(CHECK_V3));
-      this._macRequired = true;
-      await this.save();
+    } else if (!this.data.mac && ver < 3) {
+      // Старый файл без подписи: открытой части верить нечем. Адреса пересчитываются из seed всегда;
+      // всё остальное (контакты, ноды, сайты, настройки) начинает действовать только после подтверждения паролем.
+      await this.rederiveAddresses();
+      if (this.unverified || this._addrFixed || this._bad.size || this.untrustedContent().length) {
+        this.tampered = true;
+        this.tamperReason = "unsigned";
+      } else if (!(await this._upgrade(password, { freshMark: true }))) {
+        this._macRequired = true;
+        await this.save();
+      }
+    } else if (ver < 4) {
+      // подписанный файл старого формата: новый мастер-ключ (старые блоки check им не расшифровать) и AAD у каждого блока
+      await this._upgrade(password);
     } else if (!this.data.mac) {
       await this.save();
     }
@@ -717,17 +993,146 @@ export const WalletStore = {
     this.notify("unlocked");
   },
 
+  /** Открытый текст всех секретов (для перешифрования). Вызывающий обязан обнулить. */
+  async _plainSecrets() {
+    const out = [];
+    try {
+      for (const w of this.data.wallets || []) {
+        let phrase = await this._open(w.vault, AAD.vault(w.id));
+        let seed;
+        if (w.vaultSeed) {
+          seed = await this._open(w.vaultSeed, AAD.seed(w.id));
+        } else {
+          // самый старый сейф: JSON с фразой (и, возможно, seed в hex) — разделяем на фразу и бинарный seed
+          const parsed = JSON.parse(new TextDecoder().decode(phrase));
+          wipe(phrase);
+          seed = parsed.seed ? hexToBytes(parsed.seed) : bip39.mnemonicToSeedSync(parsed.mnemonic);
+          phrase = utf8ToBytes(JSON.stringify({ mnemonic: parsed.mnemonic }));
+        }
+        out.push({ w, phrase, seed });
+        if (seed.length !== 64) {
+          throw new Error("Seed повреждён: ожидалось 64 байта");
+        }
+      }
+    } catch (e) {
+      out.forEach(p => wipe(p.phrase, p.seed));
+      throw e;
+    }
+    return out;
+  },
+
+  /** Перешифрование всего файла новым мастер-ключом в формате v4 (AAD). Состояние переключается разом,
+   * после неудачной записи возвращается прежнее. mark — текст знака подлинности или null (будет выдан новый). */
+  async _rekey(raw, { passwordless, salt, mark }) {
+    const secrets = await this._plainSecrets();
+    const before = { key: this._key, json: JSON.stringify(this.data), legacy: this._legacy, macRequired: this._macRequired };
+    let switched = false;
+    try {
+      const check = await encrypt(raw, utf8ToBytes(CHECK_V4), AAD.check);
+      const blobs = [];
+      for (const p of secrets) {
+        blobs.push({ vault: await encrypt(raw, p.phrase, AAD.vault(p.w.id)), vaultSeed: await encrypt(raw, p.seed, AAD.seed(p.w.id)) });
+      }
+      const markEnc = mark ? await encrypt(raw, utf8ToBytes(mark), AAD.mark) : null;
+      // дальше без await до записи: остальной код видит либо старое состояние, либо новое
+      secrets.forEach((p, i) => {
+        p.w.vault = blobs[i].vault;
+        p.w.vaultSeed = blobs[i].vaultSeed;
+      });
+      this.data.v = 4;
+      this.data.check = check;
+      this.data.passwordless = !!passwordless;
+      this.data.kdf = passwordless ? null : { alg: "argon2id", salt: base64.encode(salt), ...KDF };
+      this.data.settings ||= {};
+      delete this.data.settings.phishMark;
+      if (markEnc) {
+        this.data.settings.phishMarkEnc = markEnc;
+      } else {
+        delete this.data.settings.phishMarkEnc;
+      }
+      this._key = raw;
+      this._legacy = false;
+      this._macRequired = true;
+      switched = true;
+      await this._write();
+    } catch (e) {
+      if (switched) {
+        this._key = before.key;
+        this.data = JSON.parse(before.json);
+        this._legacy = before.legacy;
+        this._macRequired = before.macRequired;
+      }
+      throw e;
+    } finally {
+      secrets.forEach(p => wipe(p.phrase, p.seed));
+    }
+    wipe(before.key);
+  },
+
+  /** Перевод файла старого формата на v4: новый мастер-ключ (новая соль или новый ключ в менеджере паролей)
+   * и AAD у каждого шифроблока. Старые блоки без AAD после этого не принимаются. Копия прежнего файла
+   * остаётся рядом до смены пароля. false — перевести не удалось, файл и состояние прежние. */
+  async _upgrade(password, { freshMark = false } = {}) {
+    if (!this._key || this.tampered || !this._legacy) {
+      return false;
+    }
+    let raw = null;
+    try {
+      let mark = null;
+      const s = this.data.settings || {};
+      if (!freshMark && s.phishMarkEnc) {
+        try {
+          const plain = await this._open(s.phishMarkEnc, AAD.mark);
+          mark = new TextDecoder().decode(plain);
+          wipe(plain);
+        } catch (e) {}
+      }
+      if (!freshMark && !mark && typeof s.phishMark === "string") {
+        mark = cleanText(s.phishMark, 24) || null; // открытый знак подписанного файла самой старой версии
+      }
+      const passwordless = !!this.data.passwordless;
+      const salt = randomBytes(16);
+      raw = passwordless ? randomBytes(32) : await deriveKey(password || "", salt, KDF);
+      if (passwordless) {
+        await loginSet(KEY_NEXT, raw);
+      }
+      await this.backupFile(".pre-v4.bak");
+      await this._rekey(raw, { passwordless, salt, mark });
+      if (passwordless) {
+        await promoteLoginKey(raw).catch(() => {}); // не вышло — vault-key-next подхватится при следующей разблокировке
+      }
+      this._phishMark = mark || "";
+      this.notify();
+      return true;
+    } catch (e) {
+      if (this._key !== raw) {
+        wipe(raw);
+      }
+      console.error("Tabora Wallet: файл не переведён на формат v4", e);
+      return false;
+    }
+  },
+
   /** Подменённый файл: адреса приёма и отпечатки пересчитываются из seed (шифроблок без ключа не подделать).
-   * В файл ничего не пишется, пока пользователь не подтвердит правки. */
+   * В файл ничего не пишется, пока пользователь не подтвердит правки. Кошельки, чей seed не расшифровался,
+   * не показываются; если не проверился ни один — адресов нет вообще (unverified). */
   async rederiveAddresses() {
     let fixed = 0;
-    const good = [];
-    for (const wallet of this.wallets) {
+    let good = 0;
+    const bad = new Set();
+    const all = Array.isArray(this.data.wallets) ? this.data.wallets : [];
+    const ids = new Set();
+    for (const wallet of all) {
       let seed;
       try {
+        if (!wallet || typeof wallet !== "object" || typeof wallet.id !== "string" || ids.has(wallet.id)) {
+          throw new Error("запись кошелька повреждена");
+        }
+        ids.add(wallet.id);
         seed = await this.seedOf(wallet);
       } catch (e) {
-        fixed++; // шифроблок испорчен: таким кошельком нельзя ни подписать, ни доверять его адресам
+        fixed++; // шифроблок испорчен или подставлен: таким кошельком нельзя ни подписать, ни доверять его адресам
+        bad.add(wallet);
         continue;
       }
       try {
@@ -750,14 +1155,16 @@ export const WalletStore = {
         }
         wallet.accounts = accounts;
         wallet.name = cleanText(wallet.name, 40) || "Кошелёк";
-        good.push(wallet);
+        good++;
+      } catch (e) {
+        fixed++;
+        bad.add(wallet);
       } finally {
         wipe(seed);
       }
     }
-    if (good.length) {
-      this.data.wallets = good;
-    }
+    this._bad = bad;
+    this.unverified = good === 0;
     this._addrFixed = fixed;
   },
 
@@ -765,6 +1172,7 @@ export const WalletStore = {
     wipe(this._key);
     this._key = null;
     this._phishMark = "";
+    this._spentUsd = 0;
     this._deadline = 0;
     clearTimeout(this._timer);
     if (deferNotify) {
@@ -784,8 +1192,45 @@ export const WalletStore = {
     if (this.tampered || this.data?.settings?.autolockMinutes !== undefined) {
       return DEFAULT_AUTOLOCK;
     }
-    const legacy = Services.prefs.getIntPref(AUTOLOCK_PREF, DEFAULT_AUTOLOCK);
-    return ok(legacy) ? legacy : DEFAULT_AUTOLOCK;
+    return this._legacyAutolock();
+  },
+
+  /** Настройки профиля меняются через about:config и prefs.js без пароля, поэтому из них берётся только то,
+   * что не слабее умолчаний: автоблокировка не длиннее стандартной и встроенные ноды. */
+  _legacyAutolock() {
+    let v = DEFAULT_AUTOLOCK;
+    try {
+      v = Services.prefs.getIntPref(AUTOLOCK_PREF, DEFAULT_AUTOLOCK);
+    } catch (e) {}
+    return Number.isInteger(v) && v > 0 && v <= DEFAULT_AUTOLOCK ? v : DEFAULT_AUTOLOCK;
+  },
+
+  _legacyNodes() {
+    const clean = {};
+    let saved = {};
+    try {
+      saved = JSON.parse(Services.prefs.getStringPref(NODES_PREF, "{}")) || {};
+    } catch (e) {}
+    for (const id of Object.keys(CHAINS)) {
+      const entry = saved?.[id];
+      if (!Array.isArray(entry?.list) || !entry.list.length) {
+        continue;
+      }
+      const valid = entry.list.map(u => {
+        try {
+          return this.validateNodeUrl(u);
+        } catch (e) {
+          return null;
+        }
+      });
+      const list = valid.filter(u => u && this.isBuiltinNode(id, u)); // свои ноды — только заново и с паролем
+      if (!list.length) {
+        continue;
+      }
+      const chosen = valid[Number(entry.index) | 0];
+      clean[id] = { list, index: Math.max(0, list.indexOf(chosen)) };
+    }
+    return clean;
   },
 
   /** Удлинение или отключение автоблокировки требует пароль кошелька. */
@@ -817,22 +1262,7 @@ export const WalletStore = {
       changed = true;
     }
     if (s.nodes === undefined) {
-      const clean = {};
-      let saved = {};
-      try {
-        saved = JSON.parse(Services.prefs.getStringPref(NODES_PREF, "{}")) || {};
-      } catch (e) {}
-      for (const id of Object.keys(CHAINS)) {
-        const entry = saved[id];
-        if (!Array.isArray(entry?.list) || !entry.list.length) {
-          continue;
-        }
-        try {
-          const list = entry.list.map(u => this.validateNodeUrl(u));
-          clean[id] = { list, index: Math.max(0, Math.min(list.length - 1, Number(entry.index) | 0)) };
-        } catch (e) {}
-      }
-      s.nodes = clean;
+      s.nodes = this._legacyNodes();
       changed = true;
     }
     if (changed) {
@@ -885,35 +1315,33 @@ export const WalletStore = {
     if (!this.unlocked) {
       throw new Error("Кошелёк заблокирован");
     }
-    const plain = await decrypt(this._key, wallet.vault.iv, wallet.vault.ct);
+    const plain = await this._open(wallet.vault, AAD.vault(wallet.id));
     const { mnemonic } = JSON.parse(new TextDecoder().decode(plain));
     wipe(plain);
     return mnemonic;
   },
 
-  /** Seed BIP-39 (64 байта) для подписи; вызывающий обязан обнулить. Старые сейфы дополняются seed. */
+  /** Seed BIP-39 для подписи: ровно 64 байта, иначе блок считается подставленным. Вызывающий обязан обнулить. */
   async seedOf(wallet) {
     if (!this.unlocked) {
       throw new Error("Кошелёк заблокирован");
     }
+    let seed;
     if (wallet.vaultSeed) {
-      return decrypt(this._key, wallet.vaultSeed.iv, wallet.vaultSeed.ct); // сразу байты, без строк
+      seed = await this._open(wallet.vaultSeed, AAD.seed(wallet.id)); // сразу байты, без строк
+    } else if (this._legacy) {
+      // самый старый сейф: JSON с фразой (и, возможно, seed в hex); на отдельный seed его переводит _upgrade
+      const plain = await this._open(wallet.vault, AAD.vault(wallet.id));
+      const parsed = JSON.parse(new TextDecoder().decode(plain));
+      wipe(plain);
+      seed = parsed.seed ? hexToBytes(parsed.seed) : bip39.mnemonicToSeedSync(parsed.mnemonic);
+    } else {
+      throw new Error("У кошелька нет шифроблока seed");
     }
-    // старый сейф: JSON с фразой (и, возможно, seed в hex) — переводим на отдельный бинарный seed
-    const plain = await decrypt(this._key, wallet.vault.iv, wallet.vault.ct);
-    const parsed = JSON.parse(new TextDecoder().decode(plain));
-    wipe(plain);
-    const seed = parsed.seed ? hexToBytes(parsed.seed) : bip39.mnemonicToSeedSync(parsed.mnemonic);
-    if (this.tampered) {
-      return seed; // недоверенный файл не переписываем
+    if (!(seed instanceof Uint8Array) || seed.length !== 64) {
+      wipe(seed);
+      throw new Error("Seed повреждён: ожидалось 64 байта");
     }
-    try {
-      wallet.vaultSeed = await encrypt(this._key, seed);
-      const onlyPhrase = utf8ToBytes(JSON.stringify({ mnemonic: parsed.mnemonic }));
-      wallet.vault = await encrypt(this._key, onlyPhrase);
-      wipe(onlyPhrase);
-      await this.save();
-    } catch (e) {}
     return seed;
   },
 
@@ -933,45 +1361,56 @@ export const WalletStore = {
     }
     const raw = await this.masterKey(password);
     wipe(raw);
+    this._spentUsd = 0; // пароль введён: накопительный счётчик порога начинается заново
     this.touch();
     return true;
   },
 
-  /** Смена пароля: перешифровываем все фразы новым мастер-ключом. */
+  /** Смена пароля: все шифроблоки перешифровываются новым мастер-ключом (формат v4, AAD).
+   * Ключ в менеджере паролей меняется и удаляется только после успешной записи файла. */
   async changePassword(oldPassword, newPassword) {
+    this.assertTrusted();
     await this.verifyPassword(oldPassword);
-    const vaults = [];
-    const seeds = [];
+    const passwordless = !newPassword;
+    const salt = randomBytes(16);
+    const raw = passwordless ? randomBytes(32) : await deriveKey(newPassword, salt, KDF);
     try {
-      for (const w of this.wallets) {
-        vaults.push(await decrypt(this._key, w.vault.iv, w.vault.ct));
-        seeds.push(w.vaultSeed ? await decrypt(this._key, w.vaultSeed.iv, w.vaultSeed.ct) : null);
+      if (passwordless) {
+        await loginSet(KEY_NEXT, raw); // если менеджер паролей недоступен, файл остаётся нетронутым
       }
-      const passwordless = !newPassword;
-      const salt = randomBytes(16);
-      await removeLoginKey(); // старый ключ хранилища больше не нужен ни в одном из режимов
-      const raw = passwordless ? await loginKey(true) : await deriveKey(newPassword, salt, KDF);
-      this.data.check = await encrypt(raw, utf8ToBytes(CHECK_V3));
-      this._macRequired = true;
-      for (let i = 0; i < this.wallets.length; i++) {
-        this.wallets[i].vault = await encrypt(raw, vaults[i]);
-        if (seeds[i]) {
-          this.wallets[i].vaultSeed = await encrypt(raw, seeds[i]);
-        }
+      await this._rekey(raw, { passwordless, salt, mark: this._phishMark || null });
+    } catch (e) {
+      if (this._key !== raw) {
+        wipe(raw);
       }
-      const mark = this._phishMark;
-      this.data.passwordless = passwordless;
-      this.data.kdf = passwordless ? null : { alg: "argon2id", salt: base64.encode(salt), ...KDF };
-      wipe(this._key);
-      this._key = raw;
-      if (mark) {
-        this.data.settings.phishMarkEnc = await encrypt(raw, utf8ToBytes(mark));
-      }
-      await this.save();
-    } finally {
-      vaults.forEach(v => wipe(v));
-      seeds.forEach(v => v && wipe(v));
+      throw e;
     }
+    if (passwordless) {
+      await promoteLoginKey(raw).catch(() => {});
+    } else {
+      await removeLoginKey(); // старый ключ хранилища больше не нужен: файл уже записан новым
+    }
+    await this.removeBackups(); // копии зашифрованы прежним паролем
+    this.notify();
+    if (!this._phishMark) {
+      await this.ensurePhishMark();
+    }
+  },
+
+  /** Непроверяемый файл убирается в сторону (не удаляется), чтобы кошелёк можно было создать заново по фразе. */
+  async quarantine(password) {
+    if (!this.unverified) {
+      throw new Error("Файл кошелька проверен: убирать его не нужно");
+    }
+    await this.verifyPassword(password);
+    this.lock();
+    await IOUtils.move(FILE(), FILE() + ".unverified.bak");
+    this.data = null;
+    this.tampered = false;
+    this.tamperReason = null;
+    this.unverified = false;
+    this._bad = new Set();
+    this.notify("destroyed");
   },
 
   async destroy(password) {
@@ -980,7 +1419,12 @@ export const WalletStore = {
     try {
       await IOUtils.remove(FILE());
     } catch (e) {}
+    await this.removeBackups();
     this.data = null;
+    this.tampered = false;
+    this.tamperReason = null;
+    this.unverified = false;
+    this._bad = new Set();
     this.notify("destroyed");
   },
 
@@ -1057,11 +1501,7 @@ export const WalletStore = {
     if (this.tampered || this.data?.settings?.nodes !== undefined) {
       return {};
     }
-    try {
-      return JSON.parse(Services.prefs.getStringPref(NODES_PREF, "{}")) || {};
-    } catch (e) {
-      return {};
-    }
+    return this._legacyNodes();
   },
 
   nodesFor(chainId) {
@@ -1173,15 +1613,46 @@ export const WalletStore = {
 
   /* ---------- разрешения сайтов ---------- */
 
+  /** Приватные окна: origin несёт privateBrowsingId. Разрешения таких сайтов живут только в памяти
+   * и не попадают в файл, иначе на диске остался бы след посещений из приватного режима. */
+  _sessionPerms: {},
+
+  isPrivateOrigin(origin) {
+    return /\^(?:[^^]*&)?privateBrowsingId=[1-9]/.test(String(origin));
+  },
+
+  watchPrivateExit() {
+    if (this._pbObs) {
+      return;
+    }
+    this._pbObs = { observe: () => {
+      this._sessionPerms = {};
+      this.notify();
+    } };
+    try {
+      Services.obs.addObserver(this._pbObs, "last-pb-context-exited");
+    } catch (e) {}
+  },
+
   permissionFor(origin, chain) {
     if (this.tampered) {
       return null; // файл подменён или откатан: сайтам ничего не даём, пока пользователь не подтвердит правки
+    }
+    if (this.isPrivateOrigin(origin)) {
+      return this._sessionPerms[origin]?.[chain] || null;
     }
     return this.data?.permissions?.[origin]?.[chain] || null;
   },
 
   async grantPermission(origin, chain, grant) {
     this.assertTrusted();
+    if (this.isPrivateOrigin(origin)) {
+      this._sessionPerms[origin] ||= { since: new Date().toISOString(), session: true };
+      this._sessionPerms[origin][chain] = { ...grant, at: new Date().toISOString() };
+      this.watchPrivateExit();
+      this.notify();
+      return;
+    }
     this.data.permissions ||= {};
     this.data.permissions[origin] ||= { since: new Date().toISOString() };
     this.data.permissions[origin][chain] = { ...grant, at: new Date().toISOString() };
@@ -1189,23 +1660,34 @@ export const WalletStore = {
   },
 
   async revokePermission(origin, chain) {
-    if (!this.data?.permissions?.[origin]) {
+    // запись приватного окна, оставшаяся в файле от прежних версий, отзывается как обычная
+    const session = this.isPrivateOrigin(origin) && !this.data?.permissions?.[origin];
+    const map = session ? this._sessionPerms : this.data?.permissions;
+    if (!map?.[origin]) {
       return;
+    }
+    if (!session) {
+      delete this._sessionPerms[origin];
     }
     if (!this.unlocked) {
       throw new Error("Кошелёк заблокирован: отключение сайта доступно после разблокировки");
     }
     if (chain) {
-      delete this.data.permissions[origin][chain];
+      delete map[origin][chain];
     }
-    if (!chain || !["evm", "tron", "sol"].some(c => this.data.permissions[origin][c])) {
-      delete this.data.permissions[origin];
+    if (!chain || !["evm", "tron", "sol"].some(c => map[origin][c])) {
+      delete map[origin];
+    }
+    if (session) {
+      this.notify();
+      return;
     }
     await this.save();
   },
 
+  /** Все действующие разрешения: из файла и из приватных окон этого сеанса (у последних session: true). */
   get permissions() {
-    return this.data?.permissions || {};
+    return { ...(this.data?.permissions || {}), ...this._sessionPerms };
   },
 
   /* ---------- знак подлинности ---------- */
@@ -1217,25 +1699,35 @@ export const WalletStore = {
     return this._key ? this._phishMark : "";
   },
 
-  /** Знак хранится зашифрованным: читатель файла профиля его не узнает. */
-  async ensurePhishMark() {
+  /** Знак хранится зашифрованным: читатель файла профиля его не узнает.
+   * fresh — выдать новый знак (после принятия подменённого файла: прежний мог подложить тот, кто правил файл). */
+  async ensurePhishMark({ fresh = false } = {}) {
     if (!this.data || !this._key || this.tampered) {
       return;
     }
     this.data.settings ||= {};
     const s = this.data.settings;
-    if (s.phishMarkEnc) {
+    if (!fresh && s.phishMarkEnc) {
       try {
-        const plain = await decrypt(this._key, s.phishMarkEnc.iv, s.phishMarkEnc.ct);
+        const plain = await this._open(s.phishMarkEnc, AAD.mark);
         this._phishMark = new TextDecoder().decode(plain);
         wipe(plain);
         return;
       } catch (e) {}
     }
     const pool = ["🦊", "🐙", "🦉", "🐝", "🍀", "🌙", "⚡", "🔥", "🌊", "🍉", "🎈", "🎯", "🧩", "🪐", "🍄", "🦋", "🐢", "🍋", "🧊", "🎲", "🌵", "🐬", "🍇", "🪁"];
-    const bytes = randomBytes(3);
-    const mark = s.phishMark || Array.from(bytes, b => pool[b % pool.length]).join(" "); // старый открытый знак переносим в шифроблок
-    s.phishMarkEnc = await encrypt(this._key, utf8ToBytes(mark));
+    const pick = () => {
+      for (;;) {
+        const b = randomBytes(1)[0];
+        if (b < 240) {
+          return pool[b % pool.length]; // 240 = 24 × 10: без смещения
+        }
+      }
+    };
+    // открытый знак самой старой версии переносим в шифроблок только из подписанного файла
+    const old = !fresh && typeof s.phishMark === "string" ? cleanText(s.phishMark, 24) : "";
+    const mark = old || [pick(), pick(), pick()].join(" ");
+    s.phishMarkEnc = await this._seal(utf8ToBytes(mark), AAD.mark);
     delete s.phishMark;
     this._phishMark = mark;
     await this.save();
@@ -1345,6 +1837,9 @@ export const WalletStore = {
   },
 
   async addActivity(entry) {
+    if (entry?.private) {
+      return; // действия сайтов из приватных окон на диск не пишутся
+    }
     this.data.activity ||= [];
     this.data.activity.unshift({ ...entry, at: new Date().toISOString() });
     this.data.activity = this.data.activity.slice(0, 200);
@@ -1617,7 +2112,7 @@ export const WalletStore = {
       for (const t of transfers.slice(0, 40)) {
         const token = known.get((t.token?.address || t.token?.address_hash || "").toLowerCase());
         const hash = t.tx_hash || t.transaction_hash;
-        raw.push({ hash, at: Date.parse(t.timestamp), dir: dirOf(t.from?.hash, t.to?.hash), from: t.from?.hash, to: t.to?.hash, rawAmount: BigInt(t.total?.value || 0), decimals: safeDecimals(t.total?.decimals ?? token?.decimals ?? 18, 18), symbol: token?.symbol || "?", logo: token?.logo || null, kind: "token", known: !!token, custom: !!token?.custom, status: "ok", scam: t.from?.is_scam || (t.from?.reputation && t.from.reputation !== "ok") || t.token?.reputation === "scam", mine: signed.has(String(hash || "").toLowerCase()) });
+        raw.push({ hash, at: Date.parse(t.timestamp), dir: dirOf(t.from?.hash, t.to?.hash), from: t.from?.hash, to: t.to?.hash, rawAmount: BigInt(t.total?.value || 0), decimals: safeDecimals(token?.decimals ?? t.total?.decimals ?? 18, 18), symbol: token?.symbol || "?", logo: token?.logo || null, kind: "token", known: !!token, custom: !!token?.custom, status: "ok", scam: t.from?.is_scam || (t.from?.reputation && t.from.reputation !== "ok") || t.token?.reputation === "scam", mine: signed.has(String(hash || "").toLowerCase()) });
       }
     } else if (chain.kind === "btc") {
       const txs = await this.rpc(chainId, null, `/address/${address}/txs`);
@@ -1703,27 +2198,43 @@ export const WalletStore = {
           continue;
         }
         const token = known.get((t.token_info?.address || "").toLowerCase());
-        raw.push({ hash: t.transaction_id, at: t.block_timestamp, dir: dirOf(t.from, t.to), from: t.from, to: t.to, rawAmount: BigInt(t.value || 0), decimals: safeDecimals(t.token_info?.decimals ?? token?.decimals ?? 6, 6), symbol: token?.symbol || "?", logo: token?.logo || null, kind: "token", known: !!token, custom: !!token?.custom, status: "ok", mine: signed.has(String(t.transaction_id || "").toLowerCase()) });
+        raw.push({ hash: t.transaction_id, at: t.block_timestamp, dir: dirOf(t.from, t.to), from: t.from, to: t.to, rawAmount: BigInt(t.value || 0), decimals: safeDecimals(token?.decimals ?? t.token_info?.decimals ?? 6, 6), symbol: token?.symbol || "?", logo: token?.logo || null, kind: "token", known: !!token, custom: !!token?.custom, status: "ok", mine: signed.has(String(t.transaction_id || "").toLowerCase()) });
       }
     }
     return this.filterHistory(chainId, raw, prices);
   },
 
-  /** Фильтр спама и нормализация. Скрываем: неизвестные токены, пыль (< $0.5), нулевые переводы в любую
-   * сторону, «исходящие», которые вы не подписывали (отравление адреса), помеченных скамеров, неудачные входящие.
+  /** Фильтр спама и нормализация. Скрываем: неизвестные токены, пыль (дешевле $0.5 или меньше порога сети в базовых
+   * единицах), нулевые переводы в любую сторону, «исходящие», которые вы не подписывали (отравление адреса),
+   * помеченных скамеров, неудачные входящие. Суммы сравниваются по сырому значению (BigInt): сумма, которую
+   * не удалось разобрать или оценить, считается спамом, а не проходит фильтр.
    * suspects — адреса контрагентов скрытых операций: экран отправки предупреждает о них. */
-  filterHistory(chainId, raw, prices) {
+  filterHistory(chainId, raw, prices = {}) {
     const chain = CHAINS[chainId];
     const items = [];
     const suspects = new Set();
     let hidden = 0;
     const seen = new Set();
+    const dust = dustRaw(chain);
     for (const r of raw) {
-      const amount = this.format(r.rawAmount, r.decimals, 8);
+      let value = null; // сырая сумма; null — не разобрана
+      let decimals = 0;
+      try {
+        value = BigInt(r.rawAmount);
+        decimals = safeDecimals(r.decimals);
+        if (value < 0n) {
+          value = null;
+        }
+      } catch (e) {
+        value = null;
+      }
+      const amount = value === null ? "?" : this.format(value, decimals, 8);
       // цена только по нашим встроенным токенам и монетам сети; свои токены и чужие события — без оценки
       const priced = r.kind === "native" || (r.known && !r.custom);
-      const price = priced ? prices[r.symbol] ?? (/^(USDT|USDC|DAI)$/.test(r.symbol) ? 1 : null) : null;
-      const usd = price === null ? null : parseFloat(amount) * price;
+      const quote = priced ? Number(prices?.[r.symbol] ?? (STABLE.test(r.symbol) ? 1 : NaN)) : NaN;
+      const price = Number.isFinite(quote) && quote > 0 ? quote : null;
+      const usd = price === null || value === null ? null : this.toNumber(value, decimals) * price;
+      const badUsd = usd !== null && !Number.isFinite(usd); // оценка есть, но не число: не доверяем
       const incoming = r.dir === "in";
       let spam = false;
       let poison = false; // признаки отравления адреса: контрагента запоминаем
@@ -1731,16 +2242,16 @@ export const WalletStore = {
         spam = true;
       } else if (r.kind === "token" && !r.known) {
         spam = true; // неизвестный токен в любую сторону: контракт может эмитить любые события от вашего имени
-      } else if (r.rawAmount === 0n && !(r.call && r.dir === "out" && r.mine !== false)) {
+      } else if (value === null || badUsd) {
+        spam = poison = true; // сумму не удалось разобрать или оценить: считаем спамом
+      } else if (value === 0n && !(r.call && r.dir === "out" && r.mine !== false)) {
         spam = poison = true; // нулевой перевод в любую сторону (отравление адреса); свои вызовы контрактов остаются
       } else if (!incoming && r.mine === false) {
         spam = poison = true; // «исходящий» перевод в транзакции, которую вы не подписывали
-      } else if (incoming && ((usd !== null && usd < 0.5) || (r.kind === "native" && chain.dust && parseFloat(amount) < chain.dust))) {
+      } else if (incoming && ((usd !== null && usd < DUST_USD) || (r.kind === "native" && value < dust))) {
         spam = poison = true; // пыль (в т. ч. «отравление адреса» мелкими суммами), даже если курс не загрузился
       } else if (incoming && r.status === "failed") {
         spam = true;
-      } else if (incoming && r.kind === "token" && /^(USDT|USDC|DAI)$/.test(r.symbol) && usd !== null && usd < 0.5 && r.decimals >= 6) {
-        spam = poison = true; // «1 USDT» от неизвестного — классическое отравление с мелкой суммой
       }
       if (spam) {
         hidden++;

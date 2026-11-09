@@ -105,7 +105,9 @@ Object.assign(Tabora, {
           await WalletStore.unlock("");
         } catch (e) {}
       }
-      node = WalletStore.unlocked ? this.walletMainView() : this.walletLockedView();
+      node = !WalletStore.unlocked ? this.walletLockedView() : WalletStore.unverified ? this.walletUnverifiedView() : this.walletMainView();
+    } else if (WalletStore.unverified) {
+      node = this.walletUnverifiedView(); // ни один кошелёк файла не проверен: адресов нет, приём и отправка закрыты
     } else if (w.view === "settings") {
       node = this.walletSettingsView();
     } else if (w.view === "receive") {
@@ -116,9 +118,9 @@ Object.assign(Tabora, {
       node = this.walletMainView();
     }
     // предупреждение о подменённом файле видно на всех экранах кошелька
-    const tamper = WalletStore.exists && WalletStore.unlocked && WalletStore.tampered && !w.flow ? this.walletTamperBanner() : null;
+    const tamper = WalletStore.exists && WalletStore.unlocked && WalletStore.tampered && !WalletStore.unverified && !w.flow ? this.walletTamperBanner() : null;
     d.body.replaceChildren(...[tamper, node].filter(Boolean));
-    if (WalletStore.exists && WalletStore.unlocked && !w.flow && w.view === "main") {
+    if (WalletStore.exists && WalletStore.unlocked && !WalletStore.unverified && !w.flow && w.view === "main") {
       this.walletLoadBalances(seq);
     }
   },
@@ -128,23 +130,60 @@ Object.assign(Tabora, {
     this.renderDrawer();
   },
 
-  /** Файл кошелька изменён вне Tabora: что это значит и подтверждение правок паролем. */
+  /** Файл кошелька изменён вне Tabora: что это значит и подтверждение правок паролем.
+   * Перед вводом пароля показывается, что именно из файла начнёт действовать. */
   walletTamperBanner() {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { WalletStore } = this.walletStore();
     const fixed = WalletStore._addrFixed;
-    const accept = this.wButton("Это мои правки, принять…", "small ghost", () => this.walletPassword(
-      "Принять файл кошелька",
-      "Вы подтверждаете, что файл изменили вы. После этого кошелёк снова будет доверять контактам, нодам, своим токенам, настройкам и подключённым сайтам из файла. Если вы файл не меняли, не принимайте: восстановите кошелёк по фразе.",
+    const unsigned = WalletStore.tamperReason === "unsigned";
+    const what = unsigned ? "Файл кошелька старого формата: его открытая часть не была подписана, проверить её нечем." : WalletStore.tamperReason === "rollback" ? "Файл кошелька заменён более старой копией." : "Файл кошелька изменён вне Tabora.";
+    const accept = this.wButton(unsigned ? "Проверить и принять…" : "Это мои правки, принять…", "small ghost", () => {
+      const content = WalletStore.untrustedContent();
+      this.walletPassword(
+        "Принять файл кошелька",
+        [
+          unsigned ? "Адреса приёма уже пересчитаны из вашей фразы. Остальное содержимое файла начнёт действовать только после вашего пароля." : "Вы подтверждаете, что файл изменили вы. Если вы файл не меняли, не принимайте: восстановите кошелёк по фразе.",
+          content.length ? "После подтверждения кошелёк начнёт доверять этим данным из файла:" : "Кроме адресов (они пересчитаны из фразы), в файле нет данных, требующих доверия.",
+          ...content.map(line => `• ${line}`),
+          "Знак подлинности на листах подтверждения будет выдан новый.",
+        ],
+        async pass => {
+          await WalletStore.acceptFile(pass);
+          this.notice("Файл кошелька подтверждён. Знак подлинности выдан новый");
+          this.renderDrawer();
+        }
+      );
+    });
+    return h("div", { class: "w-badge-danger w-tamper" }, null, [
+      h("span", {}, `${what} Пока вы не подтвердите его паролем, кошелёк ему не доверяет: адреса приёма пересчитаны из фразы${fixed ? ` (не совпадало: ${fixed})` : ""}, контакты, ноды, свои токены и настройки из файла не используются, сайты отключены.`),
+      accept,
+    ]);
+  },
+
+  /** Ни один кошелёк файла не прошёл проверку по seed: адреса из файла не показываются, приём и отправка закрыты. */
+  walletUnverifiedView() {
+    const h = (t, a, x, c) => this.html(t, a, x, c);
+    const { WalletStore } = this.walletStore();
+    const lock = this.wButton("Заблокировать", "ghost", () => WalletStore.lock());
+    const restore = this.wButton("Восстановить по фразе…", "primary", () => this.walletPassword(
+      "Восстановление кошелька",
+      [
+        "Файл кошелька будет убран в сторону (tabora-wallet.json.unverified.bak в профиле), после чего кошелёк можно создать заново, импортировав seed-фразу.",
+        "Продолжайте, только если фраза у вас записана: из этого файла её достать не удалось.",
+      ],
       async pass => {
-        await WalletStore.acceptFile(pass);
-        this.notice("Файл кошелька подтверждён");
+        await WalletStore.quarantine(pass);
+        this.wallet.view = "main";
         this.renderDrawer();
       }
     ));
-    return h("div", { class: "w-badge-danger w-tamper" }, null, [
-      h("span", {}, `Файл кошелька изменён вне Tabora. Пока вы не подтвердите правки паролем, кошелёк ему не доверяет: адреса приёма пересчитаны из фразы${fixed ? ` (не совпадало: ${fixed})` : ""}, контакты, ноды, свои токены и настройки из файла не используются, сайты отключены.`),
-      accept,
+    return h("div", { class: "w-locked" }, null, [
+      h("div", { class: "w-lock-mark" }, null, [this.wIcon(["M12 9v4", "M12 17h.01", "M10.3 3.9 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"], 22, 1.8)]),
+      h("b", {}, "Кошелёк не удалось проверить"),
+      h("p", { class: "w-badge-danger" }, "Файл кошелька изменён вне Tabora, и ни один зашифрованный блок с ключами не прошёл проверку. Адреса из такого файла не показываются: они могут принадлежать тому, кто его правил. Приём, отправка и запросы сайтов закрыты."),
+      h("p", { class: "w-sub" }, "Восстановите файл профиля из резервной копии или создайте кошелёк заново по seed-фразе."),
+      h("div", { class: "w-actions" }, null, [lock, restore]),
     ]);
   },
 
@@ -980,7 +1019,7 @@ Object.assign(Tabora, {
       box.remove();
       onCancel?.();
     });
-    const box = h("div", { class: "w-sheet" }, null, [h("div", { class: "w-sheet-card" }, null, [h("b", {}, title), h("p", { class: "w-sub" }, sub), WalletStore.passwordless ? h("span") : pass.wrap, err, h("div", { class: "w-actions" }, null, [cancel, ok])])]);
+    const box = h("div", { class: "w-sheet" }, null, [h("div", { class: "w-sheet-card" }, null, [h("b", {}, title), ...[].concat(sub).map(line => h("p", { class: "w-sub" }, line)), WalletStore.passwordless ? h("span") : pass.wrap, err, h("div", { class: "w-actions" }, null, [cancel, ok])])]);
     pass.input.addEventListener("keydown", e => {
       e.stopPropagation();
       if (e.key === "Enter") {

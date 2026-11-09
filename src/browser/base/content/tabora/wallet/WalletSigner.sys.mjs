@@ -240,17 +240,204 @@ export const WalletSigner = {
     } catch (e) {
       return unknown(e.message);
     }
-    // известные контракты библиотеки (роутеры Uniswap, Kyber, WETH): только mainnet и только точное совпадение адреса
-    if (chainId === "ethereum" && depth === 0) {
-      try {
-        const d = ethDecodeData(to, data, toBig(value || 0));
-        if (d && !Array.isArray(d)) {
-          const text = typeof d.hint === "string" && d.hint ? d.hint : `${d.name}: ${JSON.stringify(d.value ?? null, (k, v) => (typeof v === "bigint" ? v.toString() : v))}`;
-          return { kind: "known", text };
-        }
-      } catch (e) {}
+    // роутеры из вендорной библиотеки: только mainnet, точное совпадение адреса и функция из белого списка;
+    // вложенные вызовы multicall этого же роутера разбираются так же
+    if (chainId === "ethereum" && depth <= 1 && this.SWAP_ROUTERS[target]) {
+      return this.swapDecode(target, data, value) || unknown("функция роутера вне белого списка");
     }
     return unknown();
+  },
+
+  /* Роутеры обмена, которые расшифровывает вендорный декодер. self/sender — адреса-заглушки в поле получателя:
+   * у SwapRouter V3 address(0) означает сам роутер (результат ждёт unwrapWETH9/sweepToken в том же multicall);
+   * у SwapRouter02 и Universal Router это address(2) = роутер и address(1) = msg.sender. Заглушка действует только
+   * у того роутера, где она объявлена: у остальных такой адрес — обычный чужой получатель. */
+  SWAP_ROUTERS: {
+    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": { name: "Uniswap V2", funcs: "v2", self: [], sender: [] },
+    "0xe592427a0aece92de3edee1f18e0157c05861564": { name: "Uniswap V3", funcs: "v3", self: ["0x0000000000000000000000000000000000000000"], sender: [] },
+    "0x9aab3f75489902f3a48495025729a0af77d4b11e": { name: "Kyber", funcs: "kyber", self: [], sender: [] },
+  },
+  ROUTER02_SENDER: "0x0000000000000000000000000000000000000001",
+  ROUTER02_SELF: "0x0000000000000000000000000000000000000002",
+
+  /* Белый список функций: где лежит получатель (to), минимум к получению (min) или точная сумма (out), что отдаётся (in).
+   * Функция роутера вне списка или без извлечённого получателя считается нерасшифрованной (опасной). */
+  SWAP_FUNCS: (() => {
+    const exactIn = { role: "swap", to: "to", in: "amountIn", min: "amountOutMin", path: "path" };
+    const exactOut = { role: "swap", to: "to", inMax: "amountInMax", out: "amountOut", path: "path" };
+    const liq = { role: "liquidity", to: "to" };
+    const permit = { role: "permit" };
+    return {
+      v2: {
+        swapExactETHForTokens: { ...exactIn, in: null, inNative: true },
+        swapExactETHForTokensSupportingFeeOnTransferTokens: { ...exactIn, in: null, inNative: true },
+        swapETHForExactTokens: { ...exactOut, inMax: null, inNative: true },
+        swapExactTokensForETH: exactIn,
+        swapExactTokensForETHSupportingFeeOnTransferTokens: exactIn,
+        swapExactTokensForTokens: exactIn,
+        swapExactTokensForTokensSupportingFeeOnTransferTokens: exactIn,
+        swapTokensForExactETH: exactOut,
+        swapTokensForExactTokens: exactOut,
+        addLiquidity: liq,
+        addLiquidityETH: liq,
+        removeLiquidity: liq,
+        removeLiquidityETH: liq,
+        removeLiquidityETHSupportingFeeOnTransferTokens: liq,
+        removeLiquidityWithPermit: liq,
+        removeLiquidityETHWithPermit: liq,
+        removeLiquidityETHWithPermitSupportingFeeOnTransferTokens: liq,
+      },
+      v3: {
+        exactInputSingle: { role: "swap", to: "recipient", in: "amountIn", min: "amountOutMinimum", tokenIn: "tokenIn", tokenOut: "tokenOut" },
+        exactInput: { role: "swap", to: "recipient", in: "amountIn", min: "amountOutMinimum", pathBytes: "path" },
+        exactOutputSingle: { role: "swap", to: "recipient", inMax: "amountInMaximum", out: "amountOut", tokenIn: "tokenIn", tokenOut: "tokenOut" },
+        exactOutput: { role: "swap", to: "recipient", inMax: "amountInMaximum", out: "amountOut", pathBytes: "path", reversed: true },
+        unwrapWETH9: { role: "sweep", to: "recipient", min: "amountMinimum" },
+        unwrapWETH9WithFee: { role: "sweep", to: "recipient", min: "amountMinimum", feeTo: "feeRecipient", feeBips: "feeBips" },
+        sweepToken: { role: "sweep", to: "recipient", min: "amountMinimum", tokenOut: "token" },
+        sweepTokenWithFee: { role: "sweep", to: "recipient", min: "amountMinimum", tokenOut: "token", feeTo: "feeRecipient", feeBips: "feeBips" },
+        refundETH: { role: "refund" },
+        selfPermit: permit,
+        selfPermitIfNecessary: permit,
+        selfPermitAllowed: permit,
+        selfPermitAllowedIfNecessary: permit,
+      },
+      kyber: {
+        trade: { role: "swap", to: "destAddress", in: "srcAmount", min: "minConversionRate", minIsRate: true, tokenIn: "src", tokenOut: "dest", feeTo: "platformWallet" },
+        tradeWithHint: { role: "swap", to: "destAddress", in: "srcAmount", min: "minConversionRate", minIsRate: true, tokenIn: "src", tokenOut: "dest", feeTo: "walletId" },
+        tradeWithHintAndFee: { role: "swap", to: "destAddress", in: "srcAmount", min: "minConversionRate", minIsRate: true, tokenIn: "src", tokenOut: "dest", feeTo: "platformWallet", feeBips: "platformFeeBps" },
+      },
+    };
+  })(),
+
+  /** Вызов роутера обмена: расшифровка вендорным декодером плюс получатель и минимум к получению.
+   * null — расшифровать строго не удалось (вызывающий покажет вызов как опасный). */
+  swapDecode(target, data, value) {
+    const router = this.SWAP_ROUTERS[target];
+    let d;
+    try {
+      d = ethDecodeData(target, data, toBig(value || 0));
+    } catch (e) {
+      return null;
+    }
+    const spec = d && !Array.isArray(d) && typeof d.name === "string" && Object.hasOwn(this.SWAP_FUNCS[router.funcs], d.name) ? this.SWAP_FUNCS[router.funcs][d.name] : null;
+    if (!spec) {
+      return null;
+    }
+    const v = d.value && typeof d.value === "object" ? d.value : {};
+    const isAddr = a => typeof a === "string" && /^0x[0-9a-fA-F]{40}$/.test(a);
+    const addr = k => (k && isAddr(v[k]) ? v[k].toLowerCase() : null);
+    const num = k => (k && typeof v[k] === "bigint" ? v[k] : null);
+    const out = {
+      kind: "swap", role: spec.role, router: router.name, fn: d.name,
+      text: typeof d.hint === "string" && d.hint ? d.hint : d.name,
+      recipient: null, recipientIs: null,
+      amountIn: num(spec.in), amountInMax: num(spec.inMax), minOut: num(spec.min), amountOut: num(spec.out),
+      exactOut: !!spec.out, minIsRate: !!spec.minIsRate, inNative: !!spec.inNative,
+      tokenIn: addr(spec.tokenIn), tokenOut: addr(spec.tokenOut),
+      feeRecipient: addr(spec.feeTo), feeBips: num(spec.feeBips),
+    };
+    if (spec.path) {
+      const path = Array.isArray(v[spec.path]) ? v[spec.path] : [];
+      if (path.length < 2 || !path.every(isAddr)) {
+        return null;
+      }
+      out.tokenIn = path[0].toLowerCase();
+      out.tokenOut = path[path.length - 1].toLowerCase();
+    }
+    if (spec.pathBytes) {
+      const b = v[spec.pathBytes];
+      // путь V3: адрес (20) + [комиссия (3) + адрес (20)]…
+      if (!(b instanceof Uint8Array) || b.length < 43 || (b.length - 20) % 23) {
+        return null;
+      }
+      const ends = [hex0x(b.slice(0, 20)), hex0x(b.slice(-20))];
+      [out.tokenIn, out.tokenOut] = spec.reversed ? ends.reverse() : ends;
+    }
+    if (spec.role === "refund" || spec.role === "permit") {
+      out.recipientIs = "sender"; // refundETH возвращает остаток отправителю, selfPermit ничего не переводит
+      return out;
+    }
+    // получатель обязан извлечься, а минимум/сумма — быть на месте: иначе вызов не считается расшифрованным
+    const to = addr(spec.to);
+    if (!to || (spec.role === "swap" && out.minOut === null && out.amountOut === null) || (spec.role === "sweep" && out.minOut === null)) {
+      return null;
+    }
+    out.recipient = to;
+    out.recipientIs = router.self.includes(to) ? "router" : router.sender.includes(to) ? "sender" : "address";
+    return out;
+  },
+
+  /** Минимум к получению, при котором обмен пройдёт по любому курсу. */
+  swapTinyMin(v) {
+    return v !== null && v !== undefined && v <= 1000n;
+  },
+
+  /** Проверка обмена (одного вызова или пакета multicall роутера): получатель обязан быть адресом пользователя.
+   * Возвращает { danger, lines, rows, warns }: строки для листа подтверждения. */
+  evmSwapReview(decoded, me) {
+    const mine = a => !!a && String(a).toLowerCase() === String(me || "").toLowerCase();
+    const calls = (decoded?.kind === "multicall" ? decoded.calls : [decoded]).filter(c => c?.kind === "swap");
+    const lines = [];
+    const rows = [];
+    const warns = new Set();
+    let danger = false;
+    let own = false;
+    let held = 0; // обмены, результат которых остался на роутере и пока не забран
+    let heldLoose = false; // …и минимум у них не задан
+    const noMin = "Минимум к получению не задан (ноль или ничтожная сумма): обмен пройдёт по любому курсу, и разницу заберут боты (сэндвич-атака). Обычные сайты обмена так не делают.";
+    for (const c of calls) {
+      if (c.role === "refund" || c.role === "permit") {
+        continue;
+      }
+      const loose = c.role !== "liquidity" && !c.exactOut && this.swapTinyMin(c.minOut);
+      if (c.recipientIs === "router") {
+        if (c.role === "sweep") {
+          danger = true;
+          warns.add("Вывод с роутера отправляет средства на сам роутер: забрать их сможет кто угодно.");
+        } else {
+          held++;
+          heldLoose ||= loose;
+        }
+      } else if (c.recipientIs === "sender" || (c.recipientIs === "address" && mine(c.recipient))) {
+        own = true;
+        if (c.role === "sweep") {
+          if (held && heldLoose && this.swapTinyMin(c.minOut)) {
+            warns.add(noMin);
+          }
+          held = 0;
+          heldLoose = false;
+        } else if (loose) {
+          warns.add(noMin);
+        }
+      } else {
+        danger = true;
+        lines.push(`Получатель: чужой адрес ${c.recipient}`);
+        rows.push(["Получатель", `чужой адрес ${c.recipient}`, "bad"]);
+        warns.add(`Результат операции получит не ваш адрес, а ${c.recipient}. Сайты обмена отправляют результат вам: так выглядит кража через подменённого получателя.`);
+        if (loose) {
+          warns.add(noMin);
+        }
+      }
+      if (c.feeRecipient && !/^0x0{40}$/.test(c.feeRecipient) && !mine(c.feeRecipient)) {
+        lines.push(`Комиссия посредника${c.feeBips !== null ? ` ${Number(c.feeBips) / 100}%` : ""} уходит на ${c.feeRecipient}`);
+        if (c.feeBips !== null && c.feeBips > 100n) {
+          danger = true;
+          warns.add("Комиссия посредника больше 1% от суммы обмена.");
+        }
+      }
+    }
+    if (held) {
+      danger = true;
+      warns.add("Результат обмена остаётся на контракте роутера и в этой транзакции не забирается на ваш адрес: его сможет забрать кто угодно.");
+    }
+    if (!calls.length) {
+      danger = true; // проверять нечего: получателя нет
+    } else if (own && !rows.length) {
+      lines.push("Получатель: ваш адрес");
+      rows.push(["Получатель", "ваш адрес"]);
+    }
+    return { danger, lines, rows, warns: [...warns] };
   },
 
   /** Вызовы Permit2 от вашего адреса: approve, permit (single/batch), transferFrom, lockdown, invalidateNonces. */
@@ -939,6 +1126,13 @@ export const WalletSigner = {
     const lines = [];
     let danger = false;
     let unknown = 0; // программы, которые кошелёк не расшифровывает: с вашей подписью они могут через CPI сделать что угодно с вашими счетами
+    // Сколько списаний с вашего адреса инструкции называют явно: симуляция сверяет с этим фактическое изменение
+    // баланса, чтобы мелкий перевод-приманка не прикрывал крупное списание.
+    let solOut = 0n; // лампорты: переводы и создание счетов за ваш счёт
+    let ataCreates = 0; // токен-счета (ATA), создаваемые за ваш счёт
+    let plainTokenOut = 0n; // Transfer без указания mint с вашей подписью: токен неизвестен
+    const tokenOut = new Map(); // mint → сырая сумма переводов TransferChecked с вашей подписью
+    const ours = i => key(i) === ourAddress;
     const short = a => (a ? `${a.slice(0, 4)}…${a.slice(-4)}` : "?");
     const key = i => (i < parsed.keys.length ? parsed.keys[i] : null);
     const name = i => {
@@ -958,8 +1152,14 @@ export const WalletSigner = {
         const tag = new DataView(d.buffer, d.byteOffset).getUint32(0, true);
         if (tag === 2 && d.length >= 12) {
           lines.push(`Перевод ${fmt(u64(d, 4), 9)} SOL: ${name(ix.accounts[0])} → ${name(ix.accounts[1])}`);
-        } else if (tag === 0) {
-          lines.push(`Создание счёта${d.length >= 12 ? ` · ${fmt(u64(d, 4), 9)} SOL` : ""}`);
+          if (ours(ix.accounts[0])) {
+            solOut += u64(d, 4);
+          }
+        } else if (tag === 0 && d.length >= 12) {
+          lines.push(`Создание счёта · ${fmt(u64(d, 4), 9)} SOL`);
+          if (ours(ix.accounts[0])) {
+            solOut += u64(d, 4);
+          }
         } else if (tag === 3) {
           lines.push("Создание счёта с seed");
         } else if (tag === 1 || tag === 10) {
@@ -975,7 +1175,9 @@ export const WalletSigner = {
           lines.push("Перевод SOL со счёта по seed");
           danger = true;
         } else {
-          lines.push(`System: инструкция ${tag}`);
+          lines.push(`System: инструкция ${tag}, кошелёк её не расшифровывает`);
+          danger = true;
+          unknown++;
         }
         continue;
       }
@@ -987,8 +1189,15 @@ export const WalletSigner = {
         };
         if (tag === 3 && d.length >= 9) {
           lines.push(`Перевод токена: ${u64(d, 1)} единиц со счёта ${name(ix.accounts[0])} → ${name(ix.accounts[1])}`);
+          if (ours(ix.accounts[2])) {
+            plainTokenOut += u64(d, 1);
+          }
         } else if (tag === 12 && d.length >= 10) {
           const t = tok(ix.accounts[1]);
+          const mint = key(ix.accounts[1]);
+          if (mint && ours(ix.accounts[3])) {
+            tokenOut.set(mint, (tokenOut.get(mint) || 0n) + u64(d, 1));
+          }
           lines.push(`Перевод ${t ? `${fmt(u64(d, 1), t.decimals)} ${t.symbol}` : `${fmt(u64(d, 1), d[9])} токена ${short(key(ix.accounts[1]))}`} со счёта ${name(ix.accounts[0])} на токен-счёт ${name(ix.accounts[2])}`);
         } else if ((tag === 4 || tag === 13) && d.length >= 9) {
           const t = tag === 13 ? tok(ix.accounts[1]) : null;
@@ -1010,13 +1219,23 @@ export const WalletSigner = {
         } else if (tag === 38) {
           lines.push("WithdrawExcessLamports: вывод SOL с токен-счёта");
           danger = true;
+        } else if (tag === 1 || tag === 16 || tag === 18) {
+          lines.push("Инициализация токен-счёта");
+        } else if (tag === 17) {
+          lines.push("SyncNative: синхронизация обёрнутого SOL");
         } else {
-          lines.push(`Token: инструкция ${tag}`);
+          // прочие инструкции Token и расширения Token-2022 (комиссии, хуки, конфиденциальные переводы) не разбираются
+          lines.push(`Token: инструкция ${tag}, кошелёк её не расшифровывает`);
+          danger = true;
+          unknown++;
         }
         continue;
       }
       if (p === this.SOL_ATA) {
         lines.push("Создание токен-счёта (ATA)");
+        if (ours(ix.accounts[0])) {
+          ataCreates++;
+        }
         continue;
       }
       if (p === this.SOL_MEMO || p === this.SOL_MEMO_V1) {
@@ -1035,7 +1254,7 @@ export const WalletSigner = {
       danger = true;
       lines.push(`Часть адресов берётся из ${parsed.lookups} таблиц(ы): их нельзя проверить заранее`);
     }
-    return { lines, danger, unknown, feePayer: parsed.keys[0] === ourAddress };
+    return { lines, danger, unknown, feePayer: parsed.keys[0] === ourAddress, solOut, ataCreates, plainTokenOut, tokenOut };
   },
 
   SOL_MEMO: "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",

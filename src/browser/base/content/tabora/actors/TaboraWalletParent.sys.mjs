@@ -49,6 +49,8 @@ export class TaboraWalletParent extends JSWindowActorParent {
         userInteracted,
         transient,
         secure: principal.schemeIs("https"),
+        // приватное окно: разрешения и действия такого сайта не записываются в файл кошелька
+        private: principal.privateBrowsingId > 0,
         browsingContext: this.browsingContext,
         actor: this,
       });

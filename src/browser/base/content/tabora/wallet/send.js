@@ -124,28 +124,37 @@ Object.assign(Tabora, {
     const family = c => (kind === "evm" ? CHAINS[c]?.kind === "evm" : c === chainId); // у EVM-сетей общий адрес
     const norm = a => (kind === "evm" ? String(a).toLowerCase() : String(a));
     const strip = a => (kind === "evm" ? a.replace(/^0x/, "") : kind === "tron" ? a.replace(/^T/, "") : kind === "btc" ? a.replace(/^(bc1[qp]|[13])/, "") : a);
+    // «Знакомые» адреса: свои, контакты и те, на которые вы сами подписывали отправку. Только их точное совпадение
+    // снимает проверку. Отправители входящих переводов знакомыми не считаются: прислать вам перевод может кто угодно,
+    // в том числе с адреса, похожего на ваш.
     const known = new Map();
-    const add = (a, label) => {
-      if (a && !known.has(norm(a))) {
-        known.set(norm(a), { address: String(a), label });
+    const seenIn = new Map(); // контрагенты входящих: с ними только сравниваем на похожесть
+    const add = (map, a, label) => {
+      if (a && !map.has(norm(a))) {
+        map.set(norm(a), { address: String(a), label });
       }
     };
     for (const w of WalletStore.wallets) {
       for (const acc of w.accounts) {
-        add(acc.addresses?.[chainId], `ваш адрес «${acc.name}»`);
+        add(known, acc.addresses?.[chainId], `ваш адрес «${acc.name}»`);
       }
     }
     for (const c of WalletStore.contactsFor(chainId)) {
-      add(c.address, `контакт «${c.name}»`);
+      add(known, c.address, `контакт «${c.name}»`);
     }
     for (const a of WalletStore.activity) {
-      if (a.to && family(a.chain)) {
-        add(a.to, "адрес из ваших отправок");
+      if (a.to && a.kind === "send" && family(a.chain)) {
+        add(known, a.to, "адрес из ваших отправок");
       }
     }
     for (const it of this.wallet.history?.items || []) {
-      if (it.counterparty && family(it.chain)) {
-        add(it.counterparty, "адрес из истории");
+      if (!it.counterparty || !family(it.chain)) {
+        continue;
+      }
+      if (it.dir === "out" && it.status !== "failed") {
+        add(known, it.counterparty, "адрес из ваших отправок"); // исходящие в истории — только подписанные вами
+      } else if (it.dir === "in") {
+        add(seenIn, it.counterparty, "адрес из истории входящих");
       }
     }
     const t = norm(to);
@@ -156,7 +165,7 @@ Object.assign(Tabora, {
       return { text: "Этот адрес встречался в скрытых подозрительных операциях (нулевые переводы, пыль, «исходящие», которые вы не подписывали). Так готовят подмену адреса: не отправляйте, если скопировали его из истории или обозревателя." };
     }
     const ts = strip(t);
-    for (const k of known.values()) {
+    const similar = k => {
       const a = strip(norm(k.address));
       const max = Math.min(a.length, ts.length);
       let head = 0;
@@ -167,7 +176,17 @@ Object.assign(Tabora, {
       while (tail < max - head && a[a.length - 1 - tail] === ts[ts.length - 1 - tail]) {
         tail++;
       }
-      if ((head >= 3 && tail >= 3) || tail >= 5 || head >= 6) {
+      return (head >= 3 && tail >= 3) || tail >= 5 || head >= 6;
+    };
+    // сначала сравнение со знакомыми: адрес отправителя входящего перевода, похожий на ваш или на контакт, — отравление
+    for (const k of known.values()) {
+      if (similar(k)) {
+        const fromIn = seenIn.has(t) ? " Он уже присылал вам перевод: так подставляют похожий адрес в историю." : "";
+        return { text: `Адрес похож на ${k.label} (${this.shortAddr(k.address)}): совпадают начало и конец, но это другой адрес.${fromIn} Так выглядит «отравление адреса»: сверьте все символы.` };
+      }
+    }
+    for (const k of seenIn.values()) {
+      if (norm(k.address) !== t && similar(k)) {
         return { text: `Адрес похож на ${k.label} (${this.shortAddr(k.address)}): совпадают начало и конец, но это другой адрес. Так выглядит «отравление адреса»: сверьте все символы.` };
       }
     }
@@ -328,14 +347,26 @@ Object.assign(Tabora, {
       }
       // для нативной монеты вычитаем комиссию
       let raw = available;
-      if (asset.native && this.wCheckAddress(asset.chain, to.value).ok) {
+      if (asset.native) {
+        // адрес ещё не введён: комиссию обычного перевода оцениваем по своему адресу,
+        // после ввода получателя она пересчитается (кнопка проверит сумму ещё раз)
+        const hasTo = this.wCheckAddress(asset.chain, to.value).ok;
+        const target = hasTo ? to.value.trim() : account.addresses[asset.chain];
         try {
-          const est = await this.walletEstimateFee(asset, to.value.trim(), available, { max: true });
+          const est = await this.walletEstimateFee(asset, target, available, { max: true });
           raw = est.maxSendable ?? available;
-        } catch (e) {}
-      } else if (asset.native) {
-        this.notice("Сначала укажите адрес: максимум зависит от комиссии");
-        return;
+        } catch (e) {
+          this.notice(`Не удалось оценить комиссию: ${e.message || e}`);
+          return;
+        }
+        if (raw <= 0n) {
+          amountNote.textContent = "Баланса не хватает на комиссию сети";
+          amountNote.className = "w-note bad";
+          return;
+        }
+        if (!hasTo) {
+          to.focus();
+        }
       }
       amount.value = this.wFmt(raw < 0n ? 0n : raw, decimals, decimals);
       update();
@@ -774,6 +805,9 @@ Object.assign(Tabora, {
             await WalletStore.verifyPassword(pass.input.value); // проверка здесь, обработчики паролю доверяют
           }
           const result = await opts.onSign(pass.input.value);
+          if (!needPass && !opts.noPassword) {
+            WalletStore.noteSpend(usd); // подписано без пароля: сумма идёт в накопительный счётчик порога
+          }
           finish(resolve, result);
         } catch (e) {
           busy = false;
