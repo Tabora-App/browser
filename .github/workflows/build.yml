@@ -3,6 +3,8 @@ name: Build
 # Сборка на Linux-раннерах GitHub или Blacksmith. macOS собирается кросс-компиляцией
 # с тулчейнами Mozilla. Запуск только вручную, чтобы не тратить минуты на каждый коммит.
 # Сторонние actions закреплены по полному SHA коммита (тег в комментарии).
+# Для выпуска (workflow Release) годится только сборка на раннере GitHub (ubuntu-24.04):
+# Release проверяет это по данным запуска и не подпишет артефакт со стороннего раннера.
 
 on:
   workflow_dispatch:
@@ -18,7 +20,7 @@ on:
         type: boolean
         default: false
       runner:
-        description: "Раннер: GitHub (бесплатно для публичного репозитория, 4 vCPU) или Blacksmith"
+        description: "Раннер: GitHub (только такие сборки идут в выпуск) или Blacksmith (для проверки, не для выпуска)"
         type: choice
         default: ubuntu-24.04
         options: [ubuntu-24.04, ubuntu-24.04-arm, blacksmith-4vcpu-ubuntu-2404, blacksmith-8vcpu-ubuntu-2404, blacksmith-16vcpu-ubuntu-2404]
@@ -55,6 +57,15 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Verify vendored bundles are reproducible
+        # вендорные бандлы (криптография кошелька, QR сейфа) пересобираются из закреплённых
+        # package-lock.json и сверяются побайтно с закоммиченными
+        run: |
+          set -euo pipefail
+          node --version
+          sh tools/wallet-vendor/verify.sh
+          sh tools/vault-vendor/verify.sh
 
       - name: Install system packages
         run: |

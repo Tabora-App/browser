@@ -1,0 +1,92 @@
+diff --git a/build/moz.configure/update-programs.configure b/build/moz.configure/update-programs.configure
+index c017c7fb5e..0b06412ade 100644
+--- a/build/moz.configure/update-programs.configure
++++ b/build/moz.configure/update-programs.configure
+@@ -83,12 +83,36 @@ option(
+ )
+ 
+ 
+-def mac_prod_requirements_string(identifier):
++# Tabora: Apple Developer Team ID of the certificate the application is signed
++# with (macTeamId in browser.json). The privileged update helper and the
++# application authorize each other by this ID, so it must not be Mozilla's.
++option(
++    env="TABORA_MAC_TEAM_ID",
++    nargs=1,
++    when=target_is_osx,
++    help="Apple Developer Team ID used in code signing requirements",
++)
++
++
++@depends("TABORA_MAC_TEAM_ID", when=target_is_osx)
++@imports("re")
++def mac_team_id(value):
++    if not value:
++        die("TABORA_MAC_TEAM_ID is not set: configure through tools/build.py")
++    team_id = value[0]
++    if not re.match(r"^[A-Z0-9]{10}$", team_id):
++        die("TABORA_MAC_TEAM_ID must be a 10 character Team ID, got %s", team_id)
++    if team_id == "43AQ936H96":
++        die("TABORA_MAC_TEAM_ID must not be the Team ID of Mozilla")
++    return team_id
++
++
++def mac_prod_requirements_string(identifier, team_id):
+     return (
+         f'identifier "{identifier}" and anchor apple generic and '
+         "certificate 1[field.1.2.840.113635.100.6.2.6] and "
+         "certificate leaf[field.1.2.840.113635.100.6.1.13] and "
+-        'certificate leaf[subject.OU] = "43AQ936H96"'
++        f'certificate leaf[subject.OU] = "{team_id}"'
+     )
+ 
+ 
+@@ -99,28 +123,33 @@ def mac_relaxed_requirements_string(identifier):
+ @depends(
+     "--enable-mac-elevated-updates-with-generic-certs",
+     moz_mac_bundle_id,
++    mac_team_id,
+     when=target_is_osx,
+ )
+-def smauthorizedclients_requirements(enabled, bundle_id):
++def smauthorizedclients_requirements(enabled, bundle_id, team_id):
+     if enabled:
+         return mac_relaxed_requirements_string(bundle_id)
+     else:
+-        return mac_prod_requirements_string(bundle_id)
++        return mac_prod_requirements_string(bundle_id, team_id)
+ 
+ 
+ set_config("MOZ_SMAUTHORIZEDCLIENTS_REQUIREMENTS", smauthorizedclients_requirements)
+ 
+ 
+-def requirements_string(exec_id, relaxed):
++def requirements_string(exec_id, relaxed, team_id):
+     if relaxed:
+         return mac_relaxed_requirements_string(exec_id)
+     else:
+-        return mac_prod_requirements_string(exec_id)
++        return mac_prod_requirements_string(exec_id, team_id)
+ 
+ 
+-@depends("--enable-mac-elevated-updates-with-generic-certs", when=target_is_osx)
++@depends(
++    "--enable-mac-elevated-updates-with-generic-certs",
++    mac_team_id,
++    when=target_is_osx,
++)
+ @imports(_from="xml.sax.saxutils", _import="escape")
+-def generate_smprivilegedexec_requirements(relaxed):
++def generate_smprivilegedexec_requirements(relaxed, team_id):
+     requirements = ""
+     smprivilegedexecutables_list = [
+         "org.mozilla.dmgInstallHelper",
+@@ -130,7 +159,7 @@ def generate_smprivilegedexec_requirements(relaxed):
+     for executable in smprivilegedexecutables_list:
+         requirements += f"<key>{escape(executable)}</key>"
+         requirements += (
+-            f"<string>{escape(requirements_string(executable, relaxed))}</string>"
++            f"<string>{escape(requirements_string(executable, relaxed, team_id))}</string>"
+         )
+ 
+     return requirements

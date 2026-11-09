@@ -15,16 +15,20 @@
   run [-- args]   запустить собранный браузер
   l10n            скачать переводы (firefox-l10n) для locales из browser.json
   package         упаковать сборку в dist/ (с переводами: mach package-multi-locale)
+  verify [--dev]  проверить упакованное приложение: годится ли для распространения
   update [--to V] обновить версию Firefox в browser.json (по умолчанию до последней)
   status          показать версию, бренд и платформу
 
 Переменные окружения:
   TARGET_PLATFORM  darwin | linux (по умолчанию хост)
   TARGET_ARCH      aarch64 | x86_64 (по умолчанию хост)
-  BROWSER_RELEASE  1 = релизная сборка (оптимизации, без тестов)
+  BROWSER_RELEASE  1 = сборка для распространения (MOZILLA_OFFICIAL, оптимизации, без тестов).
+                   Задаётся одинаково для build и package. Без неё package делает пакет
+                   для разработки: файлы в dist/ получают суффикс -dev, распространять нельзя.
   BROWSER_DISABLE_LTO, BROWSER_DISABLE_BOOTSTRAP  см. configs/common/mozconfig
   TABORA_SAFEBROWSING_KEYFILE  файл ключа Google Safe Browsing (по умолчанию
-                   ~/.config/tabora/safebrowsing.key, если он есть)
+                   ~/.config/tabora/safebrowsing.key, если он есть). Без ключа удалённая
+                   проверка загрузок выключается настройкой (данные не уходят в Google).
 
 Только стандартная библиотека Python 3.9+.
 """
@@ -78,6 +82,9 @@ MAR_CHANNEL_ID = "tabora-release"
 L10N_REPO = "https://github.com/mozilla-l10n/firefox-l10n.git"
 L10N_BASE = BUILD_STATE / "l10n-central"
 LOCALE_RE = re.compile(r"^[a-z]{2,3}(-[A-Z]{2}|-[a-zA-Z]{4,8})?$")
+TEAM_ID_RE = re.compile(r"^[A-Z0-9]{10}$")
+MOZILLA_TEAM_ID = "43AQ936H96"
+NO_SAFEBROWSING_KEY = "no-google-safebrowsing-api-key"
 HOST_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")
 
 
@@ -165,6 +172,31 @@ def need_engine() -> None:
         die("нет исходников Firefox, сначала: tools/build.py download")
 
 
+def is_release_env() -> bool:
+    """BROWSER_RELEASE задана: сборка и пакет для распространения."""
+    return bool(os.environ.get("BROWSER_RELEASE"))
+
+
+def safebrowsing_keyfile() -> Optional[Path]:
+    """Файл ключа Google Safe Browsing, если он есть и не пуст (то же условие, что в
+    configs/common/mozconfig)."""
+    path = Path(os.environ.get("TABORA_SAFEBROWSING_KEYFILE")
+                or Path.home() / ".config" / "tabora" / "safebrowsing.key")
+    try:
+        return path if path.is_file() and path.stat().st_size > 0 else None
+    except OSError:
+        return None
+
+
+def mac_team_id(config: dict) -> str:
+    """Apple Team ID сертификата подписи (macTeamId в browser.json): им связаны приложение и
+    привилегированный помощник обновления (SMPrivilegedExecutables / SMAuthorizedClients)."""
+    team = config.get("macTeamId")
+    if not isinstance(team, str) or not TEAM_ID_RE.match(team) or team == MOZILLA_TEAM_ID:
+        die(f"неверный macTeamId в browser.json: {team!r} (нужен свой Team ID из 10 знаков)")
+    return team
+
+
 def mach_env(config: dict, brand: str) -> Dict[str, str]:
     env = {
         "MOZCONFIG": str(ENGINE / "mozconfig"),
@@ -180,6 +212,10 @@ def mach_env(config: dict, brand: str) -> Dict[str, str]:
 def mach(args: List[str], config: dict, brand: str) -> None:
     need_engine()
     write_mozconfig(config, brand)
+    write_branding_prefs(config, brand)
+    if is_release_env() and not safebrowsing_keyfile():
+        warn("релизная сборка без ключа Safe Browsing (~/.config/tabora/safebrowsing.key или "
+             "TABORA_SAFEBROWSING_KEYFILE): защита от фишинга и вредоносных загрузок работать не будет")
     run(["./mach", *args], cwd=ENGINE, env=mach_env(config, brand))
 
 
@@ -228,15 +264,20 @@ def _gpg_verify(sums: bytes, sig: bytes, key: bytes) -> Optional[bool]:
 
 
 def mozilla_sha512(version: str, rel_path: str) -> str:
-    """sha512 файла релиза Firefox из SHA512SUMS archive.mozilla.org (с проверкой подписи
-    Mozilla, если есть gpg)."""
+    """sha512 файла релиза Firefox из SHA512SUMS archive.mozilla.org с проверкой подписи
+    Mozilla (gpg). Без gpg хеш не принимается и не закрепляется: это ошибка, кроме
+    осознанного пропуска общим флагом --no-gpg (tools/build.py --no-gpg update …)."""
     base = RELEASES.format(v=version)
     sums = _fetch(base + "SHA512SUMS")
     verified = _gpg_verify(sums, _fetch(base + "SHA512SUMS.asc"), _fetch(base + "KEY"))
     if verified is False:
         die("подпись SHA512SUMS не проверена ключом Mozilla " + MOZILLA_RELEASE_KEY)
     if verified is None:
-        warn("gpg не установлен: SHA512SUMS проверен только по https (закрепите хеш в browser.json)")
+        if "--no-gpg" not in sys.argv[1:]:
+            die("gpg не установлен: подпись SHA512SUMS не проверена, хеш исходников не закрепляется. "
+                "Поставьте gpg (brew install gnupg) или осознанно пропустите проверку: tools/build.py --no-gpg …")
+        warn("--no-gpg: подпись SHA512SUMS НЕ проверена, хеш получен только по https — "
+             "сверьте firefox.sha512 в browser.json на машине с gpg перед коммитом")
     for line in sums.decode("utf-8", "replace").splitlines():
         parts = line.split()
         if len(parts) == 2 and parts[1] == rel_path and re.match(r"^[0-9a-f]{128}$", parts[0]):
@@ -511,18 +552,48 @@ def apply_branding(config: dict, brand: str) -> None:
     )
     urls = info.get("urls", {})
     home = urls.get("homepage") or "about:blank"
+    write_branding_prefs(config, brand)
+    nsi = dest / "branding.nsi"
+    if nsi.exists():
+        text = nsi.read_text()
+        for old, new in (
+            ('BrandFullNameInternal "Nightly"', f'BrandFullNameInternal "{names["full"]}"'),
+            ('BrandFullName         "Nightly"', f'BrandFullName         "{names["full"]}"'),
+            ('CompanyName           "Mozilla"', f'CompanyName           "{names["vendor"]}"'),
+            ('URLInfoAbout          "https://www.mozilla.org"', f'URLInfoAbout          "{home}"'),
+            ('HelpLink              "https://support.mozilla.org/"', f'HelpLink              "{urls.get("help") or home}"'),
+        ):
+            text = text.replace(old, new)
+        nsi.write_text(text)
+
+
+def branding_prefs_text(config: dict, brand: str) -> str:
+    """Содержимое branding/pref/firefox-branding.js: адреса из browser.json, настройки из
+    configs/prefs/ и настройки, зависящие от окружения сборки (ключ Safe Browsing)."""
+    info = config["brands"][brand]
+    urls = info.get("urls", {})
+    home = urls.get("homepage") or "about:blank"
 
     def pref(name: str, value: str) -> str:
         return f'pref("{name}", "{value}");\n' if value else ""
 
-    (dest / "pref" / "firefox-branding.js").write_text(
+    # Safe Browsing: с ключом-заглушкой запросы к Google бесполезны, а удалённая проверка
+    # загрузок всё равно отправляет адрес и сведения о файле. Без ключа она выключена.
+    if safebrowsing_keyfile():
+        safebrowsing = ('// Safe Browsing: ключ Google есть, удалённая проверка загрузок включена\n'
+                        'pref("browser.safebrowsing.downloads.remote.enabled", true);\n')
+    else:
+        safebrowsing = ('// Safe Browsing: сборка без ключа Google — сведения о загрузках не отправляются\n'
+                        'pref("browser.safebrowsing.downloads.remote.enabled", false);\n'
+                        'pref("browser.safebrowsing.downloads.remote.url", "");\n')
+    return (
         "/* This Source Code Form is subject to the terms of the Mozilla Public\n"
         " * License, v. 2.0. If a copy of the MPL was not distributed with this\n"
         " * file, You can obtain one at http://mozilla.org/MPL/2.0/. */\n\n"
         + pref("startup.homepage_override_url", urls.get("whatsnew", ""))
         + pref("startup.homepage_welcome_url", urls.get("welcome", ""))
         + pref("startup.homepage_welcome_url.additional", urls.get("privacy", ""))
-        + 'pref("app.update.interval", 86400);\n'
+        # app.update.interval задаётся в configs/prefs/<brand>.js
         + 'pref("app.update.promptWaitTime", 691200);\n'
         + pref("app.update.url.manual", urls.get("download") or home)
         + pref("app.update.url.details", urls.get("releaseNotes") or home)
@@ -539,20 +610,21 @@ def apply_branding(config: dict, brand: str) -> None:
         + pref("tabora.url.releaseNotes", urls.get("releaseNotes") or home)
         + pref("tabora.url.terms", urls.get("terms") or home)
         + pref("tabora.url.privacy", urls.get("privacy") or home)
+        + safebrowsing
         + product_prefs(brand)
     )
-    nsi = dest / "branding.nsi"
-    if nsi.exists():
-        text = nsi.read_text()
-        for old, new in (
-            ('BrandFullNameInternal "Nightly"', f'BrandFullNameInternal "{names["full"]}"'),
-            ('BrandFullName         "Nightly"', f'BrandFullName         "{names["full"]}"'),
-            ('CompanyName           "Mozilla"', f'CompanyName           "{names["vendor"]}"'),
-            ('URLInfoAbout          "https://www.mozilla.org"', f'URLInfoAbout          "{home}"'),
-            ('HelpLink              "https://support.mozilla.org/"', f'HelpLink              "{urls.get("help") or home}"'),
-        ):
-            text = text.replace(old, new)
-        nsi.write_text(text)
+
+
+def write_branding_prefs(config: dict, brand: str) -> None:
+    """Перезаписывает firefox-branding.js, если содержимое изменилось. Вызывается из import и
+    перед каждым mach: настройки следуют за configs/prefs/ и за наличием ключа Safe Browsing
+    в тот же момент, когда mozconfig решает, передавать ли ключ в сборку."""
+    target = ENGINE / "browser" / "branding" / brand / "pref" / "firefox-branding.js"
+    if not target.parent.is_dir():
+        return  # брендинг ещё не наложен (bootstrap до import)
+    text = branding_prefs_text(config, brand)
+    if not target.exists() or target.read_text() != text:
+        target.write_text(text)
 
 
 def product_prefs(brand: str) -> str:
@@ -709,6 +781,8 @@ def write_mozconfig(config: dict, brand: str) -> Path:
     if not TABORA_VERSION_RE.match(version):
         die(f"displayVersion бренда {brand} должна быть вида X.Y.Z, сейчас {version!r}")
     L10N_BASE.mkdir(parents=True, exist_ok=True)
+    # Team ID только для macOS: опция configure объявлена при target_is_osx
+    team_line = f"export TABORA_MAC_TEAM_ID={mac_team_id(config)}\n" if plat == "darwin" else ""
     # --target только для кросс-сборки: на родной машине mach сам определяет цель,
     # а явный триплет без версии ОС заставляет configure считать сборку кросс-компиляцией
     cross = plat != host_platform() or target_arch() != host_arch()
@@ -734,7 +808,7 @@ export TABORA_APP_VERSION={version}
 export BROWSER_BRAND={brand}
 export TARGET_PLATFORM={plat}
 export TARGET_ARCH={target_arch()}
-"""
+{team_line}"""
     parts = [header]
     for name in ("common", plat):
         path = CONFIGS / name / "mozconfig"
@@ -805,10 +879,176 @@ def _read_omni_pref(omni: Path, name: str) -> Optional[str]:
     return None
 
 
-def verify_packaged_app(app: Path, plat: str, config: dict) -> None:
+_PREF_LINE_RE = re.compile(
+    r'^\s*pref\(\s*"([^"]+)"\s*,\s*(.*?)\s*(?:,\s*(?:sticky|locked)\s*)*\);\s*(?://.*)?$', re.M)
+
+
+def _default_prefs(res: Path) -> Dict[str, str]:
+    """Действующие значения настроек по умолчанию упакованного приложения (как текст из файла).
+    Порядок чтения как у движка: greprefs.js, затем defaults/pref/*.js платформы, затем
+    defaults/preferences/*.js приложения в обратном алфавитном порядке; позднее перекрывает."""
+    import zipfile
+    prefs: Dict[str, str] = {}
+    for omni, prefix in ((res / "omni.ja", "defaults/pref/"), (res / "browser" / "omni.ja", "defaults/preferences/")):
+        try:
+            with zipfile.ZipFile(omni) as z:
+                names = z.namelist()
+                entries = ["greprefs.js"] if "greprefs.js" in names else []
+                entries += sorted((n for n in names if n.startswith(prefix) and n.endswith(".js")), reverse=True)
+                for entry in entries:
+                    for m in _PREF_LINE_RE.finditer(z.read(entry).decode("utf-8", "replace")):
+                        prefs[m.group(1)] = m.group(2)
+        except (OSError, KeyError, zipfile.BadZipFile):
+            continue
+    return prefs
+
+
+def _app_constants(res: Path) -> Dict[str, str]:
+    """Константы сборки из modules/AppConstants.sys.mjs упакованного приложения:
+    {"MOZILLA_OFFICIAL": "true", ...}; строки без кавычек."""
+    import zipfile
+    try:
+        with zipfile.ZipFile(res / "omni.ja") as z:
+            text = z.read("modules/AppConstants.sys.mjs").decode("utf-8", "replace")
+    except (OSError, KeyError, zipfile.BadZipFile):
+        return {}
+    out = {}
+    # значение может стоять на следующей строке после служебных «//@line …» препроцессора
+    for m in re.finditer(r'^\s*([A-Z][A-Z0-9_]*):\s*(?://[^\n]*\n\s*)*(true|false|"[^"\n]*")', text, re.M):
+        out.setdefault(m.group(1), m.group(2).strip('"'))
+    return out
+
+
+def _application_ini(res: Path) -> str:
+    try:
+        return (res / "application.ini").read_text()
+    except OSError:
+        return ""
+
+
+def _privacy_problems(app: Path, plat: str, config: dict, res: Path) -> List[str]:
+    """То, чего не должно быть ни в какой сборке Tabora: отчёты о сбоях и телеметрия Mozilla,
+    Team ID Mozilla, проверка загрузок в Google с ключом-заглушкой."""
+    problems = []
+    consts = _app_constants(res)
+    if not consts:
+        return ["не читается modules/AppConstants.sys.mjs из omni.ja"]
+    for name in ("MOZ_CRASHREPORTER", "MOZ_TELEMETRY_REPORTING", "MOZ_DATA_REPORTING", "MOZ_NORMANDY"):
+        if consts.get(name) != "false":
+            problems.append(f"{name}={consts.get(name)} (должно быть false: configs/common/mozconfig, "
+                            "src/browser/moz.configure.patch)")
+    if consts.get("MOZ_REQUIRE_SIGNING") != "true":
+        problems.append("MOZ_REQUIRE_SIGNING не включён: неподписанные дополнения будут ставиться")
+    ini = _application_ini(res)
+    if re.search(r"^\[Crash Reporter\]", ini, re.M) or "crash-reports.mozilla.com" in ini:
+        problems.append("в application.ini есть [Crash Reporter] (нужен --disable-crashreporter)")
+    bin_dir = app / "Contents" / "MacOS" if plat == "darwin" else app
+    for name in ("crashreporter.app", "crashreporter", "crashhelper", "minidump-analyzer"):
+        if (bin_dir / name).exists():
+            problems.append(f"в пакете есть {name} (нужен --disable-crashreporter)")
+    prefs = _default_prefs(res)
+    has_key = consts.get("MOZ_GOOGLE_SAFEBROWSING_API_KEY", NO_SAFEBROWSING_KEY) not in ("", NO_SAFEBROWSING_KEY)
+    remote = prefs.get("browser.safebrowsing.downloads.remote.enabled")
+    if not has_key and remote != "false":
+        problems.append("сборка без ключа Safe Browsing, но browser.safebrowsing.downloads.remote.enabled "
+                        f"= {remote}: сведения о загрузках уйдут в Google")
+    if has_key and remote != "true":
+        problems.append("ключ Safe Browsing в сборке есть, а удалённая проверка загрузок выключена: "
+                        "ключ появился после import/configure? Пересоберите")
+    if plat == "darwin":
+        team = mac_team_id(config).encode()
+        plist = app / "Contents" / "Info.plist"
+        data = plist.read_bytes() if plist.is_file() else b""
+        if MOZILLA_TEAM_ID.encode() in data or team not in data:
+            problems.append(f"в Info.plist требования подписи помощников не с Team ID {team.decode()} "
+                            "(src/build/moz.configure/update-programs.configure.patch, macTeamId)")
+        for path in sorted(p for p in app.rglob("org.mozilla.updater") if p.is_file()):
+            data = path.read_bytes()
+            if MOZILLA_TEAM_ID.encode() in data or team not in data:
+                problems.append(f"в {path.relative_to(app)} зашит Team ID Mozilla или нет {team.decode()}")
+    return problems
+
+
+def _release_problems(res: Path) -> List[str]:
+    """Признаки сборки для разработки в самом пакете (не зависят от репозитория)."""
+    problems = []
+    consts = _app_constants(res)
+    if consts.get("MOZILLA_OFFICIAL") != "true":
+        problems.append("MOZILLA_OFFICIAL не задан (сборка без BROWSER_RELEASE=1)")
+    if consts.get("DEBUG") != "false":
+        problems.append("отладочная сборка (DEBUG)")
+    prefs = _default_prefs(res)
+    for name in ("devtools.chrome.enabled", "devtools.debugger.remote-enabled"):
+        if prefs.get(name) != "false":
+            problems.append(f"{name} по умолчанию {prefs.get(name)}: отладка браузера и удалённая отладка включены")
+    return problems
+
+
+def _engine_sync_problems() -> List[str]:
+    """engine/ соответствует src/: каждый патч наложен в нынешнем виде, файлы подключены."""
+    problems = []
+    if not (ENGINE / "mach").exists():
+        return problems
+    state = _load_applied()
+    for path in sorted(SRC.rglob("*")):
+        if not path.is_file() or path.name == ".gitkeep":
+            continue
+        rel = path.relative_to(SRC)
+        if path.suffix == ".patch":
+            entry = state.get(str(rel))
+            if not entry or entry.get("sha256") != _sha256_bytes(path.read_bytes()):
+                problems.append(f"патч src/{rel} не наложен в нынешнем виде (tools/build.py import)")
+                continue
+            for target, digest in (entry.get("files") or {}).items():
+                if _engine_file_hash(target) != digest:
+                    problems.append(f"engine/{target} изменён после наложения src/{rel}")
+        else:
+            target = ENGINE / rel
+            if not (target.is_symlink() and os.readlink(target) == str(path)):
+                problems.append(f"src/{rel} не подключён в engine/ (tools/build.py import)")
+    return problems
+
+
+def _source_problems(res: Path, config: dict) -> List[str]:
+    """Пакет собран из текущего коммита без незакоммиченных правок во входных данных сборки."""
+    problems = []
+    head = git(["rev-parse", "HEAD"], cwd=ROOT, check=False)
+    ini = _application_ini(res)
+    stamp = re.search(r"^SourceStamp=(\S+)$", ini, re.M)
+    if not re.match(r"^[0-9a-f]{40}$", head):
+        problems.append("не удалось узнать коммит репозитория (git rev-parse HEAD)")
+    elif not stamp or len(stamp.group(1)) < 7 or not head.startswith(stamp.group(1)):
+        problems.append(f"SourceStamp пакета {stamp.group(1) if stamp else None!r} не совпадает с HEAD {head[:12]}: "
+                        "после сборки были коммиты, пересоберите")
+    repo = re.search(r"^SourceRepository=(\S*)$", ini, re.M)
+    if not repo or repo.group(1) != config.get("repository", ""):
+        problems.append("SourceRepository пакета не совпадает с repository из browser.json")
+    dirty = run(["git", "status", "--porcelain", "--", "src", "configs", "tools", "browser.json",
+                 "rust-toolchain.toml"], cwd=ROOT, check=False, capture=True)
+    lines = [line for line in (dirty.stdout or "").splitlines() if line.strip()]
+    if dirty.returncode != 0:
+        problems.append("git status не выполнился")
+    elif lines:
+        shown = ", ".join(line[3:] for line in lines[:6]) + (" …" if len(lines) > 6 else "")
+        problems.append(f"незакоммиченные правки во входных данных сборки ({len(lines)}): {shown}")
+    problems += _engine_sync_problems()
+    return problems
+
+
+def verify_packaged_app(app: Path, plat: str, config: dict, allow_dev: bool = False,
+                        check_source: bool = False) -> bool:
     """Упакованное приложение пригодно для выпуска: в обновляторе наши сертификаты MAR,
     принимаемый канал tabora-release, версия Tabora совпадает с browser.json, в
-    application.ini нет адреса Mozilla. Любое расхождение останавливает выпуск."""
+    application.ini нет адреса Mozilla, нет отчётов о сбоях и телеметрии, сборка релизная
+    (MOZILLA_OFFICIAL, без удалённой отладки). Любое расхождение останавливает выпуск.
+
+    check_source добавляет проверки по репозиторию: SourceStamp = HEAD, нет незакоммиченных
+    правок, engine/ соответствует src/ (для локальной упаковки и подписи; в tools/release.py
+    приложение может прийти архивом из другой рабочей копии).
+
+    allow_dev: признаки сборки для разработки не останавливают, а печатаются; тогда функция
+    возвращает False, и вызывающий обязан пометить результат как нераспространяемый.
+    Возвращает True, если пакет релизный."""
     certs = _mar_cert_bytes()
     problems = []
     if plat == "darwin":
@@ -853,9 +1093,22 @@ def verify_packaged_app(app: Path, plat: str, config: dict) -> None:
     got = _read_omni_pref(res / "browser" / "omni.ja", "tabora.version")
     if got != want:
         problems.append(f"версия Tabora в приложении {got!r}, в browser.json {want!r}")
+    problems += _privacy_problems(app, plat, config, res)
+    dev = _release_problems(res)
+    if check_source:
+        dev += _source_problems(res, config)
+    if not allow_dev:
+        problems += dev
     if problems:
         die("упакованное приложение не годится для выпуска:\n  " + "\n  ".join(problems))
-    log("обновлятор: сертификаты Tabora, канал " + MAR_CHANNEL_ID + f", версия {want}")
+    log("обновлятор: сертификаты Tabora, канал " + MAR_CHANNEL_ID + f", версия {want}; "
+        "отчёты о сбоях и телеметрия выключены сборкой")
+    if dev:
+        warn("СБОРКА ДЛЯ РАЗРАБОТКИ, НЕ РАСПРОСТРАНЯТЬ:\n  " + "\n  ".join(dev))
+        return False
+    log("релизная конфигурация: MOZILLA_OFFICIAL, удалённая отладка выключена"
+        + (", SourceStamp = HEAD, дерево чистое" if check_source else ""))
+    return True
 
 
 def packaged_app_path(plat: str) -> Path:
@@ -898,23 +1151,57 @@ def cmd_package(args: argparse.Namespace) -> None:
     else:
         mach(["package"], config, brand)
     app = packaged_app_path(target_platform())
-    verify_packaged_app(app, target_platform(), config)
+    # Без BROWSER_RELEASE пакет считается сборкой для разработки, даже если он выглядит релизным:
+    # режим задаётся явно и одинаково для build и package.
+    release = is_release_env()
+    verify_packaged_app(app, target_platform(), config, allow_dev=not release, check_source=True)
+    if not release:
+        warn("BROWSER_RELEASE не задана: пакет для разработки, файлы в dist/ с суффиксом -dev. "
+             "Для распространения: BROWSER_RELEASE=1 tools/build.py build && … package")
     DIST.mkdir(exist_ok=True)
     dist_dir = objdir() / "dist"
     copied = 0
     for pattern in ("*.dmg", "*.tar.xz", "*.tar.bz2", "*.zip", "*.exe", "*.msix"):
         for artifact in dist_dir.glob(pattern):
-            shutil.copy(artifact, DIST / artifact.name)
-            log(f"→ dist/{artifact.name}")
+            name = artifact.name if release else _dev_name(artifact.name)
+            shutil.copy(artifact, DIST / name)
+            log(f"→ dist/{name}")
             copied += 1
+            stale = DIST / artifact.name
+            if not release and stale.exists():
+                warn(f"в dist/ остался {artifact.name} под релизным именем от прежней упаковки: "
+                     "проверьте, откуда он, и не распространяйте сборку для разработки")
     if not copied:
         warn(f"в {dist_dir} нет упакованных файлов")
     if args.app_tar:
         # приложение для tools/release.py в CI: tar сохраняет ссылки как ссылки
         name = f"tabora-app-{target_platform()}-{target_arch()}.tar"
+        if not release:
+            name = _dev_name(name)
         out = DIST / name
         run(["tar", "-cf", str(out), "-C", str(app.parent), app.name])
         log(f"→ dist/{name}")
+
+
+def _dev_name(name: str) -> str:
+    """tabora-1.0.mac.dmg → tabora-1.0.mac-dev.dmg; .tar.xz и .tar.bz2 считаются одним расширением."""
+    for ext in (".tar.xz", ".tar.bz2"):
+        if name.endswith(ext):
+            return name[:-len(ext)] + "-dev" + ext
+    stem, dot, ext = name.rpartition(".")
+    return f"{stem}-dev.{ext}" if dot else name + "-dev"
+
+
+def cmd_verify(args: argparse.Namespace) -> None:
+    """Проверка упакованного приложения без упаковки (её вызывает tools/sign_macos.sh).
+    Код возврата 0: пакет релизный, либо задан --dev и нарушены только признаки релиза."""
+    config = load_config()
+    plat = target_platform()
+    app = Path(args.app).resolve() if args.app else packaged_app_path(plat)
+    if not app.exists():
+        die(f"нет {app}: сначала tools/build.py package")
+    release = verify_packaged_app(app, plat, config, allow_dev=args.dev, check_source=True)
+    print("release" if release else "dev")
 
 
 def cmd_status(args: argparse.Namespace) -> None:
@@ -927,6 +1214,8 @@ def cmd_status(args: argparse.Namespace) -> None:
           f"{version_file.read_text().strip() if version_file.exists() else 'не скачан'} в engine/")
     print(f"Цель:        {target_platform()}/{target_arch()} ({target_triple()})"
           + (" кросс-сборка" if target_platform() != host_platform() else ""))
+    print(f"Режим:       {'релизный (BROWSER_RELEASE)' if is_release_env() else 'для разработки (без BROWSER_RELEASE, не распространять)'}; "
+          f"ключ Safe Browsing {'есть' if safebrowsing_keyfile() else 'не найден'}")
     print(f"Объекты:     {objdir().relative_to(ROOT)}{'' if objdir().exists() else ' (ещё не собирали)'}")
     if (ENGINE / "mach").exists():
         changed = git(["status", "--short"]).splitlines()
@@ -939,6 +1228,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="tools/build.py", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--brand", help="бренд из browser.json (по умолчанию из поля brand)")
+    parser.add_argument("--no-gpg", action="store_true",
+                        help="не проверять подпись SHA512SUMS Mozilla, если gpg не установлен (осознанный пропуск)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("download", help="скачать исходники Firefox")
@@ -957,6 +1248,10 @@ def main() -> None:
     p = sub.add_parser("package", help="упаковать в dist/")
     p.add_argument("--app-tar", action="store_true", help="также положить в dist/ tar упакованного приложения (для выпуска в CI)")
     p.set_defaults(fn=cmd_package)
+    p = sub.add_parser("verify", help="проверить упакованное приложение (релизное ли оно)")
+    p.add_argument("--dev", action="store_true", help="не считать ошибкой признаки сборки для разработки")
+    p.add_argument("--app", help="путь к приложению (по умолчанию упакованное в objdir)")
+    p.set_defaults(fn=cmd_verify)
     sub.add_parser("l10n", help="скачать переводы для locales из browser.json").set_defaults(fn=cmd_l10n)
     p = sub.add_parser("update", help="обновить версию Firefox в browser.json")
     p.add_argument("--to", help="конкретная версия, иначе последняя")

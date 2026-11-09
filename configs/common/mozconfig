@@ -23,6 +23,9 @@ if test "$SCCACHE_GHA_ENABLED" = "true"; then
   mk_add_options 'export CCACHE_CPP2=yes'
 fi
 
+# BROWSER_RELEASE=1 — сборка для распространения: MOZILLA_OFFICIAL (без удалённой отладки и
+# инструментов разработчика браузера по умолчанию), оптимизации, без тестов. Пакет без этого
+# режима tools/build.py помечает «-dev», а tools/sign_macos.sh подписывает только с --dev.
 if test "$BROWSER_RELEASE"; then
   ac_add_options --enable-optimize
   ac_add_options --enable-release
@@ -33,7 +36,6 @@ if test "$BROWSER_RELEASE"; then
   ac_add_options --enable-rust-simd
   ac_add_options --disable-geckodriver
   ac_add_options --disable-rust-tests
-  ac_add_options --disable-crashreporter
 
   # configure сам скачивает недостающие тулчейны Mozilla (clang, SDK, cctools)
   if ! test "$BROWSER_DISABLE_BOOTSTRAP"; then
@@ -61,20 +63,26 @@ fi
 # а не неподписанным языковым пакетом, поэтому снимать требование не нужно.
 
 # Google Safe Browsing: ключ из файла вне репозитория (docs/UPDATES.md, раздел «Safe Browsing»).
-# Без ключа провайдеры Google не работают: фишинг и вредоносные загрузки не проверяются.
+# Без ключа провайдеры Google не работают: фишинг и вредоносные загрузки не проверяются, а
+# tools/build.py выключает удалённую проверку загрузок (browser.safebrowsing.downloads.remote.enabled),
+# чтобы сведения о файлах не уходили в Google с ключом-заглушкой. Условие наличия ключа там то же.
 _tabora_sb_key="${TABORA_SAFEBROWSING_KEYFILE:-$HOME/.config/tabora/safebrowsing.key}"
+# Здесь нельзя ничего печатать (echo): mach разбирает вывод mozconfig и падает на посторонних
+# строках. Об отсутствии ключа в релизной сборке предупреждает tools/build.py.
 if test -s "$_tabora_sb_key"; then
   ac_add_options --with-google-safebrowsing-api-keyfile="$_tabora_sb_key"
-elif test "$BROWSER_RELEASE"; then
-  echo "Внимание: нет ключа Safe Browsing ($_tabora_sb_key), защита от фишинга работать не будет" >&2
 fi
 unset _tabora_sb_key
 
-# Телеметрия Mozilla выключена на уровне сборки
-mk_add_options MOZ_DATA_REPORTING=
-mk_add_options MOZ_SERVICES_HEALTHREPORT=
-mk_add_options MOZ_TELEMETRY_REPORTING=
-ac_add_options MOZ_DATA_REPORTING=
+# Отчёты о сбоях и телеметрия Mozilla выключены сборкой в любой конфигурации, не только релизной
+# (проверяет tools/build.py: MOZ_CRASHREPORTER, MOZ_TELEMETRY_REPORTING, MOZ_DATA_REPORTING в пакете):
+# - --disable-crashreporter: нет crashreporter.app, нет [Crash Reporter] ServerURL в application.ini;
+# - MOZ_TELEMETRY_REPORTING= — настоящая опция configure (toolkit/moz.configure), без неё в сборке
+#   с MOZILLA_OFFICIAL телеметрия включается;
+# - MOZ_SERVICES_HEALTHREPORT и MOZ_NORMANDY из mozconfig не задаются (project_flag): они убраны
+#   патчем src/browser/moz.configure.patch, после чего MOZ_DATA_REPORTING не определяется;
+# - выгрузка Glean: src/toolkit/library/rust/gkrust-features.mozbuild.patch (glean_disable_upload всегда).
+ac_add_options --disable-crashreporter
 ac_add_options MOZ_TELEMETRY_REPORTING=
 
 # Канал пакетов обновления: MAR с другим идентификатором обновлятор отвергнет

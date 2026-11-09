@@ -7,9 +7,13 @@
  * перезапуске). Поверх него — подписанный манифест цели
  * updates/<канал>/<BUILD_TARGET>/manifest.json (формат и выпуск: docs/UPDATES.md):
  *   { "signed": "<JSON-текст>", "signatures": [{ "keyid": "…", "sig": "<Ed25519, base64>" }] }
- * Внутри: версия, минимально допустимая версия, заметки, срок действия и пакет для этой
- * цели (адрес, sha512, размер, buildID). update.xml принимается, только если совпадает
- * с пакетом из манифеста (UpdateService.sys.mjs.patch вызывает filterUpdates).
+ * Внутри: версия, минимально допустимая версия, заметки, время подписи (issued), срок
+ * действия (expires) и пакет для этой цели (адрес, sha512, размер, buildID).
+ * Просроченный манифест и манифест старее уже виденного (откат) отвергаются.
+ * update.xml принимается, только если совпадает с пакетом из манифеста, а из его
+ * атрибутов остаются только перечисленные в белом списке (UpdateService.sys.mjs.patch
+ * вызывает sanitizeUpdateElement и filterUpdates); sha512 скачанного пакета сверяется
+ * там же (Downloader._verifyDownload).
  * Если текущая версия ниже minimum и обновление действительно можно поставить,
  * обновление обязательное: интерфейс блокируется до установки. Иначе — плашка
  * «Доступна версия». Проверка при запуске и раз в час. */
@@ -28,11 +32,29 @@ const MANUAL_URL_PREF = "app.update.url.manual";
 const VERSION_PREF = "tabora.version";
 const SNOOZE_PREF = "tabora.update.snoozedUntil";
 const LAST_CHECK_PREF = "tabora.update.lastCheck";
+// наибольшее виденное время подписи манифеста (мс) — по каналу и цели: защита от отката
+const SEEN_ISSUED_PREF = "tabora.update.manifestIssued.";
+// когда последний раз был получен действительный манифест (мс)
+const MANIFEST_OK_PREF = "tabora.update.manifestOkAt.";
 const CHECK_INTERVAL = 60 * 60 * 1000;
 const MANIFEST_MAX_BYTES = 64 * 1024;
 const MANIFEST_CACHE_MS = 60 * 1000;
 const FETCH_TIMEOUT_MS = 15000;
 const MANIFEST_FORMAT = 1;
+const DAY_MS = 24 * 60 * 60 * 1000;
+// допуск на расхождение часов: манифест «из будущего» дальше этого не принимается, а
+// сохранённое в профиле значение дальше этого считается испорченным и не учитывается
+const CLOCK_SKEW_MS = DAY_MS;
+const MANIFEST_MAX_VALID_MS = 366 * DAY_MS;
+// столько без единого действительного манифеста — сведения считаются устаревшими
+const STALE_AFTER_MS = 14 * DAY_MS;
+const TIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+// атрибуты update.xml, которые доходят до обновлятора; всё остальное (actions, openURL,
+// promptWaitTime, detailsURL, displayVersion, type, name…) отбрасывается, а показываемые
+// поля берутся из подписанного манифеста
+const UPDATE_ATTRS = Object.freeze(["taboraVersion", "appVersion", "buildID"]);
+const PATCH_ATTRS = Object.freeze(["type", "URL", "size", "hashFunction", "hashValue"]);
+const STALE_TEXT = "Сведения об обновлениях устарели: действительный манифест не получен. Проверьте новую версию на сайте Tabora";
 
 /** Открытые ключи Ed25519, которыми подписываются манифесты (сырые 32 байта, base64).
  * keyid — первые 16 hex-символов SHA-256 от ключа. Основной ключ лежит рядом с ключом
@@ -45,6 +67,8 @@ export const MANIFEST_KEYS = Object.freeze({
 
 const VERSION_RE = /^(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})$/;
 const HTTPS_RE = /^https:\/\/[^\/?#@\s\\]+(\/[^\s]*)?$/;
+
+const EXPIRED = "манифест просрочен";
 
 export function isVersion(v) {
   return typeof v === "string" && VERSION_RE.test(v);
@@ -116,6 +140,10 @@ export async function verifyManifestText(text, keys = MANIFEST_KEYS) {
   if (!outer || typeof outer.signed !== "string" || !Array.isArray(outer.signatures)) {
     throw new Error("манифест без подписи");
   }
+  // одиночные суррогаты TextEncoder заменяет на U+FFFD: подпись сошлась бы на другом тексте
+  if (!outer.signed.isWellFormed()) {
+    throw new Error("манифест: недопустимые символы");
+  }
   const data = new TextEncoder().encode(outer.signed);
   for (const s of outer.signatures.slice(0, 4)) {
     const raw = typeof s?.keyid === "string" && Object.hasOwn(keys, s.keyid) ? keys[s.keyid] : null;
@@ -134,8 +162,9 @@ export async function verifyManifestText(text, keys = MANIFEST_KEYS) {
   throw new Error("подпись манифеста недействительна");
 }
 
-/** Проверка полей подписанной части. Возвращает нормализованную запись канала или бросает. */
-export function validateManifest(p, { channel, target }) {
+/** Проверка полей подписанной части. Возвращает нормализованную запись канала или бросает.
+ * now — текущее время (мс): просроченный манифест и манифест «из будущего» отвергаются. */
+export function validateManifest(p, { channel, target, now = Date.now() }) {
   const fail = msg => {
     throw new Error(msg);
   };
@@ -169,9 +198,20 @@ export function validateManifest(p, { channel, target }) {
   if (typeof p.published !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(p.published)) {
     fail("неверная дата выпуска");
   }
-  const expires = typeof p.expires === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(p.expires) ? Date.parse(p.expires) : NaN;
-  if (!Number.isFinite(expires)) {
+  const time = v => (typeof v === "string" && TIME_RE.test(v) ? Date.parse(v) : NaN);
+  const issued = time(p.issued);
+  if (!Number.isFinite(issued)) {
+    fail("неверное время подписи манифеста");
+  }
+  const expires = time(p.expires);
+  if (!Number.isFinite(expires) || expires <= issued || expires - issued > MANIFEST_MAX_VALID_MS) {
     fail("неверный срок действия манифеста");
+  }
+  if (issued > now + CLOCK_SKEW_MS) {
+    fail("манифест подписан в будущем (проверьте часы)");
+  }
+  if (now > expires) {
+    fail(EXPIRED);
   }
   let update = null;
   if (p.update != null) {
@@ -202,6 +242,7 @@ export function validateManifest(p, { channel, target }) {
     notes: p.notes || "",
     notesUrl: p.notesUrl || null,
     published: p.published,
+    issued,
     expires,
     update,
   };
@@ -214,6 +255,8 @@ export const TaboraUpdate = {
   sameHttpsHost,
   channel: null, // проверенная запись из подписанного манифеста цели
   manifestError: null,
+  _expiredSeen: false, // последний ответ сервера — просроченный манифест
+  _seenIssued: 0, // наибольшее время подписи, виденное в этом сеансе
   appUpdater: null,
   status: null, // AppUpdater.STATUS.*
   progress: null, // { done, total }
@@ -228,8 +271,15 @@ export const TaboraUpdate = {
     return isVersion(v) ? v : null;
   },
 
+  /** Канал сборки: только app.update.channel из настроек по умолчанию. Пользовательские
+   * app.partner.* (их дописывает UpdateUtils.UpdateChannel) на наши адреса не влияют. */
   get channelName() {
-    return lazy.UpdateUtils.UpdateChannel || "release";
+    return lazy.UpdateUtils.getUpdateChannel(false) || "release";
+  },
+
+  /** Подставить %CHANNEL% в шаблон нашего адреса самим (до UpdateUtils.formatUpdateURL). */
+  fixChannel(template) {
+    return String(template || "").replace(/%CHANNEL%/g, encodeURIComponent(this.channelName));
   },
 
   get buildTarget() {
@@ -241,9 +291,49 @@ export const TaboraUpdate = {
     return defaultHttpsPref(MANUAL_URL_PREF) || "https://tabora.app/";
   },
 
-  /** Манифест просрочен: новые сведения об обновлениях не приходят (заморозка версии). */
+  /** Время (мс) из настройки профиля для этого канала и цели. Значение не число или
+   * дальше допуска в будущем считается испорченным и не учитывается: иначе порча
+   * настройки «вперёд» навсегда отключила бы обновления. */
+  _readTime(prefix) {
+    let n = 0;
+    try {
+      n = Number(Services.prefs.getStringPref(`${prefix}${this.channelName}.${this.buildTarget}`, ""));
+    } catch (e) {}
+    return Number.isSafeInteger(n) && n > 0 && n <= Date.now() + CLOCK_SKEW_MS ? n : 0;
+  },
+
+  _writeTime(prefix, value) {
+    try {
+      Services.prefs.setStringPref(`${prefix}${this.channelName}.${this.buildTarget}`, String(value));
+    } catch (e) {}
+  },
+
+  /** Наибольшее время подписи манифеста, виденное этой копией (сеанс и профиль). */
+  get seenIssued() {
+    return Math.max(this._seenIssued, this._readTime(SEEN_ISSUED_PREF));
+  },
+
+  /** Проверенная запись, если её срок не истёк (иначе null): только её можно применять. */
+  get valid() {
+    return this.channel && Date.now() <= this.channel.expires ? this.channel : null;
+  },
+
+  /** Сведения об обновлениях устарели (заморозка версии): сервер отдаёт просроченный
+   * манифест, срок последнего проверенного истёк или действительного манифеста нет
+   * дольше STALE_AFTER_MS. Обновления при этом не ставятся, интерфейс предупреждает. */
   get stale() {
-    return !!this.channel && Date.now() > this.channel.expires;
+    if (this._expiredSeen || (this.channel && !this.valid)) {
+      return true;
+    }
+    if (!this.manifestError) {
+      return false;
+    }
+    const ok = this._readTime(MANIFEST_OK_PREF);
+    return !!ok && Date.now() - ok > STALE_AFTER_MS;
+  },
+
+  get staleText() {
+    return STALE_TEXT;
   },
 
   /** Есть ли версия новее текущей по манифесту. */
@@ -272,8 +362,8 @@ export const TaboraUpdate = {
    * пакет не ниже минимальной версии и обновлятор действительно может его поставить. */
   get mandatory() {
     const cur = this.currentVersion;
-    const ch = this.channel;
-    if (!cur || !ch?.minimum || compareVersions(cur, ch.minimum) >= 0) {
+    const ch = this.valid;
+    if (this.stale || !cur || !ch?.minimum || compareVersions(cur, ch.minimum) >= 0) {
       return false;
     }
     if (!ch.update || compareVersions(ch.version, ch.minimum) < 0) {
@@ -321,7 +411,8 @@ export const TaboraUpdate = {
     this.notify();
   },
 
-  /** Скачать и проверить манифест цели. При ошибке остаётся последняя проверенная запись. */
+  /** Скачать и проверить манифест цели. При ошибке (нет ответа, подпись, просрочен, старее
+   * уже виденного) остаётся последняя проверенная запись — до истечения её срока. */
   fetchManifest({ maxAge = 0 } = {}) {
     if (maxAge && this._manifestAt && Date.now() - this._manifestAt < maxAge) {
       return Promise.resolve(this.channel);
@@ -343,7 +434,7 @@ export const TaboraUpdate = {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
     try {
-      const url = await lazy.UpdateUtils.formatUpdateURL(template);
+      const url = await lazy.UpdateUtils.formatUpdateURL(this.fixChannel(template));
       const res = await fetch(`${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`, {
         cache: "no-store",
         credentials: "omit",
@@ -361,19 +452,56 @@ export const TaboraUpdate = {
         throw new Error("манифест слишком большой");
       }
       const payload = await verifyManifestText(await res.text());
-      this.channel = validateManifest(payload, { channel: this.channelName, target: this.buildTarget });
-      this._manifestAt = Date.now();
+      const now = Date.now();
+      const m = validateManifest(payload, { channel: this.channelName, target: this.buildTarget, now });
+      // откат: подписанный, но более старый манифест (с прежней версией или minimum)
+      if (m.issued < this.seenIssued) {
+        throw new Error("манифест старее уже полученного (откат)");
+      }
+      this.channel = m;
+      this._seenIssued = m.issued;
+      this._writeTime(SEEN_ISSUED_PREF, m.issued);
+      this._writeTime(MANIFEST_OK_PREF, now);
+      this._manifestAt = now;
+      this._expiredSeen = false;
       this.manifestError = null;
     } catch (e) {
       this.manifestError = e.name === "AbortError" ? "нет ответа" : e.message || String(e);
+      if (this.manifestError === EXPIRED) {
+        this._expiredSeen = true;
+      }
     } finally {
       clearTimeout(timer);
     }
     return this.channel;
   },
 
+  /** Для UpdateService: оставить в элементах <update> и <patch> из update.xml только
+   * атрибуты из белого списка (до разбора в объект обновления). update.xml не подписан:
+   * actions, openURL, promptWaitTime, detailsURL, name, unsupported и прочее отбрасываются. */
+  sanitizeUpdateElement(el) {
+    const strip = (node, allowed) => {
+      for (const attr of Array.from(node.attributes)) {
+        if (!allowed.includes(attr.name)) {
+          node.removeAttribute(attr.name);
+        }
+      }
+    };
+    strip(el, UPDATE_ATTRS);
+    for (const child of Array.from(el.childNodes)) {
+      if (child.nodeType === 1 && child.localName === "patch") {
+        strip(child, PATCH_ATTRS);
+        for (const inner of Array.from(child.childNodes)) {
+          inner.remove();
+        }
+      } else {
+        child.remove();
+      }
+    }
+  },
+
   /** Совпадает ли <update> из update.xml с пакетом из подписанного манифеста. */
-  matchesManifest(update, m = this.channel) {
+  matchesManifest(update, m = this.valid) {
     if (!m?.update || !update || update.unsupported) {
       return false;
     }
@@ -386,34 +514,44 @@ export const TaboraUpdate = {
     if (taboraVersion !== m.version || update.buildID !== m.update.buildID || update.appVersion !== m.update.appVersion) {
       return false;
     }
-    if (!update.patchCount) {
+    if (update.patchCount !== 1) {
       return false;
     }
-    for (let i = 0; i < update.patchCount; i++) {
-      const patch = update.getPatchAt(i);
-      let hash = "";
-      try {
-        hash = String(patch.getProperty("hashValue")).toLowerCase();
-      } catch (e) {
-        return false;
-      }
-      if (patch.type !== "complete" || patch.URL !== m.update.url || Number(patch.size) !== m.update.size || hash !== m.update.sha512) {
-        return false;
-      }
+    const patch = update.getPatchAt(0);
+    let hash = "";
+    let fn = "";
+    try {
+      hash = String(patch.getProperty("hashValue"));
+      fn = String(patch.getProperty("hashFunction")).toLowerCase();
+    } catch (e) {
+      return false;
     }
-    return true;
+    // sha512 скачанного файла сверяет Downloader._verifyDownload с этим же hashValue
+    return fn === "sha512" && patch.type === "complete" && patch.URL === m.update.url && Number(patch.size) === m.update.size && hash === m.update.sha512;
   },
 
-  /** Фильтр для UpdateService: без проверенного манифеста и без версии Tabora выше
-   * текущей обновлений нет; остаются только <update>, совпадающие с манифестом. */
+  /** Показываемые поля обновления — из подписанного манифеста, а не из update.xml. */
+  _applyManifest(update, m) {
+    const shown = update.displayVersion;
+    update.type = "minor";
+    update.displayVersion = m.version;
+    update.detailsURL = m.notesUrl || this.manualUrl;
+    if (typeof update.name === "string" && shown) {
+      update.name = update.name.split(shown).join(m.version);
+    }
+    return update;
+  },
+
+  /** Фильтр для UpdateService: без проверенного непросроченного манифеста и без версии
+   * Tabora выше текущей обновлений нет; остаются только <update>, совпадающие с манифестом. */
   async filterUpdates(updates) {
     await this.fetchManifest({ maxAge: MANIFEST_CACHE_MS });
     const cur = this.currentVersion;
-    const m = this.channel;
+    const m = this.valid;
     if (!cur || !m?.update || compareVersions(m.version, cur) <= 0) {
       return [];
     }
-    return updates.filter(u => this.matchesManifest(u, m));
+    return updates.filter(u => this.matchesManifest(u, m)).map(u => this._applyManifest(u, m));
   },
 
   /** Штатный обновлятор: проверка, скачивание (автоматически), подготовка к перезапуску. */
@@ -439,13 +577,34 @@ export const TaboraUpdate = {
     return this.appUpdater.check();
   },
 
+  /** Текст состояния для «О программе», плашки и стены. Устаревшие сведения показываются
+   * при любом состоянии, в том числе когда обновлятор ответил «обновлений нет». */
   statusText() {
     const S = lazy.AppUpdater.STATUS;
+    const text = this._statusText(S);
+    const idle = this.status == null || this.status === S.NO_UPDATES_FOUND || this.status === S.NEVER_CHECKED;
+    return this.stale && !idle ? `${STALE_TEXT}. ${text}` : text;
+  },
+
+  _idleText(noPackage) {
+    if (this.stale) {
+      return STALE_TEXT;
+    }
+    if (this.manifestError) {
+      return `Манифест обновлений недоступен: ${this.manifestError}`;
+    }
+    if (this.available) {
+      return `Доступна версия ${this.channel.version}${noPackage ? ", но пакет для этой системы не найден" : ""}`;
+    }
+    return "Установлена последняя версия";
+  },
+
+  _statusText(S) {
     switch (this.status) {
       case S.CHECKING:
         return "Проверяем обновления…";
       case S.NO_UPDATES_FOUND:
-        return this.available ? `Доступна версия ${this.channel.version}, но пакет для этой системы не найден` : "Установлена последняя версия";
+        return this._idleText(true);
       case S.DOWNLOADING: {
         const p = this.progress;
         if (p && p.total > 0) {
@@ -475,13 +634,7 @@ export const TaboraUpdate = {
       case S.OTHER_INSTANCE_HANDLING_UPDATES:
         return "Обновление ставит другая копия браузера";
       default:
-        if (this.stale) {
-          return "Сведения об обновлениях устарели: манифест просрочен, проверьте сайт Tabora";
-        }
-        if (this.manifestError) {
-          return `Манифест обновлений недоступен: ${this.manifestError}`;
-        }
-        return this.available ? `Доступна версия ${this.channel.version}` : "Установлена последняя версия";
+        return this._idleText(false);
     }
   },
 

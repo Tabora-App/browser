@@ -1,0 +1,50 @@
+name: Verify vendor bundles
+
+# Воспроизводимость вендорных бандлов: tools/*-vendor/verify.sh пересобирает бандл из
+# закреплённых package.json и package-lock.json (скрипты установки пакетов не запускаются)
+# и сверяет его побайтно с закоммиченным в src/. Без секретов, права только на чтение.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tools/wallet-vendor/**"
+      - "tools/vault-vendor/**"
+      - "src/browser/base/content/tabora/wallet/vendor/**"
+      - "src/browser/base/content/tabora/vault/vendor/**"
+      - ".github/workflows/verify-vendor.yml"
+  pull_request:
+    paths:
+      - "tools/wallet-vendor/**"
+      - "tools/vault-vendor/**"
+      - "src/browser/base/content/tabora/wallet/vendor/**"
+      - "src/browser/base/content/tabora/vault/vendor/**"
+      - ".github/workflows/verify-vendor.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-vendor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Rebuild and compare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Wallet crypto bundle
+        run: |
+          node --version
+          npm --version
+          sh tools/wallet-vendor/verify.sh
+
+      - name: Vault QR bundle
+        run: sh tools/vault-vendor/verify.sh

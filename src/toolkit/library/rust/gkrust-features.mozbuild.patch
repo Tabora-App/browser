@@ -1,0 +1,16 @@
+diff --git a/toolkit/library/rust/gkrust-features.mozbuild b/toolkit/library/rust/gkrust-features.mozbuild
+index 44206cc469..76ab094024 100644
+--- a/toolkit/library/rust/gkrust-features.mozbuild
++++ b/toolkit/library/rust/gkrust-features.mozbuild
+@@ -57,8 +57,9 @@ if CONFIG["MOZ_WEBRTC"]:
+ # We need to tell Glean it is being built with Gecko.
+ gkrust_features += ["glean_with_gecko"]
+ 
+-if not CONFIG["MOZILLA_OFFICIAL"]:
+-    gkrust_features += ["glean_disable_upload"]
++# Tabora: Glean never uploads pings, in release (MOZILLA_OFFICIAL) builds too.
++# Data is still collected locally; the uploader reports success without sending.
++gkrust_features += ["glean_disable_upload"]
+ 
+ if CONFIG["MOZ_ENABLE_DBUS"]:
+     gkrust_features += ["with_dbus"]

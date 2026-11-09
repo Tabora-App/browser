@@ -1,5 +1,5 @@
 diff --git a/toolkit/mozapps/update/UpdateService.sys.mjs b/toolkit/mozapps/update/UpdateService.sys.mjs
-index 164381ebc1..0f7ad22e69 100644
+index 164381ebc1..d93be37800 100644
 --- a/toolkit/mozapps/update/UpdateService.sys.mjs
 +++ b/toolkit/mozapps/update/UpdateService.sys.mjs
 @@ -24,6 +24,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
@@ -19,12 +19,12 @@ index 164381ebc1..0f7ad22e69 100644
 +    // Tabora: адрес из application.ini (сервер Mozilla) не используется.
 +    // Шаблон update.xml берётся только из настроек по умолчанию: значение,
 +    // заданное пользователем или в about:config, не учитывается. Подстановки
-+    // %CHANNEL%, %BUILD_TARGET% и т. д. те же, что у штатного адреса.
++    // %BUILD_TARGET% и т. д. те же, что у штатного адреса; %CHANNEL% — ниже.
 +    let url = lazy.TaboraUpdate.defaultHttpsPref("tabora.update.url");
      let updatePin;
  
      if (Services.policies) {
-@@ -5515,6 +5521,12 @@ export class CheckerService {
+@@ -5515,12 +5521,22 @@ export class CheckerService {
        }
      }
  
@@ -37,7 +37,18 @@ index 164381ebc1..0f7ad22e69 100644
      if (!url) {
        LOG("CheckerService:getUpdateURL - update URL not defined");
        return null;
-@@ -5752,10 +5764,24 @@ export class CheckerService {
+     }
+ 
+-    url = await lazy.UpdateUtils.formatUpdateURL(url);
++    // Tabora: %CHANNEL% подставляется без пользовательских app.partner.*
++    // (канал только из настроек по умолчанию), остальное — штатно.
++    url = await lazy.UpdateUtils.formatUpdateURL(
++      lazy.TaboraUpdate.fixChannel(url)
++    );
+ 
+     if (checkType == Ci.nsIUpdateChecker.FOREGROUND_CHECK) {
+       url += (url.includes("?") ? "&" : "?") + "force=1";
+@@ -5752,10 +5768,24 @@ export class CheckerService {
        LOG("CheckerService:#updateCheck - Getting sslStatus failed.");
      }
  
@@ -62,3 +73,73 @@ index 164381ebc1..0f7ad22e69 100644
      } catch (e) {
        LOG(
          "CheckerService:#updateCheck - there was a problem checking for " +
+@@ -5877,6 +5907,11 @@ export class CheckerService {
+ 
+       let update;
+       try {
++        // Tabora: update.xml не подписан — из <update> и <patch> остаются
++        // только атрибуты из белого списка (без actions, openURL,
++        // promptWaitTime, detailsURL и т. п.); показываемые поля потом
++        // подставляет filterUpdates из подписанного манифеста.
++        lazy.TaboraUpdate.sanitizeUpdateElement(updateElement);
+         update = new Update(updateElement);
+       } catch (e) {
+         LOG("CheckerService:#parseUpdates - invalid <update/>, ignoring...");
+@@ -6085,7 +6120,7 @@ class Downloader {
+    * Verify the downloaded file.  We assume that the download is complete at
+    * this point.
+    */
+-  _verifyDownload() {
++  async _verifyDownload() {
+     LOG("Downloader:_verifyDownload called");
+     if (!this._request) {
+       AUSTLMY.pingDownloadCode(
+@@ -6109,6 +6144,39 @@ class Downloader {
+     }
+ 
+     LOG("Downloader:_verifyDownload downloaded size == expected size.");
++
++    // Tabora: sha512 скачанного файла сверяется с hashValue патча. Он принят
++    // только при совпадении с подписанным манифестом цели
++    // (TaboraUpdate.matchesManifest), поэтому файл проверен ещё до передачи
++    // обновлятору. Патч без sha512 не принимается.
++    let expected = "";
++    try {
++      if (
++        String(this._patch.getProperty("hashFunction")).toLowerCase() ==
++        "sha512"
++      ) {
++        expected = String(this._patch.getProperty("hashValue")).toLowerCase();
++      }
++    } catch (e) {}
++    if (!/^[0-9a-f]{128}$/.test(expected)) {
++      LOG("Downloader:_verifyDownload patch has no sha512, rejected.");
++      return false;
++    }
++    let actual = "";
++    try {
++      actual = await IOUtils.computeHexDigest(destination.path, "sha512");
++    } catch (e) {
++      LOG("Downloader:_verifyDownload failed to hash the download: " + e);
++      return false;
++    }
++    if (actual.toLowerCase() != expected) {
++      LOG("Downloader:_verifyDownload sha512 mismatch, download rejected.");
++      try {
++        destination.remove(false);
++      } catch (e) {}
++      return false;
++    }
++    LOG("Downloader:_verifyDownload sha512 matches the signed manifest.");
+     return true;
+   }
+ 
+@@ -6936,7 +7004,7 @@ class Downloader {
+         retryTimeout
+     );
+     if (Components.isSuccessCode(status)) {
+-      if (this._verifyDownload()) {
++      if (await this._verifyDownload()) {
+         AUSTLMY.pingDownloadCode(this.isCompleteUpdate, AUSTLMY.DWNLD_SUCCESS);
+ 
+         LOG(

@@ -10,6 +10,7 @@
   },
   "brand": "release",
   "updateHost": "tabora.app",
+  "macTeamId": "7YQU9YBJQ8",
   "brands": {
     "release": {
       "displayVersion": "0.1.0",

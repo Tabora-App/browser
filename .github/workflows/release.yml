@@ -1,11 +1,15 @@
 name: Release
 
 # Выпуск обновления из артефакта успешного запуска Build на main:
-#   verify  — проверка входных данных и запуска Build (без секретов);
+#   verify  — проверка входных данных и запуска Build (без секретов): успешный Build из
+#             main этого репозитория, собранный на раннере GitHub (не на стороннем);
 #   sign    — сборка MAR и подписанных манифестов. Environment «release» (секреты ключей,
-#             подтверждение ревьюером). signmar собирается здесь же из исходников Firefox
-#             (хеш закреплён в browser.json); бинарники из артефакта не запускаются.
-#   publish — релиз на GitHub и коммит updates/ в main (без ключей).
+#             подтверждение ревьюером). Скрипты (tools/) берутся из текущего main — коммита,
+#             с которого запущен этот workflow, — а из коммита сборки только данные: версия
+#             Tabora и версия/хеш исходников Firefox. signmar собирается здесь же из
+#             исходников Firefox; бинарники из артефакта не запускаются.
+#   publish — черновик релиза на GitHub с тегом на коммите сборки, пуш updates/ в main и
+#             только после него публикация релиза; при сбое пуша черновик удаляется.
 # Входные данные передаются в скрипты только через переменные окружения.
 
 on:
@@ -83,6 +87,15 @@ jobs:
           ' run.json >/dev/null || { echo "::error::запуск $BUILD_RUN_ID — не успешный Build из main этого репозитория"; jq '{path, head_branch, event, status, conclusion, repo: .repository.full_name, head: .head_repository.full_name}' run.json; exit 1; }
           head_sha="$(jq -r .head_sha run.json)"
           [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::неверный head_sha"; exit 1; }
+          # выпуск только из сборок на раннерах GitHub: build.yml позволяет выбрать сторонний
+          # раннер (Blacksmith), но его артефакт не подписывается
+          gh api --paginate "repos/$REPO/actions/runs/$BUILD_RUN_ID/jobs?filter=all" --jq '.jobs[]' | jq -s . > jobs.json
+          jq -e '
+            length > 0 and all(.[];
+              .runner_group_name == "GitHub Actions"
+              and ((.runner_name // "") | startswith("GitHub Actions"))
+              and ((.labels // []) | length > 0 and all(.[]; . == "ubuntu-24.04" or . == "ubuntu-24.04-arm")))
+          ' jobs.json >/dev/null || { echo "::error::запуск $BUILD_RUN_ID собран не на раннере GitHub (или в нескольких попытках на разных раннерах): для выпуска нужен Build с раннером ubuntu-24.04"; jq '[.[] | {name, run_attempt, runner_name, runner_group_name, labels}]' jobs.json; exit 1; }
           gh api "repos/$REPO/actions/runs/$BUILD_RUN_ID/artifacts" > artifacts.json
           jq -e --arg name "tabora-$PLATFORM" '[.artifacts[] | select(.name == $name and .expired == false)] | length == 1' artifacts.json >/dev/null \
             || { echo "::error::в запуске нет артефакта tabora-$PLATFORM"; exit 1; }
@@ -99,6 +112,24 @@ jobs:
           HEAD_SHA: ${{ steps.run.outputs.head_sha }}
         run: git merge-base --is-ancestor "$HEAD_SHA" origin/main || { echo "::error::коммит сборки не входит в main"; exit 1; }
 
+      - name: Release of this version is not published yet
+        # релизы неизменяемы (immutable releases): в опубликованный релиз пакет не добавить,
+        # поэтому до подписи проверяется, что версия ещё не опубликована
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ steps.run.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          git show "$HEAD_SHA:browser.json" > build-browser.json
+          version="$(jq -r '.brands[.brand].displayVersion' build-browser.json)"
+          [[ "$version" =~ ^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$ ]] || { echo "::error::неверная версия Tabora в коммите сборки"; exit 1; }
+          if gh api "repos/$REPO/releases/tags/v$version" > release.json 2>/dev/null; then
+            if jq -e '.draft == false and .immutable == true' release.json >/dev/null; then
+              echo "::error::релиз v$version уже опубликован и неизменяем: поднимите displayVersion и соберите заново"; exit 1
+            fi
+          fi
+
   sign:
     name: Build and sign MAR
     needs: verify
@@ -112,11 +143,42 @@ jobs:
       TARGET_PLATFORM: ${{ startsWith(inputs.platform, 'darwin') && 'darwin' || 'linux' }}
       TARGET_ARCH: ${{ endsWith(inputs.platform, 'aarch64') && 'aarch64' || 'x86_64' }}
     steps:
-      - name: Checkout build commit
+      - name: Checkout scripts from current main
+        # скрипты выпуска (tools/release.py, tools/build.py), сертификаты и MANIFEST_KEYS — из
+        # коммита, с которого запущен workflow (github.sha, ветка main), а не из коммита
+        # сборки: исправления скриптов действуют и для сборок, сделанных до них
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.verify.outputs.head_sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Take release data from the build commit
+        # из коммита сборки берутся только данные: версия Tabora и версия/хеш исходников
+        # Firefox (они должны совпасть с приложением из артефакта); остальной browser.json,
+        # сертификаты MAR и скрипты — из текущего main
+        env:
+          HEAD_SHA: ${{ needs.verify.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::неверный head_sha"; exit 1; }
+          git merge-base --is-ancestor "$HEAD_SHA" "$GITHUB_SHA" || { echo "::error::коммит сборки не входит в историю текущего main"; exit 1; }
+          b="$RUNNER_TEMP/build-browser.json"
+          git show "$HEAD_SHA:browser.json" > "$b"
+          brand="$(jq -r .brand browser.json)"
+          [ "$(jq -r .brand "$b")" = "$brand" ] || { echo "::error::в коммите сборки другой бренд"; exit 1; }
+          version="$(jq -r --arg b "$brand" '.brands[$b].displayVersion' "$b")"
+          ff_version="$(jq -r .firefox.version "$b")"
+          ff_sha512="$(jq -r .firefox.sha512 "$b")"
+          [[ "$version" =~ ^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$ ]] || { echo "::error::неверная версия Tabora в коммите сборки"; exit 1; }
+          [[ "$ff_version" =~ ^[0-9]{2,4}\.[0-9]{1,3}(\.[0-9]{1,3})?$ ]] || { echo "::error::неверная версия Firefox в коммите сборки"; exit 1; }
+          [[ "$ff_sha512" =~ ^[0-9a-f]{128}$ ]] || { echo "::error::в коммите сборки не закреплён firefox.sha512"; exit 1; }
+          jq --arg b "$brand" --arg v "$version" --arg fv "$ff_version" --arg fs "$ff_sha512" \
+            '.brands[$b].displayVersion = $v | .firefox.version = $fv | .firefox.sha512 = $fs' browser.json > "$RUNNER_TEMP/browser.json"
+          cp "$RUNNER_TEMP/browser.json" browser.json
+          echo "Tabora $version, Firefox $ff_version (из $HEAD_SHA); скрипты из $GITHUB_SHA"
+          echo "Изменения скриптов и сертификатов после коммита сборки:"
+          git diff --stat "$HEAD_SHA" "$GITHUB_SHA" -- tools src/toolkit/mozapps/update/updater browser.json || true
 
       - name: Checkout current manifests from main
         # уже выпущенные версии берутся из main (не из коммита сборки): release.py не даст
@@ -239,21 +301,8 @@ jobs:
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/artifact
 
-      - name: Create GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          NOTES: ${{ inputs.notes }}
-        run: |
-          set -euo pipefail
-          meta="$(ls "$RUNNER_TEMP"/release/*.complete.mar.json)"
-          args=(--meta "$meta")
-          if [ -n "$NOTES" ]; then args+=(--notes "$NOTES"); fi
-          for dmg in "$RUNNER_TEMP"/artifact/*.dmg; do
-            [ -f "$dmg" ] && args+=(--dmg "$dmg")
-          done
-          python3 tools/release.py upload "${args[@]}"
-
-      - name: Commit manifests
+      - name: Prepare manifest commit
+        id: prep
         env:
           PLATFORM: ${{ inputs.platform }}
         run: |
@@ -262,8 +311,10 @@ jobs:
           meta="$(ls "$RUNNER_TEMP"/release/*.complete.mar.json)"
           channel="$(jq -r .channel "$meta")"
           target="$(jq -r .target "$meta")"
+          version="$(jq -r .version "$meta")"
           [[ "$channel" =~ ^[a-z][a-z0-9-]{0,31}$ ]] || { echo "::error::неверный канал"; exit 1; }
           [[ "$target" =~ ^(Darwin|Linux)_(aarch64|x86_64)-gcc3$ ]] || { echo "::error::неверная цель"; exit 1; }
+          [[ "$version" =~ ^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$ ]] || { echo "::error::неверная версия"; exit 1; }
           # переносятся только файлы этой цели и общий channel.json (обычные файлы, не ссылки)
           for f in "$channel/$target/manifest.json" "$channel/$target/update.xml" channel.json; do
             [ -f "$src/$f" ] && [ ! -L "$src/$f" ] || { echo "::error::нет $f"; exit 1; }
@@ -274,4 +325,81 @@ jobs:
           git config user.email "release@tabora.app"
           git add updates
           git commit -m "Обновление: манифесты $PLATFORM" || echo "нечего коммитить"
-          git push origin HEAD:main
+          # до создания релиза: main актуальна, коммит ложится поверх неё, пуш возможен
+          git fetch origin main
+          git rebase origin/main
+          git push --dry-run origin HEAD:main
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Create draft release
+        # тег ставится на коммит сборки (а не на вершину main); релиз создаётся черновиком и
+        # публикуется только после пуша манифестов
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ inputs.notes }}
+          HEAD_SHA: ${{ needs.verify.outputs.head_sha }}
+          TAG: ${{ steps.prep.outputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::неверный head_sha"; exit 1; }
+          # уже существующий тег этой версии должен указывать на тот же коммит сборки
+          tag_sha="$(git ls-remote origin "refs/tags/$TAG^{}" | cut -f1)"
+          [ -n "$tag_sha" ] || tag_sha="$(git ls-remote origin "refs/tags/$TAG" | cut -f1)"
+          if [ -n "$tag_sha" ] && [ "$tag_sha" != "$HEAD_SHA" ]; then
+            echo "::error::тег $TAG уже указывает на $tag_sha, а сборка сделана из $HEAD_SHA"; exit 1
+          fi
+          state="$(gh release view "$TAG" --json isDraft --jq 'if .isDraft then "draft" else "published" end' 2>/dev/null || true)"
+          echo "state=${state:-none}" >> "$GITHUB_OUTPUT"
+          meta="$(ls "$RUNNER_TEMP"/release/*.complete.mar.json)"
+          args=(--meta "$meta" --target "$HEAD_SHA" --draft)
+          if [ -n "$NOTES" ]; then args+=(--notes "$NOTES"); fi
+          for dmg in "$RUNNER_TEMP"/artifact/*.dmg; do
+            [ -f "$dmg" ] && args+=(--dmg "$dmg")
+          done
+          python3 tools/release.py upload "${args[@]}"
+
+      - name: Push manifests
+        id: push
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then exit 0; fi
+            echo "::warning::пуш манифестов не прошёл (попытка $attempt)"
+            sleep 5
+            git fetch origin main
+            git rebase origin/main || { git rebase --abort || true; break; }
+          done
+          echo "::error::манифесты не отправлены в main"; exit 1
+
+      - name: Delete draft release after a failed push
+        # манифесты не дошли до клиентов: черновик (созданный или дозагруженный этим запуском)
+        # удаляется, тега у черновика ещё нет. Уже опубликованный релиз не трогается.
+        if: failure() && steps.push.outcome != 'success' && steps.prep.outputs.tag != '' && (steps.release.outputs.state == 'none' || steps.release.outputs.state == 'draft')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.prep.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || true)" = "true" ]; then
+            gh release delete "$TAG" --yes
+            echo "::warning::черновик релиза $TAG удалён: манифесты не отправлены"
+          fi
+
+      - name: Publish release
+        if: steps.release.outputs.state != 'published'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.verify.outputs.head_sha }}
+          TAG: ${{ steps.prep.outputs.tag }}
+        run: |
+          set -euo pipefail
+          ok=""
+          for attempt in 1 2 3 4 5; do
+            if gh release edit "$TAG" --draft=false && [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = "false" ]; then ok=1; break; fi
+            sleep 10
+          done
+          [ -n "$ok" ] || { echo "::error::манифесты уже в main, но релиз $TAG остался черновиком: опубликуйте его вручную (gh release edit $TAG --draft=false)"; exit 1; }
+          tag_sha="$(git ls-remote origin "refs/tags/$TAG^{}" | cut -f1)"
+          [ -n "$tag_sha" ] || tag_sha="$(git ls-remote origin "refs/tags/$TAG" | cut -f1)"
+          [ "$tag_sha" = "$HEAD_SHA" ] || { echo "::error::тег $TAG указывает на $tag_sha, ожидался коммит сборки $HEAD_SHA"; exit 1; }

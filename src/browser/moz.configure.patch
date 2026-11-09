@@ -1,8 +1,19 @@
 diff --git a/browser/moz.configure b/browser/moz.configure
-index 8979a2e4e8..1b55245857 100644
+index 8979a2e4e8..4277cfb2da 100644
 --- a/browser/moz.configure
 +++ b/browser/moz.configure
-@@ -11,13 +11,54 @@ imply_option("MOZ_NORMANDY", True)
+@@ -3,21 +3,63 @@
+ # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ 
+ imply_option("MOZ_PLACES", True)
+-imply_option("MOZ_SERVICES_HEALTHREPORT", True)
++# Tabora: no Firefox Health Report and no Normandy recipe runner. Together with
++# --disable-crashreporter and MOZ_TELEMETRY_REPORTING= (configs/common/mozconfig)
++# this leaves MOZ_DATA_REPORTING undefined: no upload service is built in.
+ imply_option("MOZ_SERVICES_SYNC", True)
+ imply_option("MOZ_DEDICATED_PROFILES", True)
+ imply_option("MOZ_BLOCK_PROFILE_DOWNGRADE", True)
+-imply_option("MOZ_NORMANDY", True)
  imply_option("MOZ_PROFILE_MIGRATOR", True)
  
  

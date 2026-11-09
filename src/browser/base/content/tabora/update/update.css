@@ -26,6 +26,15 @@
   display: none;
 }
 
+/* сведения об обновлениях устарели: предупреждение */
+#tabora-update-banner.stale {
+  border-color: #e5484d;
+}
+
+#tabora-update-banner.stale .text b {
+  color: #e5484d;
+}
+
 #tabora-update-banner .tb-mark {
   width: 32px;
   height: 32px;

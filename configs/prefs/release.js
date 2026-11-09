@@ -41,6 +41,84 @@ pref("app.shield.optoutstudies.enabled", false);
 pref("app.normandy.enabled", false);
 pref("browser.discovery.enabled", false);
 pref("extensions.htmlaboutaddons.recommendations.enabled", false);
+// Сборка идёт без MOZ_DATA_REPORTING (src/browser/moz.configure.patch), поэтому all.js не задаёт
+// значения политики отправки данных. Задаём их сами, чтобы код, читающий их без запасного
+// значения, не падал; отправка при этом выключена и сборкой, и настройками выше.
+pref("datareporting.policy.dataSubmissionPolicyNotifiedTime", "0");
+pref("datareporting.policy.dataSubmissionPolicyAcceptedVersion", 0);
+pref("datareporting.policy.currentPolicyVersion", 2);
+pref("datareporting.policy.minimumPolicyVersion", 1);
+
+// ---- Остальные каналы в Mozilla и Google (второй аудит, раздел «Сборка») ----
+
+// Системные дополнения Mozilla не обновляются: запрос на aus5.mozilla.org/update/3/SystemAddons/
+// раскрывал версию, идентификатор сборки, ОС и язык и позволял Mozilla доставить код в браузер.
+// Пустой адрес — второй рубеж (XPIInstall.updateSystemAddons выходит, если адреса нет).
+pref("extensions.systemAddon.update.enabled", false);
+pref("extensions.systemAddon.update.url", "");
+
+// Кодеки OpenH264 и Widevine (DRM-видео) оставлены и обновляются. Запрос списка уходит на
+// aus5.mozilla.org раз в сутки; из адреса убрано всё, что отличает Tabora и пользователя
+// (идентификатор сборки, язык, версия ОС, дистрибутив): остаются версия движка и платформа, как у
+// любого Firefox. Ответ подписан (content signature); при ошибке берётся список, встроенный в
+// сборку (toolkit/content/gmp-sources). Сами файлы качаются с ciscobinary.openh264.org и
+// серверов Google (для Widevine ещё запрос версии на update.googleapis.com), видны IP и версия.
+pref("media.gmp-manager.url", "https://aus5.mozilla.org/update/3/GMP/%VERSION%/20260101000000/%BUILD_TARGET%/en-US/release/default/default/default/update.xml");
+
+// Сообщения и рекомендации Mozilla (ASRouter, CFR, «оцените Firefox»): все источники выключены.
+// Каждая настройка — JSON; отсутствующая или пустая читается как «источника нет».
+pref("browser.newtabpage.activity-stream.asrouter.providers.cfr", "{\"id\":\"cfr\",\"enabled\":false,\"type\":\"remote-settings\",\"collection\":\"cfr\"}");
+pref("browser.newtabpage.activity-stream.asrouter.providers.message-groups", "{\"id\":\"message-groups\",\"enabled\":false,\"type\":\"remote-settings\",\"collection\":\"message-groups\"}");
+pref("browser.newtabpage.activity-stream.asrouter.providers.messaging-experiments", "{\"id\":\"messaging-experiments\",\"enabled\":false,\"type\":\"remote-experiments\"}");
+pref("browser.newtabpage.activity-stream.asrouter.providers.onboarding", "{\"id\":\"onboarding\",\"enabled\":false,\"type\":\"local\",\"localProvider\":\"OnboardingMessageProvider\",\"exclude\":[]}");
+pref("browser.newtabpage.activity-stream.asrouter.userprefs.cfr.addons", false);
+pref("browser.newtabpage.activity-stream.asrouter.userprefs.cfr.features", false);
+pref("browser.newtabpage.activity-stream.asrouter.useRemoteL10n", false);
+pref("messaging-system.askForFeedback", false);
+// Плитки и реклама Mozilla на стартовой странице Firefox (сама страница выключена ниже)
+pref("browser.topsites.contile.enabled", false);
+pref("browser.newtabpage.activity-stream.discoverystream.enabled", false);
+pref("browser.newtabpage.activity-stream.unifiedAds.tiles.enabled", false);
+pref("browser.newtabpage.activity-stream.unifiedAds.spocs.enabled", false);
+// Подсказки Firefox Suggest и погода через merino.services.mozilla.com
+pref("browser.urlbar.quicksuggest.enabled", false);
+pref("browser.urlbar.quicksuggest.online.enabled", false);
+pref("browser.urlbar.suggest.weather", false);
+
+// Проверка «портала авторизации» (Wi-Fi в гостинице): запрос на firefox-portal-detection.com при
+// запуске и смене сети — выключена. Проверка связности IPv4/IPv6 (network.connectivity-service)
+// оставлена: по ней движок выбирает семейство адресов и порядок соединений; это запросы
+// http://firefox-portal-detection.com/success.txt?ipv4|ipv6 без cookie и идентификаторов (виден IP).
+pref("network.captive-portal-service.enabled", false);
+
+// Регион не определяется через location.services.mozilla.com (запрос раскрывал IP, а с включённым
+// сканированием и сети Wi-Fi). Без адреса Region.sys.mjs оставляет регион неизвестным: поиск и
+// прочее берут конфигурацию «по умолчанию для всех регионов».
+pref("browser.region.network.url", "");
+pref("browser.region.update.enabled", false);
+
+// UITour: сайты mozilla.org/firefox.com не управляют интерфейсом. Права по умолчанию для этих
+// сайтов (uitour, install, remote-troubleshooting) убраны из сборки: src/browser/app/permissions.patch.
+pref("browser.uitour.enabled", false);
+pref("browser.uitour.url", "");
+
+// Список установленных дополнений не отправляется в AMO (ежедневный запрос метаданных со всеми
+// идентификаторами). Обновления дополнений (versioncheck.addons.mozilla.org, по одному запросу
+// на дополнение раз в сутки) и блок-лист (Remote Settings) остаются.
+pref("extensions.getAddons.cache.enabled", false);
+
+// Поисковые подсказки — функция, оставлены; в приватных окнах запросы поисковику не уходят.
+pref("browser.search.suggest.enabled.private", false);
+
+// Оставлено сознательно:
+// - Remote Settings (firefox.settings.services.mozilla.com): CRLite, отзыв сертификатов,
+//   блок-лист дополнений, конфигурация поиска. Запрос без идентификаторов.
+// - Push (dom.push.connection.enabled, wss://push.services.mozilla.com): PushService открывает
+//   соединение при запуске независимо от наличия подписок (PushService.sys.mjs: connect()
+//   вызывается всегда, по нему же приходят оповещения Remote Settings), сервер видит IP и
+//   постоянный идентификатор профиля (UAID). Выключение ломает web push на сайтах.
+// - Списки защиты от отслеживания (shavar.services.mozilla.com) и Safe Browsing Google
+//   (см. browser.safebrowsing.downloads.remote.enabled, его задаёт tools/build.py по наличию ключа).
 
 // Стартовая страница без рекламы и подборок Mozilla
 pref("browser.newtabpage.activity-stream.showSponsored", false);
@@ -124,7 +202,8 @@ pref("tabora.update.manifestUrl", "https://raw.githubusercontent.com/Tabora-App/
 pref("tabora.update.url", "https://raw.githubusercontent.com/Tabora-App/browser/main/updates/%CHANNEL%/%BUILD_TARGET%/update.xml");
 pref("app.update.auto", true);
 pref("app.update.staging.enabled", true);
-pref("app.update.interval", 3600);
+// Проверка обновлений раз в 6 часов (единственное место, где задаётся интервал)
+pref("app.update.interval", 21600);
 
 // Перевод страниц: без всплывающего предложения, только по кнопке в адресной строке
 pref("browser.translations.automaticallyPopup", false);

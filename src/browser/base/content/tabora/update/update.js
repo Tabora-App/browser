@@ -45,7 +45,8 @@ Object.assign(Tabora, {
       this.updateWallShow();
     } else {
       this.updateWallHide();
-      if (TaboraUpdate.available && !TaboraUpdate.snoozed) {
+      // устаревшие сведения (просроченный манифест) показываются и без доступной версии
+      if ((TaboraUpdate.available || TaboraUpdate.stale) && !TaboraUpdate.snoozed) {
         this.updateBannerShow();
       } else {
         this.updateBannerHide();
@@ -65,6 +66,30 @@ Object.assign(Tabora, {
       this.upd.banner = b;
     }
     const ready = TaboraUpdate.readyForRestart;
+    // сведения устарели: обновления не ставятся, остаётся проверить сайт или повторить
+    const stale = !ready && TaboraUpdate.stale;
+    b.classList.toggle("stale", stale);
+    b.setAttribute("role", stale ? "alert" : "status");
+    if (stale) {
+      const site = this.html("button", { class: "primary", type: "button" }, "Открыть сайт");
+      site.addEventListener("click", () => this.go(TaboraUpdate.manualUrl));
+      const retry = this.html("button", { class: "ghost", type: "button" }, "Проверить снова");
+      retry.addEventListener("click", () => TaboraUpdate.check({ force: true }).catch(() => {}));
+      const hide = this.html("button", { class: "linkish", type: "button" }, "Позже");
+      hide.addEventListener("click", () => TaboraUpdate.snooze(24));
+      b.replaceChildren(
+        this.markSvg(),
+        h("div", { class: "text" }, null, [
+          h("b", {}, "Сведения об обновлениях устарели"),
+          h("span", {}, "Действительный манифест обновлений не получен: новая версия могла выйти, но браузер о ней не узнает. Проверьте сайт Tabora."),
+        ]),
+        hide,
+        retry,
+        site
+      );
+      b.hidden = false;
+      return;
+    }
     // обновлятор недоступен (политика, нет прав, сборка без обновлятора): только сайт
     const manualOnly = !ready && !TaboraUpdate.updatesPossible;
     const primary = this.html("button", { class: "primary", type: "button" }, ready ? "Перезапустить и обновить" : manualOnly ? "Скачать с сайта" : "Обновить");

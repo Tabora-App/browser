@@ -1,0 +1,27 @@
+diff --git a/browser/app/permissions b/browser/app/permissions
+index fe018a08c7..088a03f0e0 100644
+--- a/browser/app/permissions
++++ b/browser/app/permissions
+@@ -7,19 +7,6 @@
+ # Permissions defined here will also be set for private browsing.
+ # See PermissionManager.cpp for more...
+ 
+-# UITour
+-origin	uitour	1	https://www.mozilla.org
+-origin	uitour	1	https://support.mozilla.org
+-origin	uitour	1	about:home
+-origin	uitour	1	about:newtab
+-# Bug 1942328: firefox.com needs the same privileges as mozilla.org
+-origin	uitour	1	https://www.firefox.com
+-
+-# XPInstall
+-origin	install	1	https://addons.mozilla.org
+-
+-# Remote troubleshooting
+-origin	remote-troubleshooting	1	https://support.mozilla.org
+-
+-# autoplay video/audio
+-origin	autoplay-media	1	about:welcome
++# Tabora: no default permissions. Firefox grants mozilla.org, firefox.com and
++# addons.mozilla.org the uitour, install and remote-troubleshooting permissions
++# here; Tabora gives no web site such privileges (browser.uitour.enabled=false).
