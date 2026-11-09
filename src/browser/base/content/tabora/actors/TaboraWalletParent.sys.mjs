@@ -18,17 +18,19 @@ export class TaboraWalletParent extends JSWindowActorParent {
       throw { code: 4100, message: "Кошелёк недоступен для этого документа" };
     }
     let host = "";
+    let hostPort = "";
     try {
       host = principal.host;
+      hostPort = principal.hostPort || host; // порт показываем: https://host:8443 не должен выглядеть как host
     } catch (e) {}
     const local = ["localhost", "127.0.0.1"].includes(host) || host.endsWith(".localhost");
     if (!principal.schemeIs("https") && !(principal.schemeIs("http") && local)) {
       throw { code: 4100, message: "Кошелёк доступен только сайтам по HTTPS" };
     }
     const origin = principal.origin;
-    let topHost = host;
+    let topHost = hostPort;
     try {
-      topHost = this.browsingContext.top.currentWindowGlobal?.documentPrincipal?.host || host;
+      topHost = this.browsingContext.top.currentWindowGlobal?.documentPrincipal?.hostPort || hostPort;
     } catch (e) {}
     const data = message.data || {};
     // Признак взаимодействия приходит из контент-актора (navigator.userActivation через Xray):
@@ -41,7 +43,7 @@ export class TaboraWalletParent extends JSWindowActorParent {
         method: String(data.method || ""),
         params: data.params,
         origin,
-        host: host || origin,
+        host: hostPort || origin,
         topHost,
         isFrame: this.browsingContext.top !== this.browsingContext,
         userInteracted,

@@ -30,14 +30,39 @@ export const WalletSigner = {
       WalletStore.evm(chainId, "eth_maxPriorityFeePerGas", []).catch(() => "0x59682f00"), // 1.5 gwei
     ]);
     const baseFee = toBig(block?.baseFeePerGas || "0x0");
-    const priority = tx.maxPriorityFeePerGas ? toBig(tx.maxPriorityFeePerGas) : toBig(priorityHex);
-    const maxFee = tx.maxFeePerGas ? toBig(tx.maxFeePerGas) : tx.gasPrice ? toBig(tx.gasPrice) : baseFee * 2n + priority;
-    let gasLimit;
+    const netPriority = toBig(priorityHex);
+    const netMax = baseFee * 2n + netPriority;
+    let priority = tx.maxPriorityFeePerGas ? toBig(tx.maxPriorityFeePerGas) : netPriority;
+    let maxFee = tx.maxFeePerGas ? toBig(tx.maxFeePerGas) : tx.gasPrice ? toBig(tx.gasPrice) : netMax;
+    const capped = [];
+    // Комиссию назначает кошелёк, а не сайт: завышенный приоритет целиком уходит валидатору
+    if (priority > netPriority * 3n + 1_000_000_000n) {
+      capped.push("приоритет");
+      priority = netPriority;
+    }
+    if (maxFee > netMax * 3n) {
+      capped.push("максимум");
+      maxFee = netMax;
+    }
+    if (maxFee < baseFee) {
+      maxFee = netMax; // иначе транзакция не попадёт в блок
+    }
+    let estimated = null;
+    try {
+      const est = await WalletStore.evm(chainId, "eth_estimateGas", [{ from, to: tx.to, value: tx.value || "0x0", data: tx.data || tx.input || "0x" }]);
+      estimated = (toBig(est) * 120n) / 100n;
+    } catch (e) {
+      if (!(tx.gas || tx.gasLimit)) {
+        throw e;
+      }
+    }
+    let gasLimit = estimated;
     if (tx.gas || tx.gasLimit) {
       gasLimit = toBig(tx.gas || tx.gasLimit);
-    } else {
-      const est = await WalletStore.evm(chainId, "eth_estimateGas", [{ from, to: tx.to, value: tx.value || "0x0", data: tx.data || tx.input || "0x" }]);
-      gasLimit = (toBig(est) * 120n) / 100n;
+      if (estimated !== null && gasLimit > estimated * 3n && gasLimit > 500_000n) {
+        capped.push("лимит газа");
+        gasLimit = estimated;
+      }
     }
     const value = toBig(tx.value || 0);
     const prepared = {
@@ -51,7 +76,7 @@ export const WalletSigner = {
       maxPriorityFeePerGas: priority > maxFee ? maxFee : priority,
       gasLimit,
     };
-    return { prepared, fee: gasLimit * maxFee, feeLikely: gasLimit * (baseFee + priority), baseFee, value };
+    return { prepared, fee: gasLimit * maxFee, feeLikely: gasLimit * (baseFee + priority), baseFee, value, capped };
   },
 
   evmSign(prepared, priv) {
@@ -95,6 +120,16 @@ export const WalletSigner = {
     if (sel === "0x23b872dd") {
       return { kind: "transferFrom", from: addrOf(0), to: addrOf(1), amount: num(2) };
     }
+    if (sel === "0xa22cb465") {
+      return { kind: "setApprovalForAll", operator: addrOf(0), approved: num(1) !== 0n };
+    }
+    if (sel === "0x39509351") {
+      const amount = num(1);
+      return { kind: "approve", spender: addrOf(0), amount, unlimited: amount >= (1n << 96n) - 1n || amount >= 10n ** 30n, increase: true };
+    }
+    if (sel === "0x42842e0e" || sel === "0xb88d4fde") {
+      return { kind: "nftTransfer", from: addrOf(0), to: addrOf(1), tokenId: num(2) };
+    }
     if (sel === "0x2e1a7d4d") {
       return { kind: "withdraw", amount: num(0) };
     }
@@ -124,22 +159,25 @@ export const WalletSigner = {
   },
 
   /** REST-запрос к TRON с перебором нод и повтором при 429. */
+  _tronCooldown: new Map(), // нода → время, до которого её не трогаем после 429
+
   async tronPost(path, body) {
     let lastError = null;
-    for (const node of this.tronNodes()) {
-      for (let attempt = 0; attempt < 2; attempt++) {
+    const nodes = this.tronNodes();
+    const live = nodes.filter(n => (this._tronCooldown.get(n) || 0) < Date.now());
+    for (const node of live.length ? live : nodes) {
+      for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const res = await fetch(node + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-          if (res.status === 429 && attempt === 0) {
-            await new Promise(r => setTimeout(r, 900));
-            continue;
-          }
-          if (!res.ok) {
-            throw new Error(`TRON ${new URL(node).host}: HTTP ${res.status}`);
-          }
-          return await res.json();
+          return await WalletStore.fetchJson(node + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }, { timeout: 12000 });
         } catch (e) {
-          lastError = e;
+          lastError = new Error(`TRON ${e.message}`);
+          if (/HTTP 429/.test(e.message)) {
+            if (attempt < 2) {
+              await new Promise(r => setTimeout(r, 1200 * (attempt + 1)));
+              continue;
+            }
+            this._tronCooldown.set(node, Date.now() + 20000);
+          }
           break;
         }
       }
@@ -169,7 +207,8 @@ export const WalletSigner = {
   },
 
   tronSignMessageV2(message, priv) {
-    const bytes = typeof message === "string" && /^0x[0-9a-fA-F]*$/.test(message) ? hexToBytes(message.slice(2)) : utf8ToBytes(String(message));
+    // как в TronWeb: строка хешируется как UTF-8 (даже если выглядит как hex), байты — как есть
+    const bytes = Array.isArray(message) ? Uint8Array.from(message) : utf8ToBytes(String(message));
     const prefix = utf8ToBytes(`\x19TRON Signed Message:\n${bytes.length}`);
     const all = new Uint8Array(prefix.length + bytes.length);
     all.set(prefix, 0);
@@ -274,6 +313,9 @@ export const WalletSigner = {
         v |= BigInt(b & 0x7f) << shift;
         shift += 7n;
         if (!(b & 0x80)) {
+          if (v > 0xffffffffffffffffn) {
+            throw new Error("protobuf: varint больше 64 бит");
+          }
           return v;
         }
       }
@@ -338,13 +380,26 @@ export const WalletSigner = {
     const raw = this.pbDecode(bytes);
     // Transaction.raw: 1 ref_block_bytes, 3 ref_block_num, 4 ref_block_hash, 8 expiration, 10 data, 11 contract (repeated), 14 timestamp, 18 fee_limit
     const one = this.pbStrict(raw, [1, 3, 4, 8, 10, 11, 14, 18], [11]);
+    const i64 = v => {
+      if (v !== undefined && v !== null && v > 0x7fffffffffffffffn) {
+        throw new Error("Значение поля вне диапазона int64: отклонено");
+      }
+      return v;
+    };
+    const num = v => {
+      i64(v);
+      if (v > 9007199254740991n) {
+        throw new Error("Значение поля слишком велико: отклонено");
+      }
+      return Number(v ?? 0n);
+    };
     const out = {
       refBlockBytes: one(1) ? bytesToHex(one(1)) : "",
-      refBlockNum: one(3) ?? null,
+      refBlockNum: i64(one(3)) ?? null,
       refBlockHash: one(4) ? bytesToHex(one(4)) : "",
-      expiration: Number(one(8) ?? 0n),
-      timestamp: Number(one(14) ?? 0n),
-      feeLimit: Number(one(18) ?? 0n),
+      expiration: num(one(8) ?? 0n),
+      timestamp: num(one(14) ?? 0n),
+      feeLimit: num(one(18) ?? 0n),
       data: one(10) ? new TextDecoder().decode(one(10)) : "",
       dataBytes: one(10) || null,
       contracts: [],
@@ -372,15 +427,15 @@ export const WalletSigner = {
         const pOne = this.pbStrict(pf, [1, 2, 3]);
         entry.owner = addr(pOne(1));
         entry.to = addr(pOne(2));
-        entry.amount = pOne(3) ?? 0n;
+        entry.amount = i64(pOne(3)) ?? 0n;
       } else if (type === 31) {
         const pOne = this.pbStrict(pf, [1, 2, 3, 4, 5, 6]);
         entry.owner = addr(pOne(1));
         entry.contractAddress = addr(pOne(2));
-        entry.callValue = pOne(3) ?? 0n;
+        entry.callValue = i64(pOne(3)) ?? 0n;
         entry.data = pOne(4) ? "0x" + bytesToHex(pOne(4)) : "0x";
-        entry.callTokenValue = pOne(5) ?? 0n;
-        entry.tokenId = pOne(6) ?? 0n;
+        entry.callTokenValue = i64(pOne(5)) ?? 0n;
+        entry.tokenId = i64(pOne(6)) ?? 0n;
       } else {
         throw new Error(`Операция ${entry.typeName} не поддерживается кошельком`);
       }
@@ -519,18 +574,36 @@ export const WalletSigner = {
       }
       return hex.padStart(64, "0");
     }
-    if (/^u?int\d*$/.test(type)) {
+    const intMatch = /^(u?)int(\d*)$/.exec(type);
+    if (intMatch) {
+      const unsigned = !!intMatch[1];
+      const bits = BigInt(intMatch[2] || "256");
+      if (bits < 8n || bits > 256n || bits % 8n !== 0n) {
+        throw new Error(`Неверная ширина типа ${type}`);
+      }
       let v = toBig(value);
+      const max = unsigned ? (1n << bits) - 1n : (1n << (bits - 1n)) - 1n;
+      const min = unsigned ? 0n : -(1n << (bits - 1n));
+      if (v < min || v > max) {
+        throw new Error(`Значение вне диапазона ${type}`);
+      }
       if (v < 0n) {
         v = (1n << 256n) + v;
       }
       return v.toString(16).padStart(64, "0");
     }
     if (type === "bool") {
-      return (value ? "1" : "0").padStart(64, "0");
+      if (![true, false, 1, 0, "true", "false", "1", "0"].includes(value)) {
+        throw new Error("bool: допустимы только true/false");
+      }
+      return (value === true || value === 1 || value === "true" || value === "1" ? "1" : "0").padStart(64, "0");
     }
     if (/^bytes32$/.test(type)) {
-      return String(value).replace(/^0x/, "").padEnd(64, "0");
+      const hex = String(value).replace(/^0x/, "");
+      if (!/^([0-9a-fA-F]{2}){1,32}$/.test(hex)) {
+        throw new Error("bytes32: нужен hex до 32 байт");
+      }
+      return hex.padEnd(64, "0");
     }
     throw new Error(`Тип ${type} пока не поддержан`);
   },
@@ -706,6 +779,7 @@ export const WalletSigner = {
     const u64 = (d, off) => new DataView(d.buffer, d.byteOffset).getBigUint64(off, true);
     const fmt = (raw, dec) => WalletStore.format(raw, dec, 6);
     for (const ix of parsed.instructions) {
+      try {
       const p = ix.program;
       const d = ix.data;
       if (p === this.SOL_COMPUTE) {
@@ -747,7 +821,7 @@ export const WalletSigner = {
         } else if (tag === 12 && d.length >= 10) {
           const t = tok(ix.accounts[1]);
           lines.push(`Перевод ${t ? `${fmt(u64(d, 1), t.decimals)} ${t.symbol}` : `${fmt(u64(d, 1), d[9])} токена ${short(key(ix.accounts[1]))}`} со счёта ${name(ix.accounts[0])} на токен-счёт ${name(ix.accounts[2])}`);
-        } else if (tag === 4 || tag === 13) {
+        } else if ((tag === 4 || tag === 13) && d.length >= 9) {
           const t = tag === 13 ? tok(ix.accounts[1]) : null;
           lines.push(`Approve: делегат ${name(ix.accounts[tag === 13 ? 2 : 1])} сможет тратить ${t ? `${fmt(u64(d, 1), t.decimals)} ${t.symbol}` : `${u64(d, 1)} единиц токена`}`);
           danger = true;
@@ -780,6 +854,10 @@ export const WalletSigner = {
         danger = true;
       }
       lines.push(`Программа ${p ? short(p) : "из таблицы адресов"}: ${ix.data.length} байт данных`);
+      } catch (e) {
+        lines.push(`Инструкция с некорректными данными (${ix.program ? short(ix.program) : "программа из таблицы"})`);
+        danger = true;
+      }
     }
     if (parsed.lookups) {
       danger = true;

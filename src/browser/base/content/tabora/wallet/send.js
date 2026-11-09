@@ -327,9 +327,9 @@ Object.assign(Tabora, {
     const nativePrice = prices[chain.symbol] || 0;
     const nativeBal = this.wallet.balances[`${asset.chain}:${from}`];
     const nativeRaw = nativeBal ? this.wParseAmount(nativeBal.native, chain.decimals) ?? 0n : 0n;
-    const usd = (feeRaw, decimals = chain.decimals) => (nativePrice ? ` · ${this.wFmtUsd(parseFloat(this.wFmt(feeRaw, decimals, 8)) * nativePrice)}` : "");
+    const usd = (feeRaw, decimals = chain.decimals) => (nativePrice ? ` · ${this.wFmtUsd(WalletStore.toNumber(feeRaw, decimals) * nativePrice)}` : "");
     const fmtFee = (feeRaw, decimals = chain.decimals) => `${this.wFmt(feeRaw, decimals, 8)} ${chain.symbol}${usd(feeRaw, decimals)}`;
-    const out = { ok: true, rows: [], warning: "", plan: { chain: asset.chain, from, to, raw: raw.toString(), asset } };
+    const out = { ok: true, rows: [], warning: "", plan: { chain: asset.chain, from, to, raw: raw.toString(), asset, walletId: WalletStore.activeWallet.id, index: account.index } };
 
     if (chain.kind === "evm") {
       const tx = asset.native
@@ -450,10 +450,21 @@ Object.assign(Tabora, {
 
     if (chain.kind === "tron") {
       const S = this.walletSigner().WalletSigner;
+      // параметры сети меняются редко: кэш на час, чтобы не упираться в лимиты публичных нод
+      const paramsP = this._tronParams && Date.now() - this._tronParams.at < 3600000
+        ? Promise.resolve(this._tronParams.data)
+        : S.tronPost("/wallet/getchainparameters", {}).then(d => {
+          this._tronParams = { at: Date.now(), data: d };
+          return d;
+        }).catch(() => ({ chainParameter: [] }));
+      let resourceFailed = false;
       const [res, params, toAcc] = await Promise.all([
-        S.tronPost("/wallet/getaccountresource", { address: from, visible: true }),
-        S.tronPost("/wallet/getchainparameters", {}).catch(() => ({ chainParameter: [] })),
-        S.tronPost("/wallet/getaccount", { address: to, visible: true }).catch(() => ({})),
+        S.tronPost("/wallet/getaccountresource", { address: from, visible: true }).catch(() => {
+          resourceFailed = true;
+          return {};
+        }),
+        paramsP,
+        S.tronPost("/wallet/getaccount", { address: to, visible: true }).catch(() => null),
       ]);
       const param = key => BigInt(params.chainParameter?.find(p => p.key === key)?.value ?? 0);
       const bandwidthPrice = param("getTransactionFee") || 1000n; // sun за байт
@@ -461,27 +472,39 @@ Object.assign(Tabora, {
       const createFee = (param("getCreateNewAccountFeeInSystemContract") || 1000000n) + (param("getCreateAccountFee") || 100000n);
       const freeNet = BigInt((res.freeNetLimit || 0) - (res.freeNetUsed || 0) + (res.NetLimit || 0) - (res.NetUsed || 0));
       const freeEnergy = BigInt((res.EnergyLimit || 0) - (res.EnergyUsed || 0));
-      const recipientNew = !toAcc || !toAcc.address;
+      const recipientNew = toAcc ? !toAcc.address : false;
       let fee = 0n;
       if (asset.native) {
         const bytes = 270n;
         const netFee = freeNet >= bytes ? 0n : bytes * bandwidthPrice;
         fee = netFee + (recipientNew ? createFee : 0n);
         out.plan.tron = { kind: "trx" };
-        out.rows.push(["Комиссия сети", fee ? fmtFee(fee) : "0 TRX · за счёт bandwidth"], ["Bandwidth", `${freeNet} свободно · нужно ${bytes}`, "muted"]);
+        out.rows.push(["Комиссия сети", fee ? `${resourceFailed ? "до " : ""}${fmtFee(fee)}` : "0 TRX · за счёт bandwidth"], ["Bandwidth", resourceFailed ? "нода не ответила · считаем без бесплатной квоты" : `${freeNet} свободно · нужно ${bytes}`, "muted"]);
         if (recipientNew) {
           out.rows.push(["Активация адреса", `${this.wFmt(createFee, 6, 2)} TRX · адрес ещё не активирован`, "muted"]);
+        } else if (!toAcc) {
+          out.rows.push(["Активация адреса", `не удалось проверить · +${this.wFmt(createFee, 6, 2)} TRX, если адрес новый`, "muted"]);
         }
       } else {
         const contract = asset.token.address;
         const parameter = S.abiEncodeParam("address", to) + S.abiEncodeParam("uint256", raw);
-        const energy = await S.tronEstimateEnergy(from, contract, "transfer(address,uint256)", parameter);
+        let energy;
+        let energyGuess = false;
+        try {
+          energy = await S.tronEstimateEnergy(from, contract, "transfer(address,uint256)", parameter);
+        } catch (e) {
+          if (!/HTTP|таймаут|недоступна/.test(e.message)) {
+            throw e; // контракт отклонил вызов: это не сетевая ошибка
+          }
+          energy = 65000n; // типичный transfer USDT: нода не ответила, берём верхнюю оценку
+          energyGuess = true;
+        }
         const bytes = 350n;
         const energyFee = (energy > freeEnergy ? energy - freeEnergy : 0n) * energyPrice;
         const netFee = freeNet >= bytes ? 0n : bytes * bandwidthPrice;
         fee = energyFee + netFee;
         out.plan.tron = { kind: "trc20", contract, parameter, feeLimit: Number(energy * energyPrice * 15n / 10n) + 1000000 };
-        out.rows.push(["Комиссия сети", `≈ ${fmtFee(fee)}`], ["Энергия", `${freeEnergy} из ${res.EnergyLimit || 0} · нужно ${energy}`, "muted"]);
+        out.rows.push(["Комиссия сети", `${energyGuess || resourceFailed ? "до" : "≈"} ${fmtFee(fee)}`], ["Энергия", energyGuess ? "нода не ответила · оценка сверху" : `${freeEnergy} из ${res.EnergyLimit || 0} · нужно ${energy}`, "muted"]);
       }
       out.fee = fee;
       out.maxSendable = nativeRaw - fee;
@@ -542,8 +565,12 @@ Object.assign(Tabora, {
     const { WalletSigner } = this.walletSigner();
     const C = ChromeUtils.importESModule("chrome://browser/content/tabora/wallet/vendor/crypto.sys.mjs");
     const chain = CHAINS[asset.chain];
-    const wallet = WalletStore.activeWallet;
-    const account = WalletStore.activeAccount;
+    // подписываем тем кошельком и счётом, для которых строился план, а не «активным на момент нажатия»
+    const wallet = WalletStore.wallets.find(w => w.id === plan.walletId) || WalletStore.activeWallet;
+    const account = wallet.accounts.find(a => a.index === plan.index) || WalletStore.activeAccount;
+    if (account.addresses[asset.chain] !== plan.from) {
+      throw new Error("Счёт отправителя изменился: пересчитайте перевод");
+    }
     const raw = BigInt(plan.raw);
     if (!WalletStore.passwordless) {
       await WalletStore.verifyPassword(pass);
@@ -612,6 +639,7 @@ Object.assign(Tabora, {
       // Защита от кликджекинга и перехвата ввода: кнопка включается через паузу,
       // клики, начатые до показа, игнорируются, Enter работает только после ввода в этом листе.
       const ARM_MS = opts.fromSite ? 900 : 500;
+      const needPass = !WalletStore.passwordless && !opts.noPassword;
       const shownAt = Date.now();
       let armed = false;
       let typedHere = false;
@@ -626,8 +654,12 @@ Object.assign(Tabora, {
         if (!armed || Date.now() - shownAt < ARM_MS) {
           return;
         }
-        if (e && e.detail === 0 && !WalletStore.passwordless && !typedHere) {
+        if (e && e.detail === 0 && needPass && !typedHere) {
           return; // Enter без ввода пароля в этом листе
+        }
+        if (opts.guard && !opts.guard.alive()) {
+          finish(reject, Object.assign(new Error("Страница запроса закрыта или ушла: запрос отклонён"), { code: 4001 }));
+          return;
         }
         ok.disabled = true;
         cancel.disabled = true;
@@ -656,7 +688,7 @@ Object.assign(Tabora, {
         opts.extra || null,
         opts.warning ? h("div", { class: `w-warn${opts.danger ? " danger" : ""}` }, opts.warning) : null,
         opts.details ? h("details", { class: "w-details" }, null, [h("summary", {}, opts.detailsLabel || "Данные вызова"), h("pre", { class: "mono" }, opts.details)]) : null,
-        WalletStore.passwordless ? h("p", { class: "w-badge-danger" }, "Без пароля · подпись без подтверждения паролем") : pass.wrap,
+        opts.noPassword ? null : WalletStore.passwordless ? h("p", { class: "w-badge-danger" }, "Без пароля · подпись без подтверждения паролем") : pass.wrap,
         err,
         h("div", { class: "w-actions" }, null, [cancel, ok]),
       ].filter(Boolean));
@@ -670,7 +702,7 @@ Object.assign(Tabora, {
           e.stopImmediatePropagation(); // клик начался до того, как лист «вооружился»
         }
       }, true);
-      let moved = !opts.fromSite || !WalletStore.passwordless;
+      let moved = !opts.fromSite || needPass;
       setTimeout(() => {
         if (!done) {
           armed = true;
@@ -688,7 +720,11 @@ Object.assign(Tabora, {
         }, { once: true });
       }
       if (opts.fromSite) {
-        // лист сайта живёт не дольше 2 минут и исчезает при блокировке кошелька
+        if (!this.drawer.open || this.drawer.section !== "wallet") {
+          this.openDrawer("wallet"); // экран пользователя не сбрасываем: лист ложится поверх
+        }
+        // лист сайта живёт не дольше 2 минут, исчезает при блокировке кошелька,
+        // при уходе с вкладки запроса и при навигации/закрытии страницы-отправителя
         const ttl = setTimeout(() => finish(reject, Object.assign(new Error("Время ожидания истекло"), { code: 4001 })), 120000);
         const obs = (s, t, what) => {
           if (what === "locked") {
@@ -696,9 +732,23 @@ Object.assign(Tabora, {
           }
         };
         Services.obs.addObserver(obs, WalletStore.TOPIC);
+        const g = opts.guard;
+        const onTab = () => {
+          if (g?.tab && gBrowser.selectedTab !== g.tab) {
+            finish(reject, Object.assign(new Error("Вкладка запроса переключена: запрос отклонён"), { code: 4001 }));
+          }
+        };
+        gBrowser.tabContainer.addEventListener("TabSelect", onTab);
+        const aliveTimer = setInterval(() => {
+          if (g && !g.alive()) {
+            finish(reject, Object.assign(new Error("Страница запроса закрыта или ушла: запрос отклонён"), { code: 4001 }));
+          }
+        }, 1000);
         const origFinish = finish;
         finish = (fn, v) => {
           clearTimeout(ttl);
+          clearInterval(aliveTimer);
+          gBrowser.tabContainer.removeEventListener("TabSelect", onTab);
           try {
             Services.obs.removeObserver(obs, WalletStore.TOPIC);
           } catch (e) {}
@@ -708,7 +758,7 @@ Object.assign(Tabora, {
       pass.input.addEventListener("input", () => { typedHere = true; });
       pass.input.addEventListener("keydown", e => {
         e.stopPropagation();
-        if (e.key === "Enter" && armed && (typedHere || WalletStore.passwordless)) {
+        if (e.key === "Enter" && armed && (typedHere || !needPass)) {
           ok.click();
         }
       });
@@ -1009,7 +1059,14 @@ Object.assign(Tabora, {
           if (now > before) {
             const delta = WalletStore.format(now - before, t.decimals, 6);
             const usd = t.custom ? 0 : parseFloat(delta) * (prices[t.symbol] || 0);
-            if (t.custom || usd >= 0.5) {
+            const tkey = `${key}:${(t.address || t.mint || t.symbol).toLowerCase()}`;
+            w.customNotified ||= {};
+            // контракт своего токена может врать в balanceOf: уведомляем не чаще раза в 6 часов
+            const throttled = t.custom && Date.now() - (w.customNotified[tkey] || 0) < 6 * 3600 * 1000;
+            if ((t.custom && !throttled) || (!t.custom && usd >= 0.5)) {
+              if (t.custom) {
+                w.customNotified[tkey] = Date.now();
+              }
               incoming.push({ chain, text: `${delta} ${t.symbol}${t.custom ? " (свой токен, без оценки)" : ""}`, usd });
             }
           }

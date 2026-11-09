@@ -79,6 +79,7 @@ function slip10Ed25519(seed, path) {
   let I = hmac(sha512, utf8ToBytes("ed25519 seed"), seed);
   let key = I.slice(0, 32);
   let chain = I.slice(32);
+  wipe(I);
   const parts = path.replace(/^m\//, "").split("/");
   for (const p of parts) {
     const index = (parseInt(p.replace("'", ""), 10) | 0x80000000) >>> 0;
@@ -87,9 +88,14 @@ function slip10Ed25519(seed, path) {
     data.set(key, 1);
     new DataView(data.buffer).setUint32(33, index, false);
     I = hmac(sha512, chain, data);
+    wipe(data);
+    wipe(key);
+    wipe(chain);
     key = I.slice(0, 32);
     chain = I.slice(32);
+    wipe(I);
   }
+  wipe(chain);
   return key;
 }
 
@@ -98,6 +104,50 @@ function timeoutSignal(ms) {
   const c = new AbortController();
   setTimeout(() => c.abort(new Error(`таймаут ${ms / 1000} с`)), ms);
   return c.signal;
+}
+
+/** fetch с таймаутом, без редиректов и с лимитом размера ответа: публичная нода не должна уронить браузер. */
+async function fetchJson(url, init = {}, { timeout = 12000, maxBytes = 4 << 20, redirect = "error" } = {}) {
+  const res = await fetch(url, { ...init, redirect, signal: timeoutSignal(timeout) });
+  let host = url;
+  try {
+    host = new URL(url).host;
+  } catch (e) {}
+  if (!res.ok) {
+    throw new Error(`${host}: HTTP ${res.status}`);
+  }
+  if (Number(res.headers.get("content-length") || 0) > maxBytes) {
+    throw new Error(`${host}: ответ слишком большой`);
+  }
+  const reader = res.body?.getReader?.();
+  if (!reader) {
+    const text = await res.text();
+    if (text.length > maxBytes) {
+      throw new Error(`${host}: ответ слишком большой`);
+    }
+    return JSON.parse(text);
+  }
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    total += value.length;
+    if (total > maxBytes) {
+      reader.cancel().catch(() => {});
+      throw new Error(`${host}: ответ слишком большой`);
+    }
+    chunks.push(value);
+  }
+  const buf = new Uint8Array(total);
+  let o = 0;
+  for (const c of chunks) {
+    buf.set(c, o);
+    o += c.length;
+  }
+  return JSON.parse(new TextDecoder().decode(buf));
 }
 
 /** Текст из сети/контракта: без невидимых и управляющих символов, с лимитом длины. */
@@ -156,15 +206,61 @@ async function decrypt(raw, iv, ct) {
 }
 
 function deriveKey(password, salt, kdf) {
-  return argon2id(utf8ToBytes(password.normalize("NFKC")), salt, { t: kdf.t, m: kdf.m, p: kdf.p, dkLen: kdf.dkLen });
+  const t = Number(kdf?.t);
+  const m = Number(kdf?.m);
+  const p = Number(kdf?.p);
+  const dkLen = Number(kdf?.dkLen);
+  // параметры приходят из файла: вне границ это либо повреждение, либо попытка подвесить браузер
+  if (!(t >= 1 && t <= 10) || !(m >= 8192 && m <= 1 << 20) || !(p >= 1 && p <= 4) || dkLen !== 32 || !(salt?.length >= 8)) {
+    throw new Error("Файл кошелька повреждён: параметры KDF вне допустимых границ");
+  }
+  return argon2id(utf8ToBytes(password.normalize("NFKC")), salt, { t, m, p, dkLen });
 }
 
 async function removeLoginKey() {
   try {
     const logins = await Services.logins.searchLoginsAsync({ origin: LOGIN_ORIGIN });
     for (const l of logins) {
-      Services.logins.removeLogin(l);
+      if (l.username === "vault-key") {
+        Services.logins.removeLogin(l);
+      }
     }
+  } catch (e) {}
+}
+
+/** Последняя известная ревизия файла: защита от отката к старой, но подписанной копии.
+ * Хранится в менеджере паролей (вне файла кошелька). При мастер-пароле Firefox без входа — не трогаем. */
+async function getRevMarker() {
+  try {
+    if (!Services.logins.isLoggedIn) {
+      return null;
+    }
+    const logins = await Services.logins.searchLoginsAsync({ origin: LOGIN_ORIGIN });
+    const f = logins.find(l => l.username === "file-rev");
+    return f ? Number(f.password) || 0 : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function setRevMarker(rev) {
+  try {
+    if (!Services.logins.isLoggedIn) {
+      return;
+    }
+    const logins = await Services.logins.searchLoginsAsync({ origin: LOGIN_ORIGIN });
+    const f = logins.find(l => l.username === "file-rev");
+    if (f) {
+      if (Number(f.password) !== rev) {
+        const n = f.clone();
+        n.password = String(rev);
+        Services.logins.modifyLogin(f, n);
+      }
+      return;
+    }
+    const info = Cc["@mozilla.org/login-manager/loginInfo;1"].createInstance(Ci.nsILoginInfo);
+    info.init(LOGIN_ORIGIN, null, "Tabora Wallet", "file-rev", String(rev), "", "");
+    await Services.logins.addLoginAsync(info);
   } catch (e) {}
 }
 
@@ -188,6 +284,7 @@ async function loginKey(create) {
 
 export const WalletStore = {
   TOPIC: "tabora-wallet-changed",
+  fetchJson,
   data: null, // файл: публичная часть + зашифрованные фразы
   _key: null, // мастер-ключ AES, пока разблокирован
   _timer: null,
@@ -253,7 +350,21 @@ export const WalletStore = {
   /** Пользователь подтвердил, что правки файла сделаны им: подписываем текущее содержимое. */
   async acceptFile() {
     this.tampered = false;
+    const known = await getRevMarker();
+    this.data.rev = Math.max(this.data.rev || 0, known || 0);
     await this.save();
+  },
+
+  /** Откат файла к старой подписанной копии: ревизия в файле ниже известной. */
+  async verifyRev() {
+    if (this.tampered) {
+      return false;
+    }
+    const known = await getRevMarker();
+    if (known !== null && (this.data.rev || 0) < known) {
+      this.tampered = true;
+    }
+    return !this.tampered;
   },
 
   SIGNED_PREF: "tabora.wallet.fileSigned",
@@ -276,6 +387,7 @@ export const WalletStore = {
       throw new Error("Кошелёк заблокирован");
     }
     if (!this.tampered) {
+      this.data.rev = (this.data.rev || 0) + 1;
       this.data.mac = this.computeMac();
       Services.prefs.setBoolPref(this.SIGNED_PREF, true);
     }
@@ -283,6 +395,9 @@ export const WalletStore = {
     try {
       await IOUtils.setPermissions(FILE(), 0o600);
     } catch (e) {}
+    if (!this.tampered) {
+      setRevMarker(this.data.rev);
+    }
     this.notify();
   },
 
@@ -341,10 +456,12 @@ export const WalletStore = {
       wipe(seed);
       throw new Error("Этот кошелёк уже добавлен");
     }
-    // в сейфе и фраза (для показа), и seed (для подписи: его можно обнулить в памяти)
-    const plain = utf8ToBytes(JSON.stringify({ mnemonic: phrase, seed: bytesToHex(seed) }));
+    // фраза (для показа) и seed (для подписи) лежат в разных шифртекстах:
+    // seed расшифровывается сразу в Uint8Array и не проходит через строки JS
+    const plain = utf8ToBytes(JSON.stringify({ mnemonic: phrase }));
     const vault = await encrypt(this._key, plain);
     wipe(plain);
+    const vaultSeed = await encrypt(this._key, seed);
     const wallet = {
       id: `w${Date.now().toString(36)}`,
       name: name || `Кошелёк ${this.wallets.length + 1}`,
@@ -352,6 +469,7 @@ export const WalletStore = {
       createdAt: new Date().toISOString(),
       words: phrase.split(" ").length,
       vault,
+      vaultSeed,
       accounts: [{ index: 0, name: "Адрес 1", addresses: this.deriveAll(seed, 0) }],
     };
     wipe(seed);
@@ -431,8 +549,10 @@ export const WalletStore = {
 
   async unlock(password) {
     const raw = await this.masterKey(password);
+    wipe(this._key);
     this._key = raw;
     this.verifyMac();
+    await this.verifyRev();
     if (!this.tampered && !this._macRequired) {
       // старый файл: переводим на обязательную подпись (якорь внутри шифроблока)
       this.data.check = await encrypt(this._key, utf8ToBytes(CHECK_V3));
@@ -449,6 +569,7 @@ export const WalletStore = {
   lock() {
     wipe(this._key);
     this._key = null;
+    this._phishMark = "";
     clearTimeout(this._timer);
     this.notify("locked");
   },
@@ -482,17 +603,19 @@ export const WalletStore = {
     if (!this.unlocked) {
       throw new Error("Кошелёк заблокирован");
     }
+    if (wallet.vaultSeed) {
+      return decrypt(this._key, wallet.vaultSeed.iv, wallet.vaultSeed.ct); // сразу байты, без строк
+    }
+    // старый сейф: JSON с фразой (и, возможно, seed в hex) — переводим на отдельный бинарный seed
     const plain = await decrypt(this._key, wallet.vault.iv, wallet.vault.ct);
     const parsed = JSON.parse(new TextDecoder().decode(plain));
     wipe(plain);
-    if (parsed.seed) {
-      return hexToBytes(parsed.seed);
-    }
-    const seed = bip39.mnemonicToSeedSync(parsed.mnemonic);
+    const seed = parsed.seed ? hexToBytes(parsed.seed) : bip39.mnemonicToSeedSync(parsed.mnemonic);
     try {
-      const upgraded = utf8ToBytes(JSON.stringify({ mnemonic: parsed.mnemonic, seed: bytesToHex(seed) }));
-      wallet.vault = await encrypt(this._key, upgraded);
-      wipe(upgraded);
+      wallet.vaultSeed = await encrypt(this._key, seed);
+      const onlyPhrase = utf8ToBytes(JSON.stringify({ mnemonic: parsed.mnemonic }));
+      wallet.vault = await encrypt(this._key, onlyPhrase);
+      wipe(onlyPhrase);
       await this.save();
     } catch (e) {}
     return seed;
@@ -522,25 +645,37 @@ export const WalletStore = {
   async changePassword(oldPassword, newPassword) {
     await this.verifyPassword(oldPassword);
     const vaults = [];
-    for (const w of this.wallets) {
-      const plain = await decrypt(this._key, w.vault.iv, w.vault.ct);
-      vaults.push(plain);
+    const seeds = [];
+    try {
+      for (const w of this.wallets) {
+        vaults.push(await decrypt(this._key, w.vault.iv, w.vault.ct));
+        seeds.push(w.vaultSeed ? await decrypt(this._key, w.vaultSeed.iv, w.vaultSeed.ct) : null);
+      }
+      const passwordless = !newPassword;
+      const salt = randomBytes(16);
+      await removeLoginKey(); // старый ключ хранилища больше не нужен ни в одном из режимов
+      const raw = passwordless ? await loginKey(true) : deriveKey(newPassword, salt, KDF);
+      this.data.check = await encrypt(raw, utf8ToBytes(CHECK_V3));
+      this._macRequired = true;
+      for (let i = 0; i < this.wallets.length; i++) {
+        this.wallets[i].vault = await encrypt(raw, vaults[i]);
+        if (seeds[i]) {
+          this.wallets[i].vaultSeed = await encrypt(raw, seeds[i]);
+        }
+      }
+      const mark = this._phishMark;
+      this.data.passwordless = passwordless;
+      this.data.kdf = passwordless ? null : { alg: "argon2id", salt: base64.encode(salt), ...KDF };
+      wipe(this._key);
+      this._key = raw;
+      if (mark) {
+        this.data.settings.phishMarkEnc = await encrypt(raw, utf8ToBytes(mark));
+      }
+      await this.save();
+    } finally {
+      vaults.forEach(v => wipe(v));
+      seeds.forEach(v => v && wipe(v));
     }
-    const passwordless = !newPassword;
-    const salt = randomBytes(16);
-    await removeLoginKey(); // старый ключ хранилища больше не нужен ни в одном из режимов
-    const raw = passwordless ? await loginKey(true) : deriveKey(newPassword, salt, KDF);
-    this.data.check = await encrypt(raw, utf8ToBytes(CHECK_V3));
-    this._macRequired = true;
-    for (let i = 0; i < this.wallets.length; i++) {
-      this.wallets[i].vault = await encrypt(raw, vaults[i]);
-      wipe(vaults[i]);
-    }
-    this.data.passwordless = passwordless;
-    this.data.kdf = passwordless ? null : { alg: "argon2id", salt: base64.encode(salt), ...KDF };
-    wipe(this._key);
-    this._key = raw;
-    await this.save();
   },
 
   async destroy(password) {
@@ -623,7 +758,14 @@ export const WalletStore = {
       saved = JSON.parse(Services.prefs.getStringPref(NODES_PREF, "{}"));
     } catch (e) {}
     const chain = CHAINS[chainId];
-    const list = saved[chainId]?.list?.length ? saved[chainId].list : chain.nodes;
+    let list = chain.nodes;
+    if (saved[chainId]?.list?.length) {
+      try {
+        list = saved[chainId].list.map(u => this.validateNodeUrl(u)); // prefs не под подписью файла: проверяем при каждом чтении
+      } catch (e) {
+        list = chain.nodes;
+      }
+    }
     const index = Math.min(saved[chainId]?.index || 0, list.length - 1);
     return { list, index, url: list[index] };
   },
@@ -669,16 +811,11 @@ export const WalletStore = {
       const i = (index + step) % list.length;
       const url = forced || list[i];
       try {
-        const res = await fetch(url + path, {
-          signal: timeoutSignal(12000),
+        const json = await fetchJson(url + path, {
           method: body ? "POST" : "GET",
           headers: body ? { "Content-Type": "application/json" } : {},
           body: body ? JSON.stringify(body) : undefined,
         });
-        if (!res.ok) {
-          throw new Error(`${new URL(url).host}: HTTP ${res.status}`);
-        }
-        const json = await res.json();
         if (!forced && i !== index) {
           this._nodeOverride[chainId] = i;
         }
@@ -711,6 +848,9 @@ export const WalletStore = {
   /* ---------- разрешения сайтов ---------- */
 
   permissionFor(origin, chain) {
+    if (this.tampered) {
+      return null; // файл подменён или откатан: сайтам ничего не даём, пока пользователь не подтвердит правки
+    }
     return this.data?.permissions?.[origin]?.[chain] || null;
   },
 
@@ -744,18 +884,33 @@ export const WalletStore = {
   /* ---------- знак подлинности ---------- */
 
   /** Три случайных эмодзи, известные только кошельку: показываются на настоящих листах подтверждения. */
+  _phishMark: "",
+
   get phishMark() {
-    return this.data?.settings?.phishMark || "";
+    return this._key ? this._phishMark : "";
   },
 
+  /** Знак хранится зашифрованным: читатель файла профиля его не узнает. */
   async ensurePhishMark() {
-    if (!this.data || this.data.settings?.phishMark || !this._key || this.tampered) {
+    if (!this.data || !this._key || this.tampered) {
       return;
+    }
+    this.data.settings ||= {};
+    const s = this.data.settings;
+    if (s.phishMarkEnc) {
+      try {
+        const plain = await decrypt(this._key, s.phishMarkEnc.iv, s.phishMarkEnc.ct);
+        this._phishMark = new TextDecoder().decode(plain);
+        wipe(plain);
+        return;
+      } catch (e) {}
     }
     const pool = ["🦊", "🐙", "🦉", "🐝", "🍀", "🌙", "⚡", "🔥", "🌊", "🍉", "🎈", "🎯", "🧩", "🪐", "🍄", "🦋", "🐢", "🍋", "🧊", "🎲", "🌵", "🐬", "🍇", "🪁"];
     const bytes = randomBytes(3);
-    this.data.settings ||= {};
-    this.data.settings.phishMark = Array.from(bytes, b => pool[b % pool.length]).join(" ");
+    const mark = s.phishMark || Array.from(bytes, b => pool[b % pool.length]).join(" "); // старый открытый знак переносим в шифроблок
+    s.phishMarkEnc = await encrypt(this._key, utf8ToBytes(mark));
+    delete s.phishMark;
+    this._phishMark = mark;
     await this.save();
   },
 
@@ -871,10 +1026,13 @@ export const WalletStore = {
     token = { ...token, symbol: cleanText(token.symbol, 12) || "TOKEN", decimals: safeDecimals(token.decimals) };
     this.data.settings.customTokens ||= {};
     const list = (this.data.settings.customTokens[chainId] ||= []);
-    const key = (token.address || token.mint || "").toLowerCase();
-    if (!key) {
-      throw new Error("Нужен адрес контракта");
+    const kind = CHAINS[chainId]?.kind;
+    const addr = String(token.address || token.mint || "");
+    const okAddr = kind === "evm" ? /^0x[0-9a-fA-F]{40}$/.test(addr) : kind === "tron" ? /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(addr) : kind === "sol" ? /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr) : false;
+    if (!okAddr) {
+      throw new Error("Неверный адрес контракта токена");
     }
+    const key = addr.toLowerCase();
     if (!list.some(t => (t.address || t.mint || "").toLowerCase() === key)) {
       list.push({ symbol: token.symbol, decimals: token.decimals, address: token.address, mint: token.mint, custom: true });
     }
@@ -949,10 +1107,22 @@ export const WalletStore = {
 
   format(raw, decimals, max = 6) {
     decimals = safeDecimals(decimals);
-    const s = BigInt(raw).toString().padStart(decimals + 1, "0");
+    const v = BigInt(raw);
+    if (v < 0n) {
+      return "-" + this.format(-v, decimals, max);
+    }
+    const s = v.toString().padStart(decimals + 1, "0");
     const int = s.slice(0, s.length - decimals) || "0";
     const frac = s.slice(s.length - decimals).slice(0, max).replace(/0+$/, "");
+    if (!frac && int === "0" && v > 0n) {
+      return `<0.${"0".repeat(Math.max(0, Math.min(max, decimals) - 1))}1`; // ненулевая сумма не должна выглядеть как 0
+    }
     return frac ? `${int}.${frac}` : int;
+  },
+
+  /** Число для оценок в валюте (не для точного отображения сумм). */
+  toNumber(raw, decimals) {
+    return Number(BigInt(raw)) / 10 ** safeDecimals(decimals);
   },
 
   async balance(chainId, address = this.activeAccount?.addresses?.[chainId]) {
@@ -1043,8 +1213,7 @@ export const WalletStore = {
       return this._prices.data;
     }
     try {
-      const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum,bitcoin,solana,tron,polygon-ecosystem-token&vs_currencies=usd");
-      const j = await res.json();
+      const j = await fetchJson("https://api.coingecko.com/api/v3/simple/price?ids=ethereum,bitcoin,solana,tron,polygon-ecosystem-token&vs_currencies=usd", {}, { timeout: 6000, maxBytes: 64 << 10 });
       const data = { ETH: j.ethereum?.usd, BTC: j.bitcoin?.usd, SOL: j.solana?.usd, TRX: j.tron?.usd, POL: j["polygon-ecosystem-token"]?.usd, USDT: 1, USDC: 1, DAI: 1 };
       this._prices = { at: Date.now(), data };
       return data;
@@ -1068,11 +1237,7 @@ export const WalletStore = {
     const dirOf = (from, to) => (from?.toLowerCase() === me && to?.toLowerCase() === me ? "self" : from?.toLowerCase() === me ? "out" : "in");
     if (chain.kind === "evm" && chain.history) {
       const get = async path => {
-        const res = await fetch(`${chain.history}/api/v2/addresses/${address}${path}`, { signal: timeoutSignal(15000) });
-        if (!res.ok) {
-          throw new Error(`${new URL(chain.history).host}: HTTP ${res.status}`);
-        }
-        return (await res.json()).items || [];
+        return (await fetchJson(`${chain.history}/api/v2/addresses/${address}${path}`, {}, { timeout: 15000 })).items || [];
       };
       const [txs, transfers] = await Promise.all([get("/transactions").catch(() => []), get("/token-transfers?type=ERC-20").catch(() => [])]);
       for (const t of txs.slice(0, 30)) {
@@ -1139,11 +1304,7 @@ export const WalletStore = {
     } else if (chain.kind === "tron") {
       const base = this.nodesFor(chainId).list.find(u => !this.tronIsJsonRpc(u)) || "https://api.trongrid.io";
       const get = async path => {
-        const res = await fetch(`${base}/v1/accounts/${address}${path}`, { signal: timeoutSignal(15000) });
-        if (!res.ok) {
-          throw new Error(`TRON: HTTP ${res.status}`);
-        }
-        return (await res.json()).data || [];
+        return (await fetchJson(`${base}/v1/accounts/${address}${path}`, {}, { timeout: 15000 })).data || [];
       };
       const [txs, trc20] = await Promise.all([get("/transactions?limit=30&only_confirmed=true").catch(() => []), get("/transactions/trc20?limit=40&only_confirmed=true").catch(() => [])]);
       const b58 = hex => {
