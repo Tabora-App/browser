@@ -261,3 +261,57 @@
   filter: blur(6px);
   user-select: none;
 }
+
+/* Сворачиваемая карточка сейфа */
+#tabora-drawer .v-card > summary.v-card-head {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  margin: -4px -4px;
+  padding: 4px 4px;
+  border-radius: 8px;
+  user-select: none;
+}
+
+#tabora-drawer .v-card > summary.v-card-head::-webkit-details-marker {
+  display: none;
+}
+
+#tabora-drawer .v-card > summary.v-card-head:hover {
+  background: var(--tabora-raised);
+}
+
+#tabora-drawer .v-card > summary .w-group-title {
+  margin: 0;
+  flex: none;
+}
+
+#tabora-drawer .v-card-sub {
+  flex: 1;
+  min-width: 0;
+  font: 500 11px/1.2 var(--tabora-font);
+  color: var(--tabora-text-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+
+#tabora-drawer .v-card > summary svg {
+  flex: none;
+  color: var(--tabora-text-4);
+  transition: transform var(--tabora-ease);
+}
+
+#tabora-drawer .v-card[open] > summary svg {
+  transform: rotate(180deg);
+}
+
+#tabora-drawer .v-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+}

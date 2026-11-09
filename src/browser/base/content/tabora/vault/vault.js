@@ -834,7 +834,6 @@ Object.assign(Tabora, {
     const { Vault } = this.vaultMod();
     const row = (name, value, cls = "") => h("div", { class: `w-kv ${cls}`.trim() }, null, [h("span", {}, name), h("b", {}, value)]);
     const kids = [
-      h("b", { class: "w-group-title" }, "Сейф"),
       row("Связка ключей системы", Vault.hasOsKey && Vault.osUnlockEnabled ? "ключ сохранён · тихая разблокировка" : "не используется"),
       row("Мастер-пароль", Vault.hasPassword ? "задан · можно перенести на другой компьютер" : "не задан · только этот компьютер", Vault.hasPassword ? "" : "muted"),
       this.wButton(Vault.hasPassword ? "Сменить мастер-пароль" : "Задать мастер-пароль", "ghost", () => this.vaultPasswordSheet()),
@@ -871,7 +870,21 @@ Object.assign(Tabora, {
         this.notice(e.message);
       }
     }));
-    return h("div", { class: "w-group" }, null, kids);
+    // карточка свёрнута по умолчанию: заголовок с короткой сводкой, подробности по клику
+    const brief = [
+      Vault.hasOsKey && Vault.osUnlockEnabled ? "открывается тихо" : "пароль при запуске",
+      Vault.hasPassword ? "мастер-пароль" : "без мастер-пароля",
+      rkAt ? "ключ восстановления" : "без ключа восстановления",
+    ].join(" · ");
+    const summary = h("summary", { class: "v-card-head" }, null, [
+      h("b", { class: "w-group-title" }, "Сейф"),
+      h("span", { class: "v-card-sub" }, brief),
+      this.svg(["m6 9 6 6 6-6"], 14, 2.2),
+    ]);
+    const card = h("details", { class: "w-group v-card" }, null, [summary, h("div", { class: "v-card-body" }, null, kids)]);
+    card.open = Services.prefs.getBoolPref("tabora.vault.cardOpen", false);
+    card.addEventListener("toggle", () => Services.prefs.setBoolPref("tabora.vault.cardOpen", card.open));
+    return card;
   },
 
   /* ---- Листы ---------------------------------------------------------------- */
