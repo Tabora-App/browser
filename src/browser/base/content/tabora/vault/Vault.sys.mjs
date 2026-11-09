@@ -992,7 +992,15 @@ export const Vault = {
       await this._exclusive(() => (this.exists || this.state !== "absent" ? null : this._create({})));
     }
     if (!this.unlocked && this.exists) {
-      await this.unlock();
+      // Запрос к связке ключей системы может висеть (macOS спрашивает доступ у пользователя).
+      // Если сейф тем временем открыли мастер-паролем или ключом восстановления, не ждём ответа.
+      let settled = false;
+      const viaOs = this.unlock().catch(() => false).finally(() => (settled = true));
+      const otherwise = new Promise(resolve => {
+        const tick = () => (settled || this.unlocked ? resolve() : setTimeout(tick, 400));
+        tick();
+      });
+      await Promise.race([viaOs, otherwise]);
     }
     if (!this.unlocked) {
       // интерфейс покажет просьбу ввести мастер-пароль или выбрать восстановление:
