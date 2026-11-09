@@ -42,7 +42,7 @@ var Tabora = {
     Services.scriptloader.loadSubScript("chrome://tabora/content/update/update.js", window);
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
-      "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initWalletProvider", "initVaultActor", "initAccount", "initUpdates", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "initLegacyShellUrls", "startTimers", "updateTitle", "localizeUrlbar",
+      "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initWalletProvider", "initVaultActor", "initAccount", "initUpdates", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "initLegacyShellUrls", "initMailToggle", "startTimers", "updateTitle", "localizeUrlbar",
       "routeUrlbarToCommandBar",
     ]) {
       try {
@@ -1144,7 +1144,7 @@ var Tabora = {
       this.html("span", {}, "Почта и алиасы"),
       this.html("span", { class: "kbd" }, "⌘⇧M"),
     ]);
-    mail.addEventListener("click", () => this.openMail());
+    mail.addEventListener("click", () => this.toggleMail());
     mail.addEventListener("contextmenu", e => {
       e.preventDefault();
       e.stopPropagation();
@@ -1508,6 +1508,45 @@ var Tabora = {
       return;
     }
     this.openMailTab(hash);
+  },
+
+  /** Кнопка «Почта и алиасы» и ⌘⇧M работают как кошелёк: открывают почту, а если она уже
+   *  перед глазами, возвращают на вкладку, где человек был до неё. */
+  toggleMail() {
+    if (this.isMailUrl(gBrowser.selectedBrowser?.currentURI?.spec)) {
+      const back = this.tabBeforeMail();
+      if (back) {
+        gBrowser.selectedTab = back;
+        return;
+      }
+    }
+    this.openMail();
+  },
+
+  /** Вкладка, на которую вернуться из почты: последняя открытая не-почта в текущем пространстве. */
+  tabBeforeMail() {
+    const ok = t => t && !t.closing && !t.hidden && t.isConnected && !this.isMailUrl(t.linkedBrowser?.currentURI?.spec);
+    if (ok(this._lastNonMailTab)) {
+      return this._lastNonMailTab;
+    }
+    const candidates = gBrowser.tabs.filter(ok).sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
+    return candidates[0] || null;
+  },
+
+  initMailToggle() {
+    const remember = () => {
+      const tab = gBrowser.selectedTab;
+      if (!this.isMailUrl(tab?.linkedBrowser?.currentURI?.spec)) {
+        this._lastNonMailTab = tab;
+      }
+    };
+    remember();
+    gBrowser.tabContainer.addEventListener("TabSelect", remember);
+    gBrowser.tabContainer.addEventListener("TabClose", e => {
+      if (e.target === this._lastNonMailTab) {
+        this._lastNonMailTab = null;
+      }
+    });
   },
 
   openMailTab(hash = "") {
@@ -2802,7 +2841,7 @@ var Tabora = {
           e.preventDefault();
           e.stopPropagation();
         } else if (e.shiftKey && e.code === "KeyM") {
-          this.openMail();
+          this.toggleMail();
           e.preventDefault();
           e.stopPropagation();
         } else if (e.shiftKey && this.drawer && { KeyJ: "downloads", KeyH: "history", KeyI: "media", KeyS: "spaces", KeyB: "bookmarks", KeyW: "wallet", KeyK: "codes" }[e.code]) {
