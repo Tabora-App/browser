@@ -382,7 +382,7 @@ export const Account = {
     }
     if (Vault.hasPassword) {
       await Vault.verifyPassword(password).catch(() => {
-        throw new Error("Пароль аккаунта должен совпадать с мастер-паролем сейфа этого компьютера");
+        throw Object.assign(new Error("Сейф этого компьютера защищён другим паролем. Введите его ниже, чтобы передать сейф этому аккаунту."), { code: "vault-mismatch" });
       });
       if (!Vault.unlocked) {
         await Vault.unlockWithPassword(password);
@@ -426,7 +426,20 @@ export const Account = {
     return { email };
   },
 
-  async login(emailInput, password) {
+  /** Вход в другой аккаунт на этом компьютере: сейф перепривязывается к новому паролю (нужен прежний мастер-пароль). */
+  async _rebindVault(vaultPassword, password) {
+    await Vault.verifyPassword(vaultPassword).catch(() => {
+      throw new Error("Неверный мастер-пароль сейфа");
+    });
+    if (!Vault.unlocked) {
+      await Vault.unlockWithPassword(vaultPassword);
+    }
+    if (vaultPassword !== password) {
+      await Vault.changePassword(vaultPassword, password);
+    }
+  },
+
+  async login(emailInput, password, { vaultPassword = null } = {}) {
     await this.ready();
     this._checkLockout();
     const email = this.normalizeEmail(emailInput);
@@ -444,7 +457,15 @@ export const Account = {
       throw e;
     }
     this._failures = 0;
-    await this._syncVaultPassword(password);
+    try {
+      await this._syncVaultPassword(password);
+    } catch (e) {
+      if (e.code === "vault-mismatch" && vaultPassword) {
+        await this._rebindVault(vaultPassword, password);
+      } else {
+        throw e;
+      }
+    }
     this.data = { version: 1, email, userId: r.userId, session: r.session, server: this.serverUrl || null, createdAt: this.data?.createdAt || new Date().toISOString(), lastLoginAt: new Date().toISOString() };
     await this.save();
     this.markFirstRunDone();

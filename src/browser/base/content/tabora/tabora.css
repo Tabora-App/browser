@@ -12,6 +12,7 @@
 @import url("chrome://browser/content/tabora/wallet/wallet.css");
 @import url("chrome://browser/content/tabora/vault/vault.css");
 @import url("chrome://browser/content/tabora/account/account.css");
+@import url("chrome://browser/content/tabora/update/update.css");
 
 :root {
   --tabora-bg: #0b0c0e;
@@ -2540,6 +2541,24 @@ menupopup {
   --panel-border-radius: 14px !important;
   color-scheme: dark;
   font-family: var(--tabora-font);
+}
+
+/* В светлой теме панели тоже светлые: иначе поля (например, «Сохранить пароль?»)
+   рисуют текст системным цветом тёмной схемы и он пропадает на светлом поле */
+:root[tabora-theme="light"] panel,
+:root[tabora-theme="light"] menupopup {
+  color-scheme: light;
+}
+
+/* Поля во всплывающих панелях: наш цвет текста и фона, а не системный */
+popupnotification html|input,
+popupnotification html|select,
+popupnotification xul|menulist,
+#password-notification-username,
+#password-notification-password {
+  color: var(--tabora-text) !important;
+  background-color: var(--tabora-field) !important;
+  border-color: var(--tabora-field-border) !important;
 }
 
 panel::part(content) {

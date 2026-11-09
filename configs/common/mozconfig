@@ -66,3 +66,7 @@ mk_add_options MOZ_SERVICES_HEALTHREPORT=
 mk_add_options MOZ_TELEMETRY_REPORTING=
 ac_add_options MOZ_DATA_REPORTING=
 ac_add_options MOZ_TELEMETRY_REPORTING=
+
+# Канал пакетов обновления: MAR с другим идентификатором обновлятор отвергнет
+export MAR_CHANNEL_ID=tabora-release
+export ACCEPTED_MAR_CHANNEL_IDS=tabora-release

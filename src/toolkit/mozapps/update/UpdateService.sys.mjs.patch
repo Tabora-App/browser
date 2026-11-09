@@ -1,0 +1,18 @@
+diff --git a/toolkit/mozapps/update/UpdateService.sys.mjs b/toolkit/mozapps/update/UpdateService.sys.mjs
+index 164381ebc1..506dc08139 100644
+--- a/toolkit/mozapps/update/UpdateService.sys.mjs
++++ b/toolkit/mozapps/update/UpdateService.sys.mjs
+@@ -5500,6 +5500,13 @@ export class CheckerService {
+     let url = Services.appinfo.updateURL;
+     let updatePin;
+ 
++    // Tabora: манифест обновлений лежит на GitHub, шаблон задаётся настройкой
++    // (подстановки %CHANNEL%, %BUILD_TARGET% и т. д. те же, что у штатного адреса).
++    const taboraUrl = Services.prefs.getStringPref("tabora.update.url", "");
++    if (/^https:\/\//.test(taboraUrl)) {
++      url = taboraUrl;
++    }
++
+     if (Services.policies) {
+       let policies = Services.policies.getActivePolicies();
+       if (policies) {

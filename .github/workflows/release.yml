@@ -1,0 +1,68 @@
+name: Release
+
+# Выпуск обновления: собирает MAR из упакованного приложения, подписывает ключом Tabora из
+# секретов, публикует релиз на GitHub и коммитит манифесты в updates/. Запуск вручную после
+# того, как сборка нужной платформы (workflow Build) положила артефакт с приложением.
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Платформа"
+        required: true
+        type: choice
+        default: darwin-aarch64
+        options: [darwin-aarch64, darwin-x86_64, linux-x86_64, linux-aarch64]
+      build_run_id:
+        description: "ID запуска Build с артефактом приложения"
+        required: true
+        type: string
+      minimum:
+        description: "Минимально допустимая версия (ниже — обновление обязательное)"
+        required: false
+        type: string
+      notes:
+        description: "Что нового"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release ${{ inputs.platform }}
+    runs-on: ubuntu-24.04
+    env:
+      TARGET_PLATFORM: ${{ startsWith(inputs.platform, 'darwin') && 'darwin' || 'linux' }}
+      TARGET_ARCH: ${{ endsWith(inputs.platform, 'aarch64') && 'aarch64' || 'x86_64' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+          path: engine/obj-${{ env.TARGET_PLATFORM }}-${{ env.TARGET_ARCH }}/dist
+
+      - name: Restore MAR signing keys
+        # Секрет TABORA_MAR_KEYS — base64 от tar.gz папки .build/mar-keys (cert9.db, key4.db, pkcs11.txt)
+        run: |
+          mkdir -p .build
+          echo "${{ secrets.TABORA_MAR_KEYS }}" | base64 -d | tar -xz -C .build
+          ls .build/mar-keys
+
+      - name: Build, sign and publish
+        run: |
+          python3 tools/release.py publish ${{ inputs.minimum && format('--minimum {0}', inputs.minimum) || '' }} ${{ inputs.notes && format('--notes "{0}"', inputs.notes) || '' }}
+
+      - name: Commit manifests
+        run: |
+          git config user.name "tabora-release"
+          git config user.email "release@tabora.app"
+          git add updates
+          git commit -m "Обновление: манифесты ${{ inputs.platform }}" || echo "нечего коммитить"
+          git push

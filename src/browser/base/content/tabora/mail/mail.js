@@ -200,7 +200,30 @@ const App = {
   compose: null,
   visibleThreads: [],
 
+  /** Строка аккаунта под папками: адрес из аккаунта Tabora, смена пароля и выход через оболочку. */
+  async initAccountRow() {
+    const row = document.getElementById("account-row");
+    if (!row) {
+      return;
+    }
+    let email = ACCOUNT.address;
+    try {
+      const { Account } = ChromeUtils.importESModule("chrome://browser/content/tabora/account/Account.sys.mjs");
+      await Account.ready();
+      if (Account.email) {
+        email = Account.email;
+      }
+    } catch (e) {}
+    document.getElementById("account-email").textContent = email;
+    document.getElementById("account-avatar").textContent = (email[0] || "T").toUpperCase();
+    const shell = () => window.browsingContext?.topChromeWindow?.Tabora;
+    document.getElementById("account-change").addEventListener("click", () => shell()?.accountDialog("change"));
+    document.getElementById("account-switch").addEventListener("click", () => shell()?.accountLogout({ thenLogin: true, blankEmail: true }));
+    document.getElementById("account-logout").addEventListener("click", () => shell()?.accountLogout({ thenLogin: false }));
+  },
+
   async init() {
+    this.initAccountRow().catch(() => {});
     await Store.ready();
     this.bindStatic();
     window.TaboraSelect?.enhanceAll(document);

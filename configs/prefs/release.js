@@ -102,5 +102,12 @@ pref("signon.storage.rust.enabled", true);
 pref("tabora.account.domain", "tabora.app");
 pref("tabora.account.server", "");
 
+// Обновления: манифест канала и update.xml лежат в репозитории GitHub, пакеты — в GitHub Releases
+pref("tabora.update.channelUrl", "https://raw.githubusercontent.com/Tabora-App/browser/main/updates/channel.json");
+pref("tabora.update.url", "https://raw.githubusercontent.com/Tabora-App/browser/main/updates/%CHANNEL%/%BUILD_TARGET%/update.xml");
+pref("app.update.auto", true);
+pref("app.update.staging.enabled", true);
+pref("app.update.interval", 3600);
+
 // Перевод страниц: без всплывающего предложения, только по кнопке в адресной строке
 pref("browser.translations.automaticallyPopup", false);

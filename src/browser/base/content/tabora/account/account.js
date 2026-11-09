@@ -52,6 +52,7 @@ Object.assign(Tabora, {
     }
     root.hidden = false;
     this.account.after = typeof opts.after === "function" ? opts.after : null; // что открыть после входа
+    this.account.blankEmail = !!opts.blankEmail; // вход в другой аккаунт: не подставлять прежний адрес
     this.accountRender(step, opts);
   },
 
@@ -193,7 +194,7 @@ Object.assign(Tabora, {
     if (Vault.exists && Vault.hasPassword) {
       fields.push(h("p", { class: "ta-hint" }, "Сейф на этом компьютере уже защищён мастер-паролем. Пароль аккаунта должен быть тем же: он откроет и сейф, и аккаунт."));
     } else {
-      fields.push(h("p", { class: "ta-hint" }, "Этот пароль станет мастер-паролем сейфа. Он не отправляется на сервер и не восстанавливается без ключа восстановления, который вы получите на следующем шаге."));
+      fields.push(h("p", { class: "ta-hint" }, "Один пароль для почты и сейфа. Сервер получает только его хеш для входа, сам пароль не покидает компьютер, поэтому забытый пароль восстанавливается только ключом восстановления, который вы получите на следующем шаге."));
     }
     return this.taForm({
       title: "Создать аккаунт",
@@ -260,15 +261,26 @@ Object.assign(Tabora, {
 
   accountLogin() {
     const { Account } = this.accountMod();
-    const email = this.taField("Адрес почты", { type: "text", autocomplete: "username", spellcheck: "false", placeholder: "имя", autocapitalize: "off", value: Account.email ? Account.email.split("@")[0] : "" }, { suffix: `@${Account.domain}` });
+    const email = this.taField("Адрес почты", { type: "text", autocomplete: "username", spellcheck: "false", placeholder: "имя", autocapitalize: "off", value: Account.email && !this.account.blankEmail ? Account.email.split("@")[0] : "" }, { suffix: `@${Account.domain}` });
     const pass = this.taField("Пароль", { type: "password", autocomplete: "current-password" });
+    const vaultPass = this.taField("Мастер-пароль сейфа этого компьютера", { type: "password", autocomplete: "off" });
+    vaultPass.wrap.hidden = true;
     return this.taForm({
       title: "Вход",
-      fields: [email.wrap, pass.wrap],
+      fields: [email.wrap, pass.wrap, vaultPass.wrap],
       okLabel: "Войти",
       back: Account.firstRunDone ? null : () => this.accountRender("welcome"),
       onOk: async () => {
-        const r = await Account.login(email.input.value, pass.input.value);
+        let r;
+        try {
+          r = await Account.login(email.input.value, pass.input.value, { vaultPassword: vaultPass.wrap.hidden ? null : vaultPass.input.value });
+        } catch (e) {
+          if (e.code === "vault-mismatch") {
+            vaultPass.wrap.hidden = false;
+            vaultPass.input.focus();
+          }
+          throw e;
+        }
         this.notice(`Вы вошли как ${r.email}`);
         const after = this.account.after;
         this.accountClose();
@@ -324,6 +336,45 @@ Object.assign(Tabora, {
     });
   },
 
+  /* ---- Выход и меню аккаунта --------------------------------------------------- */
+
+  /** Выйти из аккаунта: почта закрывается, затем окно входа, где можно войти в другой аккаунт. */
+  async accountLogout({ thenLogin = true, blankEmail = false } = {}) {
+    const { Account } = this.accountMod();
+    await Account.logout();
+    for (const t of gBrowser.tabs.filter(t => this.isMailUrl(t.linkedBrowser?.currentURI?.spec))) {
+      if (gBrowser.tabs.length > 1) {
+        gBrowser.removeTab(t);
+      } else {
+        t.linkedBrowser.loadURI(Services.io.newURI("about:newtab"), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+      }
+    }
+    this.notice("Вы вышли из аккаунта. Сейф и данные остаются на этом компьютере.");
+    if (thenLogin) {
+      this.accountDialog("login", { blankEmail });
+    }
+  },
+
+  /** Пункты меню аккаунта для правого клика по «Почта и алиасы» и для страницы почты. */
+  accountMenuItems() {
+    const { Account } = this.accountMod();
+    const items = [{ label: "Открыть почту", icon: ["M3.5 6.5h17v11h-17z", "M3.5 7l8.5 6 8.5-6"], run: () => this.openMail() }, { separator: true }];
+    if (Account.signedIn) {
+      items.push(
+        { label: Account.email, disabled: true, run: () => {} },
+        { label: "Сменить пароль", icon: ["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], run: () => this.accountDialog("change") },
+        { label: "Выйти из аккаунта", icon: ["M10 17l5-5-5-5", "M15 12H3", "M21 4v16"], run: () => this.accountLogout() },
+        { label: "Войти в другой аккаунт", icon: ["M12 5v14", "M5 12h14"], run: () => this.accountLogout({ thenLogin: true, blankEmail: true }) }
+      );
+    } else {
+      items.push(
+        { label: "Войти", icon: ["M14 7l5 5-5 5", "M19 12H9", "M3 4v16"], run: () => this.accountDialog("login") },
+        { label: "Создать аккаунт", icon: ["M12 5v14", "M5 12h14"], run: () => this.accountDialog("register") }
+      );
+    }
+    return items;
+  },
+
   /* ---- Карточка аккаунта в разделе «Коды» ------------------------------------ */
 
   accountCard() {
@@ -335,10 +386,8 @@ Object.assign(Tabora, {
       kids.push(row("Аккаунт", Account.email));
       kids.push(row("Синхронизация", Account.isLocalMode ? "появится, когда будет сервер · данные пока только на этом компьютере" : `сервер ${new URL(Account.serverUrl).host}`, Account.isLocalMode ? "muted" : ""));
       kids.push(this.wButton("Сменить пароль", "ghost", () => this.accountDialog("change")));
-      kids.push(this.wButton("Выйти из аккаунта", "ghost", async () => {
-        await Account.logout();
-        this.notice("Вы вышли из аккаунта. Сейф остаётся на этом компьютере.");
-      }));
+      kids.push(this.wButton("Выйти из аккаунта", "ghost", () => this.accountLogout({ thenLogin: false })));
+      kids.push(this.wButton("Войти в другой аккаунт", "ghost", () => this.accountLogout({ thenLogin: true, blankEmail: true })));
     } else {
       kids.push(row("Аккаунт", Account.email ? `${Account.email} · выход выполнен` : "не создан", "muted"));
       kids.push(h("p", { class: "w-hint" }, "Аккаунт нужен для переноса сейфа, паролей и кодов на другой компьютер."));

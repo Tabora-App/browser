@@ -764,3 +764,19 @@ kbd {
   .msg[aria-selected="true"] { background: #f1efe9; }
   .toast { background: #16171a; color: #fff; border-color: #16171a; }
 }
+
+/* Аккаунт под папками: адрес и выход */
+.account-row { margin-top: 6px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--card); }
+.account-row summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 8px 10px; cursor: pointer; border-radius: 12px; }
+.account-row summary::-webkit-details-marker { display: none; }
+.account-row summary:hover { background: var(--card-2); }
+.account-row[open] summary svg { transform: rotate(180deg); }
+.account-row summary svg { color: var(--text-3); flex: none; transition: transform 160ms ease; }
+.account-avatar { width: 28px; height: 28px; border-radius: 8px; background: var(--accent); color: #0b0c0e; display: grid; place-items: center; font: 800 12px/1 var(--font); flex: none; }
+.account-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.account-text b { font: 600 12px/1.2 var(--font); color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.account-text span { font: 500 10.5px/1.2 var(--font); color: var(--text-3); }
+.account-actions { display: flex; flex-direction: column; gap: 4px; padding: 4px 6px 8px; }
+.account-actions button { height: 30px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--text); font: 600 12px var(--font); text-align: left; padding: 0 8px; cursor: pointer; }
+.account-actions button:hover { background: var(--card-2); }
+.account-actions button.danger { color: #e5484d; }

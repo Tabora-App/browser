@@ -2,7 +2,7 @@ diff --git a/browser/base/jar.mn b/browser/base/jar.mn
 index b2b5db6040..fbeefdc452 100644
 --- a/browser/base/jar.mn
 +++ b/browser/base/jar.mn
-@@ -33,6 +33,70 @@ browser.jar:
+@@ -33,6 +33,73 @@ browser.jar:
          content/browser/aboutTabCrashed.xhtml         (content/aboutTabCrashed.xhtml)
          content/browser/blanktab.html                 (content/blanktab.html)
          content/browser/browser.js                    (content/browser.js)
@@ -42,6 +42,9 @@ index b2b5db6040..fbeefdc452 100644
 +        content/browser/tabora/about/about.xhtml  (content/tabora/about/about.xhtml)
 +        content/browser/tabora/about/about.css  (content/tabora/about/about.css)
 +        content/browser/tabora/about/about.js  (content/tabora/about/about.js)
++        content/browser/tabora/update/TaboraUpdate.sys.mjs  (content/tabora/update/TaboraUpdate.sys.mjs)
++        content/browser/tabora/update/update.js  (content/tabora/update/update.js)
++        content/browser/tabora/update/update.css  (content/tabora/update/update.css)
 +        content/browser/tabora/actors/TaboraWalletChild.sys.mjs  (content/tabora/actors/TaboraWalletChild.sys.mjs)
 +        content/browser/tabora/actors/TaboraWalletParent.sys.mjs  (content/tabora/actors/TaboraWalletParent.sys.mjs)
 +        content/browser/tabora/wallet/logos/ethereum.png  (content/tabora/wallet/logos/ethereum.png)

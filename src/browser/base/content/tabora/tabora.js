@@ -39,9 +39,10 @@ var Tabora = {
     Services.scriptloader.loadSubScript("chrome://browser/content/tabora/wallet/send.js", window);
     Services.scriptloader.loadSubScript("chrome://browser/content/tabora/vault/vault.js", window);
     Services.scriptloader.loadSubScript("chrome://browser/content/tabora/account/account.js", window);
+    Services.scriptloader.loadSubScript("chrome://browser/content/tabora/update/update.js", window);
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
-      "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initWalletProvider", "initVaultActor", "initAccount", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "startTimers", "updateTitle", "localizeUrlbar",
+      "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initWalletProvider", "initVaultActor", "initAccount", "initUpdates", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "startTimers", "updateTitle", "localizeUrlbar",
       "routeUrlbarToCommandBar",
     ]) {
       try {
@@ -1105,6 +1106,11 @@ var Tabora = {
       this.html("span", { class: "kbd" }, "⌘⇧M"),
     ]);
     mail.addEventListener("click", () => this.openMail());
+    mail.addEventListener("contextmenu", e => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.showMenu(this.accountMenuItems(), e.clientX, e.clientY);
+    });
     const walletCard = this.html("button", { id: "tabora-wallet-card", title: "Кошелёк (⌘⇧W)" }, null, [
       this.svg(["M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v2", "M3 7v10a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-7a1 1 0 0 0-1-1H5a2 2 0 0 1-2-2z", "M16 14h.01"], 16, 1.8),
       this.html("span", {}, "Кошелёк"),

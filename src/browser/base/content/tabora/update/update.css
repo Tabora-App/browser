@@ -1,0 +1,215 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Плашка необязательного обновления внизу окна */
+#tabora-update-banner {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  translate: -50% 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(720px, calc(100% - 32px));
+  padding: 10px 10px 10px 12px;
+  border-radius: 14px;
+  background: var(--tabora-panel);
+  border: 1px solid var(--tabora-panel-border);
+  box-shadow: var(--tabora-shadow-lg);
+  font-family: var(--tabora-font);
+  color: var(--tabora-text);
+}
+
+#tabora-update-banner[hidden] {
+  display: none;
+}
+
+#tabora-update-banner .tb-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  flex: none;
+}
+
+#tabora-update-banner .text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+#tabora-update-banner .text b {
+  font: 700 13px/1.2 var(--tabora-font);
+  color: var(--tabora-text-strong);
+}
+
+#tabora-update-banner .text span {
+  font: 500 12px/1.3 var(--tabora-font);
+  color: var(--tabora-text-3);
+}
+
+#tabora-update-banner button {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid var(--tabora-field-border);
+  background: transparent;
+  color: var(--tabora-text);
+  font: 600 12px var(--tabora-font);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#tabora-update-banner button.primary {
+  background: var(--tabora-accent);
+  border-color: var(--tabora-accent);
+  color: var(--tabora-on-accent);
+  font-weight: 700;
+}
+
+#tabora-update-banner button.linkish {
+  border: none;
+  color: var(--tabora-text-3);
+  padding: 0 6px;
+}
+
+/* Стена обязательного обновления: закрывает всё окно, ввод не проходит */
+#tabora-update-wall {
+  position: absolute;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--tabora-bg) 92%, transparent);
+  backdrop-filter: blur(14px);
+  font-family: var(--tabora-font);
+  color: var(--tabora-text);
+}
+
+#tabora-update-wall[hidden] {
+  display: none;
+}
+
+#tabora-update-wall .card {
+  width: 440px;
+  max-width: calc(100% - 32px);
+  padding: 28px;
+  border-radius: 18px;
+  background: var(--tabora-panel);
+  border: 1px solid var(--tabora-panel-border);
+  box-shadow: var(--tabora-shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+#tabora-update-wall .wall-mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 13px;
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--tabora-accent) 35%, transparent);
+}
+
+#tabora-update-wall h2 {
+  margin: 4px 0 0;
+  font: 700 20px/1.2 var(--tabora-font);
+  letter-spacing: -0.01em;
+  color: var(--tabora-text-strong);
+}
+
+#tabora-update-wall .why,
+#tabora-update-wall .notes {
+  margin: 0;
+  font: 400 13px/1.5 var(--tabora-font);
+  color: var(--tabora-text-3);
+}
+
+#tabora-update-wall .notes {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--tabora-field);
+  color: var(--tabora-text-2);
+  white-space: pre-wrap;
+}
+
+#tabora-update-wall .bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--tabora-line);
+  overflow: hidden;
+}
+
+#tabora-update-wall .bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--tabora-accent);
+  transition: width 400ms ease;
+}
+
+#tabora-update-wall .bar i.indeterminate {
+  animation: tb-indeterminate 1.4s ease-in-out infinite;
+}
+
+@keyframes tb-indeterminate {
+  0% { translate: -20% 0; width: 20%; }
+  50% { width: 45%; }
+  100% { translate: 500% 0; width: 20%; }
+}
+
+#tabora-update-wall .state {
+  margin: 0;
+  font: 500 12.5px/1.4 var(--tabora-font);
+  color: var(--tabora-text-3);
+}
+
+#tabora-update-wall .state.failed {
+  color: #e5484d;
+}
+
+#tabora-update-wall .actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+#tabora-update-wall button {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid var(--tabora-field-border);
+  background: transparent;
+  color: var(--tabora-text);
+  font: 600 13px var(--tabora-font);
+  cursor: pointer;
+}
+
+#tabora-update-wall button.primary {
+  background: var(--tabora-accent);
+  border-color: var(--tabora-accent);
+  color: var(--tabora-on-accent);
+  font-weight: 700;
+}
+
+#tabora-update-wall button.linkish {
+  border: none;
+  color: var(--tabora-text-3);
+  margin-inline-end: auto;
+  padding: 0 4px;
+}
+
+#tabora-update-wall button.linkish:hover {
+  color: var(--tabora-text-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #tabora-update-wall .bar i.indeterminate {
+    animation: none;
+    width: 30%;
+  }
+}

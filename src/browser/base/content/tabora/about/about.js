@@ -43,13 +43,22 @@ function fill() {
     const d = new Date(Number(id.slice(0, 4)), Number(id.slice(4, 6)) - 1, Number(id.slice(6, 8)));
     document.getElementById("build").textContent = `Сборка ${d.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}`;
   }
-  let updates = "Обновления: вручную, последняя версия на сайте";
-  try {
-    if (Services.policies.isAllowed("appUpdate") && AppConstants.MOZ_UPDATER) {
-      updates = "Обновления проверяются автоматически";
-    }
-  } catch (e) {}
-  document.getElementById("updates").textContent = updates;
+  const { TaboraUpdate } = ChromeUtils.importESModule("chrome://browser/content/tabora/update/TaboraUpdate.sys.mjs");
+  const upd = document.getElementById("updates");
+  const restart = document.getElementById("restart-update");
+  const renderUpdates = () => {
+    upd.textContent = TaboraUpdate.statusText();
+    restart.hidden = !TaboraUpdate.readyForRestart;
+  };
+  renderUpdates();
+  const obs = () => renderUpdates();
+  Services.obs.addObserver(obs, TaboraUpdate.TOPIC);
+  window.addEventListener("unload", () => Services.obs.removeObserver(obs, TaboraUpdate.TOPIC));
+  document.getElementById("check-updates").addEventListener("click", () => {
+    upd.textContent = "Проверяем обновления…";
+    TaboraUpdate.check({ force: true }).catch(e => { upd.textContent = `Не удалось проверить: ${e.message}`; });
+  });
+  restart.addEventListener("click", () => TaboraUpdate.restart());
   for (const b of document.querySelectorAll(".link[data-url]")) {
     b.addEventListener("click", () => open(url(b.dataset.url)));
   }
