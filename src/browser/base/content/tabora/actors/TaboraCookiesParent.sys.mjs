@@ -25,7 +25,18 @@ export class TaboraCookiesParent extends JSWindowActorParent {
       return;
     }
     const how = message.data?.how === "rule" ? "rule" : "text";
+    // фрейм и «чужой ли это сайт» определяются здесь, по принципалам, а не по словам страницы
+    const frame = !!this.browsingContext.parent;
+    let thirdParty = false;
+    if (frame) {
+      try {
+        const base = top.currentWindowGlobal.documentPrincipal.baseDomain;
+        thirdParty = !base || this.manager.documentPrincipal.baseDomain !== base;
+      } catch (e) {
+        thirdParty = true;
+      }
+    }
     const win = this.browsingContext.topChromeWindow;
-    win?.Tabora?.cookieBannerHandled?.({ host, how, frame: !!this.browsingContext.parent }, top);
+    win?.Tabora?.cookieBannerHandled?.({ host, how, frame, thirdParty }, top);
   }
 }

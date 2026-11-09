@@ -752,9 +752,12 @@ var Tabora = {
   /** Контейнер вкладки менять нельзя: открываем ту же страницу в другом пространстве и закрываем старую. */
   moveTabToSpace(tab, space) {
     const url = tab.linkedBrowser?.currentURI?.spec || "about:blank";
+    // сайт заново открывается с нулевым принципалом нового контейнера; системный — только для внутренних страниц
+    const ssm = Services.scriptSecurityManager;
+    const web = /^https?:/i.test(url);
     const fresh = gBrowser.addTab(url, {
       userContextId: space.userContextId,
-      triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+      triggeringPrincipal: web ? ssm.createNullPrincipal({ userContextId: space.userContextId }) : ssm.getSystemPrincipal(),
       index: tab._tPos + 1,
     });
     gBrowser.removeTab(tab);
@@ -909,17 +912,39 @@ var Tabora = {
   },
 
   cookieBannerHandled(data, topContext) {
+    const now = Date.now();
+    // Сообщение приходит из процесса страницы, а страница может плодить фреймы и перезагрузки.
+    // Поэтому считаем не чаще раза в 3 секунды на вкладку и не больше 30 раз в минуту на окно.
+    const browser = topContext?.embedderElement;
+    const tab = browser ? gBrowser.getTabForBrowser(browser) : null;
+    if (!tab) {
+      return;
+    }
+    const seen = (this._cookieSeen ||= new WeakMap());
+    if (now - (seen.get(browser) || 0) < 3000) {
+      return;
+    }
+    seen.set(browser, now);
+    const rate = (this._cookieRate ||= { at: now, n: 0 });
+    if (now - rate.at > 60000) {
+      rate.at = now;
+      rate.n = 0;
+    }
+    if (++rate.n > 30) {
+      return;
+    }
     const count = Services.prefs.getIntPref("tabora.cookies.handledCount", 0) + 1;
     Services.prefs.setIntPref("tabora.cookies.handledCount", count);
-    this._cookieLast = { ...data, at: Date.now() };
+    this._cookieLast = { ...data, at: now };
+    if (data?.thirdParty) {
+      return; // фрейм другого сайта: в счётчик попадает, но уведомления от имени сайта вкладки не будет
+    }
     if (!Services.prefs.getBoolPref("tabora.cookies.notify", true)) {
       return;
     }
-    const tab = gBrowser.getTabForBrowser(topContext?.embedderElement);
-    if (tab && tab !== gBrowser.selectedTab) {
+    if (tab !== gBrowser.selectedTab) {
       return; // фоновые вкладки не отвлекают
     }
-    const now = Date.now();
     if (this._cookieNoticeAt && now - this._cookieNoticeAt < 4000) {
       return;
     }

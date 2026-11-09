@@ -2421,6 +2421,72 @@ sidebar-main {
   pointer-events: none;
 }
 
+/* Карточка подтверждения действия агента: сайт крупно, адрес и данные целиком */
+#tabora-agent .quick.confirm .act {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+#tabora-agent .quick.confirm .act + .act {
+  padding-top: 8px;
+  border-top: 1px solid var(--tabora-line);
+}
+
+#tabora-agent .quick.confirm .what {
+  font: 500 12px/1.4 var(--tabora-font);
+  color: var(--tabora-text);
+  overflow-wrap: anywhere;
+}
+
+#tabora-agent .quick.confirm .site {
+  font: 700 15px/1.3 var(--tabora-font);
+  color: var(--tabora-text-strong);
+  overflow-wrap: anywhere;
+}
+
+#tabora-agent .quick.confirm .url,
+#tabora-agent .quick.confirm .kv .v {
+  max-height: 96px;
+  overflow: auto;
+  padding: 5px 7px;
+  border-radius: 7px;
+  background: var(--tabora-panel);
+  font: 400 11px/1.45 ui-monospace, "SF Mono", Menlo, monospace;
+  color: var(--tabora-text);
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  white-space: pre-wrap;
+  user-select: text;
+  -moz-user-select: text;
+}
+
+#tabora-agent .quick.confirm .kv {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+#tabora-agent .quick.confirm .kv .k {
+  font: 600 11px/1.3 var(--tabora-font);
+  color: var(--tabora-text-3);
+  overflow-wrap: anywhere;
+}
+
+#tabora-agent .quick.confirm .note {
+  font: 400 12px/1.45 var(--tabora-font);
+  color: var(--tabora-text-3);
+  overflow-wrap: anywhere;
+}
+
+#tabora-agent .msg .link-site {
+  color: var(--tabora-text-3);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+}
+
 #tabora-agent .chips[hidden] {
   display: none;
 }
