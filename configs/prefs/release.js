@@ -19,6 +19,24 @@ pref("datareporting.healthreport.uploadEnabled", false);
 pref("datareporting.policy.dataSubmissionEnabled", false);
 pref("toolkit.telemetry.enabled", false);
 pref("toolkit.telemetry.unified", false);
+// Пинги Glean и старой телеметрии по отдельности: usage-reporting, архив, новые профили,
+// завершение работы, обновления, зависания, характеристики пользователя
+pref("datareporting.usage.uploadEnabled", false);
+pref("datareporting.policy.firstRunURL", "");
+pref("toolkit.telemetry.archive.enabled", false);
+pref("toolkit.telemetry.newProfilePing.enabled", false);
+pref("toolkit.telemetry.shutdownPingSender.enabled", false);
+pref("toolkit.telemetry.firstShutdownPing.enabled", false);
+pref("toolkit.telemetry.updatePing.enabled", false);
+pref("toolkit.telemetry.bhrPing.enabled", false);
+pref("toolkit.telemetry.user_characteristics_ping.opt-out", true);
+pref("toolkit.telemetry.server", "data:,");
+pref("browser.newtabpage.activity-stream.telemetry.privatePing.enabled", false);
+pref("browser.search.serpEventTelemetryCategorization.enabled", false);
+pref("browser.crashReports.unsubmittedCheck.autoSubmit2", false);
+// Эксперименты и раскатки Nimbus меняют настройки удалённо — выключены
+pref("nimbus.rollouts.enabled", false);
+pref("nimbus.telemetry.targetingContextEnabled", false);
 pref("app.shield.optoutstudies.enabled", false);
 pref("app.normandy.enabled", false);
 pref("browser.discovery.enabled", false);
@@ -68,12 +86,9 @@ pref("browser.startup.page", 1);
 pref("browser.startup.homepage", "about:blank");
 pref("browser.newtab.preload", false);
 
-// Язык интерфейса: русский. Перевод встроен языковым пакетом (tools/langpack.py),
-// собранным из официальной локализации Firefox с брендом Tabora, поэтому подпись
-// Mozilla на нём не действует и для языковых пакетов не требуется.
+// Язык интерфейса: русский. Перевод встроен в сборку (mach package-multi-locale из
+// firefox-l10n, бренд Tabora из нашего брендинга), подпись дополнений не снимается.
 pref("intl.locale.requested", "ru,en-US");
-pref("extensions.langpacks.signatures.required", false);
-pref("extensions.installDistroAddons", true);
 
 // Настройки: без разделов Mozilla (управление ИИ, профили Firefox)
 pref("browser.preferences.aiControls", false);
@@ -102,8 +117,10 @@ pref("signon.storage.rust.enabled", true);
 pref("tabora.account.domain", "tabora.app");
 pref("tabora.account.server", "");
 
-// Обновления: манифест канала и update.xml лежат в репозитории GitHub, пакеты — в GitHub Releases
-pref("tabora.update.channelUrl", "https://raw.githubusercontent.com/Tabora-App/browser/main/updates/channel.json");
+// Обновления: подписанный манифест цели и update.xml лежат в репозитории GitHub, пакеты —
+// в GitHub Releases. Адреса читаются только из настроек по умолчанию (значение пользователя
+// не действует) и только https; формат и подпись — docs/UPDATES.md.
+pref("tabora.update.manifestUrl", "https://raw.githubusercontent.com/Tabora-App/browser/main/updates/%CHANNEL%/%BUILD_TARGET%/manifest.json");
 pref("tabora.update.url", "https://raw.githubusercontent.com/Tabora-App/browser/main/updates/%CHANNEL%/%BUILD_TARGET%/update.xml");
 pref("app.update.auto", true);
 pref("app.update.staging.enabled", true);

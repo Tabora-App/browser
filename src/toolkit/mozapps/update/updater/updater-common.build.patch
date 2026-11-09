@@ -1,0 +1,17 @@
+diff --git a/toolkit/mozapps/update/updater/updater-common.build b/toolkit/mozapps/update/updater/updater-common.build
+index e0930da5d8..06be1ca41d 100644
+--- a/toolkit/mozapps/update/updater/updater-common.build
++++ b/toolkit/mozapps/update/updater/updater-common.build
+@@ -137,6 +137,12 @@ for var in (
+ ):
+     DEFINES[var] = '"%s"' % CONFIG[var]
+ 
++# Tabora: the downgrade check compares the MAR product version with the Tabora
++# version (displayVersion), not with the Firefox version.
++if not CONFIG["TABORA_APP_VERSION"]:
++    error("TABORA_APP_VERSION is not set")
++DEFINES["TABORA_APP_VERSION"] = '"%s"' % CONFIG["TABORA_APP_VERSION"]
++
+ LOCAL_INCLUDES += [
+     "/toolkit/mozapps/update/common",
+     "/xpcom/base",  # for nsVersionComparator.cpp

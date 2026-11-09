@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Языковые пакеты для Tabora.
+"""Языковой пакет Firefox с брендом Tabora (вспомогательный инструмент).
 
-Firefox распространяет перевод интерфейса отдельными расширениями (langpack).
-Мы берём официальный пакет для нашей версии Firefox, меняем в нём файлы
-брендинга на Tabora и кладём в приложение как встроенное расширение
-(Contents/Resources/distribution/extensions). Подпись Mozilla при этом
-снимается, поэтому в настройках сборки выключена проверка подписи именно
-для языковых пакетов (extensions.langpacks.signatures.required).
+Сборка его больше не использует: перевод встраивается в приложение multi-locale
+упаковкой (tools/build.py package → mach package-multi-locale), а подпись дополнений
+обязательна, поэтому пакет с изменённым брендингом (подпись Mozilla снята) релизная
+сборка не загрузит. Инструмент оставлен для сравнения строк и проверок в сборках
+разработчика.
+
+Официальный пакет скачивается с archive.mozilla.org и сверяется с SHA512SUMS
+(подпись Mozilla проверяется, если установлен gpg).
 
   tools/langpack.py [--locale ru] [--version 159.0.1] [--out .build/langpacks]
 """
@@ -14,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import sys
 import urllib.request
@@ -21,6 +24,9 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tools"))
+import build as buildtool  # noqa: E402
+
 BUILD_STATE = ROOT / ".build"
 CACHE = BUILD_STATE / "langpacks"
 
@@ -44,14 +50,26 @@ def engine_version() -> str:
 
 
 def download(locale: str, version: str) -> Path:
+    if not buildtool.FIREFOX_VERSION_RE.match(version):
+        sys.exit(f"неверная версия Firefox: {version!r}")
+    if not re.match(r"^[a-z]{2,3}(-[A-Z]{2}|-[a-zA-Z]{4,8})?$", locale):
+        sys.exit(f"неверный код языка: {locale!r}")
     CACHE.mkdir(parents=True, exist_ok=True)
     dest = CACHE / f"{locale}-{version}.orig.xpi"
-    if dest.exists():
+    expected = buildtool.mozilla_sha512(version, f"mac/xpi/{locale}.xpi")
+    if dest.exists() and buildtool.sha512_file(dest) == expected:
         return dest
     url = XPI_URL.format(v=version, locale=locale)
     print(f"скачиваю {url}")
-    with urllib.request.urlopen(url) as resp, open(dest, "wb") as out:
+    tmp = dest.with_suffix(".part")
+    with urllib.request.urlopen(url, timeout=120) as resp, open(tmp, "wb") as out:
+        if not resp.geturl().startswith("https://archive.mozilla.org/"):
+            sys.exit(f"перенаправление на чужой адрес: {resp.geturl()}")
         shutil.copyfileobj(resp, out)
+    if buildtool.sha512_file(tmp) != expected:
+        tmp.unlink()
+        sys.exit(f"хеш {url} не совпадает с SHA512SUMS: файл удалён")
+    tmp.rename(dest)
     return dest
 
 

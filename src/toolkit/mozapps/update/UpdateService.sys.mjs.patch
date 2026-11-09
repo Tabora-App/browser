@@ -1,18 +1,64 @@
 diff --git a/toolkit/mozapps/update/UpdateService.sys.mjs b/toolkit/mozapps/update/UpdateService.sys.mjs
-index 164381ebc1..506dc08139 100644
+index 164381ebc1..0f7ad22e69 100644
 --- a/toolkit/mozapps/update/UpdateService.sys.mjs
 +++ b/toolkit/mozapps/update/UpdateService.sys.mjs
-@@ -5500,6 +5500,13 @@ export class CheckerService {
-     let url = Services.appinfo.updateURL;
+@@ -24,6 +24,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
+   UpdateUtils: "resource://gre/modules/UpdateUtils.sys.mjs",
+   WindowsRegistry: "resource://gre/modules/WindowsRegistry.sys.mjs",
+   setTimeout: "resource://gre/modules/Timer.sys.mjs",
++  // Tabora: проверка update.xml по подписанному манифесту цели
++  TaboraUpdate: "chrome://tabora/content/update/TaboraUpdate.sys.mjs",
+ });
+ 
+ XPCOMUtils.defineLazyServiceGetter(
+@@ -5497,7 +5499,11 @@ export class CheckerService {
+       throw Components.Exception("", Cr.NS_ERROR_INVALID_ARG);
+     }
+ 
+-    let url = Services.appinfo.updateURL;
++    // Tabora: адрес из application.ini (сервер Mozilla) не используется.
++    // Шаблон update.xml берётся только из настроек по умолчанию: значение,
++    // заданное пользователем или в about:config, не учитывается. Подстановки
++    // %CHANNEL%, %BUILD_TARGET% и т. д. те же, что у штатного адреса.
++    let url = lazy.TaboraUpdate.defaultHttpsPref("tabora.update.url");
      let updatePin;
  
-+    // Tabora: манифест обновлений лежит на GitHub, шаблон задаётся настройкой
-+    // (подстановки %CHANNEL%, %BUILD_TARGET% и т. д. те же, что у штатного адреса).
-+    const taboraUrl = Services.prefs.getStringPref("tabora.update.url", "");
-+    if (/^https:\/\//.test(taboraUrl)) {
-+      url = taboraUrl;
+     if (Services.policies) {
+@@ -5515,6 +5521,12 @@ export class CheckerService {
+       }
+     }
+ 
++    // Tabora: только https (в том числе адрес из политики AppUpdateURL)
++    if (url && !/^https:\/\/[^\/?#@\s]+\//.test(url)) {
++      LOG("CheckerService:getUpdateURL - not an https URL, ignored");
++      url = "";
 +    }
 +
-     if (Services.policies) {
-       let policies = Services.policies.getActivePolicies();
-       if (policies) {
+     if (!url) {
+       LOG("CheckerService:getUpdateURL - update URL not defined");
+       return null;
+@@ -5752,10 +5764,24 @@ export class CheckerService {
+       LOG("CheckerService:#updateCheck - Getting sslStatus failed.");
+     }
+ 
++    // Tabora: ответ принимается только с того же хоста по https, без
++    // перенаправлений на другие хосты.
++    if (!lazy.TaboraUpdate.sameHttpsHost(url, request.responseURL)) {
++      LOG(
++        "CheckerService:#updateCheck - response from an unexpected location: " +
++          request.responseURL
++      );
++      return this.#getCheckFailedObject(Cr.NS_ERROR_UNEXPECTED, 200, request);
++    }
++
+     let updates;
+     try {
+       // Analyze the resulting DOM and determine the set of updates.
+       updates = this.#parseUpdates(request);
++      // Tabora: остаются только обновления, совпадающие с подписанным
++      // манифестом цели: версия Tabora выше установленной, тот же пакет,
++      // sha512 и размер. Без действительного манифеста обновлений нет.
++      updates = await lazy.TaboraUpdate.filterUpdates(updates);
+     } catch (e) {
+       LOG(
+         "CheckerService:#updateCheck - there was a problem checking for " +

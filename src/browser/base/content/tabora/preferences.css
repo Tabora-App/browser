@@ -168,11 +168,11 @@ setting-group[groupid="assistantModelGroup"],
 setting-group[groupid="aiControlsDescription"],
 setting-group[groupid="aiFeatures"],
 setting-group[groupid="aiStatesDescription"],
-setting-group[groupid="dataCollection"],
-setting-group[groupid="securityPrivacyStatus"],
-setting-group[groupid="securityPrivacyWarnings"] {
+setting-group[groupid="dataCollection"] {
   display: none !important;
 }
+/* Карточки «Статус защиты» и предупреждения безопасности (securityPrivacyStatus,
+ * securityPrivacyWarnings) не скрываются: они сообщают об ослабленных настройках. */
 
 /* Лиса Firefox в баннере «браузер по умолчанию» */
 img[src$="fox-ai.svg"],

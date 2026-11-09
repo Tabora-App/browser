@@ -11,7 +11,7 @@ ac_add_options --enable-application=browser
 if test -z "$CI"; then
   mk_add_options MOZ_PARALLEL_BUILD=8
 fi
-ac_add_options --with-l10n-base="${topsrcdir}/browser/locales"
+# --with-l10n-base (переводы firefox-l10n в .build/l10n-central) задаёт tools/build.py
 
 if test "$SCCACHE_GHA_ENABLED" = "true"; then
   if test -x "$(command -v sccache)"; then
@@ -55,10 +55,20 @@ if test "$BROWSER_RELEASE"; then
   export AUTOCLOBBER=1
 fi
 
-# Разрешить неподписанные системные расширения (для своих встроенных модулей)
-ac_add_options --with-unsigned-addon-scopes=app,system
-export MOZ_REQUIRE_SIGNING=
-mk_add_options MOZ_REQUIRE_SIGNING=
+# Подпись дополнений обязательна (MOZ_REQUIRE_SIGNING по умолчанию для релизной ветки):
+# неподписанные расширения не ставятся ни в профиль, ни из системных каталогов.
+# Русский интерфейс встроен в сборку (mach package-multi-locale, tools/build.py package),
+# а не неподписанным языковым пакетом, поэтому снимать требование не нужно.
+
+# Google Safe Browsing: ключ из файла вне репозитория (docs/UPDATES.md, раздел «Safe Browsing»).
+# Без ключа провайдеры Google не работают: фишинг и вредоносные загрузки не проверяются.
+_tabora_sb_key="${TABORA_SAFEBROWSING_KEYFILE:-$HOME/.config/tabora/safebrowsing.key}"
+if test -s "$_tabora_sb_key"; then
+  ac_add_options --with-google-safebrowsing-api-keyfile="$_tabora_sb_key"
+elif test "$BROWSER_RELEASE"; then
+  echo "Внимание: нет ключа Safe Browsing ($_tabora_sb_key), защита от фишинга работать не будет" >&2
+fi
+unset _tabora_sb_key
 
 # Телеметрия Mozilla выключена на уровне сборки
 mk_add_options MOZ_DATA_REPORTING=

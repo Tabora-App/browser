@@ -5,8 +5,9 @@
   tools/chrome_ctl.py --shot .build/shot.png
   tools/chrome_ctl.py --script 'Tabora.openCommandBar("зарег")' --shot .build/shot.png
 
-Браузер должен быть запущен с флагом --marionette (tools/dev_inject.py --marionette
-или build.py run --marionette). Порт по умолчанию 2828.
+Браузер должен быть запущен с флагом --marionette (build.py run --marionette или
+`MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1 <Tabora.app>/Contents/MacOS/tabora --profile <путь> --marionette`).
+Порт по умолчанию 2828.
 """
 from __future__ import annotations
 

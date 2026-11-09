@@ -1,0 +1,16 @@
+diff --git a/toolkit/mozapps/update/updater/updater.cpp b/toolkit/mozapps/update/updater/updater.cpp
+index 52ec6e3c07..caf4f56331 100644
+--- a/toolkit/mozapps/update/updater/updater.cpp
++++ b/toolkit/mozapps/update/updater/updater.cpp
+@@ -3390,8 +3390,10 @@ static void UpdateThreadFunc(void* param) {
+     if (rv == OK) {
+       rv = PopulategMARStrings();
+       if (rv == OK) {
++        // Tabora: MAR product version is the Tabora version, see
++        // updater-common.build.
+         rv = gArchiveReader.VerifyProductInformation(
+-            gMARStrings.MARChannelID.get(), MOZ_APP_VERSION);
++            gMARStrings.MARChannelID.get(), TABORA_APP_VERSION);
+       }
+     }
+ #endif

@@ -1,8 +1,8 @@
 diff --git a/browser/moz.configure b/browser/moz.configure
-index 8979a2e4e8..c317b4cf6a 100644
+index 8979a2e4e8..1b55245857 100644
 --- a/browser/moz.configure
 +++ b/browser/moz.configure
-@@ -11,7 +11,7 @@ imply_option("MOZ_NORMANDY", True)
+@@ -11,13 +11,54 @@ imply_option("MOZ_NORMANDY", True)
  imply_option("MOZ_PROFILE_MIGRATOR", True)
  
  
@@ -11,3 +11,50 @@ index 8979a2e4e8..c317b4cf6a 100644
  imply_option("MOZ_APP_ID", "{ec8030f7-c20a-464f-9b0e-13a3a9e97384}")
  # Include the DevTools client, not just the server (which is the default)
  imply_option("MOZ_DEVTOOLS", "all")
+ imply_option("BROWSER_CHROME_URL", "chrome://browser/content/browser.xhtml")
+ 
+ 
++# Tabora: version of the product (displayVersion from browser.json). The updater
++# compares it with the product version of a MAR, so an older Tabora package is
++# rejected even when it is built on the same Firefox version.
++option(env="TABORA_APP_VERSION", nargs=1, help="Tabora version, e.g. 0.2.0")
++
++
++@depends("TABORA_APP_VERSION")
++@imports("re")
++def tabora_app_version(value):
++    if not value:
++        die("TABORA_APP_VERSION is not set: configure through tools/build.py")
++    version = value[0]
++    if not re.match(r"^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$", version):
++        die("TABORA_APP_VERSION must look like 1.2.3, got %s", version)
++    return version
++
++
++set_config("TABORA_APP_VERSION", tabora_app_version)
++
++# Tabora: host for the [AppUpdate] URL in application.ini. Firefox falls back
++# to aus5.mozilla.org when it is empty; the URL itself is not used by Tabora
++# (updates come from tabora.update.url in the default prefs).
++option(env="MOZ_APPUPDATE_HOST", nargs=1, help="Update server host for application.ini")
++
++
++@depends("MOZ_APPUPDATE_HOST")
++@imports("re")
++def appupdate_host(value):
++    if not value:
++        return None
++    host = value[0]
++    if not re.match(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", host):
++        die("MOZ_APPUPDATE_HOST must be a host name, got %s", host)
++    if host.endswith("mozilla.org"):
++        die("MOZ_APPUPDATE_HOST must not point to Mozilla servers")
++    return host
++
++
++set_config("MOZ_APPUPDATE_HOST", appupdate_host)
++
++
+ with only_when(target_has_linux_kernel & compile_environment):
+     option(env="MOZ_NO_PIE_COMPAT", help="Enable non-PIE wrapper")
+ 

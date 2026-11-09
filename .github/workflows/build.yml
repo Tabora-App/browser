@@ -2,6 +2,7 @@ name: Build
 
 # Сборка на Linux-раннерах GitHub или Blacksmith. macOS собирается кросс-компиляцией
 # с тулчейнами Mozilla. Запуск только вручную, чтобы не тратить минуты на каждый коммит.
+# Сторонние actions закреплены по полному SHA коммита (тег в комментарии).
 
 on:
   workflow_dispatch:
@@ -37,36 +38,39 @@ jobs:
       TARGET_ARCH: ${{ endsWith(inputs.platform, 'aarch64') && 'aarch64' || 'x86_64' }}
       BROWSER_DISABLE_LTO: ${{ inputs.lto && '' || '1' }}
       BROWSER_RELEASE: 1
+      PLATFORM: ${{ inputs.platform }}
 
     steps:
       - name: Free disk space
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: false
+        # вместо jlumbroso/free-disk-space: то же самое своими командами
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+            /usr/local/share/boost /opt/hostedtoolcache/CodeQL /usr/share/swift || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          sudo swapoff -a >/dev/null 2>&1 && sudo rm -f /mnt/swapfile /swapfile || true
+          df -h /
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install system packages
         run: |
           sudo apt-get update
           sudo apt-get install -y python3 python3-pip zstd yasm nasm build-essential libgtk2.0-dev libpython3-dev m4 uuid \
             libasound2-dev libcurl4-openssl-dev libdbus-1-dev libdrm-dev libdbus-glib-1-dev libgtk-3-dev libpulse-dev \
-            libx11-xcb-dev libxt-dev xvfb --fix-missing
+            libx11-xcb-dev libxt-dev xvfb gnupg --fix-missing
 
-      - name: Download Firefox source
+      - name: Download Firefox source and translations
+        # хеш архива закреплён в browser.json (firefox.sha512), подпись SHA512SUMS проверяется gpg
         run: python3 tools/build.py download
 
-      - name: Cache macOS cross toolchain
-        if: env.TARGET_PLATFORM == 'darwin'
-        id: cache-mac-cross
-        uses: actions/cache@v4
-        with:
-          path: ~/mac-cross
-          key: mac-cross-v1
-
+      # Тулчейн кросс-сборки macOS не кэшируется: mach проверяет загрузку по chain-of-trust
+      # Taskcluster, а восстановленный кэш такой проверки не проходит.
       - name: Fetch macOS cross toolchain (cctools, dmg, hfsplus)
-        if: env.TARGET_PLATFORM == 'darwin' && steps.cache-mac-cross.outputs.cache-hit != 'true'
+        if: env.TARGET_PLATFORM == 'darwin'
         run: |
           set -ex
           mkdir -p ~/mac-cross
@@ -77,25 +81,43 @@ jobs:
 
       - name: Setup Rust
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain $(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)
-          source "$HOME/.cargo/env"
-          case "${{ inputs.platform }}" in
+          channel="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)"
+          if ! command -v rustup >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none
+          fi
+          . "$HOME/.cargo/env" 2>/dev/null || true
+          rustup toolchain install --profile minimal "$channel"
+          rustup default "$channel"
+          case "$PLATFORM" in
             darwin-aarch64) rustup target add aarch64-apple-darwin ;;
             darwin-x86_64)  rustup target add x86_64-apple-darwin ;;
             linux-aarch64)  rustup target add aarch64-unknown-linux-gnu ;;
           esac
+
+      - name: Safe Browsing key
+        # ключ Google Safe Browsing из секрета (не обязателен: без него защита от фишинга не работает)
+        env:
+          SAFEBROWSING_API_KEY: ${{ secrets.SAFEBROWSING_API_KEY }}
+        run: |
+          if [ -n "$SAFEBROWSING_API_KEY" ]; then
+            umask 077
+            printf '%s' "$SAFEBROWSING_API_KEY" > "$RUNNER_TEMP/safebrowsing.key"
+            echo "TABORA_SAFEBROWSING_KEYFILE=$RUNNER_TEMP/safebrowsing.key" >> "$GITHUB_ENV"
+          else
+            echo "::warning::нет секрета SAFEBROWSING_API_KEY: Safe Browsing в этой сборке работать не будет"
+          fi
 
       - name: Import branding and patches
         run: python3 tools/build.py import
 
       - name: Bootstrap Mozilla toolchains
         run: |
-          . "$HOME/.cargo/env"
+          . "$HOME/.cargo/env" 2>/dev/null || true
           python3 tools/build.py bootstrap
 
       - name: Build
         run: |
-          . "$HOME/.cargo/env"
+          . "$HOME/.cargo/env" 2>/dev/null || true
           if [ "$TARGET_PLATFORM" = "linux" ] && [ -d "$HOME/.mozbuild/clang/bin" ]; then
             export CC="$HOME/.mozbuild/clang/bin/clang"
             export CXX="$HOME/.mozbuild/clang/bin/clang++"
@@ -104,13 +126,20 @@ jobs:
           python3 tools/build.py build
 
       - name: Package
+        # package проверяет обновлятор (наши сертификаты, канал tabora-release, версия) и
+        # кладёт в dist/ tar приложения для workflow Release
         run: |
-          . "$HOME/.cargo/env"
-          python3 tools/build.py package
+          . "$HOME/.cargo/env" 2>/dev/null || true
+          python3 tools/build.py package --app-tar
+
+      - name: Remove Safe Browsing key file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/safebrowsing.key"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: tabora-${{ inputs.platform }}
           retention-days: 7
+          if-no-files-found: error
           path: dist/*

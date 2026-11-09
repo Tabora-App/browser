@@ -1,8 +1,12 @@
 name: Release
 
-# Выпуск обновления: собирает MAR из упакованного приложения, подписывает ключом Tabora из
-# секретов, публикует релиз на GitHub и коммитит манифесты в updates/. Запуск вручную после
-# того, как сборка нужной платформы (workflow Build) положила артефакт с приложением.
+# Выпуск обновления из артефакта успешного запуска Build на main:
+#   verify  — проверка входных данных и запуска Build (без секретов);
+#   sign    — сборка MAR и подписанных манифестов. Environment «release» (секреты ключей,
+#             подтверждение ревьюером). signmar собирается здесь же из исходников Firefox
+#             (хеш закреплён в browser.json); бинарники из артефакта не запускаются.
+#   publish — релиз на GitHub и коммит updates/ в main (без ключей).
+# Входные данные передаются в скрипты только через переменные окружения.
 
 on:
   workflow_dispatch:
@@ -14,11 +18,11 @@ on:
         default: darwin-aarch64
         options: [darwin-aarch64, darwin-x86_64, linux-x86_64, linux-aarch64]
       build_run_id:
-        description: "ID запуска Build с артефактом приложения"
+        description: "ID успешного запуска Build из main с артефактом приложения"
         required: true
         type: string
       minimum:
-        description: "Минимально допустимая версия (ниже — обновление обязательное)"
+        description: "Минимально допустимая версия X.Y.Z (ниже — обновление обязательное)"
         required: false
         type: string
       notes:
@@ -26,43 +30,248 @@ on:
         required: false
         type: string
 
-permissions:
-  contents: write
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  release:
-    name: Release ${{ inputs.platform }}
+  verify:
+    name: Verify inputs and build run
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      head_sha: ${{ steps.run.outputs.head_sha }}
+    steps:
+      - name: Validate inputs
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          MINIMUM: ${{ inputs.minimum }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+          [[ "$PLATFORM" =~ ^(darwin|linux)-(aarch64|x86_64)$ ]] || { echo "::error::неверная платформа"; exit 1; }
+          [[ "$BUILD_RUN_ID" =~ ^[0-9]{1,20}$ ]] || { echo "::error::build_run_id — только цифры"; exit 1; }
+          if [ -n "$MINIMUM" ] && ! [[ "$MINIMUM" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::minimum должна быть вида X.Y.Z"; exit 1
+          fi
+          if [ "${#NOTES}" -gt 2000 ]; then echo "::error::notes длиннее 2000 символов"; exit 1; fi
+
+      - name: Check build run
+        id: run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          PLATFORM: ${{ inputs.platform }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPO/actions/runs/$BUILD_RUN_ID" > run.json
+          jq -e --arg repo "$REPO" '
+            .path == ".github/workflows/build.yml"
+            and .head_branch == "main"
+            and .event == "workflow_dispatch"
+            and .status == "completed"
+            and .conclusion == "success"
+            and .repository.full_name == $repo
+            and .head_repository.full_name == $repo
+          ' run.json >/dev/null || { echo "::error::запуск $BUILD_RUN_ID — не успешный Build из main этого репозитория"; jq '{path, head_branch, event, status, conclusion, repo: .repository.full_name, head: .head_repository.full_name}' run.json; exit 1; }
+          head_sha="$(jq -r .head_sha run.json)"
+          [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::неверный head_sha"; exit 1; }
+          gh api "repos/$REPO/actions/runs/$BUILD_RUN_ID/artifacts" > artifacts.json
+          jq -e --arg name "tabora-$PLATFORM" '[.artifacts[] | select(.name == $name and .expired == false)] | length == 1' artifacts.json >/dev/null \
+            || { echo "::error::в запуске нет артефакта tabora-$PLATFORM"; exit 1; }
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Build commit is on main
+        env:
+          HEAD_SHA: ${{ steps.run.outputs.head_sha }}
+        run: git merge-base --is-ancestor "$HEAD_SHA" origin/main || { echo "::error::коммит сборки не входит в main"; exit 1; }
+
+  sign:
+    name: Build and sign MAR
+    needs: verify
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      actions: read
+      contents: read
     env:
       TARGET_PLATFORM: ${{ startsWith(inputs.platform, 'darwin') && 'darwin' || 'linux' }}
       TARGET_ARCH: ${{ endsWith(inputs.platform, 'aarch64') && 'aarch64' || 'x86_64' }}
-      GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout build commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.verify.outputs.head_sha }}
+          persist-credentials: false
+
+      - name: Checkout current manifests from main
+        # уже выпущенные версии берутся из main (не из коммита сборки): release.py не даст
+        # выпустить версию ниже или равную опубликованной
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          path: main-tree
+          persist-credentials: false
+          sparse-checkout: updates
+
+      - name: Use manifests from main
+        run: |
+          rm -rf updates
+          cp -R main-tree/updates updates
+          rm -rf main-tree
 
       - name: Download build artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
+          name: tabora-${{ inputs.platform }}
           run-id: ${{ inputs.build_run_id }}
           github-token: ${{ github.token }}
-          path: engine/obj-${{ env.TARGET_PLATFORM }}-${{ env.TARGET_ARCH }}/dist
+          path: ${{ runner.temp }}/artifact
 
-      - name: Restore MAR signing keys
-        # Секрет TABORA_MAR_KEYS — base64 от tar.gz папки .build/mar-keys (cert9.db, key4.db, pkcs11.txt)
+      - name: Install tools
         run: |
-          mkdir -p .build
-          echo "${{ secrets.TABORA_MAR_KEYS }}" | base64 -d | tar -xz -C .build
-          ls .build/mar-keys
+          sudo apt-get update
+          sudo apt-get install -y libnss3-dev libnss3-tools pkg-config xz-utils build-essential
 
-      - name: Build, sign and publish
+      - name: Build signmar from verified Firefox sources
+        # ключей на диске ещё нет; исходники проверяются по firefox.sha512 из browser.json
+        run: python3 tools/release.py tools --out "$RUNNER_TEMP/mar-tools"
+
+      - name: Restore signing keys
+        # TABORA_MAR_KEYS — base64 от tar.gz каталога mar-keys (cert9.db, key4.db, pkcs11.txt,
+        # manifest-ed25519.pem); TABORA_MAR_KEYS_PASSWORD — пароль базы, если задан
+        env:
+          MAR_KEYS: ${{ secrets.TABORA_MAR_KEYS }}
+          MAR_KEYS_PASSWORD: ${{ secrets.TABORA_MAR_KEYS_PASSWORD }}
         run: |
-          python3 tools/release.py publish ${{ inputs.minimum && format('--minimum {0}', inputs.minimum) || '' }} ${{ inputs.notes && format('--notes "{0}"', inputs.notes) || '' }}
+          set -euo pipefail
+          umask 077
+          keys="$RUNNER_TEMP/keys"
+          mkdir -p "$keys"
+          printf '%s' "$MAR_KEYS" > "$keys/keys.b64"
+          base64 -d "$keys/keys.b64" | tar -xz -C "$keys" --no-same-owner --no-same-permissions
+          rm -f "$keys/keys.b64"
+          test -f "$keys/mar-keys/key4.db" || { echo "::error::в секрете нет mar-keys/key4.db"; exit 1; }
+          chmod 700 "$keys/mar-keys"
+          chmod 600 "$keys"/mar-keys/*
+          echo "TABORA_MAR_KEYS_DIR=$keys/mar-keys" >> "$GITHUB_ENV"
+          if [ -n "$MAR_KEYS_PASSWORD" ]; then
+            printf '%s\n' "$MAR_KEYS_PASSWORD" > "$keys/password"
+            echo "TABORA_MAR_KEYS_PASSWORD_FILE=$keys/password" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build and sign MAR, write manifests
+        env:
+          MINIMUM: ${{ inputs.minimum }}
+          NOTES: ${{ inputs.notes }}
+          PLATFORM: ${{ inputs.platform }}
+        run: |
+          set -euo pipefail
+          app_tar="$RUNNER_TEMP/artifact/tabora-app-$PLATFORM.tar"
+          test -f "$app_tar" || { echo "::error::в артефакте нет tabora-app-$PLATFORM.tar"; exit 1; }
+          python3 tools/release.py mar --app-tar "$app_tar" --tools "$RUNNER_TEMP/mar-tools"
+          args=()
+          if [ -n "$MINIMUM" ]; then args+=(--minimum "$MINIMUM"); fi
+          if [ -n "$NOTES" ]; then args+=(--notes "$NOTES"); fi
+          python3 tools/release.py manifest "${args[@]}"
+
+      - name: Remove signing keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/keys"
+
+      - name: Collect release files
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/release"
+          mkdir -p "$out"
+          cp .build/release/*.complete.mar .build/release/*.complete.mar.json "$out/"
+          cp -R updates "$out/updates"
+
+      - name: Upload release files
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ inputs.platform }}
+          retention-days: 7
+          if-no-files-found: error
+          path: ${{ runner.temp }}/release/
+
+  publish:
+    name: Publish release and manifests
+    needs: [verify, sign]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Checkout main
+        # нужен пуш манифестов, поэтому учётные данные сохраняются только в этом задании
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+
+      - name: Download release files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-${{ inputs.platform }}
+          path: ${{ runner.temp }}/release
+
+      - name: Download dmg from build
+        if: startsWith(inputs.platform, 'darwin')
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: tabora-${{ inputs.platform }}
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/artifact
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+          meta="$(ls "$RUNNER_TEMP"/release/*.complete.mar.json)"
+          args=(--meta "$meta")
+          if [ -n "$NOTES" ]; then args+=(--notes "$NOTES"); fi
+          for dmg in "$RUNNER_TEMP"/artifact/*.dmg; do
+            [ -f "$dmg" ] && args+=(--dmg "$dmg")
+          done
+          python3 tools/release.py upload "${args[@]}"
 
       - name: Commit manifests
+        env:
+          PLATFORM: ${{ inputs.platform }}
         run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/release/updates"
+          meta="$(ls "$RUNNER_TEMP"/release/*.complete.mar.json)"
+          channel="$(jq -r .channel "$meta")"
+          target="$(jq -r .target "$meta")"
+          [[ "$channel" =~ ^[a-z][a-z0-9-]{0,31}$ ]] || { echo "::error::неверный канал"; exit 1; }
+          [[ "$target" =~ ^(Darwin|Linux)_(aarch64|x86_64)-gcc3$ ]] || { echo "::error::неверная цель"; exit 1; }
+          # переносятся только файлы этой цели и общий channel.json (обычные файлы, не ссылки)
+          for f in "$channel/$target/manifest.json" "$channel/$target/update.xml" channel.json; do
+            [ -f "$src/$f" ] && [ ! -L "$src/$f" ] || { echo "::error::нет $f"; exit 1; }
+            mkdir -p "updates/$(dirname "$f")"
+            cp "$src/$f" "updates/$f"
+          done
           git config user.name "tabora-release"
           git config user.email "release@tabora.app"
           git add updates
-          git commit -m "Обновление: манифесты ${{ inputs.platform }}" || echo "нечего коммитить"
-          git push
+          git commit -m "Обновление: манифесты $PLATFORM" || echo "нечего коммитить"
+          git push origin HEAD:main

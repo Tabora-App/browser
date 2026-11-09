@@ -12,7 +12,7 @@ Object.assign(Tabora, {
 
   updateMod() {
     if (!this._updateMod) {
-      this._updateMod = ChromeUtils.importESModule("chrome://browser/content/tabora/update/TaboraUpdate.sys.mjs");
+      this._updateMod = ChromeUtils.importESModule("chrome://tabora/content/update/TaboraUpdate.sys.mjs");
       Services.obs.addObserver(() => this.updateRender(), this._updateMod.TaboraUpdate.TOPIC);
     }
     return this._updateMod;
@@ -21,24 +21,25 @@ Object.assign(Tabora, {
   initUpdates() {
     const { TaboraUpdate } = this.updateMod();
     TaboraUpdate.start();
-    // клавиши при обязательном обновлении: только выход из браузера
+    // клавиши при обязательном обновлении: выход из браузера (⌘Q / Ctrl+Q) и
+    // управление кнопками самого экрана, остальное в браузер не проходит
     window.addEventListener("keydown", e => {
       if (!this.upd.wall || this.upd.wall.hidden) {
         return;
       }
-      const quit = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "q";
-      if (!quit) {
-        e.preventDefault();
-        e.stopPropagation();
+      const quit = (e.metaKey || e.ctrlKey) && (e.key || "").toLowerCase() === "q";
+      if (quit || this.upd.wall.contains(e.target)) {
+        return;
       }
+      e.preventDefault();
+      e.stopPropagation();
     }, true);
   },
 
   updateRender() {
     const { TaboraUpdate } = this.updateMod();
-    if (window !== Services.wm.getMostRecentBrowserWindow() && !this.upd.wall?.hidden === false) {
-      // чужое окно: стену показываем во всех, плашку — в каждом окне тоже
-    }
+    // стена и плашка показываются в каждом окне; обязательность считает TaboraUpdate:
+    // только если пакет для этой платформы есть и обновлятор может его поставить
     if (TaboraUpdate.mandatory) {
       this.updateBannerHide();
       this.updateWallShow();
@@ -64,10 +65,14 @@ Object.assign(Tabora, {
       this.upd.banner = b;
     }
     const ready = TaboraUpdate.readyForRestart;
-    const primary = this.html("button", { class: "primary", type: "button" }, ready ? "Перезапустить и обновить" : "Обновить");
+    // обновлятор недоступен (политика, нет прав, сборка без обновлятора): только сайт
+    const manualOnly = !ready && !TaboraUpdate.updatesPossible;
+    const primary = this.html("button", { class: "primary", type: "button" }, ready ? "Перезапустить и обновить" : manualOnly ? "Скачать с сайта" : "Обновить");
     primary.addEventListener("click", () => {
       if (TaboraUpdate.readyForRestart) {
         TaboraUpdate.restart();
+      } else if (manualOnly) {
+        this.go(TaboraUpdate.manualUrl);
       } else {
         TaboraUpdate.check({ force: true }).catch(() => {});
       }
@@ -99,7 +104,8 @@ Object.assign(Tabora, {
 
   updateWallShow() {
     const h = (t, a, x, c) => this.html(t, a, x, c);
-    const { TaboraUpdate, compareVersions } = this.updateMod();
+    const { TaboraUpdate } = this.updateMod();
+    const S = ChromeUtils.importESModule("resource://gre/modules/AppUpdater.sys.mjs").AppUpdater.STATUS;
     let w = this.upd.wall;
     if (!w) {
       w = h("div", { id: "tabora-update-wall", role: "dialog", "aria-modal": "true", hidden: "true" });
@@ -107,33 +113,37 @@ Object.assign(Tabora, {
       this.upd.wall = w;
     }
     const ready = TaboraUpdate.readyForRestart;
+    const busy = [S.CHECKING, S.DOWNLOADING, S.STAGING, S.DOWNLOAD_AND_INSTALL].includes(TaboraUpdate.status);
+    const failed = [S.DOWNLOAD_FAILED, S.CHECKING_FAILED, S.INTERNAL_ERROR].includes(TaboraUpdate.status);
     const p = TaboraUpdate.progress;
     const pct = p && p.total > 0 ? Math.round((p.done / p.total) * 100) : ready ? 100 : null;
-    const S = this.updateMod().TaboraUpdate.appUpdater ? ChromeUtils.importESModule("resource://gre/modules/AppUpdater.sys.mjs").AppUpdater.STATUS : {};
-    const failed = [S.DOWNLOAD_FAILED, S.CHECKING_FAILED, S.INTERNAL_ERROR, S.MANUAL_UPDATE, S.UNSUPPORTED_SYSTEM, S.NO_UPDATER].includes(TaboraUpdate.status);
+    // выход есть всегда: «Скачать с сайта» и «Выйти»; «Повторить», пока ничего не идёт
     const action = ready
       ? this.html("button", { class: "primary", type: "button" }, "Перезапустить и установить")
-      : failed
-        ? this.html("button", { class: "primary", type: "button" }, "Повторить")
-        : null;
-    action?.addEventListener("click", () => (ready ? TaboraUpdate.restart() : TaboraUpdate.check({ force: true }).catch(() => {})));
-    const manual = failed && TaboraUpdate.status !== S.CHECKING_FAILED ? this.html("button", { class: "linkish", type: "button" }, "Скачать с сайта") : null;
-    manual?.addEventListener("click", () => this.go(Services.prefs.getStringPref("app.update.url.manual", "https://tabora.app")));
+      : busy
+        ? null
+        : this.html("button", { class: "primary", type: "button" }, "Повторить");
+    action?.addEventListener("click", () => (TaboraUpdate.readyForRestart ? TaboraUpdate.restart() : TaboraUpdate.check({ force: true }).catch(() => {})));
+    const manual = this.html("button", { class: "linkish", type: "button" }, "Скачать с сайта");
+    manual.addEventListener("click", () => {
+      this.updateWallHide(); // страница загрузки должна быть видна; стена вернётся при следующей проверке
+      this.go(TaboraUpdate.manualUrl);
+    });
     const quit = this.html("button", { class: "linkish", type: "button" }, "Выйти из браузера");
     quit.addEventListener("click", () => Services.startup.quit(Ci.nsIAppStartup.eAttemptQuit));
+    const ch = TaboraUpdate.channel;
     w.replaceChildren(
       h("div", { class: "card" }, null, [
         this.markSvg("wall-mark"),
-        h("h2", {}, `Обязательное обновление до ${TaboraUpdate.channel?.version || "новой версии"}`),
-        h("p", { class: "why" }, `Версия ${TaboraUpdate.currentVersion} больше не поддерживается${TaboraUpdate.channel?.minimum ? `: минимально допустимая ${TaboraUpdate.channel.minimum}` : ""}. Работа продолжится после установки. Вкладки и данные сохранятся.`),
-        TaboraUpdate.channel?.notes ? h("p", { class: "notes" }, TaboraUpdate.channel.notes) : null,
+        h("h2", {}, `Обязательное обновление до ${ch?.version || "новой версии"}`),
+        h("p", { class: "why" }, `Версия ${TaboraUpdate.currentVersion || ""} больше не поддерживается${ch?.minimum ? `: минимально допустимая ${ch.minimum}` : ""}. Работа продолжится после установки. Вкладки и данные сохранятся.`),
+        ch?.notes ? h("p", { class: "notes" }, ch.notes) : null,
         h("div", { class: "bar", "aria-hidden": "true" }, null, [h("i", { style: `width:${pct ?? 6}%`, class: pct === null ? "indeterminate" : "" })]),
         h("p", { class: `state${failed ? " failed" : ""}` }, TaboraUpdate.statusText()),
         h("div", { class: "actions" }, null, [quit, manual, action].filter(Boolean)),
       ].filter(Boolean))
     );
     w.hidden = false;
-    void compareVersions;
   },
 
   updateWallHide() {

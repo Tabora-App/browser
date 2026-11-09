@@ -5,10 +5,11 @@
   "binaryName": "tabora",
   "repository": "https://github.com/Tabora-App/browser",
   "firefox": {
-    "version": "159.0.1"
+    "version": "159.0.1",
+    "sha512": "e7375c0c18361b22fa1d2e6fd5f6a4ff20b22e7090a64bf32d7ef79edb0a649983439b8e6e80106fe51bb96699bdd3096c921fe198d1b460193a66d6d8f227a4"
   },
   "brand": "release",
-  "updateHost": "",
+  "updateHost": "tabora.app",
   "brands": {
     "release": {
       "displayVersion": "0.1.0",
