@@ -96,7 +96,7 @@
   background: var(--tabora-panel, var(--card-2, #17191d));
   border: 1px solid var(--tabora-field-border, var(--field-border, #2a2d34));
   border-radius: 12px;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--tabora-shadow-lg, 0 18px 50px rgba(0, 0, 0, 0.55));
   overflow-y: auto;
   outline: none;
   animation: tsel-in 140ms cubic-bezier(0.2, 0, 0, 1);
@@ -135,11 +135,11 @@
 
 .tsel-item[data-active] {
   background: var(--tabora-raised, var(--raised, #23262c));
-  color: #fff;
+  color: var(--tabora-text-strong, var(--text-strong, #fff));
 }
 
 .tsel-item[aria-selected="true"] {
-  color: #fff;
+  color: var(--tabora-text-strong, var(--text-strong, #fff));
   font-weight: 700;
 }
 
