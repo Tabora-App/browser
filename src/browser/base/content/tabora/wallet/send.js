@@ -162,10 +162,18 @@ Object.assign(Tabora, {
         to.dispatchEvent(new Event("input"));
       } catch (e) {}
     }, 14);
+    const book = this.iconButton("", "Контакты", ["M4 4h12a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2z", "M4 18a2 2 0 0 1 2-2h12", "M8 4v16", "M20 8h1", "M20 12h1"], e => {
+      const r = e.currentTarget.getBoundingClientRect();
+      const contacts = WalletStore.contactsFor(asset.chain);
+      const items = contacts.map(c => ({ label: c.name, hint: this.shortAddr(c.address), run: () => { to.value = c.address; to.dispatchEvent(new Event("input")); } }));
+      items.push(...(items.length ? [{ separator: true }] : []), { label: "Новый контакт…", run: () => this.walletContactSheet({ addresses: this.wCheckAddress(asset.chain, to.value).ok ? { [WalletStore.contactKey(asset.chain)]: to.value.trim() } : {} }) });
+      this.showMenu(items, r.left, r.bottom + 6);
+    }, 14);
     const toNote = h("span", { class: "w-note" });
     const refreshToNote = () => {
       const c = this.wCheckAddress(asset.chain, to.value);
-      toNote.textContent = c.note;
+      const contact = c.ok ? WalletStore.contactFor(asset.chain, to.value.trim()) : null;
+      toNote.textContent = contact ? `Контакт: ${contact.name} · ${c.note}` : c.note;
       toNote.className = `w-note${c.ok ? (c.danger ? " danger" : " ok") : to.value.trim() ? " bad" : ""}`;
       return c;
     };
@@ -274,7 +282,7 @@ Object.assign(Tabora, {
     return h("div", { class: "w-send" }, null, [
       h("div", { class: "w-flow-head" }, null, [h("b", { class: "w-title" }, "Отправить"), back]),
       h("label", { class: "w-field" }, null, [h("span", {}, "Актив"), assetBtn]),
-      h("label", { class: "w-field" }, null, [h("span", {}, "Кому"), h("div", { class: "w-input-row" }, null, [to, paste]), toNote]),
+      h("label", { class: "w-field" }, null, [h("span", {}, "Кому"), h("div", { class: "w-input-row" }, null, [to, book, paste]), toNote]),
       h("label", { class: "w-field" }, null, [h("span", { class: "w-field-head" }, null, [h("span", {}, "Сумма"), maxLink]), h("div", { class: "w-input-row" }, null, [to && amount, h("span", { class: "w-input-suffix" }, asset.symbol)]), amountNote]),
       feeBox,
       warn,
@@ -509,11 +517,11 @@ Object.assign(Tabora, {
       amountNote: `${price ? `≈ ${this.wFmtUsd(parseFloat(amountText) * price)} · ` : ""}сеть ${chain.name}`,
       rows: [
         ["Откуда", `${account.name} · ${this.shortAddr(from)}`],
-        ["Куда", s.to, "mono"],
+        ["Куда", WalletStore.contactFor(asset.chain, s.to) ? `${WalletStore.contactFor(asset.chain, s.to).name} · ${s.to}` : s.to, "mono"],
         ["Комиссия сети", feeRow ? feeRow[1] : "—"],
         ["Нода", this.hostOf(WalletStore.nodesFor(asset.chain).url)],
       ],
-      warning: "Перевод необратим. Проверьте первые и последние символы адреса. Подпись выполняется локально, фраза не покидает устройство.",
+      warning: WalletStore.contactFor(asset.chain, s.to) ? "Перевод необратим. Получатель из ваших контактов. Подпись выполняется локально, фраза не покидает устройство." : "Перевод необратим. Получатель не в контактах: проверьте первые и последние символы адреса. Подпись выполняется локально, фраза не покидает устройство.",
       okLabel: "Подписать и отправить",
       onSign: async pass => {
         const hash = await this.walletExecuteSend(asset, fee.plan, pass);
@@ -781,14 +789,14 @@ Object.assign(Tabora, {
           h("span", { class: "w-coin" }, null, [h("img", { src: it.logo, alt: "" }), h("i", { class: "w-coin-chain" }, null, [h("img", { src: it.chainLogo, alt: "" })])]),
           h("div", { class: "w-chain-text" }, null, [
             h("b", {}, title),
-            h("span", { class: "w-sub-line" }, `${when(it.at)} · ${it.status === "pending" ? "ожидает · " : it.status === "failed" ? "ошибка · " : ""}${it.counterparty ? this.shortAddr(it.counterparty) : this.shortAddr(it.hash)}`),
+            h("span", { class: "w-sub-line" }, `${when(it.at)} · ${it.status === "pending" ? "ожидает · " : it.status === "failed" ? "ошибка · " : ""}${it.counterparty ? WalletStore.contactFor(it.chain, it.counterparty)?.name || this.shortAddr(it.counterparty) : this.shortAddr(it.hash)}`),
           ]),
           h("div", { class: "w-chain-bal" }, null, [
             h("b", { class: "w-native" }, it.call && it.amount === "0" ? "" : `${sign}${it.amount}`),
             h("span", { class: "w-usd" }, it.usd !== null && it.usd >= 0.01 ? this.wFmtUsd(it.usd) : it.symbol),
           ]),
         ]);
-        this.wActivityMenu(row, it.chain, it.hash);
+        this.wActivityMenu(row, it.chain, it.hash, it.counterparty);
       }
       list.append(row);
     }
@@ -808,15 +816,110 @@ Object.assign(Tabora, {
     return list;
   },
 
-  wActivityMenu(row, chain, hash) {
+  wActivityMenu(row, chain, hash, counterparty = null) {
+    const { WalletStore } = this.walletStore();
     row.addEventListener("click", () => this.openInSpace(this.wTxUrl(chain, hash), true));
     row.addEventListener("contextmenu", e => {
       e.preventDefault();
-      this.showMenu([
+      const items = [
         { label: "Открыть в обозревателе", run: () => this.openInSpace(this.wTxUrl(chain, hash), true) },
         { label: "Копировать хеш", run: () => this.copyText(hash, "Хеш скопирован") },
-      ], e.clientX, e.clientY);
+      ];
+      if (counterparty) {
+        const known = WalletStore.contactFor(chain, counterparty);
+        items.push({ separator: true }, { label: "Копировать адрес контрагента", run: () => this.copyText(counterparty, "Адрес скопирован") });
+        items.push(known ? { label: `Контакт: ${known.name}`, run: () => this.walletContactSheet(known) } : { label: "Сохранить в контакты…", run: () => this.walletContactSheet({ addresses: { [WalletStore.contactKey(chain)]: counterparty } }) });
+      }
+      this.showMenu(items, e.clientX, e.clientY);
     });
+  },
+
+  /* ---- Контакты ---------------------------------------------------------- */
+
+  CONTACT_FIELDS: [["evm", "EVM (Ethereum, Base, Arbitrum, Polygon)", "ethereum"], ["bitcoin", "Bitcoin", "bitcoin"], ["solana", "Solana", "solana"], ["tron", "TRON", "tron"]],
+
+  /** Лист добавления/редактирования контакта. contact: { id?, name?, addresses?, note? } */
+  walletContactSheet(contact = {}) {
+    const h = (t, a, x, c) => this.html(t, a, x, c);
+    const { WalletStore } = this.walletStore();
+    const name = this.wField("Имя", { type: "text", value: contact.name || "", placeholder: "Например, Биржа или Алиса", maxlength: "40" });
+    const fields = this.CONTACT_FIELDS.map(([key, label, chainId]) => {
+      const f = this.wField(label, { type: "text", class: "w-input mono", value: contact.addresses?.[key] || "", spellcheck: "false", autocomplete: "off" });
+      const note = h("span", { class: "w-note" });
+      const check = () => {
+        const v = f.input.value.trim();
+        if (!v) {
+          note.textContent = "";
+          note.className = "w-note";
+          return true;
+        }
+        const c = this.wCheckAddress(chainId, v);
+        note.textContent = c.ok ? "" : c.note;
+        note.className = `w-note${c.ok ? " ok" : " bad"}`;
+        return c.ok;
+      };
+      f.input.addEventListener("input", check);
+      f.wrap.append(note);
+      return { key, f, check };
+    });
+    const err = h("div", { class: "w-error", hidden: "true" });
+    const ok = this.wButton(contact.id ? "Сохранить" : "Добавить", "primary", async () => {
+      if (!fields.every(x => x.check())) {
+        err.textContent = "Проверьте адреса";
+        err.hidden = false;
+        return;
+      }
+      const addresses = Object.fromEntries(fields.map(x => [x.key, x.f.input.value.trim()]));
+      try {
+        if (contact.id) {
+          await WalletStore.updateContact(contact.id, { name: name.input.value, addresses });
+        } else {
+          await WalletStore.addContact({ name: name.input.value, addresses });
+        }
+        box.remove();
+        this.notice(contact.id ? "Контакт обновлён" : "Контакт добавлен");
+        this.renderDrawer();
+      } catch (e) {
+        err.textContent = e.message;
+        err.hidden = false;
+      }
+    });
+    const cancel = this.wButton("Отмена", "ghost", () => box.remove());
+    const actions = [cancel, ok];
+    if (contact.id) {
+      actions.unshift(this.wButton("Удалить", "ghost danger small", async () => {
+        await WalletStore.removeContact(contact.id);
+        box.remove();
+        this.renderDrawer();
+      }), h("span", { class: "spacer" }));
+    }
+    const box = h("div", { class: "w-sheet" }, null, [h("div", { class: "w-sheet-card w-confirm" }, null, [h("b", {}, contact.id ? "Контакт" : "Новый контакт"), name.wrap, ...fields.map(x => x.f.wrap), err, h("div", { class: "w-actions" }, null, actions)])]);
+    box.querySelectorAll("input").forEach(i => i.addEventListener("keydown", e => e.stopPropagation()));
+    this.wSheetShow(box);
+    setTimeout(() => (contact.name ? fields[0].f.input : name.input).focus(), 60);
+  },
+
+  /** Карточка «Контакты» в настройках. */
+  walletContactsCard() {
+    const h = (t, a, x, c) => this.html(t, a, x, c);
+    const { WalletStore } = this.walletStore();
+    const add = this.iconButton("", "Добавить контакт", ["M12 5v14", "M5 12h14"], () => this.walletContactSheet(), 13);
+    const card = h("div", { class: "w-group" }, null, [h("div", { class: "w-group-head" }, null, [h("b", { class: "w-group-title" }, "Контакты"), add])]);
+    if (!WalletStore.contacts.length) {
+      card.append(h("p", { class: "w-hint" }, "Сохраняйте адреса получателей: на экране отправки их можно выбрать из списка, а в истории будут видны имена."));
+      return card;
+    }
+    const labels = { evm: "EVM", bitcoin: "BTC", solana: "SOL", tron: "TRON" };
+    for (const c of WalletStore.contacts) {
+      const row = h("button", { class: "w-site w-contact", type: "button" }, null, [
+        h("span", { class: "w-origin-icon small" }, null, [h("b", {}, this.letterOf(c.name))]),
+        h("div", { class: "w-chain-text" }, null, [h("b", {}, c.name), h("span", { class: "w-sub-line" }, Object.keys(c.addresses).map(k => `${labels[k] || k} ${this.shortAddr(c.addresses[k])}`).join(" · "))]),
+        this.wIcon(["m9 18 6-6-6-6"], 14, 2),
+      ]);
+      row.addEventListener("click", () => this.walletContactSheet(c));
+      card.append(row);
+    }
+    return card;
   },
 
   /* ---- Фоновое наблюдение: поступления и уведомления ---------------------- */

@@ -855,7 +855,7 @@ Object.assign(Tabora, {
     if (window.TaboraSelect) {
       window.TaboraSelect.enhance(autolock, { compact: true });
     }
-    return h("div", { class: "w-settings" }, null, [h("div", { class: "w-flow-head" }, null, [h("b", {}, "Настройки кошелька"), back]), security, this.walletSitesCard(), nodes, chains]);
+    return h("div", { class: "w-settings" }, null, [h("div", { class: "w-flow-head" }, null, [h("b", {}, "Настройки кошелька"), back]), security, this.walletContactsCard(), this.walletSitesCard(), nodes, chains]);
   },
 
   /** Запрос пароля в панели: колбэк получает пароль, при ошибке показываем текст. */

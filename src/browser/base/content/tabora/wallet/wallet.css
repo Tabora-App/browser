@@ -1446,3 +1446,46 @@
   text-align: center;
   padding: 6px 12px;
 }
+
+/* Контакты */
+#tabora-drawer .w-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#tabora-drawer .w-group-head .icon-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 1px solid var(--tabora-line);
+  background: transparent;
+  color: var(--tabora-text);
+  appearance: none;
+}
+
+#tabora-drawer button.w-contact {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 10px;
+  padding: 6px 4px;
+  appearance: none;
+}
+
+#tabora-drawer button.w-contact:hover {
+  background: var(--tabora-hover, rgba(127, 127, 127, 0.1));
+}
+
+#tabora-drawer .w-contact > svg {
+  color: var(--tabora-text-dim);
+  flex: none;
+}
+
+#tabora-drawer .w-confirm .w-actions .spacer {
+  flex: 1;
+}

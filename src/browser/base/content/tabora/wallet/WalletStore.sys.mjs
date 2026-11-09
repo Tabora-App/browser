@@ -683,6 +683,67 @@ export const WalletStore = {
     return this.data?.permissions || {};
   },
 
+  /* ---------- контакты ---------- */
+
+  /** Ключ адресной книги для сети: все EVM-сети делят один адрес. */
+  contactKey(chainId) {
+    return CHAINS[chainId]?.kind === "evm" ? "evm" : chainId;
+  },
+
+  get contacts() {
+    return this.data?.contacts || [];
+  },
+
+  async addContact({ name, addresses, note = "" }) {
+    const clean = Object.fromEntries(Object.entries(addresses || {}).filter(([, v]) => v && String(v).trim()).map(([k, v]) => [k, String(v).trim()]));
+    if (!name?.trim() || !Object.keys(clean).length) {
+      throw new Error("Нужны имя и хотя бы один адрес");
+    }
+    this.data.contacts ||= [];
+    const contact = { id: `c${Date.now().toString(36)}`, name: name.trim().slice(0, 40), addresses: clean, note: String(note || "").slice(0, 200), at: new Date().toISOString() };
+    this.data.contacts.push(contact);
+    await this.save();
+    return contact;
+  },
+
+  async updateContact(id, patch) {
+    const c = this.contacts.find(x => x.id === id);
+    if (!c) {
+      throw new Error("Контакт не найден");
+    }
+    if (patch.name !== undefined) {
+      c.name = String(patch.name).trim().slice(0, 40) || c.name;
+    }
+    if (patch.addresses) {
+      c.addresses = Object.fromEntries(Object.entries(patch.addresses).filter(([, v]) => v && String(v).trim()).map(([k, v]) => [k, String(v).trim()]));
+    }
+    if (patch.note !== undefined) {
+      c.note = String(patch.note).slice(0, 200);
+    }
+    await this.save();
+  },
+
+  async removeContact(id) {
+    this.data.contacts = this.contacts.filter(x => x.id !== id);
+    await this.save();
+  },
+
+  /** Контакт по адресу в сети (регистр для EVM не важен). */
+  contactFor(chainId, address) {
+    if (!address) {
+      return null;
+    }
+    const key = this.contactKey(chainId);
+    const a = String(address).toLowerCase();
+    return this.contacts.find(c => (c.addresses[key] || "").toLowerCase() === a) || null;
+  },
+
+  /** Контакты, у которых есть адрес для этой сети. */
+  contactsFor(chainId) {
+    const key = this.contactKey(chainId);
+    return this.contacts.filter(c => c.addresses[key]).map(c => ({ ...c, address: c.addresses[key] }));
+  },
+
   /* ---------- история операций ---------- */
 
   get activity() {
