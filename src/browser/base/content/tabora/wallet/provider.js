@@ -31,32 +31,65 @@ Object.assign(Tabora, {
     }
   },
 
+  _walletCooldown: new Map(), // origin → время, до которого нужен свежий клик (после отказа)
+  _walletReads: new Map(), // origin → { n, at } лимит запросов чтения
+
   walletHandleRequest(req) {
     const needsUi = !this.walletIsReadOnly(req);
     if (!needsUi) {
+      // чтение через нашу ноду: не больше 60 запросов за 10 с на сайт
+      const r = this._walletReads.get(req.origin) || { n: 0, at: Date.now() };
+      if (Date.now() - r.at > 10000) {
+        r.n = 0;
+        r.at = Date.now();
+      }
+      if (++r.n > 60) {
+        this._walletReads.set(req.origin, r);
+        return Promise.reject(this.wErr(-32005, "Слишком много запросов"));
+      }
+      this._walletReads.set(req.origin, r);
       return this.walletDispatch(req);
     }
     if (this._walletPending.has(req.origin)) {
       return Promise.reject(this.wErr(-32002, "Предыдущий запрос этого сайта ещё ожидает ответа"));
     }
-    if (this._walletPending.size >= 3) {
-      return Promise.reject(this.wErr(-32002, "Кошелёк занят другими запросами"));
-    }
     if (!req.userInteracted) {
       return Promise.reject(this.wErr(4001, "Сначала взаимодействуйте со страницей: запрос без действия пользователя отклонён"));
+    }
+    // после отказа следующий запрос требует свежего клика (transient activation)
+    if ((this._walletCooldown.get(req.origin) || 0) > Date.now() && !req.transient) {
+      return Promise.reject(this.wErr(4001, "Запрос отклонён: нажмите на странице, чтобы отправить новый"));
     }
     this._walletPending.add(req.origin);
     const run = async () => {
       try {
-        await this.walletSheetFree();
-        return await this.walletDispatch(req);
+        // ждём активную вкладку ДО очереди: фоновая страница не блокирует другие сайты
+        await this.walletFocusRequest(req);
+        if (this._walletQueueSize >= 4) {
+          throw this.wErr(-32002, "Кошелёк занят другими запросами");
+        }
+        this._walletQueueSize = (this._walletQueueSize || 0) + 1;
+        const job = async () => {
+          try {
+            await this.walletSheetFree();
+            return await this.walletDispatch(req);
+          } finally {
+            this._walletQueueSize--;
+          }
+        };
+        const p = this._walletQueue.then(job, job);
+        this._walletQueue = p.catch(() => {});
+        return await p;
+      } catch (e) {
+        if (e?.code === 4001) {
+          this._walletCooldown.set(req.origin, Date.now() + 30000);
+        }
+        throw e;
       } finally {
         this._walletPending.delete(req.origin);
       }
     };
-    const p = this._walletQueue.then(run, run);
-    this._walletQueue = p.catch(() => {});
-    return p;
+    return run();
   },
 
   walletIsReadOnly(req) {
@@ -312,6 +345,9 @@ Object.assign(Tabora, {
       case "wallet_getPermissions":
         return visible.length ? [{ parentCapability: "eth_accounts", invoker: req.origin, caveats: [{ type: "restrictReturnedAccounts", value: accounts }] }] : [];
       case "wallet_revokePermissions":
+        if (!WalletStore.unlocked) {
+          throw this.wErr(4100, "Кошелёк заблокирован");
+        }
         await WalletStore.revokePermission(req.origin, "evm");
         this.walletEmit(req, "evm", "accountsChanged", []);
         return null;
@@ -361,14 +397,17 @@ Object.assign(Tabora, {
         }
         const info = await WalletStore.tokenInfo(chainId, opts.address);
         const symbol = this.wSafe(String(info.symbol || opts.symbol || "?")).text.slice(0, 12);
-        const known = (CHAINS[chainId].tokens || []).find(t => t.symbol.toLowerCase() === symbol.toLowerCase() && t.address.toLowerCase() !== opts.address.toLowerCase());
+        const skeleton = x => String(x).normalize("NFKC").toLowerCase().replace(/[а]/g, "a").replace(/[е]/g, "e").replace(/[о]/g, "o").replace(/[р]/g, "p").replace(/[с]/g, "c").replace(/[т]/g, "t").replace(/[у]/g, "y").replace(/[х]/g, "x").replace(/[і]/g, "i").replace(/[ԁ]/g, "d").replace(/[0]/g, "o").replace(/[1l|]/g, "i").replace(/[$]/g, "s");
+        const allKnown = Object.values(CHAINS).flatMap(c => c.tokens || []);
+        const known = allKnown.find(t => skeleton(t.symbol) === skeleton(symbol) && (t.address || "").toLowerCase() !== opts.address.toLowerCase()) || (/^(usdt|usdc|dai|eth|btc|sol|trx|pol|wbtc|weth)$/.test(skeleton(symbol)) ? { symbol, address: "" } : null);
         await this.walletConfirm({
           fromSite: true,
+          onDisconnect: () => WalletStore.revokePermission(req.origin, req.chain).catch(() => {}),
           title: "Добавить токен",
           origin: this.originInfo(req, perm),
           summary: [`${symbol} · ${this.wSafe(info.name || "").text} · ${CHAINS[chainId].name}`],
           rows: [["Контракт", opts.address, "mono"], ["Десятичных", String(info.decimals ?? opts.decimals)]],
-          warning: known ? `Символ ${symbol} совпадает с известным токеном, но контракт другой (${this.shortAddr(known.address)} — настоящий). Это может быть подделка.` : null,
+          warning: known ? `Символ «${symbol}» выглядит как известный токен${known.address ? `, но контракт другой (настоящий: ${this.shortAddr(known.address)})` : ""}. Это может быть подделка: токен будет помечен как непроверенный.` : null,
           danger: !!known,
           okLabel: "Добавить",
           onSign: async pass => {
@@ -425,6 +464,7 @@ Object.assign(Tabora, {
         const looksLikeTx = /0x[0-9a-fA-F]{64,}/.test(text) && !/\s/.test(text);
         return this.walletConfirm({
           fromSite: true,
+          onDisconnect: () => WalletStore.revokePermission(req.origin, req.chain).catch(() => {}),
           title: "Подпись сообщения",
           badge: "personal_sign",
           origin: this.originInfo(req, perm),
@@ -458,15 +498,37 @@ Object.assign(Tabora, {
           throw this.wErr(4100, "Адрес не совпадает с подключённым");
         }
         const data = typeof typed === "string" ? JSON.parse(typed) : typed;
-        await this.walletEnsureUnlocked(req);
-        await this.walletFocusRequest(req);
-        const primary = data.primaryType || "";
+        if (Array.isArray(data) || !data?.types || !data.primaryType || !data.domain) {
+          throw this.wErr(-32602, "Поддерживается только EIP-712 (v3/v4) с types, domain и primaryType");
+        }
+        const primary = String(data.primaryType);
         const domain = data.domain || {};
         const msg = data.message || {};
+        if (domain.chainId !== undefined && Number(domain.chainId) !== CHAINS[chainId].chainId) {
+          throw this.wErr(4902, `Данные для другой сети (chainId ${domain.chainId}), текущая — ${CHAINS[chainId].name}`);
+        }
+        await this.walletEnsureUnlocked(req);
+        await this.walletFocusRequest(req);
         const isPermit = /permit/i.test(primary);
-        const rows = [["Тип", primary], ["Домен", `${domain.name || "—"}${domain.version ? " v" + domain.version : ""}`]];
-        if (domain.chainId && Number(domain.chainId) !== CHAINS[chainId].chainId) {
-          rows.push(["Сеть в данных", `chainId ${domain.chainId} · отличается от текущей`, "bad"]);
+        // типы, подпись которых равносильна переводу или произвольному вызову от вашего имени
+        const DANGEROUS = {
+          TransferWithAuthorization: "перевод токенов по подписи (EIP-3009): средства спишутся без отдельной транзакции",
+          ReceiveWithAuthorization: "перевод токенов по подписи (EIP-3009)",
+          CancelAuthorization: "отмена авторизации EIP-3009",
+          ForwardRequest: "мета-транзакция (ERC-2771): произвольный вызов от вашего имени",
+          MetaTransaction: "мета-транзакция: произвольный вызов от вашего имени",
+          SafeTx: "транзакция Safe от вашего имени",
+          OrderComponents: "ордер на продажу NFT/токенов (Seaport)",
+          Order: "ордер на продажу/обмен",
+          Delegation: "делегирование прав (EIP-7710)",
+          BulkOrder: "пакет ордеров",
+          Listing: "листинг на продажу",
+        };
+        const dangerText = DANGEROUS[primary] || null;
+        const rows = [["Тип", primary], ["Домен", `${this.wSafe(domain.name || "—").text}${domain.version ? " v" + this.wSafe(String(domain.version)).text : ""}`]];
+        const knownToken = domain.verifyingContract && (CHAINS[chainId].tokens || []).concat(WalletStore.tokensFor(chainId)).find(t => t.address?.toLowerCase() === String(domain.verifyingContract).toLowerCase());
+        if (knownToken) {
+          rows.push(["Контракт токена", `${knownToken.symbol}: подпись может распоряжаться этими токенами`, "bad"]);
         }
         if (domain.verifyingContract) {
           rows.push(["Контракт", domain.verifyingContract, "mono"]);
@@ -491,15 +553,19 @@ Object.assign(Tabora, {
             rows.push(["Действует до", deadline]);
           }
         }
+        if (dangerText) {
+          warning = `${primary}: ${dangerText}.${warning ? " " + warning : ""}`;
+        }
         return this.walletConfirm({
           fromSite: true,
+          onDisconnect: () => WalletStore.revokePermission(req.origin, req.chain).catch(() => {}),
           title: "Подпись данных",
           badge: "EIP-712",
           origin: this.originInfo(req, perm),
-          summary: [isPermit ? "Сайт просит подписать разрешение на трату токенов" : "Структурированная подпись: средства не списываются сразу, но подпись может быть использована контрактом"],
+          summary: [isPermit ? "Сайт просит подписать разрешение на трату токенов" : dangerText ? `Сайт просит подписать: ${dangerText}` : "Структурированная подпись: средства не списываются сразу, но подпись может быть использована контрактом"],
           rows,
           warning,
-          danger: isPermit,
+          danger: isPermit || !!dangerText || !!knownToken,
           details: this.wSafe(JSON.stringify(msg, null, 2)).text,
           detailsLabel: "Сообщение",
           okLabel: "Подписать",
@@ -537,7 +603,7 @@ Object.assign(Tabora, {
       try {
         const info = await WalletStore.tokenInfo(chainId, tx.to);
         if (info?.symbol && info.decimals !== undefined) {
-          token = { symbol: `${info.symbol} (не из списка)`, decimals: info.decimals, address: tx.to, unverified: true };
+          token = { symbol: `${this.wSafe(info.symbol, 12).text} (не из списка)`, decimals: info.decimals, address: tx.to, unverified: true };
         }
       } catch (e) {}
     }
@@ -592,6 +658,7 @@ Object.assign(Tabora, {
     }
     const hash = await this.walletConfirm({
       fromSite: true,
+      onDisconnect: () => WalletStore.revokePermission(req.origin, req.chain).catch(() => {}),
       title: "Запрос транзакции",
       badge: "EIP-1193",
       origin: this.originInfo(req, perm),
@@ -701,6 +768,7 @@ Object.assign(Tabora, {
           // подпись хеша/сообщения (старый API)
           return this.walletConfirm({
             fromSite: true,
+            onDisconnect: () => WalletStore.revokePermission(req.origin, req.chain).catch(() => {}),
             title: "Подпись сообщения",
             badge: "TRON",
             origin: this.originInfo(req, perm),
@@ -727,6 +795,7 @@ Object.assign(Tabora, {
         const message = p[0];
         return this.walletConfirm({
           fromSite: true,
+          onDisconnect: () => WalletStore.revokePermission(req.origin, req.chain).catch(() => {}),
           title: "Подпись сообщения",
           badge: "TRON",
           origin: this.originInfo(req, perm),
@@ -778,6 +847,9 @@ Object.assign(Tabora, {
     if (decoded.expiration && decoded.expiration < Date.now()) {
       throw this.wErr(-32602, "Транзакция уже просрочена");
     }
+    if (decoded.expiration > Date.now() + 24 * 60 * 60 * 1000) {
+      throw this.wErr(-32602, "Срок действия транзакции больше суток: отклонено");
+    }
     const type = c.typeName;
     const summary = [];
     const rows = [["Сеть", "TRON"], ["Тип", type]];
@@ -817,10 +889,19 @@ Object.assign(Tabora, {
       danger = true;
     }
     if (c.permissionId) {
-      rows.push(["Permission", String(c.permissionId)]);
+      rows.push(["Permission", String(c.permissionId), "bad"]);
+      danger = true;
+      warning = `${warning ? warning + " " : ""}Используется нестандартное разрешение (permission ${c.permissionId}).`;
+    }
+    if (decoded.data) {
+      rows.push(["Memo", this.wSafe(decoded.data, 200).text]);
+    }
+    if (decoded.expiration) {
+      rows.push(["Действует до", new Date(decoded.expiration).toLocaleString("ru-RU", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" })]);
     }
     const sig = await this.walletConfirm({
       fromSite: true,
+      onDisconnect: () => WalletStore.revokePermission(req.origin, req.chain).catch(() => {}),
       title: "Запрос подписи",
       badge: "TRON",
       origin: this.originInfo(req, perm),
@@ -875,6 +956,11 @@ Object.assign(Tabora, {
         return { accounts: [payload] };
       }
       case "sol_disconnect":
+        if (!WalletStore.unlocked) {
+          // файл не трогаем в заблокированном состоянии: сайту просто сообщаем об отключении
+          this.walletEmit(req, "sol", "accountsChanged", null);
+          return null;
+        }
         await WalletStore.revokePermission(req.origin, "sol");
         this.walletEmit(req, "sol", "accountsChanged", null);
         return null;
@@ -904,6 +990,7 @@ Object.assign(Tabora, {
           const safe = this.wSafe(text);
           const sig = await this.walletConfirm({
             fromSite: true,
+            onDisconnect: () => WalletStore.revokePermission(req.origin, req.chain).catch(() => {}),
             title: "Подпись сообщения",
             badge: "Solana",
             origin: this.originInfo(req, perm),
@@ -974,6 +1061,23 @@ Object.assign(Tabora, {
     // Симуляция: изменение SOL и известных токенов
     try {
       const atas = tokens.map(t => ({ t, ata: WalletSigner.solAta(address, t.mint) }));
+      // плюс любые счета из транзакции, которые окажутся нашими токен-счетами (в т. ч. Token-2022 и не-ATA)
+      const extra = parsed.keys.filter(k => k !== address && !atas.some(a => a.ata === k)).slice(0, 40);
+      const extraInfo = extra.length ? await WalletStore.rpc("solana", { jsonrpc: "2.0", id: 3, method: "getMultipleAccounts", params: [extra, { encoding: "base64" }] }) : { result: { value: [] } };
+      const tokenPrograms = [WalletSigner.SOL_TOKEN, WalletSigner.SOL_TOKEN_2022];
+      const ours = [];
+      (extraInfo.result?.value || []).forEach((acc, i) => {
+        if (!acc?.data?.[0] || !tokenPrograms.includes(acc.owner)) {
+          return;
+        }
+        const raw = C.base64.decode(acc.data[0]);
+        if (raw.length >= 165 && C.base58.encode(raw.slice(32, 64)) === address) {
+          const mint = C.base58.encode(raw.slice(0, 32));
+          const t = tokens.find(x => x.mint === mint) || { symbol: `токен ${mint.slice(0, 4)}…${mint.slice(-4)}`, decimals: 0, mint };
+          ours.push({ t, ata: extra[i] });
+        }
+      });
+      atas.push(...ours);
       const addresses = [address, ...atas.map(a => a.ata)];
       const [sim, cur] = await Promise.all([
         WalletStore.rpc("solana", { jsonrpc: "2.0", id: 1, method: "simulateTransaction", params: [C.base64.encode(bytes), { encoding: "base64", sigVerify: false, replaceRecentBlockhash: true, accounts: { encoding: "base64", addresses } }] }),
@@ -994,6 +1098,11 @@ Object.assign(Tabora, {
         const before = BigInt(cur.result?.value?.[0]?.lamports || 0);
         const after = BigInt(r.accounts[0]?.lamports || 0);
         const sol = Number(after - before) / 1e9;
+        // уменьшение SOL сверх комиссии, не объяснённое описанным переводом SOL — тревога
+        if (sol < -0.001 && !desc.lines.some(l => /SOL/.test(l) && /Перевод|Создание/.test(l))) {
+          danger = true;
+          warning ||= `Баланс SOL уменьшится на ${Math.abs(sol).toLocaleString("en-US", { maximumFractionDigits: 6 })} без явного перевода в инструкциях.`;
+        }
         const deltas = [`${sol >= 0 ? "+" : ""}${sol.toLocaleString("en-US", { maximumFractionDigits: 6 })} SOL${prices.SOL ? ` (${this.wFmtUsd(Math.abs(sol) * prices.SOL)})` : ""}`];
         atas.forEach(({ t }, i) => {
           const d = tokenAmount(r.accounts[i + 1]) - tokenAmount(cur.result?.value?.[i + 1]);

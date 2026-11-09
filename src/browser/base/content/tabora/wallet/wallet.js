@@ -615,7 +615,7 @@ Object.assign(Tabora, {
       const v = addr.input.value.trim();
       const symbol = sym.input.value.trim().toUpperCase();
       const decimals = parseInt(dec.input.value, 10);
-      if (!v || !symbol || Number.isNaN(decimals)) {
+      if (!v || !symbol || Number.isNaN(decimals) || decimals < 0 || decimals > 36) {
         err.textContent = "Заполните адрес, символ и знаки";
         err.hidden = false;
         return;

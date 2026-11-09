@@ -84,13 +84,13 @@ export const WalletSigner = {
     const word = i => "0x" + data.slice(10 + i * 64, 10 + (i + 1) * 64);
     const addrOf = i => "0x" + word(i).slice(-40);
     const num = i => toBig(word(i));
-    const MAX = (1n << 256n) - 1n;
     if (sel === "0xa9059cbb") {
       return { kind: "transfer", to: addrOf(0), amount: num(1) };
     }
     if (sel === "0x095ea7b3") {
       const amount = num(1);
-      return { kind: "approve", spender: addrOf(0), amount, unlimited: amount >= MAX / 2n };
+      // «фактически без лимита»: 2^96−1 и больше (USDC/Uniswap-стиль) либо сумма, недостижимая для любого токена
+      return { kind: "approve", spender: addrOf(0), amount, unlimited: amount >= (1n << 96n) - 1n || amount >= 10n ** 30n };
     }
     if (sel === "0x23b872dd") {
       return { kind: "transferFrom", from: addrOf(0), to: addrOf(1), amount: num(2) };
@@ -293,9 +293,15 @@ export const WalletSigner = {
         fields.push({ field, wt, value: buf.slice(o, o + len) });
         o += len;
       } else if (wt === 1) {
+        if (o + 8 > buf.length) {
+          throw new Error("protobuf: обрыв fixed64");
+        }
         fields.push({ field, wt, value: buf.slice(o, o + 8) });
         o += 8;
       } else if (wt === 5) {
+        if (o + 4 > buf.length) {
+          throw new Error("protobuf: обрыв fixed32");
+        }
         fields.push({ field, wt, value: buf.slice(o, o + 4) });
         o += 4;
       } else {
@@ -307,49 +313,131 @@ export const WalletSigner = {
 
   TRON_TYPES: { 0: "AccountCreateContract", 1: "TransferContract", 2: "TransferAssetContract", 4: "VoteWitnessContract", 11: "FreezeBalanceContract", 12: "UnfreezeBalanceContract", 13: "WithdrawBalanceContract", 31: "TriggerSmartContract", 54: "FreezeBalanceV2Contract", 55: "UnfreezeBalanceV2Contract", 57: "DelegateResourceContract", 58: "UnDelegateResourceContract" },
 
-  /** Декодирует Transaction.raw из hex: именно это и подписывается. */
+  /** Строгий доступ к полям: singular-поле ровно один раз, неизвестных полей нет. */
+  pbStrict(fields, allowed, repeated = []) {
+    const seen = new Set();
+    for (const f of fields) {
+      if (!allowed.includes(f.field)) {
+        throw new Error(`Транзакция содержит неизвестное поле ${f.field}: отклонено`);
+      }
+      if (!repeated.includes(f.field)) {
+        if (seen.has(f.field)) {
+          throw new Error(`Поле ${f.field} повторяется: транзакция неоднозначна, отклонено`);
+        }
+        seen.add(f.field);
+      }
+    }
+    return n => fields.find(f => f.field === n)?.value;
+  },
+
+  /** Декодирует Transaction.raw из hex: именно это и подписывается.
+   * Разбор строгий, а после разбора байты пересобираются каноническим кодеком и
+   * сравниваются с исходными: любая нестандартная кодировка отклоняется. */
   tronDecodeRaw(hex) {
-    const raw = this.pbDecode(hexToBytes(String(hex).replace(/^0x/, "")));
-    const one = (fields, n) => fields.find(f => f.field === n)?.value;
+    const bytes = hexToBytes(String(hex).replace(/^0x/, ""));
+    const raw = this.pbDecode(bytes);
+    // Transaction.raw: 1 ref_block_bytes, 3 ref_block_num, 4 ref_block_hash, 8 expiration, 10 data, 11 contract (repeated), 14 timestamp, 18 fee_limit
+    const one = this.pbStrict(raw, [1, 3, 4, 8, 10, 11, 14, 18], [11]);
     const out = {
-      refBlockBytes: one(raw, 1) ? bytesToHex(one(raw, 1)) : "",
-      refBlockHash: one(raw, 4) ? bytesToHex(one(raw, 4)) : "",
-      expiration: Number(one(raw, 8) ?? 0n),
-      timestamp: Number(one(raw, 14) ?? 0n),
-      feeLimit: Number(one(raw, 18) ?? 0n),
-      data: one(raw, 10) ? new TextDecoder().decode(one(raw, 10)) : "",
+      refBlockBytes: one(1) ? bytesToHex(one(1)) : "",
+      refBlockNum: one(3) ?? null,
+      refBlockHash: one(4) ? bytesToHex(one(4)) : "",
+      expiration: Number(one(8) ?? 0n),
+      timestamp: Number(one(14) ?? 0n),
+      feeLimit: Number(one(18) ?? 0n),
+      data: one(10) ? new TextDecoder().decode(one(10)) : "",
+      dataBytes: one(10) || null,
       contracts: [],
     };
     for (const c of raw.filter(f => f.field === 11)) {
       const cf = this.pbDecode(c.value);
-      const type = Number(one(cf, 1) ?? 0n);
-      const anyBytes = one(cf, 2);
-      const any = anyBytes ? this.pbDecode(anyBytes) : [];
-      const typeUrl = one(any, 1) ? new TextDecoder().decode(one(any, 1)) : "";
-      const pf = one(any, 2) ? this.pbDecode(one(any, 2)) : [];
-      const addr = v => (v && v.length === 21 ? b58check.encode(v) : v ? bytesToHex(v) : null);
-      const entry = { type, typeName: this.TRON_TYPES[type] || typeUrl.split(".").pop() || `type ${type}`, permissionId: Number(one(cf, 5) ?? 0n) };
+      const cOne = this.pbStrict(cf, [1, 2, 5]); // type, parameter, Permission_id
+      const type = Number(cOne(1) ?? 0n);
+      const anyBytes = cOne(2);
+      if (!anyBytes) {
+        throw new Error("Контракт без параметров");
+      }
+      const any = this.pbDecode(anyBytes);
+      const aOne = this.pbStrict(any, [1, 2]);
+      const typeUrl = aOne(1) ? new TextDecoder().decode(aOne(1)) : "";
+      const pf = this.pbDecode(aOne(2) || new Uint8Array(0));
+      const addr = v => {
+        if (!v || v.length !== 21 || v[0] !== 0x41) {
+          throw new Error("Адрес в транзакции имеет неверный формат");
+        }
+        return b58check.encode(v);
+      };
+      const entry = { type, typeName: this.TRON_TYPES[type] || `type ${type}`, permissionId: Number(cOne(5) ?? 0n), typeUrl };
       if (type === 1) {
-        entry.owner = addr(one(pf, 1));
-        entry.to = addr(one(pf, 2));
-        entry.amount = one(pf, 3) ?? 0n;
-      } else if (type === 2) {
-        entry.assetName = one(pf, 1) ? new TextDecoder().decode(one(pf, 1)) : "";
-        entry.owner = addr(one(pf, 2));
-        entry.to = addr(one(pf, 3));
-        entry.amount = one(pf, 4) ?? 0n;
+        const pOne = this.pbStrict(pf, [1, 2, 3]);
+        entry.owner = addr(pOne(1));
+        entry.to = addr(pOne(2));
+        entry.amount = pOne(3) ?? 0n;
       } else if (type === 31) {
-        entry.owner = addr(one(pf, 1));
-        entry.contractAddress = addr(one(pf, 2));
-        entry.callValue = one(pf, 3) ?? 0n;
-        entry.data = one(pf, 4) ? "0x" + bytesToHex(one(pf, 4)) : "0x";
+        const pOne = this.pbStrict(pf, [1, 2, 3, 4, 5, 6]);
+        entry.owner = addr(pOne(1));
+        entry.contractAddress = addr(pOne(2));
+        entry.callValue = pOne(3) ?? 0n;
+        entry.data = pOne(4) ? "0x" + bytesToHex(pOne(4)) : "0x";
+        entry.callTokenValue = pOne(5) ?? 0n;
+        entry.tokenId = pOne(6) ?? 0n;
       } else {
-        entry.owner = addr(one(pf, 1));
-        entry.raw = anyBytes ? bytesToHex(anyBytes) : "";
+        throw new Error(`Операция ${entry.typeName} не поддерживается кошельком`);
+      }
+      if (entry.typeUrl !== `type.googleapis.com/protocol.${entry.typeName}`) {
+        throw new Error("Тип контракта не совпадает с описанием");
       }
       out.contracts.push(entry);
     }
+    if (!out.contracts.length) {
+      throw new Error("Транзакция без контрактов");
+    }
+    // Каноническая пересборка: байты обязаны совпасть с исходными
+    const canon = this.tronEncodeRaw(out);
+    if (bytesToHex(canon) !== bytesToHex(bytes)) {
+      throw new Error("Нестандартная кодировка транзакции: отклонено");
+    }
     return out;
+  },
+
+  /** Канонический кодек Transaction.raw из декодированного представления (поля по возрастанию номеров). */
+  tronEncodeRaw(d) {
+    const parts = [];
+    if (d.refBlockBytes) {
+      parts.push(this.pbBytes(1, hexToBytes(d.refBlockBytes)));
+    }
+    if (d.refBlockNum !== null && d.refBlockNum !== undefined) {
+      parts.push(this.pbUint(3, d.refBlockNum));
+    }
+    if (d.refBlockHash) {
+      parts.push(this.pbBytes(4, hexToBytes(d.refBlockHash)));
+    }
+    parts.push(this.pbUint(8, d.expiration || 0));
+    if (d.dataBytes && d.dataBytes.length) {
+      parts.push(this.pbBytes(10, d.dataBytes));
+    }
+    for (const c of d.contracts) {
+      let param;
+      if (c.type === 1) {
+        param = this.pbConcat([this.pbBytes(1, this.tronAddrBytes(c.owner)), this.pbBytes(2, this.tronAddrBytes(c.to)), this.pbUint(3, c.amount || 0)]);
+      } else if (c.type === 31) {
+        param = this.pbConcat([
+          this.pbBytes(1, this.tronAddrBytes(c.owner)),
+          this.pbBytes(2, this.tronAddrBytes(c.contractAddress)),
+          this.pbUint(3, c.callValue || 0),
+          c.data && c.data !== "0x" ? this.pbBytes(4, hexToBytes(c.data.slice(2))) : new Uint8Array(0),
+          this.pbUint(5, c.callTokenValue || 0),
+          this.pbUint(6, c.tokenId || 0),
+        ]);
+      } else {
+        throw new Error("Неизвестный тип контракта");
+      }
+      const any = this.pbConcat([this.pbBytes(1, utf8ToBytes(`type.googleapis.com/protocol.${c.typeName}`)), this.pbBytes(2, param)]);
+      parts.push(this.pbBytes(11, this.pbConcat([this.pbUint(1, c.type), this.pbBytes(2, any), this.pbUint(5, c.permissionId || 0)])));
+    }
+    parts.push(this.pbUint(14, d.timestamp || 0));
+    parts.push(this.pbUint(18, d.feeLimit || 0));
+    return this.pbConcat(parts);
   },
 
   /** raw_data в формате TronWeb (для сайтов и для нашей истории), построенный из декодированного hex. */
@@ -388,36 +476,11 @@ export const WalletSigner = {
   /** Локальная сборка Transaction.raw: ref-блок берём у ноды, всё остальное — наше. */
   async tronBuildRaw(contract, { feeLimit = 0 } = {}) {
     const block = await this.tronNowBlock();
-    let param;
-    let type;
-    let name;
-    if (contract.kind === "transfer") {
-      type = 1;
-      name = "TransferContract";
-      param = this.pbConcat([this.pbBytes(1, this.tronAddrBytes(contract.owner)), this.pbBytes(2, this.tronAddrBytes(contract.to)), this.pbUint(3, contract.amount)]);
-    } else if (contract.kind === "trigger") {
-      type = 31;
-      name = "TriggerSmartContract";
-      param = this.pbConcat([
-        this.pbBytes(1, this.tronAddrBytes(contract.owner)),
-        this.pbBytes(2, this.tronAddrBytes(contract.contractAddress)),
-        this.pbUint(3, contract.callValue || 0),
-        this.pbBytes(4, hexToBytes(String(contract.data).replace(/^0x/, ""))),
-      ]);
-    } else {
-      throw new Error("Неизвестный тип контракта");
-    }
-    const any = this.pbConcat([this.pbBytes(1, utf8ToBytes(`type.googleapis.com/protocol.${name}`)), this.pbBytes(2, param)]);
-    const contractMsg = this.pbConcat([this.pbUint(1, type), this.pbBytes(2, any)]);
-    const now = Date.now();
-    const raw = this.pbConcat([
-      this.pbBytes(1, hexToBytes(block.refBlockBytes)),
-      this.pbBytes(4, hexToBytes(block.refBlockHash)),
-      this.pbUint(8, block.timestamp + 60 * 1000),
-      this.pbBytes(11, contractMsg),
-      this.pbUint(14, now),
-      this.pbUint(18, feeLimit),
-    ]);
+    const c = contract.kind === "transfer"
+      ? { type: 1, typeName: "TransferContract", owner: contract.owner, to: contract.to, amount: BigInt(contract.amount), permissionId: 0 }
+      : { type: 31, typeName: "TriggerSmartContract", owner: contract.owner, contractAddress: contract.contractAddress, callValue: BigInt(contract.callValue || 0), data: "0x" + String(contract.data).replace(/^0x/, ""), callTokenValue: 0n, tokenId: 0n, permissionId: 0 };
+    const d = { refBlockBytes: block.refBlockBytes, refBlockNum: null, refBlockHash: block.refBlockHash, expiration: block.timestamp + 60 * 1000, dataBytes: null, contracts: [c], timestamp: Date.now(), feeLimit };
+    const raw = this.tronEncodeRaw(d);
     const raw_data_hex = bytesToHex(raw);
     const txID = bytesToHex(sha256(raw));
     return { visible: true, txID, raw_data: this.tronRawToJson(this.tronDecodeRaw(raw_data_hex)), raw_data_hex };
@@ -447,7 +510,13 @@ export const WalletSigner = {
 
   abiEncodeParam(type, value) {
     if (type === "address") {
-      const hex = /^T/.test(value) ? this.tronHexAddress(value).slice(2) : String(value).replace(/^0x/, "").replace(/^41/, "");
+      let hex = /^T/.test(value) ? this.tronHexAddress(value).slice(2) : String(value).replace(/^0x/, "");
+      if (hex.length === 42 && hex.startsWith("41")) {
+        hex = hex.slice(2);
+      }
+      if (!/^[0-9a-fA-F]{40}$/.test(hex)) {
+        throw new Error("Неверный адрес в параметрах");
+      }
       return hex.padStart(64, "0");
     }
     if (/^u?int\d*$/.test(type)) {
@@ -646,10 +715,21 @@ export const WalletSigner = {
         const tag = new DataView(d.buffer, d.byteOffset).getUint32(0, true);
         if (tag === 2 && d.length >= 12) {
           lines.push(`Перевод ${fmt(u64(d, 4), 9)} SOL: ${name(ix.accounts[0])} → ${name(ix.accounts[1])}`);
-        } else if (tag === 0 || tag === 3) {
+        } else if (tag === 0) {
           lines.push(`Создание счёта${d.length >= 12 ? ` · ${fmt(u64(d, 4), 9)} SOL` : ""}`);
-        } else if (tag === 1) {
+        } else if (tag === 3) {
+          lines.push("Создание счёта с seed");
+        } else if (tag === 1 || tag === 10) {
           lines.push("System: смена владельца счёта (Assign)");
+          danger = true;
+        } else if (tag === 4) {
+          lines.push("Durable nonce: подпись можно будет исполнить позже, в любой момент");
+          danger = true;
+        } else if (tag === 5 || tag === 7) {
+          lines.push(tag === 5 ? "Вывод из nonce-счёта" : "Смена владельца nonce-счёта");
+          danger = true;
+        } else if (tag === 11) {
+          lines.push("Перевод SOL со счёта по seed");
           danger = true;
         } else {
           lines.push(`System: инструкция ${tag}`);
@@ -666,7 +746,7 @@ export const WalletSigner = {
           lines.push(`Перевод токена: ${u64(d, 1)} единиц со счёта ${name(ix.accounts[0])} → ${name(ix.accounts[1])}`);
         } else if (tag === 12 && d.length >= 10) {
           const t = tok(ix.accounts[1]);
-          lines.push(`Перевод ${t ? `${fmt(u64(d, 1), t.decimals)} ${t.symbol}` : `${fmt(u64(d, 1), d[9])} токена ${short(key(ix.accounts[1]))}`} → владелец счёта ${name(ix.accounts[2])}`);
+          lines.push(`Перевод ${t ? `${fmt(u64(d, 1), t.decimals)} ${t.symbol}` : `${fmt(u64(d, 1), d[9])} токена ${short(key(ix.accounts[1]))}`} со счёта ${name(ix.accounts[0])} на токен-счёт ${name(ix.accounts[2])}`);
         } else if (tag === 4 || tag === 13) {
           const t = tag === 13 ? tok(ix.accounts[1]) : null;
           lines.push(`Approve: делегат ${name(ix.accounts[tag === 13 ? 2 : 1])} сможет тратить ${t ? `${fmt(u64(d, 1), t.decimals)} ${t.symbol}` : `${u64(d, 1)} единиц токена`}`);
@@ -684,6 +764,9 @@ export const WalletSigner = {
           lines.push("Revoke: отзыв делегата");
         } else if (tag === 7 || tag === 14) {
           lines.push("MintTo: выпуск токенов");
+        } else if (tag === 38) {
+          lines.push("WithdrawExcessLamports: вывод SOL с токен-счёта");
+          danger = true;
         } else {
           lines.push(`Token: инструкция ${tag}`);
         }
@@ -693,9 +776,13 @@ export const WalletSigner = {
         lines.push("Создание токен-счёта (ATA)");
         continue;
       }
-      lines.push(`Программа ${p ? short(p) : "из таблицы"}: ${ix.data.length} байт данных`);
+      if (!p) {
+        danger = true;
+      }
+      lines.push(`Программа ${p ? short(p) : "из таблицы адресов"}: ${ix.data.length} байт данных`);
     }
     if (parsed.lookups) {
+      danger = true;
       lines.push(`Часть адресов берётся из ${parsed.lookups} таблиц(ы): их нельзя проверить заранее`);
     }
     return { lines, danger, feePayer: parsed.keys[0] === ourAddress };
@@ -847,9 +934,13 @@ export const WalletSigner = {
   },
 
   /** Экранирует невидимые и управляющие направлением символы (RTL, zero-width) для показа. */
-  safeText(text) {
+  safeText(text, max = 4000) {
     let hidden = 0;
-    const out = String(text).replace(/[\p{Cf}\u2028\u2029]/gu, ch => {
+    let str = String(text);
+    if (str.length > max) {
+      str = str.slice(0, max) + "…";
+    }
+    const out = str.replace(/[\p{Cf}\u2028\u2029]|[\p{Cc}&&[^\n\t]]/gv, ch => {
       hidden++;
       return `\\u{${ch.codePointAt(0).toString(16)}}`;
     });

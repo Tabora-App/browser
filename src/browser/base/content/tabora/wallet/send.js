@@ -55,6 +55,9 @@ Object.assign(Tabora, {
 
   wTxUrl(chainId, hash) {
     const { CHAINS } = this.walletStore();
+    if (!/^(0x)?[0-9a-fA-F]{64}$|^[1-9A-HJ-NP-Za-km-z]{43,88}$/.test(String(hash || ""))) {
+      return CHAINS[chainId].explorer.replace(/\/(address|account)\/$|#\/address\/$/, "/");
+    }
     const e = CHAINS[chainId].explorer;
     if (chainId === "tron") {
       return e.replace("#/address/", "#/transaction/") + hash;
@@ -612,7 +615,7 @@ Object.assign(Tabora, {
       const shownAt = Date.now();
       let armed = false;
       let typedHere = false;
-      const finish = (fn, v) => {
+      let finish = (fn, v) => {
         if (!done) {
           done = true;
           box.remove();
@@ -645,6 +648,7 @@ Object.assign(Tabora, {
       const card = h("div", { class: "w-sheet-card w-confirm" }, null, [
         h("div", { class: "w-flow-head" }, null, [h("b", {}, opts.title || "Подтверждение"), opts.badge ? h("span", { class: "w-chip" }, opts.badge) : null].filter(Boolean)),
         opts.fromSite && WalletStore.phishMark ? h("div", { class: "w-mark", title: "Знак подлинности: его знает только ваш кошелёк, сайт подделать не может" }, null, [h("span", {}, WalletStore.phishMark), h("i", {}, "настоящий лист Tabora")]) : null,
+        opts.onDisconnect ? (() => { const b = h("button", { class: "w-link small w-right", type: "button" }, "Отключить сайт и отклонить"); b.addEventListener("click", async () => { await opts.onDisconnect(); finish(reject, Object.assign(new Error("Сайт отключён"), { code: 4001 })); }); return b; })() : null,
         opts.origin ? this.wOriginCard(opts.origin) : null,
         opts.amount ? h("div", { class: "w-confirm-amount" }, null, [h("span", {}, opts.amountLabel || "Отправляете"), h("b", { class: "mono" }, opts.amount), h("span", {}, opts.amountNote || "")]) : null,
         opts.summary ? h("div", { class: "w-confirm-summary" }, null, [h("span", { class: "w-label" }, "Что произойдёт"), ...[].concat(opts.summary).map(t => h("div", { class: "w-summary-line" }, t))]) : null,
@@ -666,13 +670,41 @@ Object.assign(Tabora, {
           e.stopImmediatePropagation(); // клик начался до того, как лист «вооружился»
         }
       }, true);
+      let moved = !opts.fromSite || !WalletStore.passwordless;
       setTimeout(() => {
         if (!done) {
           armed = true;
-          ok.disabled = false;
+          ok.disabled = !moved;
           ok.classList.remove("arming");
         }
       }, ARM_MS);
+      if (!moved) {
+        // без пароля: нужно реальное движение указателя внутри листа, иначе «кликер» подпишет вслепую
+        card.addEventListener("mousemove", () => {
+          moved = true;
+          if (armed && !done) {
+            ok.disabled = false;
+          }
+        }, { once: true });
+      }
+      if (opts.fromSite) {
+        // лист сайта живёт не дольше 2 минут и исчезает при блокировке кошелька
+        const ttl = setTimeout(() => finish(reject, Object.assign(new Error("Время ожидания истекло"), { code: 4001 })), 120000);
+        const obs = (s, t, what) => {
+          if (what === "locked") {
+            finish(reject, Object.assign(new Error("Кошелёк заблокирован"), { code: 4001 }));
+          }
+        };
+        Services.obs.addObserver(obs, WalletStore.TOPIC);
+        const origFinish = finish;
+        finish = (fn, v) => {
+          clearTimeout(ttl);
+          try {
+            Services.obs.removeObserver(obs, WalletStore.TOPIC);
+          } catch (e) {}
+          origFinish(fn, v);
+        };
+      }
       pass.input.addEventListener("input", () => { typedHere = true; });
       pass.input.addEventListener("keydown", e => {
         e.stopPropagation();
@@ -819,6 +851,9 @@ Object.assign(Tabora, {
 
   wActivityMenu(row, chain, hash, counterparty = null) {
     const { WalletStore } = this.walletStore();
+    if (counterparty && !this.wCheckAddress(chain, counterparty).ok) {
+      counterparty = null;
+    }
     row.addEventListener("click", () => this.openInSpace(this.wTxUrl(chain, hash), true));
     row.addEventListener("contextmenu", e => {
       e.preventDefault();
@@ -957,7 +992,7 @@ Object.assign(Tabora, {
         return;
       }
       const key = `${id}:${address}`;
-      const snapshot = { native: bal.native, tokens: Object.fromEntries((bal.tokens || []).map(t => [t.symbol, t.raw || "0"])) };
+      const snapshot = { native: bal.native, tokens: Object.fromEntries((bal.tokens || []).map(t => [(t.address || t.mint || t.symbol).toLowerCase(), t.raw || "0"])) };
       const prev = w.seen[key];
       if (prev) {
         const chain = CHAINS[id];
@@ -969,13 +1004,13 @@ Object.assign(Tabora, {
           }
         }
         for (const t of bal.tokens || []) {
-          const before = BigInt(prev.tokens[t.symbol] || "0");
+          const before = BigInt(prev.tokens[(t.address || t.mint || t.symbol).toLowerCase()] || "0");
           const now = BigInt(t.raw || "0");
           if (now > before) {
             const delta = WalletStore.format(now - before, t.decimals, 6);
-            const usd = parseFloat(delta) * (prices[t.symbol] || 0);
-            if (usd >= 0.5 || !prices[t.symbol]) {
-              incoming.push({ chain, text: `${delta} ${t.symbol}`, usd });
+            const usd = t.custom ? 0 : parseFloat(delta) * (prices[t.symbol] || 0);
+            if (t.custom || usd >= 0.5) {
+              incoming.push({ chain, text: `${delta} ${t.symbol}${t.custom ? " (свой токен, без оценки)" : ""}`, usd });
             }
           }
         }

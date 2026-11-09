@@ -1521,3 +1521,19 @@
   font-size: 28px;
   letter-spacing: 8px;
 }
+
+/* Направление текста изолировано во всех ячейках со значениями от сайтов и сетей */
+#tabora-drawer .w-fee-row > span,
+#tabora-drawer .w-chain-text b,
+#tabora-drawer .w-sub-line,
+#tabora-drawer .w-warn,
+#tabora-drawer .w-note,
+#tabora-drawer .w-asset-pick-text b,
+#tabora-drawer .w-confirm-amount b {
+  unicode-bidi: isolate;
+}
+
+#tabora-drawer .w-link.w-right {
+  align-self: flex-end;
+  color: var(--w-danger);
+}
