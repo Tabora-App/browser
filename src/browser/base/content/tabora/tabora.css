@@ -1038,7 +1038,7 @@ sidebar-main {
 }
 
 :root[tabora-sidebar="compact"] {
-  --tabora-sidebar-width: 80px;
+  --tabora-sidebar-width: 64px;
 }
 
 :root[tabora-sidebar="compact"] #tabora-sidebar-toggle svg {
@@ -1156,6 +1156,9 @@ sidebar-main {
 :root[tabora-sidebar="compact"] #tabora-mail,
 :root[tabora-sidebar="compact"] #tabora-downloads .head {
   justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin-inline: auto;
   padding: 0;
   gap: 0;
 }
@@ -1191,7 +1194,7 @@ sidebar-main {
 }
 
 :root[tabora-sidebar="compact"] #tabora-compact-search {
-  width: 44px;
+  width: 40px;
   height: 40px;
   border-radius: 12px;
   margin-top: 4px;
@@ -1204,13 +1207,13 @@ sidebar-main {
 }
 
 :root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] #pinned-tabs-container::part(items-wrapper) {
-  grid-template-columns: repeat(2, 32px);
+  grid-template-columns: repeat(2, 26px);
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 :root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] #pinned-tabs-container .tabbrowser-tab {
-  height: 32px !important;
+  height: 26px !important;
 }
 
 :root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] #pinned-tabs-container .tab-background {
@@ -1223,11 +1226,13 @@ sidebar-main {
 }
 
 :root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab:not(#pinned-tabs-container .tabbrowser-tab) {
-  width: 44px !important;
-  min-width: 44px !important;
-  max-width: 44px !important;
+  width: 40px !important;
+  min-width: 40px !important;
+  max-width: 40px !important;
   height: 40px !important;
   margin-inline: auto !important;
+  margin-block: 2px !important; /* плитки не слипаются */
+  padding-block: 0 !important;
 }
 
 :root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab:not(#pinned-tabs-container .tabbrowser-tab) .tab-background {
