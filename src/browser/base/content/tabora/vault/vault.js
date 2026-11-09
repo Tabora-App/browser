@@ -166,7 +166,7 @@ Object.assign(Tabora, {
     const head = h("div", { class: "otp-head" }, null, [h("b", {}, "Коды"), add]);
     const list = h("div", { class: "otp-list" }, null, entries.map(e => this.otpRow(e)));
     const empty = this.drawerEmpty(q ? "Ничего не найдено" : "Кодов пока нет", q ? "" : "Добавьте код: с QR на странице, по ссылке otpauth:// или вручную");
-    const body = h("div", { class: "w-settings" }, null, [head, entries.length ? list : empty, this.vaultCard()]);
+    const body = h("div", { class: "w-settings" }, null, [head, entries.length ? list : empty, this.accountCard(), this.vaultCard()]);
     if (entries.length) {
       this.otpStartTicking();
       if (Date.now() - Otp.clockCheckedAt > 86400000) {

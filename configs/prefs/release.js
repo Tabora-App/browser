@@ -98,5 +98,9 @@ pref("tabora.wallet.autolockMinutes", 15);
 pref("tabora.vault.passwords", true);
 pref("signon.storage.rust.enabled", true);
 
+// Аккаунт Tabora: домен почты и сервер (пусто — локальный режим без сервера)
+pref("tabora.account.domain", "tabora.app");
+pref("tabora.account.server", "");
+
 // Перевод страниц: без всплывающего предложения, только по кнопке в адресной строке
 pref("browser.translations.automaticallyPopup", false);

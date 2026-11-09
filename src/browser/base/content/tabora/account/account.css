@@ -1,0 +1,328 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Диалог аккаунта поверх окна: первый запуск, регистрация, вход, смена пароля. */
+
+#tabora-account-dialog {
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  font-family: var(--tabora-font);
+}
+
+#tabora-account-dialog .ta-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--tabora-scrim, rgba(0, 0, 0, 0.45));
+  backdrop-filter: blur(6px);
+}
+
+#tabora-account-dialog .ta-card {
+  position: relative;
+  width: 420px;
+  max-width: calc(100% - 32px);
+  max-height: calc(100% - 32px);
+  overflow: auto;
+  padding: 24px;
+  border-radius: 18px;
+  background: var(--tabora-panel);
+  border: 1px solid var(--tabora-panel-border);
+  box-shadow: var(--tabora-shadow-lg);
+  color: var(--tabora-text);
+}
+
+#tabora-account-dialog .ta-step {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+#tabora-account-dialog .ta-welcome {
+  align-items: center;
+  text-align: center;
+}
+
+#tabora-account-dialog h2 {
+  margin: 0;
+  font: 700 20px/1.2 var(--tabora-font);
+  color: var(--tabora-text-strong);
+  letter-spacing: -0.01em;
+}
+
+#tabora-account-dialog .ta-text {
+  margin: 0;
+  font: 400 13px/1.5 var(--tabora-font);
+  color: var(--tabora-text-3);
+}
+
+#tabora-account-dialog .ta-hint {
+  margin: 0;
+  font: 400 11.5px/1.45 var(--tabora-font);
+  color: var(--tabora-text-4);
+}
+
+#tabora-account-dialog .ta-orb {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: var(--tabora-accent);
+  position: relative;
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--tabora-accent) 35%, transparent);
+  align-self: center;
+}
+
+#tabora-account-dialog .ta-orb::after {
+  content: "";
+  position: absolute;
+  inset: 18px;
+  border-radius: 50%;
+  background: var(--tabora-accent-ink, #0b0c0e);
+}
+
+#tabora-account-dialog .ta-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#tabora-account-dialog .ta-field > span {
+  font: 700 11px/1 var(--tabora-font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tabora-text-4);
+}
+
+#tabora-account-dialog .ta-input {
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--tabora-field-border);
+  background: var(--tabora-field);
+  color: var(--tabora-text-strong);
+  font: 500 14px/1 var(--tabora-font);
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#tabora-account-dialog .ta-input:focus {
+  border-color: var(--tabora-accent);
+}
+
+#tabora-account-dialog .ta-input-wrap {
+  display: flex;
+  align-items: center;
+  border-radius: 10px;
+  border: 1px solid var(--tabora-field-border);
+  background: var(--tabora-field);
+  padding-inline-end: 12px;
+}
+
+#tabora-account-dialog .ta-input-wrap:focus-within {
+  border-color: var(--tabora-accent);
+}
+
+#tabora-account-dialog .ta-input-wrap .ta-input {
+  border: none;
+  background: transparent;
+  flex: 1;
+  min-width: 0;
+}
+
+#tabora-account-dialog .ta-suffix {
+  font: 500 13px/1 var(--tabora-mono);
+  color: var(--tabora-text-4);
+  white-space: nowrap;
+}
+
+#tabora-account-dialog .ta-meter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#tabora-account-dialog .ta-meter {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  flex: 1;
+}
+
+#tabora-account-dialog .ta-meter i {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--tabora-line);
+}
+
+#tabora-account-dialog .ta-meter[data-score="1"] i:nth-child(-n + 1) { background: #e5484d; }
+#tabora-account-dialog .ta-meter[data-score="2"] i:nth-child(-n + 2) { background: #f5a524; }
+#tabora-account-dialog .ta-meter[data-score="3"] i:nth-child(-n + 3) { background: var(--tabora-accent); }
+#tabora-account-dialog .ta-meter[data-score="4"] i { background: var(--tabora-accent); }
+
+#tabora-account-dialog .ta-meter-text {
+  font: 500 11px/1 var(--tabora-font);
+  color: var(--tabora-text-4);
+  min-width: 90px;
+  text-align: right;
+}
+
+#tabora-account-dialog .ta-btn {
+  height: 40px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--tabora-field-border);
+  border-radius: 10px;
+  background: var(--tabora-field);
+  color: var(--tabora-text-strong);
+  font: 600 13px/1 var(--tabora-font);
+  cursor: pointer;
+  transition: background-color var(--tabora-ease), border-color var(--tabora-ease);
+}
+
+#tabora-account-dialog .ta-btn:hover {
+  border-color: var(--tabora-line);
+  background: var(--tabora-raised);
+}
+
+#tabora-account-dialog .ta-btn.primary {
+  background: var(--tabora-accent);
+  border-color: var(--tabora-accent);
+  color: var(--tabora-on-accent);
+  font-weight: 700;
+}
+
+#tabora-account-dialog .ta-btn.primary:hover {
+  background: var(--tabora-accent-hover, var(--tabora-accent));
+}
+
+#tabora-account-dialog .ta-btn.ghost {
+  background: transparent;
+}
+
+#tabora-account-dialog .ta-btn.small {
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+#tabora-account-dialog .ta-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+#tabora-account-dialog .ta-btn.loading {
+  opacity: 0.7;
+}
+
+#tabora-account-dialog .ta-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+#tabora-account-dialog .ta-actions.row {
+  flex-direction: row;
+}
+
+#tabora-account-dialog .ta-link {
+  background: none;
+  border: none;
+  padding: 4px 0;
+  color: var(--tabora-text-3);
+  font: 500 12.5px/1.2 var(--tabora-font);
+  cursor: pointer;
+  text-align: left;
+  align-self: flex-start;
+}
+
+#tabora-account-dialog .ta-link:hover {
+  color: var(--tabora-text-strong);
+  text-decoration: underline;
+}
+
+#tabora-account-dialog .ta-welcome .ta-link {
+  align-self: center;
+}
+
+#tabora-account-dialog .ta-links {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 4px;
+}
+
+#tabora-account-dialog .ta-error {
+  padding: 8px 12px;
+  border-radius: 9px;
+  background: color-mix(in srgb, #e5484d 14%, var(--tabora-field));
+  color: #e5484d;
+  font: 600 12px/1.3 var(--tabora-font);
+}
+
+#tabora-account-dialog .ta-points {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#tabora-account-dialog .ta-points li {
+  font: 400 13px/1.45 var(--tabora-font);
+  color: var(--tabora-text-3);
+  padding-inline-start: 18px;
+  position: relative;
+}
+
+#tabora-account-dialog .ta-points li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tabora-accent);
+}
+
+#tabora-account-dialog .ta-secret {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--tabora-field);
+  border: 1px solid var(--tabora-field-border);
+  font: 600 15px/1.5 var(--tabora-mono);
+  color: var(--tabora-text-strong);
+  white-space: pre-wrap;
+  word-break: break-all;
+  text-align: center;
+  user-select: text;
+}
+
+#tabora-account-dialog .ta-secret[masked] {
+  filter: blur(7px);
+  user-select: none;
+}
+
+#tabora-account-dialog .ta-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 500 13px/1.3 var(--tabora-font);
+  color: var(--tabora-text);
+  cursor: pointer;
+}
+
+#tabora-account-dialog .ta-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--tabora-accent);
+}

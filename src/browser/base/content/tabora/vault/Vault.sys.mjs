@@ -19,7 +19,7 @@ const { OSKeyStore } = ChromeUtils.importESModule("resource://gre/modules/OSKeyS
 const FILE = () => PathUtils.join(PathUtils.profileDir, "tabora-vault.json");
 const KDF = { t: 3, m: 65536, p: 1, dkLen: 32 }; // Argon2id: 64 МБ, 3 прохода
 const CHECK = "tabora-vault-v1";
-const MIN_PASSWORD = 8;
+const MIN_PASSWORD = 6;
 const RK_INFO = "tabora-vault-recovery-v1";
 const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 

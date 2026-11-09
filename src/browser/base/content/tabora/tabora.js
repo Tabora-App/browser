@@ -38,9 +38,10 @@ var Tabora = {
     Services.scriptloader.loadSubScript("chrome://browser/content/tabora/wallet/provider.js", window);
     Services.scriptloader.loadSubScript("chrome://browser/content/tabora/wallet/send.js", window);
     Services.scriptloader.loadSubScript("chrome://browser/content/tabora/vault/vault.js", window);
+    Services.scriptloader.loadSubScript("chrome://browser/content/tabora/account/account.js", window);
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
-      "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initWalletProvider", "initVaultActor", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "startTimers", "updateTitle", "localizeUrlbar",
+      "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initWalletProvider", "initVaultActor", "initAccount", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "startTimers", "updateTitle", "localizeUrlbar",
       "routeUrlbarToCommandBar",
     ]) {
       try {
