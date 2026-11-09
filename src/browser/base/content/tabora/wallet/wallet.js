@@ -28,10 +28,9 @@ Object.assign(Tabora, {
   },
 
   walletHideSecrets() {
-    const el = this.drawer.body?.querySelector(".w-phrase");
-    if (el) {
-      el.setAttribute("masked", "true");
-    }
+    const root = this.drawer.el || document;
+    root.querySelectorAll(".w-phrase").forEach(el => el.setAttribute("masked", "true"));
+    root.querySelectorAll(".w-sheet.w-reveal").forEach(el => el.remove());
   },
 
   shortAddr(a) {
@@ -428,6 +427,7 @@ Object.assign(Tabora, {
       total,
       h("div", { class: "w-head-actions" }, null, [sendBtn, receiveBtn]),
       WalletStore.passwordless ? h("div", { class: "w-badge-danger" }, "Без пароля · незащищённый режим") : h("span"),
+      WalletStore.tampered ? h("div", { class: "w-badge-danger w-tamper" }, null, [h("span", {}, "Файл кошелька изменён вне Tabora: проверьте адреса и подключённые сайты."), this.wButton("Это я, принять", "small ghost", () => WalletStore.acceptFile())]) : h("span"),
     ]);
 
     const seg = h("div", { class: "w-seg wide" }, null, [["assets", "Активы"], ["chains", "Сети"], ["activity", "История"]].map(([id, label]) => {
@@ -800,9 +800,11 @@ Object.assign(Tabora, {
         this.wallet.balances = {};
       });
       const add = this.iconButton("", "Добавить свою ноду", ["M12 5v14", "M5 12h14"], () => this.walletPrompt(`Адрес ноды для ${chain.name}`, "https://", v => {
-        if (/^https?:\/\//.test(v)) {
+        try {
           WalletStore.setNodes(id, [...list, v.trim()], list.length);
           this.wallet.balances = {};
+        } catch (e) {
+          this.notice(e.message);
         }
       }), 13);
       const row = h("div", { class: "w-node", style: `--c:${chain.color}` }, null, [h("img", { class: "w-logo small", src: chain.logo, alt: "" }), h("span", { class: "w-node-name" }, chain.name), select, add]);
@@ -916,7 +918,7 @@ Object.assign(Tabora, {
       const grid = h("ol", { class: "w-phrase" }, null, phrase.split(" ").map((w, i) => h("li", {}, null, [h("i", {}, String(i + 1)), h("span", {}, w)])));
       grid.addEventListener("copy", e => e.preventDefault());
       const close = this.wButton("Скрыть", "primary", () => sheet.remove());
-      const sheet = h("div", { class: "w-sheet" }, null, [h("div", { class: "w-sheet-card" }, null, [h("b", {}, wallet.name), grid, close])]);
+      const sheet = h("div", { class: "w-sheet w-reveal" }, null, [h("div", { class: "w-sheet-card" }, null, [h("b", {}, wallet.name), grid, close])]);
       this.wSheetShow(sheet);
       clearTimeout(this.wallet.hideTimer);
       this.wallet.hideTimer = setTimeout(() => sheet.remove(), 60000);

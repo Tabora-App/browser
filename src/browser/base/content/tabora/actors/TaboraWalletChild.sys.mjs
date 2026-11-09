@@ -40,7 +40,12 @@ export class TaboraWalletChild extends JSWindowActorChild {
     }
     return new page.Promise(
       Cu.exportFunction((resolve, reject) => {
-        this.sendQuery("TaboraWallet:Request", { chain, method, params: safeParams }).then(
+        let activation = { active: false, been: false };
+        try {
+          const ua = this.contentWindow.navigator.userActivation;
+          activation = { active: !!ua.isActive, been: !!ua.hasBeenActive };
+        } catch (e) {}
+        this.sendQuery("TaboraWallet:Request", { chain, method, params: safeParams, activation }).then(
           result => resolve(Cu.cloneInto(transform ? transform(result) : result === undefined ? null : result, page)),
           err => {
             const e = new page.Error(err?.message || String(err));

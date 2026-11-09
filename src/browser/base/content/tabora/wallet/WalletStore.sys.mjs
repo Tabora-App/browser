@@ -93,6 +93,17 @@ function slip10Ed25519(seed, path) {
   return key;
 }
 
+/** Каноничный JSON (ключи отсортированы) для HMAC открытой части файла. */
+function canonical(value) {
+  if (Array.isArray(value)) {
+    return "[" + value.map(canonical).join(",") + "]";
+  }
+  if (value && typeof value === "object") {
+    return "{" + Object.keys(value).filter(k => value[k] !== undefined).sort().map(k => JSON.stringify(k) + ":" + canonical(value[k])).join(",") + "}";
+  }
+  return JSON.stringify(value);
+}
+
 function wipe(...arrays) {
   for (const a of arrays) {
     if (a && a.fill) {
@@ -193,8 +204,38 @@ export const WalletStore = {
     Services.obs.notifyObservers(null, this.TOPIC, what);
   },
 
+  /** HMAC открытой части файла на мастер-ключе: защита адресов, разрешений и токенов от подмены. */
+  computeMac(data = this.data) {
+    const { mac, ...rest } = data;
+    return bytesToHex(hmac(sha256, this._key, utf8ToBytes(canonical(rest))));
+  },
+
+  tampered: false,
+
+  /** Пользователь подтвердил, что правки файла сделаны им: подписываем текущее содержимое. */
+  async acceptFile() {
+    this.tampered = false;
+    await this.save();
+  },
+
+  verifyMac() {
+    if (!this.data?.mac) {
+      this.tampered = false; // старый файл без подписи: подпишем при следующем сохранении
+      return true;
+    }
+    const ok = this.computeMac() === this.data.mac;
+    this.tampered = !ok;
+    return ok;
+  },
+
   async save() {
+    if (this._key && !this.tampered) {
+      this.data.mac = this.computeMac();
+    }
     await IOUtils.writeJSON(FILE(), this.data, { tmpPath: FILE() + ".tmp" });
+    try {
+      await IOUtils.setPermissions(FILE(), 0o600);
+    } catch (e) {}
     this.notify();
   },
 
@@ -251,7 +292,8 @@ export const WalletStore = {
       wipe(seed);
       throw new Error("Этот кошелёк уже добавлен");
     }
-    const plain = utf8ToBytes(JSON.stringify({ mnemonic: phrase }));
+    // в сейфе и фраза (для показа), и seed (для подписи: его можно обнулить в памяти)
+    const plain = utf8ToBytes(JSON.stringify({ mnemonic: phrase, seed: bytesToHex(seed) }));
     const vault = await encrypt(this._key, plain);
     wipe(plain);
     const wallet = {
@@ -336,6 +378,10 @@ export const WalletStore = {
   async unlock(password) {
     const raw = await this.masterKey(password);
     this._key = raw;
+    this.verifyMac();
+    if (!this.data.mac) {
+      await this.save();
+    }
     this.armAutolock();
     this.notify("unlocked");
   },
@@ -371,6 +417,27 @@ export const WalletStore = {
     return mnemonic;
   },
 
+  /** Seed BIP-39 (64 байта) для подписи; вызывающий обязан обнулить. Старые сейфы дополняются seed. */
+  async seedOf(wallet) {
+    if (!this.unlocked) {
+      throw new Error("Кошелёк заблокирован");
+    }
+    const plain = await decrypt(this._key, wallet.vault.iv, wallet.vault.ct);
+    const parsed = JSON.parse(new TextDecoder().decode(plain));
+    wipe(plain);
+    if (parsed.seed) {
+      return hexToBytes(parsed.seed);
+    }
+    const seed = bip39.mnemonicToSeedSync(parsed.mnemonic);
+    try {
+      const upgraded = utf8ToBytes(JSON.stringify({ mnemonic: parsed.mnemonic, seed: bytesToHex(seed) }));
+      wallet.vault = await encrypt(this._key, upgraded);
+      wipe(upgraded);
+      await this.save();
+    } catch (e) {}
+    return seed;
+  },
+
   /** Фраза для показа: повторная проверка пароля обязательна. */
   async revealMnemonic(walletId, password) {
     await this.verifyPassword(password);
@@ -394,18 +461,18 @@ export const WalletStore = {
   /** Смена пароля: перешифровываем все фразы новым мастер-ключом. */
   async changePassword(oldPassword, newPassword) {
     await this.verifyPassword(oldPassword);
-    const phrases = [];
+    const vaults = [];
     for (const w of this.wallets) {
-      phrases.push(await this.mnemonicOf(w));
+      const plain = await decrypt(this._key, w.vault.iv, w.vault.ct);
+      vaults.push(plain);
     }
     const passwordless = !newPassword;
     const salt = randomBytes(16);
     const raw = passwordless ? await loginKey(true) : deriveKey(newPassword, salt, KDF);
     this.data.check = await encrypt(raw, utf8ToBytes("tabora-wallet-check"));
     for (let i = 0; i < this.wallets.length; i++) {
-      const plain = utf8ToBytes(JSON.stringify({ mnemonic: phrases[i] }));
-      this.wallets[i].vault = await encrypt(raw, plain);
-      wipe(plain);
+      this.wallets[i].vault = await encrypt(raw, vaults[i]);
+      wipe(vaults[i]);
     }
     this.data.passwordless = passwordless;
     this.data.kdf = passwordless ? null : { alg: "argon2id", salt: base64.encode(salt), ...KDF };
@@ -465,9 +532,11 @@ export const WalletStore = {
   /** Приватный ключ сети для аккаунта на время подписи. Вызывающий обязан обнулить результат. */
   async privateKeyFor(walletId, index, chainId) {
     const wallet = this.wallets.find(w => w.id === walletId);
-    const phrase = await this.mnemonicOf(wallet);
+    if (!wallet) {
+      throw new Error("Кошелёк не найден");
+    }
     const chain = CHAINS[chainId];
-    const seed = bip39.mnemonicToSeedSync(phrase);
+    const seed = await this.seedOf(wallet);
     const path = this.pathFor(chain, index);
     let key;
     if (chain.kind === "sol") {
@@ -497,7 +566,23 @@ export const WalletStore = {
     return { list, index, url: list[index] };
   },
 
+  /** Нода допустима только по https (http — лишь для localhost). */
+  validateNodeUrl(url) {
+    let u;
+    try {
+      u = new URL(url);
+    } catch (e) {
+      throw new Error("Это не адрес");
+    }
+    const local = ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname) || u.hostname.endsWith(".localhost");
+    if (u.protocol !== "https:" && !(u.protocol === "http:" && local)) {
+      throw new Error("Нода должна быть по https (http допустим только для localhost)");
+    }
+    return u.href.replace(/\/$/, "");
+  },
+
   setNodes(chainId, list, index, { quiet = false } = {}) {
+    list = list.map(u => this.validateNodeUrl(u));
     let saved = {};
     try {
       saved = JSON.parse(Services.prefs.getStringPref(NODES_PREF, "{}"));

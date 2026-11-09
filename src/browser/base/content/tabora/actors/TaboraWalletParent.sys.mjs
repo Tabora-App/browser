@@ -12,18 +12,40 @@ export class TaboraWalletParent extends JSWindowActorParent {
     }
     const win = this.browsingContext.topChromeWindow;
     const principal = this.manager.documentPrincipal;
-    if (!win?.Tabora?.walletHandleRequest || !principal || principal.isSystemPrincipal) {
-      throw { code: 4200, message: "Кошелёк недоступен" };
+    // Только обычные документы с настоящим origin: без system/null/expanded принципалов,
+    // без data:/blob:/sandbox-фреймов и без http (кроме localhost).
+    if (!win?.Tabora?.walletHandleRequest || !principal || !principal.isContentPrincipal) {
+      throw { code: 4100, message: "Кошелёк недоступен для этого документа" };
+    }
+    let host = "";
+    try {
+      host = principal.host;
+    } catch (e) {}
+    const local = ["localhost", "127.0.0.1"].includes(host) || host.endsWith(".localhost");
+    if (!principal.schemeIs("https") && !(principal.schemeIs("http") && local)) {
+      throw { code: 4100, message: "Кошелёк доступен только сайтам по HTTPS" };
     }
     const origin = principal.origin;
+    let topHost = host;
+    try {
+      topHost = this.browsingContext.top.currentWindowGlobal?.documentPrincipal?.host || host;
+    } catch (e) {}
     const data = message.data || {};
+    // Признак взаимодействия приходит из контент-актора (navigator.userActivation через Xray):
+    // сама страница его подделать не может.
+    const userInteracted = !!data.activation?.been;
+    const transient = !!data.activation?.active;
     try {
       return await win.Tabora.walletHandleRequest({
         chain: String(data.chain || ""),
         method: String(data.method || ""),
         params: data.params,
         origin,
-        host: principal.host || origin,
+        host: host || origin,
+        topHost,
+        isFrame: this.browsingContext.top !== this.browsingContext,
+        userInteracted,
+        transient,
         secure: principal.schemeIs("https"),
         browsingContext: this.browsingContext,
         actor: this,

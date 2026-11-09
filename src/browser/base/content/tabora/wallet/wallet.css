@@ -1412,3 +1412,24 @@
 #tabora-drawer .w-confirm .w-actions .w-btn.ghost {
   flex: 0 0 auto;
 }
+
+/* Кнопка подтверждения «вооружается» с задержкой: защита от кликджекинга */
+#tabora-drawer .w-btn.primary.arming {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+#tabora-drawer .w-details pre,
+#tabora-drawer .w-summary-line,
+#tabora-drawer .w-origin-text b {
+  unicode-bidi: plaintext;
+}
+
+#tabora-drawer .w-badge-danger.w-tamper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  white-space: normal;
+  line-height: 1.4;
+}

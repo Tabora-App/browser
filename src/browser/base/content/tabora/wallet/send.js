@@ -352,8 +352,12 @@ Object.assign(Tabora, {
 
     if (chain.kind === "btc") {
       const [utxos, fees] = await Promise.all([WalletStore.rpc("bitcoin", null, `/address/${from}/utxo`), WalletStore.rpc("bitcoin", null, "/v1/fees/recommended")]);
-      const rate = BigInt(Math.max(1, fees.halfHourFee || fees.hourFee || 2));
-      const sorted = [...utxos].filter(u => u.status?.confirmed || true).sort((a, b) => b.value - a.value);
+      const suggested = Number(fees.halfHourFee || fees.hourFee || 2);
+      const rate = BigInt(Math.min(500, Math.max(1, Math.round(suggested))));
+      if (suggested > 500) {
+        out.warning = `Нода предлагает ставку ${suggested} сат/vB: ограничили до 500. Проверьте сеть позже.`;
+      }
+      const sorted = [...utxos].sort((a, b) => b.value - a.value);
       const total = sorted.reduce((n, u) => n + BigInt(u.value), 0n);
       const vsize = (ins, outs) => BigInt(Math.ceil(10.5 + 68 * ins + 31 * outs));
       let chosen = [];
@@ -393,6 +397,9 @@ Object.assign(Tabora, {
       }
       if (utxos.some(u => !u.status?.confirmed)) {
         out.warning ||= "Часть средств ещё не подтверждена: перевод может занять больше времени.";
+      }
+      if (out.ok && raw > 0n && fee * 10n > raw) {
+        out.warning = `Комиссия больше 10% от суммы (${this.wFmt(fee, 8, 8)} BTC). Возможно, стоит отправить больше или подождать.`;
       }
       return out;
     }
@@ -457,12 +464,7 @@ Object.assign(Tabora, {
       } else {
         const contract = asset.token.address;
         const parameter = S.abiEncodeParam("address", to) + S.abiEncodeParam("uint256", raw);
-        const sim = await S.tronPost("/wallet/triggerconstantcontract", { owner_address: from, contract_address: contract, function_selector: "transfer(address,uint256)", parameter, visible: true });
-        if (sim.result?.result === false || sim.result?.message) {
-          const msg = sim.result?.message ? new TextDecoder().decode(C_hex(sim.result.message)) : "контракт отклонил вызов";
-          throw new Error(msg);
-        }
-        const energy = BigInt(sim.energy_used || 65000);
+        const energy = await S.tronEstimateEnergy(from, contract, "transfer(address,uint256)", parameter);
         const bytes = 350n;
         const energyFee = (energy > freeEnergy ? energy - freeEnergy : 0n) * energyPrice;
         const netFee = freeNet >= bytes ? 0n : bytes * bandwidthPrice;
@@ -483,14 +485,6 @@ Object.assign(Tabora, {
       return out;
     }
     throw new Error("Сеть не поддержана");
-
-    function C_hex(hex) {
-      const out = new Uint8Array(hex.length / 2);
-      for (let i = 0; i < out.length; i++) {
-        out[i] = parseInt(hex.substr(i * 2, 2), 16);
-      }
-      return out;
-    }
   },
 
   /* ---- Подтверждение и отправка ------------------------------------------ */
@@ -578,15 +572,15 @@ Object.assign(Tabora, {
         return WalletSigner.solSend(signed);
       }
       if (chain.kind === "tron") {
-        let tx;
-        if (plan.tron.kind === "trx") {
-          tx = await WalletSigner.tronBuildSendTrx(plan.to, raw, plan.from);
-        } else {
-          const r = await WalletSigner.tronPost("/wallet/triggersmartcontract", { owner_address: plan.from, contract_address: plan.tron.contract, function_selector: "transfer(address,uint256)", parameter: plan.tron.parameter, fee_limit: plan.tron.feeLimit, call_value: 0, visible: true });
-          if (!r.result?.result) {
-            throw new Error(r.result?.message ? new TextDecoder().decode(C.hexToBytes(r.result.message)) : "контракт отклонил вызов");
-          }
-          tx = r.transaction;
+        // транзакция собирается локально; у ноды берём только ссылку на блок
+        const tx = plan.tron.kind === "trx"
+          ? await WalletSigner.tronBuildSendTrx(plan.to, raw, plan.from)
+          : await WalletSigner.tronBuildRaw({ kind: "trigger", owner: plan.from, contractAddress: plan.tron.contract, data: "a9059cbb" + plan.tron.parameter, callValue: 0 }, { feeLimit: plan.tron.feeLimit });
+        // контроль: то, что подписываем, совпадает с тем, что ввёл пользователь
+        const check = WalletSigner.tronDecodeRaw(tx.raw_data_hex).contracts[0];
+        const okTarget = plan.tron.kind === "trx" ? check.to === plan.to && check.amount === raw : check.contractAddress === plan.tron.contract && check.data.toLowerCase() === ("0xa9059cbb" + plan.tron.parameter).toLowerCase();
+        if (!check || check.owner !== plan.from || !okTarget) {
+          throw new Error("Собранная транзакция не совпадает с введёнными данными");
         }
         const signed = WalletSigner.tronSignTx(tx, priv);
         const res = await WalletSigner.tronBroadcast(signed);
@@ -604,6 +598,12 @@ Object.assign(Tabora, {
       const pass = this.wField("Пароль кошелька", { type: "password", autocomplete: "current-password" });
       const err = h("div", { class: "w-error", hidden: "true" });
       let done = false;
+      // Защита от кликджекинга и перехвата ввода: кнопка включается через паузу,
+      // клики, начатые до показа, игнорируются, Enter работает только после ввода в этом листе.
+      const ARM_MS = opts.fromSite ? 900 : 500;
+      const shownAt = Date.now();
+      let armed = false;
+      let typedHere = false;
       const finish = (fn, v) => {
         if (!done) {
           done = true;
@@ -611,7 +611,13 @@ Object.assign(Tabora, {
           fn(v);
         }
       };
-      const ok = this.wButton(opts.okLabel || "Подписать", "primary", async () => {
+      const ok = this.wButton(opts.okLabel || "Подписать", "primary", async e => {
+        if (!armed || Date.now() - shownAt < ARM_MS) {
+          return;
+        }
+        if (e && e.detail === 0 && !WalletStore.passwordless && !typedHere) {
+          return; // Enter без ввода пароля в этом листе
+        }
         ok.disabled = true;
         cancel.disabled = true;
         ok.classList.add("loading");
@@ -642,16 +648,50 @@ Object.assign(Tabora, {
         h("div", { class: "w-actions" }, null, [cancel, ok]),
       ].filter(Boolean));
       const box = h("div", { class: "w-sheet" }, null, [card]);
+      ok.disabled = true;
+      ok.classList.add("arming");
+      let downAt = 0;
+      ok.addEventListener("mousedown", () => { downAt = Date.now(); });
+      ok.addEventListener("click", e => {
+        if (e.detail !== 0 && (downAt === 0 || downAt - shownAt < ARM_MS)) {
+          e.stopImmediatePropagation(); // клик начался до того, как лист «вооружился»
+        }
+      }, true);
+      setTimeout(() => {
+        if (!done) {
+          armed = true;
+          ok.disabled = false;
+          ok.classList.remove("arming");
+        }
+      }, ARM_MS);
+      pass.input.addEventListener("input", () => { typedHere = true; });
       pass.input.addEventListener("keydown", e => {
         e.stopPropagation();
-        if (e.key === "Enter") {
+        if (e.key === "Enter" && armed && (typedHere || WalletStore.passwordless)) {
           ok.click();
         }
       });
       this.wSheetShow(box);
       box._cancel = () => finish(reject, Object.assign(new Error("Отклонено"), { code: 4001 }));
-      setTimeout(() => pass.input.focus(), 60);
+      if (!opts.fromSite) {
+        setTimeout(() => pass.input.focus(), 60);
+      } else {
+        // запрос сайта не забирает фокус у того, что пользователь делает сейчас
+        document.activeElement?.blur?.();
+      }
     });
+  },
+
+  /** Ждём, пока в панели не останется других листов (пароль, фраза, другой запрос). */
+  async walletSheetFree() {
+    const panel = () => this.drawer.el?.querySelector(".dpanel");
+    for (let i = 0; i < 600; i++) {
+      if (!panel()?.querySelector(".w-sheet")) {
+        return;
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+    throw Object.assign(new Error("Кошелёк занят другим действием"), { code: -32002 });
   },
 
   wOriginCard(origin) {
@@ -660,7 +700,7 @@ Object.assign(Tabora, {
     icon.firstChild.addEventListener("error", () => icon.replaceChildren(h("b", {}, this.letterOf(origin.host))));
     return h("div", { class: "w-origin" }, null, [
       icon,
-      h("div", { class: "w-origin-text" }, null, [h("b", {}, origin.host), h("span", {}, [origin.secure ? "HTTPS" : "без HTTPS · небезопасно", origin.note].filter(Boolean).join(" · "))]),
+      h("div", { class: "w-origin-text" }, null, [h("b", {}, origin.host), h("span", {}, [origin.secure ? "HTTPS" : "без HTTPS · небезопасно", origin.topHost ? `во фрейме на ${origin.topHost}` : null, origin.note].filter(Boolean).join(" · "))]),
     ]);
   },
 
