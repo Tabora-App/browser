@@ -40,11 +40,6 @@
   gap: 12px;
 }
 
-#tabora-account-dialog .ta-welcome {
-  align-items: center;
-  text-align: center;
-}
-
 #tabora-account-dialog h2 {
   margin: 0;
   font: 700 20px/1.2 var(--tabora-font);
@@ -65,12 +60,9 @@
 }
 
 #tabora-account-dialog .ta-orb {
-  width: 64px;
-  height: 64px;
-  border-radius: 15px;
-  position: relative;
-  box-shadow: 0 10px 30px color-mix(in srgb, var(--tabora-accent) 35%, transparent);
-  align-self: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
   overflow: hidden;
 }
 
@@ -78,6 +70,94 @@
   width: 100%;
   height: 100%;
   display: block;
+}
+
+/* Приветствие: строка бренда, заголовок, три строки по делу, действия в один ряд */
+#tabora-account-dialog .ta-welcome {
+  gap: 0;
+}
+
+#tabora-account-dialog .ta-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 700 13px/1 var(--tabora-font);
+  color: var(--tabora-text-strong);
+}
+
+#tabora-account-dialog .ta-brand .ta-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+}
+
+#tabora-account-dialog .ta-brand i {
+  font: 500 12px/1 var(--tabora-font);
+  font-style: normal;
+  color: var(--tabora-text-4);
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--tabora-line);
+}
+
+#tabora-account-dialog .ta-welcome h2 {
+  margin: 22px 0 18px;
+  font: 700 22px/1.2 var(--tabora-font);
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+  max-width: 17em;
+}
+
+#tabora-account-dialog .ta-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--tabora-line);
+}
+
+#tabora-account-dialog .ta-list li {
+  display: flex;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--tabora-line);
+}
+
+#tabora-account-dialog .ta-list svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--tabora-text-3);
+}
+
+#tabora-account-dialog .ta-list div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+#tabora-account-dialog .ta-list b {
+  font: 600 13px/1.2 var(--tabora-font);
+  color: var(--tabora-text-strong);
+}
+
+#tabora-account-dialog .ta-list span {
+  font: 400 12.5px/1.35 var(--tabora-font);
+  color: var(--tabora-text-3);
+}
+
+#tabora-account-dialog .ta-welcome .ta-hint {
+  margin: 12px 0 0;
+}
+
+#tabora-account-dialog .ta-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+#tabora-account-dialog .ta-foot .ta-link {
+  margin-inline-start: auto;
+  align-self: center;
 }
 
 
@@ -244,10 +324,6 @@
 #tabora-account-dialog .ta-link:hover {
   color: var(--tabora-text-strong);
   text-decoration: underline;
-}
-
-#tabora-account-dialog .ta-welcome .ta-link {
-  align-self: center;
 }
 
 #tabora-account-dialog .ta-links {

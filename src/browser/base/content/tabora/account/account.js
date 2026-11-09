@@ -172,15 +172,23 @@ Object.assign(Tabora, {
   accountWelcome() {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { Account } = this.accountMod();
+    const row = (icon, title, text) =>
+      h("li", {}, null, [this.svg(icon, 16, 1.7), h("div", {}, null, [h("b", {}, title), h("span", {}, text)])]);
+    const skip = this.taLink("Не сейчас", () => this.accountClose());
     return h("div", { class: "ta-step ta-welcome" }, null, [
-      h("div", { class: "ta-orb" }, null, [this.markSvg("ta-mark")]),
-      h("h2", {}, "Добро пожаловать в Tabora"),
-      h("p", { class: "ta-text" }, `Аккаунт даёт адрес почты в домене ${Account.domain}, сейф для паролей и кодов и перенос всего на другой компьютер. Один пароль на всё, данные зашифрованы на устройстве.`),
-      h("div", { class: "ta-actions" }, null, [
-        this.taButton("Создать аккаунт", "primary", () => this.accountRender("register")),
-        this.taButton("У меня уже есть аккаунт", "ghost", () => this.accountRender("login")),
+      h("div", { class: "ta-brand" }, null, [this.markSvg("ta-mark"), h("span", {}, "Tabora"), h("i", {}, "аккаунт")]),
+      h("h2", {}, "Почта, сейф и перенос на другой компьютер"),
+      h("ul", { class: "ta-list" }, null, [
+        row(["M3.5 6.5h17v11h-17z", "M3.5 7l8.5 6 8.5-6"], `имя@${Account.domain}`, "Свой адрес и алиасы для регистраций"),
+        row(["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], "Сейф", "Пароли и коды входа шифруются на этом компьютере"),
+        row(["M4 7h11v9H4z", "M9 20h11v-9", "M15 11h5"], "Перенос", "Вход на новом компьютере возвращает всё на место"),
       ]),
-      this.taLink("Продолжить без аккаунта", () => this.accountClose()),
+      h("p", { class: "ta-hint" }, "Один пароль на всё. Он не покидает компьютер, восстановить его можно только вашим ключом восстановления."),
+      h("div", { class: "ta-foot" }, null, [
+        this.taButton("Создать аккаунт", "primary", () => this.accountRender("register")),
+        this.taButton("Войти", "ghost", () => this.accountRender("login")),
+        skip,
+      ]),
     ]);
   },
 
