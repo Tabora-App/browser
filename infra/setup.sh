@@ -2,7 +2,8 @@
 # Развёртывание сервера Tabora (Hetzner, Ubuntu 24/26). Идемпотентно: повторный запуск приводит
 # сервер к тому же состоянию и ничего не откатывает (TLS, туннель, учётки Stalwart сохраняются).
 # Ставит: базовую защиту (ufw, fail2ban, автообновления с перезагрузкой, hidepid), nginx, PostgreSQL,
-# Stalwart (почта) с проверкой sha256, каркас службы tabora-server и сайт.
+# Stalwart (почта) с проверкой sha256, каркас службы tabora-server, сайт, резервные копии (restic)
+# и мониторинг (tabora-health).
 # TLS включает enable-tls.sh, туннель и DNS — cloudflare/setup-tunnel.sh и cloudflare/dns.sh.
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -23,7 +24,7 @@ log "система: пакеты"
 apt-get update -q
 apt-get -y -q --with-new-pkgs upgrade   # с новыми пакетами (ядро), без удаления
 apt-get -y -q install ufw fail2ban python3-systemd unattended-upgrades needrestart nginx certbot \
-  python3-certbot-dns-cloudflare postgresql postgresql-contrib curl jq rsync sqlite3 dnsutils ca-certificates openssl
+  python3-certbot-dns-cloudflare postgresql postgresql-contrib curl jq rsync sqlite3 dnsutils ca-certificates openssl restic python3-yaml
 
 if ! command -v cloudflared >/dev/null; then
   log "cloudflared: пакет из репозитория Cloudflare (обновляется через unattended-upgrades)"
@@ -64,13 +65,47 @@ mkdir -p /etc/needrestart/conf.d
 echo "\$nrconf{restart} = 'a';" > /etc/needrestart/conf.d/90-tabora.conf
 
 # cloud-init после первичной настройки (сеть, ключи, имя) не нужен, а при перезагрузке гонится с
-# переименованием сетевого интерфейса Hetzner (enp1s0 → eth0) и падает. Сетевая настройка остаётся в
-# /etc/netplan/50-cloud-init.yaml. Вернуть: rm /etc/cloud/cloud-init.disabled (диск при увеличении
-# в Hetzner без cloud-init расширяется вручную: growpart /dev/sda 1 && resize2fs /dev/sda1).
+# переименованием сетевого интерфейса Hetzner (enp1s0 → eth0) и падает. Вернуть:
+# rm /etc/cloud/cloud-init.disabled (диск при увеличении в Hetzner без cloud-init расширяется
+# вручную: growpart /dev/sda 1 && resize2fs /dev/sda1).
 if [ -f /var/lib/cloud/instance/boot-finished ] && [ ! -f /etc/cloud/cloud-init.disabled ]; then
   log "система: cloud-init отключён после первичной настройки"
   touch /etc/cloud/cloud-init.disabled
   systemctl reset-failed 'cloud-init*' 2>/dev/null || true
+fi
+# Сеть: cloud-init привязал netplan к MAC-адресам этой машины, и сервер, развёрнутый из снапшота
+# на другой машине, остался бы без сети (а пароль root заблокирован). network/netplan.py заменяет
+# это на DHCP для любого интерфейса плюс статический IPv6 из метаданных Hetzner; при загрузке
+# tabora-network.service сверяет IPv6 с метаданными. Применяется с проверкой связи и автооткатом.
+if [ -f /etc/cloud/cloud-init.disabled ]; then
+  # если cloud-init когда-нибудь включат обратно, сеть он не трогает
+  echo 'network: {config: disabled}' > /etc/cloud/cloud.cfg.d/99-tabora-network.cfg
+  python3 "$HERE/network/netplan.py" apply
+  # netplan при ранней загрузке подставляет в wait-online имена интерфейсов до переименования udev
+  # (eth0, eth1), и ожидание сети падало по таймауту через две минуты. Ждём любой интерфейс с маршрутом.
+  mkdir -p /etc/systemd/system/systemd-networkd-wait-online.service.d
+  printf '[Service]\nExecStart=\nExecStart=/usr/lib/systemd/systemd-networkd-wait-online --any -o routable --timeout=60\n' \
+    > /etc/systemd/system/systemd-networkd-wait-online.service.d/90-tabora.conf
+  render "$HERE/systemd/tabora-network.service" /etc/systemd/system/tabora-network.service
+  systemctl daemon-reload
+  systemctl enable tabora-network.service >/dev/null 2>&1
+fi
+
+# SSH: единственное отличие от прежнего файла — проброс портов разрешён только к панели
+# администратора Stalwart (ssh -L 8080:127.0.0.1:8080). Проверка sshd -t до перечитывания,
+# при ошибке возвращается прежний файл.
+SSHD_CONF=/etc/ssh/sshd_config.d/00-tabora.conf
+if ! cmp -s "$HERE/ssh/00-tabora.conf" "$SSHD_CONF"; then
+  log "ssh: проброс портов только к 127.0.0.1:8080 (панель администратора)"
+  [ ! -f "$SSHD_CONF" ] || cp -p "$SSHD_CONF" /root/.00-tabora.conf.prev
+  install -m 644 -o root -g root "$HERE/ssh/00-tabora.conf" "$SSHD_CONF"
+  if sshd -t; then
+    systemctl reload ssh
+    rm -f /root/.00-tabora.conf.prev
+  else
+    if [ -f /root/.00-tabora.conf.prev ]; then mv -f /root/.00-tabora.conf.prev "$SSHD_CONF"; else rm -f "$SSHD_CONF"; fi
+    die "sshd не принял $SSHD_CONF — возвращён прежний файл"
+  fi
 fi
 
 log "система: журнал не больше 500 МБ"
@@ -126,6 +161,42 @@ CONF
 chown root:root /etc/tabora/cloudflare.env /etc/tabora/certbot-cloudflare.ini
 chmod 600 /etc/tabora/cloudflare.env /etc/tabora/certbot-cloudflare.ini
 [ ! -f /etc/tabora/stalwart-admin.env ] || { chown root:root /etc/tabora/stalwart-admin.env; chmod 600 /etc/tabora/stalwart-admin.env; }
+[ ! -f /etc/tabora/postmaster.env ] || { chown root:root /etc/tabora/postmaster.env; chmod 600 /etc/tabora/postmaster.env; }
+install -d -m 755 -o root -g root /var/lib/tabora
+# Резервные копии: пароль репозитория создаётся один раз. Без него копии не расшифровать —
+# владелец хранит его вне сервера (менеджер паролей).
+if [ ! -f /etc/tabora/backup.env ]; then
+  ( umask 077
+    cat > /etc/tabora/backup.env.new <<CONF
+# Резервные копии restic (infra/backup/backup.sh; права 600, только root). См. infra/README.md.
+# ПАРОЛЬ СОХРАНИТЕ ВНЕ СЕРВЕРА: без него копии не расшифровать, а сам этот файл в копии бесполезен.
+RESTIC_PASSWORD=$(openssl rand -base64 33)
+# Куда писать копии. Локальный каталог — только пока нет внешнего хранилища (тот же диск!).
+#   Hetzner Storage Box: RESTIC_REPOSITORY=sftp://uXXXXXX@uXXXXXX.your-storagebox.de:23//home/tabora
+#                        (открытый ключ /etc/tabora/backup_ed25519.pub добавить в Storage Box)
+#   S3 (Hetzner Object Storage, Backblaze B2, AWS):
+#                        RESTIC_REPOSITORY=s3:https://<endpoint>/<bucket>/tabora
+#                        AWS_ACCESS_KEY_ID=…  AWS_SECRET_ACCESS_KEY=…
+RESTIC_REPOSITORY=/var/backups/tabora-restic
+CONF
+  )
+  mv /etc/tabora/backup.env.new /etc/tabora/backup.env
+fi
+# отдельный ключ SSH для sftp-хранилища (не в ~/.ssh); создаётся один раз
+[ -f /etc/tabora/backup_ed25519 ] || ssh-keygen -q -t ed25519 -N '' -C "tabora-backup@$MAIL_HOST" -f /etc/tabora/backup_ed25519
+[ -f /etc/tabora/alert.env ] || cat > /etc/tabora/alert.env <<'CONF'
+# Оповещения мониторинга (infra/monitor/health.py; права 600). Пусто — только журнал и motd.
+#   ntfy:    ALERT_URL=https://ntfy.sh/<длинное-случайное-имя-темы>   (ALERT_FORMAT=ntfy)
+#   вебхук:  ALERT_URL=https://…  ALERT_FORMAT=json   (Slack, Discord, Mattermost и т. п.)
+#   ALERT_TOKEN — необязательный токен (заголовок Authorization: Bearer)
+# Проверка: /usr/local/lib/tabora/monitor/health.py test
+ALERT_URL=
+ALERT_FORMAT=ntfy
+ALERT_TOKEN=
+CONF
+chown root:root /etc/tabora/backup.env /etc/tabora/backup_ed25519 /etc/tabora/backup_ed25519.pub /etc/tabora/alert.env
+chmod 600 /etc/tabora/backup.env /etc/tabora/backup_ed25519 /etc/tabora/alert.env
+chmod 644 /etc/tabora/backup_ed25519.pub
 
 # ---- PostgreSQL --------------------------------------------------------------
 log "PostgreSQL: роль и база tabora"
@@ -245,22 +316,69 @@ install -m 755 "$HERE/stalwart/motd.sh" /etc/update-motd.d/95-tabora-stalwart
 systemctl daemon-reload
 systemctl enable --now tabora-stalwart-release.timer >/dev/null 2>&1
 
+# ---- туннель: служба из сохранённых учётных данных (после восстановления из копии) ----------
+# setup-tunnel.sh создаёт туннель и службу; если учётные данные уже лежат в /etc/cloudflared
+# (сервер восстановлен из резервной копии), службе токен Cloudflare не нужен
+if [ ! -f /etc/systemd/system/cloudflared.service ]; then
+  cred=
+  [ ! -d /etc/cloudflared ] || cred=$(find /etc/cloudflared -maxdepth 1 -name '*.json' | head -1)
+  if [ -n "$cred" ]; then
+    log "туннель: служба cloudflared из сохранённых учётных данных"
+    chown root:root "$cred" && chmod 600 "$cred"
+    render "$HERE/cloudflare/cloudflared.service" /etc/systemd/system/cloudflared.service "s/__TUNNEL_ID__/$(basename "$cred" .json)/g"
+    systemctl daemon-reload
+    systemctl enable --now cloudflared >/dev/null 2>&1 || true
+  fi
+fi
+
 # ---- nginx + сайт ------------------------------------------------------------
 log "сайт: /var/www/tabora.app"
 mkdir -p /var/www/tabora.app /var/www/mta-sts/.well-known
 install -m 644 "$HERE/mta-sts/mta-sts.txt" /var/www/mta-sts/.well-known/mta-sts.txt
-rsync -a --delete "$HERE/../site/" /var/www/tabora.app/
-chown -R www-data:www-data /var/www/tabora.app
+# сайт принадлежит root: nginx (www-data) его только читает
+rsync -a --delete --chown=root:root --chmod=D755,F644 "$HERE/../site/" /var/www/tabora.app/
+chown root:root /var/www/tabora.app && chmod 755 /var/www/tabora.app
+# журнал почтового хоста нужен fail2ban (tabora-jmap) ещё до включения TLS
+[ -f /var/log/nginx/mx.access.log ] || install -m 640 -o www-data -g adm /dev/null /var/log/nginx/mx.access.log
 install_nginx "$HERE/nginx"
 
 # ---- fail2ban ------------------------------------------------------------------
-log "fail2ban: ssh, nginx, JMAP (401/403), Stalwart (SMTP AUTH, IMAP, JMAP по журналу)"
-install -m 644 "$HERE"/fail2ban/filter.d/*.conf /etc/fail2ban/filter.d/
-install -m 644 "$HERE/fail2ban/tabora.local" /etc/fail2ban/jail.d/tabora.local
+log "fail2ban: ssh, JMAP (401/403 с авторизацией), Stalwart (SMTP AUTH, IMAP), recidive без порта 22"
+f2b_changed=
+for f in "$HERE"/fail2ban/filter.d/*.conf; do
+  cmp -s "$f" "/etc/fail2ban/filter.d/$(basename "$f")" || { install -m 644 "$f" /etc/fail2ban/filter.d/; f2b_changed=1; }
+done
+cmp -s "$HERE/fail2ban/tabora.local" /etc/fail2ban/jail.d/tabora.local || { install -m 644 "$HERE/fail2ban/tabora.local" /etc/fail2ban/jail.d/tabora.local; f2b_changed=1; }
 systemctl enable fail2ban >/dev/null 2>&1
-systemctl restart fail2ban
+# перезапуск только при изменении правил: действующие баны при повторном запуске не теряются
+if [ -n "$f2b_changed" ] || ! systemctl is-active -q fail2ban; then
+  fail2ban-client -t >/dev/null || die "fail2ban не принял конфигурацию (fail2ban-client -t)"
+  systemctl restart fail2ban
+fi
 for _ in $(seq 1 20); do fail2ban-client ping >/dev/null 2>&1 && break; sleep 1; done
 fail2ban-client status | sed -n 's/.*Jail list:[[:space:]]*/  jail: /p'
+
+# ---- резервные копии и мониторинг ------------------------------------------------
+log "резервные копии: restic, ежедневно в 03:15, проверка репозитория по воскресеньям"
+install -d -m 700 -o root -g root /var/backups/tabora
+for u in tabora-backup.service tabora-backup.timer tabora-backup-check.service tabora-backup-check.timer \
+         tabora-health.service tabora-health.timer; do
+  render "$HERE/systemd/$u" "/etc/systemd/system/$u"
+done
+install -m 755 "$HERE/monitor/motd.sh" /etc/update-motd.d/96-tabora-health
+systemctl daemon-reload
+systemctl enable --now tabora-backup.timer tabora-backup-check.timer >/dev/null 2>&1
+if grep -q '^RESTIC_REPOSITORY=/' /etc/tabora/backup.env; then
+  log "ВНИМАНИЕ: резервные копии только локальные (тот же диск). Внешнее хранилище: RESTIC_REPOSITORY в /etc/tabora/backup.env (infra/README.md)"
+fi
+if [ ! -s /var/lib/tabora/backup.json ]; then
+  log "резервные копии: первая копия (Stalwart остановится на несколько секунд)"
+  systemctl start tabora-backup.service || log "первая копия не удалась: journalctl -u tabora-backup"
+fi
+log "мониторинг: tabora-health каждые 5 минут (/run/tabora/health.json, motd, оповещения из /etc/tabora/alert.env)"
+systemctl enable --now tabora-health.timer >/dev/null 2>&1
+systemctl start tabora-health.service || true
+python3 "$LIB/monitor/health.py" show || true
 
 log "готово. Stalwart: $(/opt/stalwart/bin/stalwart --version 2>/dev/null | head -1); nginx: $(nginx -v 2>&1 | cut -d/ -f2); PostgreSQL: $(psql --version | awk '{print $3}')"
 if tls_enabled; then log "TLS включён ($MAIL_HOST)"; else log "дальше: домен в Cloudflare → infra/deploy.sh tunnel → tls → dns (infra/README.md)"; fi

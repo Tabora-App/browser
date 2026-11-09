@@ -10,7 +10,7 @@ rsync -az --delete "$ROOT/infra/" "$HOST:/root/tabora-infra/infra/"
 rsync -az --delete "$ROOT/site/" "$HOST:/root/tabora-infra/site/"
 case "$what" in
   setup)  ssh "$HOST" 'bash /root/tabora-infra/infra/setup.sh' ;;
-  site)   ssh "$HOST" 'rsync -a --delete /root/tabora-infra/site/ /var/www/tabora.app/ && chown -R www-data:www-data /var/www/tabora.app && echo "сайт обновлён"' ;;
+  site)   ssh "$HOST" 'rsync -a --delete --chown=root:root --chmod=D755,F644 /root/tabora-infra/site/ /var/www/tabora.app/ && echo "сайт обновлён"' ;;
   tls)    ssh "$HOST" 'bash /root/tabora-infra/infra/enable-tls.sh' ;;
   tunnel) ssh "$HOST" 'bash /root/tabora-infra/infra/cloudflare/setup-tunnel.sh' ;;
   dns)    ssh "$HOST" 'bash /root/tabora-infra/infra/cloudflare/dns.sh' ;;

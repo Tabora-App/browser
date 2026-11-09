@@ -20,7 +20,8 @@ render() {
 install_lib() {
   mkdir -p "$LIB"
   rsync -a --delete --chown=root:root --chmod=D755,F644 "$1/" "$LIB/"
-  chmod 755 "$LIB"/*.sh "$LIB"/stalwart/*.py "$LIB"/stalwart/*.sh "$LIB"/cloudflare/*.sh "$LIB"/cloudflare/*.py
+  chmod 755 "$LIB"/*.sh "$LIB"/stalwart/*.py "$LIB"/stalwart/*.sh "$LIB"/cloudflare/*.sh "$LIB"/cloudflare/*.py \
+            "$LIB"/backup/*.sh "$LIB"/monitor/*.py "$LIB"/monitor/*.sh "$LIB"/network/*.py
 }
 
 tls_enabled() { [ -f "$MX_LIVE/fullchain.pem" ] && [ -f "$MX_LIVE/privkey.pem" ]; }
@@ -39,6 +40,8 @@ install_nginx() {
   install -m 644 "$src/proxy.inc" /etc/nginx/snippets/tabora-proxy.conf
   # список логинов администраторов Stalwart пишет stalwart/configure.py; до него — только «admin»
   [ -f /etc/nginx/tabora-privileged-logins.map ] || printf '"~*(^|%%)admin(@|%%|$)" 1;\n' > /etc/nginx/tabora-privileged-logins.map
+  # список логинов администраторов читает только главный процесс nginx (root)
+  chown root:www-data /etc/nginx/tabora-privileged-logins.map && chmod 640 /etc/nginx/tabora-privileged-logins.map
   # старые имена (до разделения http/https) и стандартный сайт
   rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-enabled/mx.http /etc/nginx/sites-enabled/tabora.app.http \
         /etc/nginx/sites-available/mx.http /etc/nginx/sites-available/tabora.app.http

@@ -6,6 +6,8 @@
   configure.py recovery-off  убрать его из stalwart.env
   configure.py bootstrap     от имени аварийного администратора: домен и постоянный администратор
   configure.py [apply]       от имени постоянного администратора: всё остальное
+  configure.py watch         для мониторинга: обновить карту логинов nginx и сравнить привилегированные
+                             учётки с состоянием на момент последнего apply (печатает JSON)
 
 Коды выхода recovery-on/off и apply: 0 — ничего не изменилось, 3 — изменилось, нужен перезапуск
 службы stalwart; остальное — ошибка.
@@ -17,6 +19,8 @@ tabora-server: отдельная учётка с ролью User плюс уп�
 """
 import json
 import os
+import shutil
+import subprocess
 import sys
 
 sys.dont_write_bytecode = True  # без __pycache__ в /usr/local/lib/tabora
@@ -28,6 +32,14 @@ DOMAIN = read_env(SERVER_ENV).get("TABORA_DOMAIN") or os.environ.get("DOMAIN", "
 MAIL_HOST = os.environ.get("MAIL_HOST", f"mx.{DOMAIN}")
 NGINX_MAP = "/etc/nginx/tabora-privileged-logins.map"
 ZONE_FILE = f"/etc/tabora/dns-{DOMAIN}.zone"
+POSTMASTER_ENV = "/etc/tabora/postmaster.env"      # root:root 600, ящик postmaster@ (служебная почта)
+PRIVILEGED_STATE = "/var/lib/tabora/privileged.json"  # привилегированные учётки на момент apply
+# служебные адреса (RFC 2142, требования Let's Encrypt и почтовых провайдеров) — алиасы ящика postmaster
+POSTMASTER_ALIASES = ("abuse", "hostmaster", "security", "webmaster")
+DAY_MS = 86400 * 1000
+# Сроки встроенных банов Stalwart (x:Security). По умолчанию null — бан навсегда: адреса
+# переходят к другим людям, а список растёт без конца.
+BAN_PERIODS = {"authBanPeriod": DAY_MS, "abuseBanPeriod": DAY_MS, "loiterBanPeriod": DAY_MS, "scanBanPeriod": 7 * DAY_MS}
 CHANGED = 3
 
 # Публикуются в автонастройке и SRV. POP3 и ManageSieve выключены (Sieve есть в JMAP),
@@ -160,6 +172,43 @@ def configure_system(c, domain_id):
     return bool(patch or hp)
 
 
+def configure_security(c):
+    sec = c.call("x:Security/get", {"ids": ["singleton"]})["list"][0]
+    patch = {k: v for k, v in BAN_PERIODS.items() if sec.get(k) != v}
+    if patch:
+        c.call("x:Security/set", {"update": {"singleton": patch}})
+        log("встроенные баны Stalwart: конечный срок (" + ", ".join(f"{k} = {v // DAY_MS} сут." for k, v in patch.items()) + ")")
+    return bool(patch)
+
+
+def configure_postmaster(c, domain_id):
+    """Ящик postmaster@ с алиасами abuse@ и др.: обычный пользователь, пароль в postmaster.env."""
+    login = f"postmaster@{DOMAIN}"
+    aliases = {str(i): {"name": n, "domainId": domain_id} for i, n in enumerate(POSTMASTER_ALIASES)}
+    env = read_env(POSTMASTER_ENV)
+    acc = find_account(c, "postmaster", domain_id)
+    password = None
+    if acc is None:
+        password = new_secret(32)
+        c.call("x:Account/set", {"create": {"p": {
+            "@type": "User", "name": "postmaster", "domainId": domain_id, "roles": {"@type": "User"},
+            "description": "Tabora: служебная почта (postmaster, abuse, security)",
+            "aliases": aliases, "credentials": {"0": {"@type": "Password", "secret": password}}}}})
+        log(f"ящик {login} создан (алиасы: {', '.join(POSTMASTER_ALIASES)})")
+    else:
+        have = {(a.get("name"), a.get("domainId")) for a in (acc.get("aliases") or {}).values()}
+        if have != {(n, domain_id) for n in POSTMASTER_ALIASES}:
+            c.call("x:Account/set", {"update": {acc["id"]: {"aliases": aliases}}})
+            log(f"ящик {login}: алиасы обновлены")
+        if env.get("POSTMASTER_USER") != login or not env.get("POSTMASTER_PASS"):
+            password = new_secret(32)
+            c.call("x:Account/set", {"update": {acc["id"]: {"credentials": {"0": {"@type": "Password", "secret": password}}}}})
+            log(f"ящик {login}: новый пароль")
+    if password:
+        update_env(POSTMASTER_ENV, {"POSTMASTER_USER": login, "POSTMASTER_PASS": password}, mode=0o600,
+                   header="Ящик служебной почты postmaster@/abuse@/security@ (создан stalwart/configure.py). Вход по IMAP/JMAP.")
+
+
 def configure_tracing(c):
     changed = False
     tracers = c.get_all("Tracer")
@@ -237,28 +286,124 @@ def configure_service_account(c, domain_id):
     log(f"ключ API tabora-server выпущен и записан в {SERVER_ENV}")
 
 
-def write_nginx_map(c):
-    """Все учётки с ролью не User или с добавленными правами: nginx не пускает их Basic-auth снаружи."""
-    names = set()
-    for a in c.get_all("Account"):
-        roles = (a.get("roles") or {}).get("@type")
-        perms = (a.get("permissions") or {}).get("@type", "Inherit")
-        if a.get("name") and (roles != "User" or perms != "Inherit"):
-            names.add(a["name"].lower())
+def is_privileged(a):
+    roles = (a.get("roles") or {}).get("@type")
+    perms = (a.get("permissions") or {}).get("@type", "Inherit")
+    return roles != "User" or perms != "Inherit"
+
+
+def write_nginx_map(accounts):
+    """Все учётки с ролью не User или с добавленными правами: nginx не пускает их Basic-auth снаружи.
+
+    Файл 640 root:www-data (список логинов администраторов посторонним не нужен), имена
+    экранируются для регулярного выражения. True, если файл изменился (nginx перечитан).
+    """
+    names = sorted({a["name"].lower() for a in accounts if a.get("name") and is_privileged(a)})
     lines = ["# Создано infra/stalwart/configure.py: логины с правами сверх обычного пользователя.",
              '"~*(^|%)admin(@|%|$)" 1;', '"~*(^|%)recovery-" 1;']
-    lines += [f'"~*(^|%){n}(@|%|$)" 1;' for n in sorted(names)]
+    for n in names:
+        # буквы, цифры, «-» и «_» пишутся как есть, точка экранируется, любой другой символ
+        # заменяется на «.» (любой символ): так в строку nginx и в регулярное выражение не попадает
+        # ничего особого, а шаблон может только расшириться (запретить лишнее), но не сузиться
+        pattern = "".join(ch if ch.isascii() and (ch.isalnum() or ch in "-_") else "\\." if ch == "." else "." for ch in n)
+        lines.append(f'"~*(^|%){pattern}(@|%|$)" 1;')
     text = "\n".join(lines) + "\n"
     try:
-        if open(NGINX_MAP).read() == text:
-            return
+        st = os.stat(NGINX_MAP)
+        gid = grp_gid("www-data")
+        if open(NGINX_MAP).read() == text and st.st_mode & 0o777 == 0o640 and st.st_uid == 0 and st.st_gid == gid:
+            return False
     except FileNotFoundError:
         pass
-    with open(NGINX_MAP + ".tmp", "w") as f:
-        f.write(text)
-    os.chmod(NGINX_MAP + ".tmp", 0o644)
-    os.replace(NGINX_MAP + ".tmp", NGINX_MAP)
+    backup = None
+    try:
+        backup = open(NGINX_MAP).read()
+    except FileNotFoundError:
+        pass
+    write_map_file(text)
+    # карту читает главный процесс nginx (root) при перезагрузке конфигурации
+    if shutil.which("nginx") and subprocess.run(["systemctl", "is-active", "-q", "nginx"]).returncode == 0:
+        if subprocess.run(["nginx", "-t", "-q"], capture_output=True).returncode != 0:
+            if backup is not None:
+                write_map_file(backup)
+            raise SystemExit("nginx не принял карту привилегированных логинов — возвращена прежняя")
+        subprocess.run(["systemctl", "reload", "nginx"], check=False)
     log(f"nginx: логины администраторов ({len(names)}) запрещены снаружи")
+    return True
+
+
+def grp_gid(name):
+    import grp
+    try:
+        return grp.getgrnam(name).gr_gid
+    except KeyError:
+        return 0
+
+
+def write_map_file(text):
+    tmp = NGINX_MAP + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o640)
+    try:
+        os.fchown(fd, 0, grp_gid("www-data"))
+        os.fchmod(fd, 0o640)
+        os.write(fd, text.encode())
+    finally:
+        os.close(fd)
+    os.replace(tmp, NGINX_MAP)
+
+
+# ---- привилегированные учётки: снимок для мониторинга -------------------------------------------
+def privileged_snapshot(accounts):
+    """Учётки с правами сверх пользователя без секретов: по снимку мониторинг замечает, что
+    администратора изменили, добавили нового или сняли ограничение по адресам."""
+    snap = {}
+    for a in accounts:
+        if not is_privileged(a):
+            continue
+        creds = sorted(json.dumps({"type": c.get("@type"), "id": c.get("credentialId"), "allowedIps": sorted(c.get("allowedIps") or {}),
+                                   "permissions": c.get("permissions"), "expiresAt": c.get("expiresAt")}, sort_keys=True)
+                       for c in (a.get("credentials") or {}).values())
+        snap[a["id"]] = {"name": a.get("name"), "type": a.get("@type"), "roles": a.get("roles"), "permissions": a.get("permissions"),
+                         "credentials": creds, "aliases": sorted(str(v.get("name")) for v in (a.get("aliases") or {}).values()),
+                         "memberGroupIds": sorted(a.get("memberGroupIds") or {})}
+    return snap
+
+
+def snapshot_diff(old, new):
+    out = []
+    for i in sorted(set(old) | set(new)):
+        if i not in old:
+            out.append(f"новая привилегированная учётка {new[i]['name']}")
+        elif i not in new:
+            out.append(f"привилегированная учётка {old[i]['name']} удалена или лишена прав")
+        else:
+            keys = [k for k in new[i] if old[i].get(k) != new[i][k]]
+            if keys:
+                out.append(f"учётка {new[i]['name']}: изменились {', '.join(keys)}")
+    return out
+
+
+def save_privileged(accounts):
+    os.makedirs(os.path.dirname(PRIVILEGED_STATE), mode=0o755, exist_ok=True)
+    tmp = PRIVILEGED_STATE + ".tmp"
+    with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as f:
+        json.dump(privileged_snapshot(accounts), f, ensure_ascii=False, indent=1, sort_keys=True)
+    os.replace(tmp, PRIVILEGED_STATE)
+
+
+def watch():
+    """Для tabora-health: вход администратора, карта nginx, сравнение со снимком. Печатает JSON."""
+    accounts = admin_client().get_all("Account")
+    map_changed = write_nginx_map(accounts)
+    try:
+        with open(PRIVILEGED_STATE) as f:
+            expected = json.load(f)
+    except (OSError, ValueError):
+        expected = None
+    current = privileged_snapshot(accounts)
+    diff = snapshot_diff(expected, current) if expected is not None else ["нет снимка учёток: запустите infra/deploy.sh setup"]
+    print(json.dumps({"ok": True, "count": len(current), "diff": diff, "map_changed": map_changed}, ensure_ascii=False))
+    return 0
 
 
 def write_zone(c, domain_id):
@@ -284,8 +429,12 @@ def apply():
     domain_id = ensure_domain(c)
     changed |= configure_system(c, domain_id)
     changed |= configure_tracing(c)
+    changed |= configure_security(c)
     configure_service_account(c, domain_id)
-    write_nginx_map(c)
+    configure_postmaster(c, domain_id)
+    accounts = c.get_all("Account")
+    write_nginx_map(accounts)
+    save_privileged(accounts)   # состояние после развёртывания — эталон для мониторинга
     write_zone(c, domain_id)
     if not changed:
         log("Stalwart: настройки уже заданы")
@@ -299,7 +448,7 @@ def main():
             return 0 if admin_client().ok() else 1
         except JmapError:
             return 1
-    commands = {"recovery-on": recovery_on, "recovery-off": recovery_off, "bootstrap": bootstrap, "apply": apply}
+    commands = {"recovery-on": recovery_on, "recovery-off": recovery_off, "bootstrap": bootstrap, "apply": apply, "watch": watch}
     if cmd not in commands:
         raise SystemExit(__doc__)
     try:

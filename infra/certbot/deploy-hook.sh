@@ -5,5 +5,10 @@ case "${RENEWED_LINEAGE:-}" in
   */__MAIL_HOST__) ;;
   *) exit 0 ;;
 esac
-systemctl reload nginx
-python3 /usr/local/lib/tabora/stalwart/upload-cert.py "$RENEWED_LINEAGE"
+# сбой запоминается в файле: мониторинг (tabora-health) сообщает о нём, пока хук не пройдёт
+mark=/var/lib/tabora/certbot-hook.failed
+mkdir -p /var/lib/tabora
+failed() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $1" > "$mark"; logger -t tabora-certbot -p user.err -- "хук certbot: $1"; exit 1; }
+systemctl reload nginx || failed "nginx не перечитал конфигурацию"
+python3 /usr/local/lib/tabora/stalwart/upload-cert.py "$RENEWED_LINEAGE" || failed "сертификат не загружен в Stalwart"
+rm -f "$mark"

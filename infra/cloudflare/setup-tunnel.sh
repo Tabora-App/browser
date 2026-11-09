@@ -51,7 +51,8 @@ JSON
 
 log "DNS: CNAME на туннель для $DOMAIN, www, $API_HOST (с прокси)"
 for name in "$DOMAIN" "www.$DOMAIN" "$API_HOST"; do
-  rid=$(cf "$CF_API/zones/$CF_ZONE_ID/dns_records?name=$name" | jq -r '.result[0].id // empty')
+  # только CNAME: у имени могут быть и другие записи (TXT, CAA), их трогать нельзя
+  rid=$(cf "$CF_API/zones/$CF_ZONE_ID/dns_records?type=CNAME&name=$name" | jq -r '.result[0].id // empty')
   body=$(printf '{"type":"CNAME","name":"%s","content":"%s.cfargotunnel.com","proxied":true,"ttl":1}' "$name" "$TUNNEL_ID")
   if [ -n "$rid" ]; then printf '%s' "$body" | cf -X PUT "$CF_API/zones/$CF_ZONE_ID/dns_records/$rid" -d @- >/dev/null
   else printf '%s' "$body" | cf -X POST "$CF_API/zones/$CF_ZONE_ID/dns_records" -d @- >/dev/null; fi
