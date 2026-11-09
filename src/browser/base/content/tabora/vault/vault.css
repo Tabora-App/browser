@@ -315,3 +315,51 @@
   gap: 8px;
   padding-top: 10px;
 }
+
+/* Оценка стойкости пароля под полем */
+#tabora-drawer .v-strength {
+  display: block;
+  min-height: 14px;
+  margin-top: 4px;
+  font: 500 11px/1.3 var(--tabora-font);
+  color: var(--tabora-text-4);
+}
+
+#tabora-drawer .v-strength[data-score="0"],
+#tabora-drawer .v-strength[data-score="1"] {
+  color: var(--tabora-danger, #ff8a7a);
+}
+
+/* Запись кодов с неверной подписью: код не выдаётся */
+#tabora-drawer .otp-row.invalid {
+  opacity: 0.6;
+}
+
+#tabora-drawer .otp-row.invalid .otp-text span {
+  color: var(--tabora-danger, #ff8a7a);
+}
+
+/* Подсказка: какой сайт просит код */
+#tabora-otp-pop .otp-pop-head {
+  padding: 4px 10px 6px;
+  font: 500 11px/1.3 var(--tabora-font);
+  color: var(--tabora-text-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#tabora-otp-pop .otp-pop-head b {
+  font-weight: 700;
+  color: var(--tabora-text-2);
+}
+
+#tabora-otp-pop .otp-text .otp-pop-note {
+  color: var(--tabora-warn, #ffb4a3);
+}
+
+#tabora-otp-pop .otp-pop-unlock .otp-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

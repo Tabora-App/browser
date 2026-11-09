@@ -12,7 +12,7 @@ Object.assign(Tabora, {
 
   accountMod() {
     if (!this._accountMod) {
-      this._accountMod = ChromeUtils.importESModule("chrome://browser/content/tabora/account/Account.sys.mjs");
+      this._accountMod = ChromeUtils.importESModule("chrome://tabora/content/account/Account.sys.mjs");
       Services.obs.addObserver(() => this.drawerDirty("codes"), this._accountMod.Account.TOPIC);
     }
     return this._accountMod;
@@ -120,7 +120,7 @@ Object.assign(Tabora, {
     pass.input.addEventListener("input", () => {
       const s = passwordStrength(pass.input.value);
       meter.dataset.score = String(s.score);
-      meterText.textContent = pass.input.value ? s.label : "";
+      meterText.textContent = pass.input.value ? (s.score < 2 ? `${s.label} · не подойдёт` : s.label) : "";
     });
     const again = withRepeat ? this.taField("Повторите пароль", { type: "password", autocomplete: "new-password" }) : null;
     const read = () => {
@@ -204,37 +204,55 @@ Object.assign(Tabora, {
       onOk: async () => {
         const password = pw.read();
         const r = await Account.register(name.input.value, password);
-        this.accountRender("recovery", { email: r.email });
+        this.accountRender("recovery", { email: r.email, key: r.recoveryKey });
       },
       links: [this.taLink("Уже есть аккаунт? Войти", () => this.accountRender("login"))],
     });
   },
 
-  accountRecovery({ email }) {
+  /** Ключ восстановления: после регистрации, после перепривязки сейфа к другому аккаунту
+   * (rebound) или после смены пароля со сменой ключа сейфа (rotated). Показывается один раз. */
+  accountRecovery({ email, key = null, rebound = false, rotated = false }) {
     const h = (t, a, x, c) => this.html(t, a, x, c);
-    const { Vault } = this.vaultMod();
-    const pre = h("pre", { class: "ta-secret", masked: "true" }, "…");
+    const pre = h("pre", { class: "ta-secret", masked: "true" }, key || "Ключ не создан: создайте его в разделе «Коды» → «Сейф»");
     const reveal = this.taButton("Показать", "ghost small", () => {
       pre.toggleAttribute("masked");
       reveal.textContent = pre.hasAttribute("masked") ? "Показать" : "Скрыть";
     });
     const copy = this.taButton("Скопировать", "ghost small", () => {
-      this.copyWithExpiry(pre.textContent, 60000);
-      this.notice("Ключ скопирован · буфер очистится через минуту");
+      if (key) {
+        this.copyWithExpiry(key, 60000);
+        this.notice("Ключ скопирован · буфер очистится через минуту");
+      }
     });
+    copy.disabled = !key;
     const check = h("input", { type: "checkbox", id: "ta-rk-saved" });
-    const next = this.taButton("Продолжить", "primary", () => this.accountRender("done", { email }));
-    next.disabled = true;
+    const finish = () => {
+      if (rebound || rotated) {
+        const after = this.account.after;
+        this.accountClose();
+        this.account.after = after;
+        this.accountAfter();
+      } else {
+        this.accountRender("done", { email });
+      }
+    };
+    const next = this.taButton("Продолжить", "primary", finish);
+    next.disabled = !!key;
     check.addEventListener("change", () => { next.disabled = !check.checked; });
-    Vault.createRecoveryKey().then(key => { pre.textContent = key; }).catch(e => { pre.textContent = `Ошибка: ${e.message}`; });
+    const text = rebound
+      ? `Сейф этого компьютера передан аккаунту ${email}: ключ шифрования заменён, данные перешифрованы. Прежний мастер-пароль и прежний ключ восстановления больше не действуют. Запишите новый ключ и храните отдельно от компьютера: он показывается один раз.`
+      : rotated
+        ? "Ключ шифрования сейфа заменён, данные перешифрованы. Прежний ключ восстановления больше не действует. Запишите новый и храните отдельно от компьютера: он показывается один раз."
+        : "Если вы забудете пароль, только этот ключ откроет сейф и аккаунт. Запишите его и храните отдельно от компьютера: он показывается один раз.";
     return h("div", { class: "ta-step" }, null, [
-      h("h2", {}, "Ключ восстановления"),
-      h("p", { class: "ta-text" }, "Если вы забудете пароль, только этот ключ откроет сейф и аккаунт. Запишите его и храните отдельно от компьютера: он показывается один раз."),
+      h("h2", {}, rebound || rotated ? "Новый ключ восстановления" : "Ключ восстановления"),
+      h("p", { class: "ta-text" }, text),
       pre,
       h("div", { class: "ta-actions row" }, null, [reveal, copy]),
-      h("label", { class: "ta-check" }, null, [check, h("span", {}, "Я записал ключ в надёжное место")]),
+      key ? h("label", { class: "ta-check" }, null, [check, h("span", {}, "Я записал ключ в надёжное место")]) : null,
       next,
-    ]);
+    ].filter(Boolean));
   },
 
   accountDone({ email }) {
@@ -282,6 +300,11 @@ Object.assign(Tabora, {
           throw e;
         }
         this.notice(`Вы вошли как ${r.email}`);
+        if (r.rebound) {
+          // сейф перепривязан: K сменён, прежний ключ восстановления больше не действует
+          this.accountRender("recovery", { email: r.email, key: r.recoveryKey, rebound: true });
+          return;
+        }
         const after = this.account.after;
         this.accountClose();
         this.account.after = after;
@@ -295,17 +318,23 @@ Object.assign(Tabora, {
   },
 
   accountChange() {
+    const h = (t, a, x, c) => this.html(t, a, x, c);
     const { Account } = this.accountMod();
     const old = this.taField("Текущий пароль", { type: "password", autocomplete: "current-password" });
     const pw = this.taPasswordPair("Новый пароль");
+    const rotate = h("input", { type: "checkbox" });
     return this.taForm({
       title: "Сменить пароль",
       text: "Пароль аккаунта и мастер-пароль сейфа меняются вместе. На других компьютерах потребуется войти заново.",
-      fields: [old.wrap, ...pw.nodes],
+      fields: [old.wrap, ...pw.nodes, h("label", { class: "ta-check" }, null, [rotate, h("span", {}, "Сменить и ключ шифрования сейфа: если пароль мог узнать кто-то ещё. Ключ восстановления тоже заменится")])],
       okLabel: "Сменить пароль",
       onOk: async () => {
-        await Account.changePassword(old.input.value, pw.read());
-        this.notice("Пароль изменён");
+        const r = await Account.changePassword(old.input.value, pw.read(), { rotate: rotate.checked });
+        this.notice(r.complete === false ? "Пароль изменён; часть данных перешифруется при следующей разблокировке" : "Пароль изменён");
+        if (r.recoveryKey) {
+          this.accountRender("recovery", { email: Account.email, key: r.recoveryKey, rotated: true });
+          return;
+        }
         this.accountClose();
       },
     });
@@ -349,7 +378,7 @@ Object.assign(Tabora, {
         t.linkedBrowser.loadURI(Services.io.newURI("about:newtab"), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
       }
     }
-    this.notice("Вы вышли из аккаунта. Сейф и данные остаются на этом компьютере.");
+    this.notice("Вы вышли из аккаунта. Сейф заблокирован, данные остаются на этом компьютере.");
     if (thenLogin) {
       this.accountDialog("login", { blankEmail });
     }

@@ -6,7 +6,7 @@
  * Сетка: папки 200, список 380, письмо остальное. Радиусы 14/12/10/9. */
 
 @import url("chrome://browser/content/tabora/fonts.css");
-@import url("chrome://browser/content/tabora/select.css");
+@import url("chrome://tabora/content/select.css");
 
 :root {
   --bg: #0f1013;
@@ -74,6 +74,40 @@ kbd {
   height: 100%;
   display: grid;
   grid-template-columns: 200px 380px minmax(0, 1fr);
+}
+
+.app[hidden] { display: none; }
+
+/* Экран вместо почты: без входа в аккаунт или с заблокированным сейфом */
+.gate {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.gate-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 360px;
+  text-align: center;
+}
+
+.gate-card h1 {
+  margin: 8px 0 0;
+  font: 700 20px/1.2 var(--font);
+  color: var(--text-strong);
+}
+
+.gate-card p {
+  margin: 0 0 8px;
+  color: var(--text-3);
+  line-height: 1.5;
 }
 
 .app[data-view="aliases"] { grid-template-columns: 200px minmax(0, 1fr); }

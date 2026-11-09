@@ -3,15 +3,20 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* Одноразовые коды (TOTP, RFC 6238). Записи лежат в tabora-otp.json: издатель, аккаунт,
- * параметры и привязанные домены открыто (как origin в хранилище паролей), секрет —
- * зашифрован производным ключом сейфа (Vault.subkey("otp")). Расшифрованные секреты
- * живут в памяти, пока сейф разблокирован, и обнуляются при блокировке. Код считается
- * в родительском процессе; страница получает только сам код после действия пользователя. */
+ * параметры и сайты (точный хост, поддомены только по явному выбору) открыто, секрет —
+ * зашифрован производным ключом сейфа (Vault.subkey("otp")). Метаданные каждой записи
+ * вместе с зашифрованным секретом подписаны HMAC подключом сейфа ("otp-meta"): подменить
+ * сайт или издателя в файле, не зная ключа, нельзя. Расшифрованные секреты живут в памяти,
+ * пока сейф разблокирован, и обнуляются при блокировке. Код считается в родительском
+ * процессе; страница получает только сам код после действия пользователя. */
 
-const { Vault } = ChromeUtils.importESModule("chrome://browser/content/tabora/vault/Vault.sys.mjs");
+const { Vault } = ChromeUtils.importESModule("chrome://tabora/content/vault/Vault.sys.mjs");
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
+const C = ChromeUtils.importESModule("chrome://tabora/content/wallet/vendor/crypto.sys.mjs");
 
 const FILE = () => PathUtils.join(PathUtils.profileDir, "tabora-otp.json");
+const BACKUP = () => PathUtils.join(PathUtils.profileDir, "tabora-otp.json.bak");
+const MAC_INFO = "otp-meta";
 const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 const ALG = { SHA1: "SHA-1", SHA256: "SHA-256", SHA512: "SHA-512" };
 const MAX_ENTRIES = 500;
@@ -340,10 +345,30 @@ export function parseImportText(text) {
   return { entries: out, skipped };
 }
 
+function stamp() {
+  return new Date().toISOString().replace(/[:.]/g, "-");
+}
+
+/** Каноническая строка метаданных записи для подписи: всё, что влияет на то, где и какой код
+ * выдаётся. Счётчики использования не входят: они меняются при каждом коде. */
+function canonical(e) {
+  return JSON.stringify(["tabora-otp-meta-v1", e.id, e.issuer || "", e.account || "", e.algorithm, e.digits, e.period, (e.sites || []).map(s => [s.host, !!s.sub]), e.createdAt || "", e.secret?.iv || "", e.secret?.ct || ""]);
+}
+
+function macWith(key, entry) {
+  return C.base64.encode(C.hmac(C.sha256, key, C.utf8ToBytes(canonical(entry))));
+}
+
+function validEntries(data) {
+  return !!data && typeof data === "object" && data.version === 1 && Array.isArray(data.entries);
+}
+
 export const Otp = {
   TOPIC: "tabora-otp-changed",
   data: null,
+  loadError: null, // { reason, movedTo, backup, unreadable } для повреждённого файла
   _loaded: false,
+  _loading: null,
   _secrets: new Map(), // id → Uint8Array, пока сейф разблокирован
   _observing: false,
 
@@ -351,27 +376,146 @@ export const Otp = {
     if (this._loaded) {
       return this.data;
     }
-    try {
-      this.data = await IOUtils.readJSON(FILE());
-      if (!this.data || this.data.version !== 1 || !Array.isArray(this.data.entries)) {
-        throw new Error("Неизвестный формат файла кодов");
-      }
-    } catch (e) {
-      if (e.name !== "NotFoundError") {
-        console.error("Tabora otp", e);
-      }
-      this.data = { version: 1, entries: [] };
+    if (!this._loading) {
+      this._loading = this._load().finally(() => {
+        this._loading = null;
+      });
     }
-    this._loaded = true;
+    await this._loading;
+    return this.data;
+  },
+
+  async _load() {
     if (!this._observing) {
       this._observing = true;
       Services.obs.addObserver((s, t, what) => {
         if (what === "locked") {
           this.forget();
+        } else if (what === "unlocked") {
+          this._ensureSigned().catch(e => console.error("Tabora otp", e));
+        } else if (what === "reset") {
+          // сейф создан заново: прежний файл кодов перенесён в сторону
+          this.forget();
+          this._loaded = false;
+          this.data = null;
+          this.loadError = null;
+          this.notify("reset");
         }
       }, Vault.TOPIC);
     }
-    return this.data;
+    this.loadError = null;
+    let raw;
+    try {
+      raw = await IOUtils.readUTF8(FILE());
+    } catch (e) {
+      this.data = { version: 1, macs: 1, entries: [] };
+      if (e.name !== "NotFoundError") {
+        // файл есть, но не читается: не перезаписываем его пустым
+        console.error("Tabora otp: файл кодов не читается", e);
+        this.loadError = { reason: `файл не читается (${e.message})`, unreadable: true, movedTo: null, backup: await this._readBackup() };
+      }
+      this._loaded = true;
+      return;
+    }
+    let data = null;
+    try {
+      data = JSON.parse(raw);
+    } catch (e) {}
+    if (validEntries(data)) {
+      this.data = data;
+      this._migrate();
+      this._loaded = true;
+      await this._ensureSigned().catch(e => console.error("Tabora otp", e));
+      return;
+    }
+    // повреждён: переносим в сторону, пустой список поверх не пишем, пока пользователь не решит
+    let movedTo = `${FILE()}.corrupt-${stamp()}`;
+    try {
+      await IOUtils.move(FILE(), movedTo, { noOverwrite: true });
+      await IOUtils.setPermissions(movedTo, 0o600).catch(() => {});
+    } catch (e) {
+      console.error("Tabora otp: повреждённый файл не перенесён", e);
+      movedTo = null;
+    }
+    console.error("Tabora otp: файл кодов повреждён");
+    this.data = { version: 1, macs: 1, entries: [] };
+    this.loadError = { reason: data ? "неизвестный формат файла" : "файл не разбирается как JSON", unreadable: false, movedTo, backup: await this._readBackup() };
+    this._loaded = true;
+  },
+
+  async _readBackup() {
+    try {
+      const b = await IOUtils.readJSON(BACKUP());
+      return validEntries(b) ? b : null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  /** Старые записи: базовые домены (eTLD+1) без пометки поддоменов. Совпадение по eTLD+1
+   * для них сохраняется (sub: true), но подсказка показывает, какой именно сайт просит код. */
+  _migrate() {
+    for (const e of this.data.entries) {
+      if (!Array.isArray(e.sites)) {
+        e.sites = (Array.isArray(e.domains) ? e.domains : []).map(d => ({ host: String(d).toLowerCase(), sub: true, legacy: true })).filter(s => s.host);
+        delete e.domains;
+      }
+    }
+  },
+
+  /** Подписи записей. Файл прежнего формата (без подписей) подписывается при первой
+   * разблокировке как есть; после этого запись без верной подписи не выдаёт код. */
+  async _ensureSigned() {
+    if (!this.data || this.data.macs || this.loadError || !Vault.unlocked) {
+      return;
+    }
+    const key = Vault.subkey(MAC_INFO);
+    try {
+      for (const e of this.data.entries) {
+        e.mac = macWith(key, e);
+      }
+    } finally {
+      wipe(key);
+    }
+    this.data.macs = 1;
+    await this.save();
+  },
+
+  /** Подпись записи верна (null — сейф заблокирован и проверить нельзя). */
+  isAuthentic(entry) {
+    if (!Vault.unlocked) {
+      return null;
+    }
+    if (!this.data?.macs) {
+      return true; // подпишется при разблокировке (_ensureSigned)
+    }
+    if (typeof entry?.mac !== "string") {
+      return false;
+    }
+    const key = Vault.subkey(MAC_INFO);
+    try {
+      if (macWith(key, entry) === entry.mac) {
+        return true;
+      }
+    } finally {
+      wipe(key);
+    }
+    // смена ключа сейфа не завершена: запись могла остаться подписанной прежним ключом
+    const prev = Vault.prevSubkey(MAC_INFO);
+    try {
+      return !!prev && macWith(prev, entry) === entry.mac;
+    } finally {
+      wipe(prev);
+    }
+  },
+
+  _sign(entry) {
+    const key = Vault.subkey(MAC_INFO);
+    try {
+      entry.mac = macWith(key, entry);
+    } finally {
+      wipe(key);
+    }
   },
 
   get entries() {
@@ -382,13 +526,48 @@ export const Otp = {
     Services.obs.notifyObservers(null, this.TOPIC, what);
   },
 
-  async save() {
-    this.data.updatedAt = new Date().toISOString();
-    await IOUtils.writeJSON(FILE(), this.data, { tmpPath: FILE() + ".tmp" });
+  async _write(data) {
+    await IOUtils.writeJSON(FILE(), data, { tmpPath: FILE() + ".tmp" });
     try {
       await IOUtils.setPermissions(FILE(), 0o600);
     } catch (e) {}
+    try {
+      await IOUtils.writeJSON(BACKUP(), data, { tmpPath: BACKUP() + ".tmp" });
+      await IOUtils.setPermissions(BACKUP(), 0o600);
+    } catch (e) {
+      console.error("Tabora otp: запасная копия не записана", e);
+    }
+  },
+
+  async save() {
+    if (this.loadError) {
+      throw new Error("Файл кодов повреждён: сначала восстановите его из копии или начните список заново");
+    }
+    this.data.updatedAt = new Date().toISOString();
+    await this._write(this.data);
     this.notify();
+  },
+
+  /** Повреждённый файл: восстановить из запасной копии. */
+  async restoreBackup() {
+    const b = this.loadError?.backup;
+    if (!b) {
+      throw new Error("Запасной копии кодов нет");
+    }
+    this.forget();
+    this.data = b;
+    this.loadError = null;
+    this._migrate();
+    await this.save();
+    await this._ensureSigned();
+  },
+
+  /** Повреждённый файл: осознанно начать список заново (повреждённый остаётся рядом). */
+  async startFresh() {
+    this.forget();
+    this.data = { version: 1, macs: 1, entries: [] };
+    this.loadError = null;
+    await this.save();
   },
 
   forget() {
@@ -410,39 +589,65 @@ export const Otp = {
     }
   },
 
-  /** Домены записи из произвольного ввода: «github.com, www.github.com» → ["github.com"]. */
-  normalizeDomains(list) {
-    const out = new Set();
-    for (const raw of Array.isArray(list) ? list : String(list || "").split(/[\s,;]+/)) {
-      let host = String(raw || "").trim().toLowerCase();
-      if (!host) {
-        continue;
-      }
-      try {
-        host = new URL(host.includes("://") ? host : `https://${host}`).hostname;
-      } catch (e) {
-        continue;
-      }
-      const base = this.baseDomain(host);
-      if (base && /^[a-z0-9.-]+\.[a-z0-9-]{2,}$/i.test(base)) {
-        out.add(base);
-      }
+  /** Хост из произвольного ввода: «https://GitHub.com/login» → «github.com». */
+  normalizeHost(raw) {
+    let host = String(raw || "").trim().toLowerCase();
+    if (!host) {
+      return "";
     }
-    return [...out].slice(0, 8);
+    try {
+      host = new URL(host.includes("://") ? host : `https://${host}`).hostname;
+    } catch (e) {
+      return "";
+    }
+    host = host.replace(/\.$/, "");
+    return /^[a-z0-9.-]+\.[a-z0-9-]{2,}$/i.test(host) || /^\d{1,3}(\.\d{1,3}){3}$/.test(host) ? host : "";
   },
 
-  /** Домен по издателю, если издатель сам похож на домен (github.com) или есть запись-подсказка. */
-  guessDomain(issuer) {
+  /** Сайты записи: «github.com, gitlab.com» → [{ host, sub }]. sub — код выдаётся и на поддоменах
+   * (только по явному выбору пользователя). */
+  normalizeSites(list, { sub = false } = {}) {
+    const out = new Map();
+    for (const raw of Array.isArray(list) ? list : String(list || "").split(/[\s,;]+/)) {
+      const item = raw && typeof raw === "object" ? raw : { host: raw, sub };
+      const host = this.normalizeHost(item.host);
+      if (host) {
+        out.set(host, { host, sub: !!item.sub || !!out.get(host)?.sub });
+      }
+    }
+    return [...out.values()].slice(0, 8);
+  },
+
+  /** Сайт по издателю, если издатель сам похож на домен (github.com). Точный хост, без поддоменов. */
+  guessSites(issuer) {
     const s = String(issuer || "").trim().toLowerCase();
     if (/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(s)) {
-      return this.normalizeDomains([s]);
+      return this.normalizeSites([s]);
     }
     return [];
+  },
+
+  /** Как совпадает хост с записью: "exact", "sub" (по разрешённым поддоменам) или null. */
+  matchHost(entry, host) {
+    const h = String(host || "").toLowerCase();
+    let best = null;
+    for (const s of entry.sites || []) {
+      if (s.host === h) {
+        return "exact";
+      }
+      if (s.sub && h.endsWith(`.${s.host}`)) {
+        best = "sub";
+      }
+    }
+    return best;
   },
 
   async add(fields) {
     await this.ready();
     Vault.requireUnlocked();
+    if (this.loadError) {
+      throw new Error("Файл кодов повреждён: сначала восстановите его из копии или начните список заново");
+    }
     if (this.entries.length >= MAX_ENTRIES) {
       throw new Error("Слишком много записей");
     }
@@ -460,7 +665,7 @@ export const Otp = {
     if (!issuer && !account) {
       throw new Error("Укажите сервис или аккаунт");
     }
-    const id = `o${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+    const id = `o${Date.now().toString(36)}${Array.from(crypto.getRandomValues(new Uint8Array(5)), b => (b % 36).toString(36)).join("")}`;
     const entry = {
       id,
       issuer,
@@ -468,10 +673,11 @@ export const Otp = {
       algorithm,
       digits,
       period,
-      domains: this.normalizeDomains(fields.domains || []),
+      sites: this.normalizeSites(fields.sites || []),
       createdAt: new Date().toISOString(),
       secret: await Vault.encrypt("otp", secret),
     };
+    this._sign(entry);
     this.data.entries.push(entry);
     this._secrets.set(id, secret);
     await this.save();
@@ -479,7 +685,7 @@ export const Otp = {
   },
 
   /** Несколько записей разом; повторы (тот же издатель, аккаунт и секрет) пропускаются. */
-  async addMany(list, { domainsFor = null } = {}) {
+  async addMany(list, { sitesFor = null } = {}) {
     await this.ready();
     Vault.requireUnlocked();
     const seen = new Set();
@@ -497,7 +703,7 @@ export const Otp = {
         continue;
       }
       try {
-        await this.add({ ...f, domains: f.domains || (domainsFor ? domainsFor(f) : this.guessDomain(f.issuer)) });
+        await this.add({ ...f, sites: f.sites || (sitesFor ? sitesFor(f) : this.guessSites(f.issuer)) });
         seen.add(key);
         added++;
       } catch (e) {
@@ -507,24 +713,33 @@ export const Otp = {
     return { added, skipped, errors };
   },
 
+  /** Изменение названия и сайтов: подпись пересчитывается, поэтому нужен разблокированный сейф.
+   * Запись с неверной подписью не правится: её нужно удалить и добавить заново. */
   async update(id, fields) {
     await this.ready();
+    Vault.requireUnlocked();
     const entry = this.entries.find(e => e.id === id);
     if (!entry) {
       throw new Error("Запись не найдена");
     }
+    if (!this.isAuthentic(entry)) {
+      throw new Error("Запись изменена вне браузера: удалите её и добавьте код заново");
+    }
+    const next = { ...entry };
     if ("issuer" in fields) {
-      entry.issuer = cleanText(fields.issuer, 48);
+      next.issuer = cleanText(fields.issuer, 48);
     }
     if ("account" in fields) {
-      entry.account = cleanText(fields.account, 96);
+      next.account = cleanText(fields.account, 96);
     }
-    if ("domains" in fields) {
-      entry.domains = this.normalizeDomains(fields.domains);
+    if ("sites" in fields) {
+      next.sites = this.normalizeSites(fields.sites);
     }
-    if (!entry.issuer && !entry.account) {
+    if (!next.issuer && !next.account) {
       throw new Error("Укажите сервис или аккаунт");
     }
+    this._sign(next);
+    Object.assign(entry, next);
     await this.save();
     return this.meta(entry);
   },
@@ -551,7 +766,9 @@ export const Otp = {
   },
 
   meta(entry) {
-    const { secret, ...rest } = entry;
+    const { secret, mac, ...rest } = entry;
+    rest.sites = (entry.sites || []).map(s => ({ ...s }));
+    rest.valid = this.isAuthentic(entry);
     return rest;
   },
 
@@ -559,13 +776,24 @@ export const Otp = {
     return this.entries.map(e => this.meta(e));
   },
 
-  /** Записи для сайта: по базовому домену (поддомены считаются тем же сайтом). */
+  /** Записи для хоста страницы (https проверяет вызывающий: актор берёт хост из принципала
+   * документа в родительском процессе). При разблокированном сейфе — только записи с верной
+   * подписью; при заблокированном — кандидаты без проверки, только чтобы предложить разблокировку. */
   forHost(host) {
-    const base = this.baseDomain(host);
-    if (!base) {
-      return [];
+    const out = [];
+    for (const e of this.entries) {
+      const match = this.matchHost(e, host);
+      if (!match) {
+        continue;
+      }
+      const m = this.meta(e);
+      if (m.valid === false) {
+        continue;
+      }
+      m.match = match;
+      out.push(m);
     }
-    return this.entries.filter(e => (e.domains || []).includes(base)).map(e => this.meta(e));
+    return out;
   },
 
   async secretOf(id) {
@@ -575,6 +803,9 @@ export const Otp = {
       const entry = this.entries.find(e => e.id === id);
       if (!entry) {
         throw new Error("Запись не найдена");
+      }
+      if (!this.isAuthentic(entry)) {
+        throw new Error("Запись изменена вне браузера: код не выдаётся");
       }
       s = await Vault.decrypt("otp", entry.secret);
       this._secrets.set(id, s);
@@ -662,3 +893,37 @@ export const Otp = {
     return `otpauth://totp/${label}?${p}`;
   },
 };
+
+/* Смена ключа сейфа: секреты перешифровываются новым подключом, подписи пересчитываются.
+ * Запись с неверной подписью перешифровывается, но подпись не получает: подменённое
+ * в файле не узаконивается. Файл пишется атомарно, повторный вызов безопасен. */
+Vault.registerRekey("otp", async ctx => {
+  await Otp.ready();
+  if (Otp.loadError) {
+    throw new Error("файл кодов повреждён");
+  }
+  if (!Otp.entries.length) {
+    return;
+  }
+  const oldMac = ctx.subkeyOld(MAC_INFO);
+  const newMac = ctx.subkeyNew(MAC_INFO);
+  try {
+    const entries = [];
+    for (const e of Otp.entries) {
+      const authentic = !Otp.data.macs || (typeof e.mac === "string" && (macWith(oldMac, e) === e.mac || macWith(newMac, e) === e.mac));
+      const secret = await ctx.decryptOld("otp", e.secret);
+      const next = { ...e, secret: await ctx.encryptNew("otp", secret) };
+      wipe(secret);
+      next.mac = authentic ? macWith(newMac, next) : null;
+      entries.push(next);
+    }
+    const data = { ...Otp.data, macs: 1, entries, updatedAt: new Date().toISOString() };
+    await Otp._write(data);
+    Otp.data = data;
+    Otp.forget();
+    Otp.notify();
+  } finally {
+    wipe(oldMac);
+    wipe(newMac);
+  }
+}, { required: true });

@@ -2,16 +2,55 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* Почта Tabora. Интерфейс готов, данные пока демонстрационные: модуль Store
- * держит их локально и сохраняет изменения в localStorage. Когда появится
- * почтовый сервер на домене, Store заменится на настоящий источник, остальной
- * код не меняется. */
+/* Почта Tabora. Интерфейс готов, данные пока демонстрационные: модуль MailStore
+ * держит их в профиле (кэш зашифрован ключом сейфа). Когда появится почтовый
+ * сервер на домене, MailStore заменится на настоящий источник, остальной
+ * код не меняется.
+ *
+ * Почта — часть аккаунта: без входа (или с заблокированным сейфом) страница показывает
+ * экран входа, а любое обращение к данным проходит через App.access().
+ *
+ * ПРАВИЛО для тела письма. Сейчас тело — список блоков, каждый выводится через textContent;
+ * innerHTML на странице не используется вовсе. Когда появятся настоящие письма с HTML,
+ * их можно показывать только в <iframe sandbox=""> (без allow-scripts, allow-same-origin,
+ * allow-forms, allow-popups) со строгим CSP внутри (default-src 'none'; style-src
+ * 'unsafe-inline'; img-src data:) — без скриптов и без загрузки внешних ресурсов
+ * (картинки-маячки только по явному действию пользователя через прокси). Никогда не
+ * вставлять HTML письма в DOM этой страницы: у неё системные права. */
 
 "use strict";
 
-const { MailStore, ACCOUNT, SPACE_COLORS } = ChromeUtils.importESModule("chrome://browser/content/tabora/mail/MailStore.sys.mjs");
-const Store = MailStore;
+const { MailStore, ACCOUNT, SPACE_COLORS } = ChromeUtils.importESModule("chrome://tabora/content/mail/MailStore.sys.mjs");
+const { Account } = ChromeUtils.importESModule("chrome://tabora/content/account/Account.sys.mjs");
+const { Vault } = ChromeUtils.importESModule("chrome://tabora/content/vault/Vault.sys.mjs");
 const Shell = window.browsingContext?.topChromeWindow?.Tabora || null;
+
+/* Доступ к данным почты только через этот посредник: без входа в аккаунт он отдаёт пустые
+ * данные и показывает экран входа, ничего не читая из хранилища. */
+const EMPTY = { v: 3, messages: [], aliases: [], blockedThisMonth: 0 };
+const Store = new Proxy(MailStore, {
+  get(target, prop, receiver) {
+    switch (prop) {
+      case "messages":
+      case "aliases":
+        return App.access() ? Reflect.get(target, prop, receiver) : [];
+      case "data":
+        return App.access() ? target.data : EMPTY;
+      case "byId":
+        return id => (App.access() ? target.byId(id) : undefined);
+      case "thread":
+        return id => (App.access() ? target.thread(id) : []);
+      case "update":
+      case "add":
+      case "remove":
+      case "save":
+        return (...args) => (App.access() ? target[prop](...args) : undefined);
+      case "unreadInbox":
+        return () => (App.access() ? target.unreadInbox() : 0);
+    }
+    return Reflect.get(target, prop, receiver);
+  },
+});
 
 const LABELS = [
   { id: "codes", name: "Коды", color: "#c8f25a" },
@@ -64,8 +103,8 @@ function el(tag, attrs = {}, children = []) {
       node.className = v;
     } else if (k === "text") {
       node.textContent = v;
-    } else if (k === "html") {
-      node.innerHTML = v; // только для своих SVG-иконок
+    } else if (k === "style") {
+      node.style.cssText = v; // через CSSOM: атрибут style запрещён CSP страницы
     } else if (k.startsWith("on")) {
       node.addEventListener(k.slice(2), v);
     } else if (k === "dataset") {
@@ -200,40 +239,128 @@ const App = {
   compose: null,
   visibleThreads: [],
 
+  started: false,
+  gate: null,
+
   /** Строка аккаунта под папками: адрес из аккаунта Tabora, смена пароля и выход через оболочку. */
-  async initAccountRow() {
+  initAccountRow() {
     const row = document.getElementById("account-row");
     if (!row) {
       return;
     }
-    let email = ACCOUNT.address;
-    try {
-      const { Account } = ChromeUtils.importESModule("chrome://browser/content/tabora/account/Account.sys.mjs");
-      await Account.ready();
-      if (Account.email) {
-        email = Account.email;
-      }
-    } catch (e) {}
-    document.getElementById("account-email").textContent = email;
-    document.getElementById("account-avatar").textContent = (email[0] || "T").toUpperCase();
     const shell = () => window.browsingContext?.topChromeWindow?.Tabora;
     document.getElementById("account-change").addEventListener("click", () => shell()?.accountDialog("change"));
     document.getElementById("account-switch").addEventListener("click", () => shell()?.accountLogout({ thenLogin: true, blankEmail: true }));
     document.getElementById("account-logout").addEventListener("click", () => shell()?.accountLogout({ thenLogin: false }));
   },
 
-  async init() {
-    this.initAccountRow().catch(() => {});
-    await Store.ready();
+  updateAccountRow() {
+    const email = Account.email || ACCOUNT.address;
+    $("account-email").textContent = email;
+    $("account-avatar").textContent = (email[0] || "T").toUpperCase();
+  },
+
+  /** Можно ли сейчас трогать данные почты. Если нет — показать экран входа (не синхронно,
+   * чтобы не мешать текущей отрисовке) и ничего не читать. */
+  access() {
+    if (Account.signedIn && MailStore.available) {
+      return true;
+    }
+    if (!this._gatePending) {
+      this._gatePending = true;
+      Promise.resolve().then(() => {
+        this._gatePending = false;
+        this.checkAccess();
+      });
+    }
+    return false;
+  },
+
+  /** Проверка входа и сейфа: при открытии и при каждом изменении аккаунта, сейфа или почты. */
+  async checkAccess() {
+    await Account.ready();
+    if (!Account.signedIn) {
+      this.showGate("signed-out");
+      return false;
+    }
+    try {
+      await MailStore.ready();
+    } catch (e) {
+      this.showGate(e.code === "vault-locked" ? "vault-locked" : e.code === "signed-out" ? "signed-out" : "error", e.message);
+      return false;
+    }
+    if (!MailStore.available) {
+      this.showGate("vault-locked");
+      return false;
+    }
+    this.hideGate();
+    this.updateAccountRow();
+    if (!this.started) {
+      this.start();
+    } else {
+      this.renderAll();
+    }
+    return true;
+  },
+
+  /** Экран вместо почты: без входа — «Войдите в аккаунт», с заблокированным сейфом — «Разблокировать». */
+  showGate(kind, message = "") {
+    const app = $("app");
+    app.hidden = true;
+    // уже показанные письма убираем со страницы
+    for (const id of ["messages", "thread", "folder-list", "alias-rows", "alias-stats"]) {
+      $(id)?.replaceChildren();
+    }
+    $("thread").hidden = true;
+    $("reader-empty").hidden = false;
+    $("account-email").textContent = "";
+    document.title = "Почта · Tabora";
+    const shell = () => window.browsingContext?.topChromeWindow?.Tabora;
+    const texts = {
+      "signed-out": ["Войдите в аккаунт", "Почта Tabora открывается только после входа в аккаунт.", "Войти", () => shell()?.accountDialog("login")],
+      "vault-locked": ["Сейф заблокирован", "Письма хранятся на этом компьютере зашифрованными ключом сейфа. Разблокируйте его, чтобы открыть почту.", "Разблокировать", () => shell()?.vaultUnlockByUser()],
+      error: ["Почта недоступна", message || "Не удалось открыть почту.", "Повторить", () => this.checkAccess()],
+    };
+    const [title, text, label, run] = texts[kind] || texts.error;
+    const button = el("button", { class: "primary", type: "button", onclick: () => run() }, label);
+    const gate = el("div", { class: "gate", role: "dialog", "aria-labelledby": "gate-title" }, [
+      el("div", { class: "gate-card" }, [
+        el("img", { src: "chrome://tabora/content/logo.svg", alt: "", width: "44", height: "44" }),
+        el("h1", { id: "gate-title", text: title }),
+        el("p", { text }),
+        button,
+      ]),
+    ]);
+    this.gate?.remove();
+    this.gate = gate;
+    document.body.append(gate);
+    button.focus();
+  },
+
+  hideGate() {
+    this.gate?.remove();
+    this.gate = null;
+    $("app").hidden = false;
+  },
+
+  init() {
+    this.initAccountRow();
+    const recheck = { observe: () => this.checkAccess() };
+    const topics = [MailStore.TOPIC, Account.TOPIC, Vault.TOPIC];
+    for (const t of topics) {
+      Services.obs.addObserver(recheck, t);
+    }
+    window.addEventListener("unload", () => topics.forEach(t => Services.obs.removeObserver(recheck, t)));
+    this.checkAccess();
+  },
+
+  start() {
+    this.started = true;
     this.bindStatic();
     window.TaboraSelect?.enhanceAll(document);
-    this.route();
     window.addEventListener("hashchange", () => this.route());
     document.addEventListener("keydown", e => this.onKey(e));
-    const observer = { observe: () => this.renderAll() };
-    Services.obs.addObserver(observer, Store.TOPIC);
-    window.addEventListener("unload", () => Services.obs.removeObserver(observer, Store.TOPIC));
-    this.renderAll();
+    this.route();
   },
 
   /* Маршруты: #inbox, #folder/<id>, #label/<id>, #msg/<thread>, #aliases, #compose */
@@ -270,6 +397,9 @@ const App = {
   },
 
   renderAll() {
+    if (!this.access()) {
+      return;
+    }
     $("app").dataset.view = this.view;
     $("aliases-pane").hidden = this.view !== "aliases";
     $("list-pane").hidden = this.view !== "mail";
@@ -896,6 +1026,9 @@ const App = {
   },
 
   onKey(e) {
+    if (!this.access()) {
+      return;
+    }
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable;
     if (e.key === "Escape") {
       if (!$("alias-modal").hidden) {

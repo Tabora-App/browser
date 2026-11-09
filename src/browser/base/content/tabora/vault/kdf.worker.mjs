@@ -4,7 +4,7 @@
 
 /* Рабочий поток Argon2id (см. Kdf.sys.mjs). */
 
-import { argon2id } from "chrome://browser/content/tabora/wallet/vendor/crypto.sys.mjs";
+import { argon2id } from "chrome://tabora/content/wallet/vendor/crypto.sys.mjs";
 
 self.onmessage = e => {
   const { password, salt, opts } = e.data;

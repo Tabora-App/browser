@@ -1,22 +1,141 @@
 diff --git a/toolkit/components/passwordmgr/LoginStorageMigrator.sys.mjs b/toolkit/components/passwordmgr/LoginStorageMigrator.sys.mjs
-index 2f06eec51d..77fd6b8b90 100644
+index 2f06eec51d..f2151ab81d 100644
 --- a/toolkit/components/passwordmgr/LoginStorageMigrator.sys.mjs
 +++ b/toolkit/components/passwordmgr/LoginStorageMigrator.sys.mjs
-@@ -270,6 +270,13 @@ export class LoginStorageMigrator {
+@@ -139,6 +139,12 @@ export class LoginStorageMigrator {
+     this.#logger.log(`run: ${state}`);
+     switch (state) {
+       case "RustPrimary":
++        if (Services.prefs.getBoolPref("tabora.vault.passwords", false)) {
++          // Tabora: копии под ключом NSS удаляются при каждом запуске, пока они есть
++          await this.#taboraPurgeJson({ verify: true }).catch(e =>
++            this.#logger.error("Tabora: purging logins.json failed:", e)
++          );
++        }
+         return this.#rustStorage;
+ 
+       case "MigrationPending":
+@@ -162,6 +168,23 @@ export class LoginStorageMigrator {
+ 
+   // If a PrP is set, prompt for it. Then start the migration.
+   async #startMigration() {
++    if (
++      Services.prefs.getBoolPref("tabora.vault.passwords", false) &&
++      lazy.LoginHelper.isPrimaryPasswordSet()
++    ) {
++      // Tabora: пароли защищены основным паролем Firefox. Переносить их под ключ сейфа
++      // без мастер-пароля значило бы молча снять защиту: остаёмся на JSON (под NSS, как
++      // в Firefox), пока пользователь не задаст мастер-пароль сейфа.
++      const { Vault } = ChromeUtils.importESModule(
++        "chrome://tabora/content/vault/Vault.sys.mjs"
++      );
++      await Vault.ready();
++      if (!Vault.hasPassword) {
++        this.#logger.log("Migration deferred: Tabora vault needs a master password");
++        Vault.requestPasswordForMigration();
++        return this.#jsonStorage;
++      }
++    }
+     if (
+       lazy.LoginHelper.isPrimaryPasswordSet() &&
+       !this.#jsonStorage.isLoggedIn
+@@ -270,6 +293,18 @@ export class LoginStorageMigrator {
        );
  
        const activeStore = this.#completeMigration();
-+      if (
-+        Services.prefs.getBoolPref("tabora.vault.passwords", false) &&
-+        numberOfLoginsMigrated === numberOfLoginsToMigrate
-+      ) {
-+        // Tabora: все пароли под ключом сейфа, копии под ключом NSS не нужны
-+        await this.#jsonStorage.removeAllLoginsAsync();
++      if (Services.prefs.getBoolPref("tabora.vault.passwords", false)) {
++        if (numberOfLoginsMigrated === numberOfLoginsToMigrate) {
++          // Tabora: все пароли под ключом сейфа, копии под ключом NSS не нужны
++          await this.#taboraPurgeJson().catch(e =>
++            this.#logger.error("Tabora: purging logins.json failed:", e)
++          );
++        } else {
++          this.#logger.log(
++            "Tabora: some logins were not migrated, logins.json is kept until they are"
++          );
++        }
 +      }
        endState = this.#state;
        return activeStore;
      } catch (e) {
-@@ -327,6 +334,15 @@ export class LoginStorageMigrator {
+@@ -293,6 +328,76 @@ export class LoginStorageMigrator {
+     }
+   }
+ 
++  /**
++   * Tabora: полностью удалить копии паролей под ключом NSS — logins.json, logins-backup.json,
++   * их .corrupt- и .tmp-файлы и данные JSON-хранилища в памяти (без надгробий). verify:
++   * сначала убедиться, что каждая запись JSON есть в Rust-хранилище под ключом сейфа, и
++   * перенести недостающие; если перенести не удалось, копии остаются до следующего запуска.
++   */
++  async #taboraPurgeJson({ verify = false } = {}) {
++    const dir = PathUtils.profileDir;
++    const pattern =
++      /^logins(-backup)?\.json(\.tmp|(-\d+)?\.corrupt)?$/;
++    const files = (await IOUtils.getChildren(dir)).filter(p =>
++      pattern.test(PathUtils.filename(p))
++    );
++    const store = this.#jsonStorage._store;
++    const logins = store?.dataReady ? store.data.logins || [] : [];
++    if (!files.length && !logins.length) {
++      return;
++    }
++    const live = logins.filter(l => !l.deleted);
++    if (verify && live.length) {
++      if (!this.#rustStorage.taboraVaultKeyed) {
++        return; // пароли этой сессии под NSS: проверим при следующем запуске
++      }
++      const missing = new Set();
++      for (const login of live) {
++        const found = await this.#rustStorage.searchLoginsAsync({
++          guid: login.guid,
++        });
++        if (!found.length) {
++          missing.add(login.guid);
++        }
++      }
++      if (missing.size) {
++        if (
++          lazy.LoginHelper.isPrimaryPasswordSet() &&
++          !this.#jsonStorage.isLoggedIn
++        ) {
++          return; // основной пароль Firefox при запуске не спрашиваем
++        }
++        const toAdd = (await this.#jsonStorage.getAllLogins(false)).filter(l =>
++          missing.has(l.QueryInterface(Ci.nsILoginMetaInfo).guid)
++        );
++        if (toAdd.length !== missing.size) {
++          return;
++        }
++        const results =
++          await this.#rustStorage.addLoginsWithResultsAsync(toAdd);
++        if (
++          results.some(
++            r => r.error && !/Login already exists/i.test(r.error.message)
++          )
++        ) {
++          this.#logger.log("Tabora: some JSON logins still not migrated");
++          return;
++        }
++      }
++    }
++    if (store) {
++      await this.#jsonStorage.removeAllUserFacingLoginsAsync(true);
++      store.data.logins = [];
++      store.data.potentiallyVulnerablePasswords = [];
++      // запись пустого logins.json не нужна: файлы удаляем ниже
++      store._saver?.disarm();
++    }
++    for (const path of files) {
++      await IOUtils.remove(path, { ignoreAbsent: true });
++    }
++    this.#logger.log(`Tabora: removed ${files.length} NSS-encrypted login files`);
++  }
++
+   #completeMigration() {
+     Services.prefs.setBoolPref(PREFS.RUST_ACTIVE, true);
+     Services.prefs.setIntPref(PREFS.MIGRATION_ATTEMPTS, 0);
+@@ -327,6 +432,15 @@ export class LoginStorageMigrator {
    }
  
    #exceedMigrationBudget() {

@@ -3,8 +3,12 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* Актор страницы для сейфа: перехватывает ссылки otpauth:// (добавление кода в
- * аутентификатор) и отдаёт родителю пиксели картинок для распознавания QR.
- * Секретов у актора нет: распознавание и хранение — в родительском процессе. */
+ * аутентификатор), сообщает о фокусе на поле одноразового кода и отдаёт родителю пиксели
+ * картинок для распознавания QR. Картинки, canvas и SVG страницы растеризуются здесь, в
+ * процессе страницы: родитель получает только ограниченные по размеру пиксели в оттенках
+ * серого и никогда не декодирует разметку страницы. Секретов у актора нет. Сообщениям
+ * отсюда родитель не доверяет: хост он берёт из принципала документа, а вставку кода
+ * подтверждает своим наблюдением за клавиатурой. */
 
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
@@ -13,7 +17,9 @@ ChromeUtils.defineESModuleGetters(lazy, {
 
 const MIN_QR_SIDE = 80;
 const MAX_IMAGES = 24;
-const MAX_SIDE = 1600; // QR крупнее не бывает, а память контент-процесса бережём
+const MAX_SIDE = 1600; // одна картинка из меню: QR крупнее не бывает
+const PAGE_MAX_SIDE = 1024; // поиск по странице: много картинок, каждая меньше
+const PAGE_BUDGET = 16 * 1024 * 1024; // байт пикселей на весь ответ
 
 /* Поле одноразового кода: явный autocomplete, характерные имена, числовое поле на 6–8 знаков
  * или группа из 4–8 однознаковых полей. Родитель покажет подсказку, только если у сайта есть запись. */
@@ -117,9 +123,18 @@ export class TaboraVaultChild extends JSWindowActorChild {
     return { x: r.left, y: r.top, w: r.width, h: r.height };
   }
 
+  /** Коды только для https и защищённого контекста: по http их увидел бы любой посредник. */
+  get secure() {
+    try {
+      return this.document.location.protocol === "https:" && !!this.contentWindow.isSecureContext;
+    } catch (e) {
+      return false;
+    }
+  }
+
   onFocusIn(event) {
     const el = event.composedTarget || event.target;
-    if (!/^https?:$/.test(this.document.location.protocol) || !el || el === this._otpTarget) {
+    if (!event.isTrusted || !this.secure || !el || el === this._otpTarget) {
       return;
     }
     const kind = this.otpKind(el);
@@ -134,7 +149,8 @@ export class TaboraVaultChild extends JSWindowActorChild {
     const a = first.getBoundingClientRect();
     const b = last.getBoundingClientRect();
     const rect = { x: Math.min(a.left, b.left), y: Math.min(a.top, b.top), w: Math.max(a.right, b.right) - Math.min(a.left, b.left), h: Math.max(a.bottom, b.bottom) - Math.min(a.top, b.top) };
-    this.sendAsyncMessage("TaboraVault:OtpField", { host: this.document.location.host, kind, rect, zoom: this.contentWindow.windowUtils?.fullZoom || 1, maxLength: group ? group.length : el.maxLength > 0 ? el.maxLength : 0 });
+    // хост не передаём: родитель берёт его из принципала документа
+    this.sendAsyncMessage("TaboraVault:OtpField", { kind, rect, zoom: this.contentWindow.windowUtils?.fullZoom || 1, maxLength: group ? group.length : el.maxLength > 0 ? el.maxLength : 0 });
   }
 
   onFocusOut(event) {
@@ -158,7 +174,7 @@ export class TaboraVaultChild extends JSWindowActorChild {
   }
 
   onKeyDown(event) {
-    if (!this._armed || !this._otpTarget) {
+    if (!event.isTrusted || !this._armed || !this._otpTarget) {
       return;
     }
     const el = event.composedTarget || event.target;
@@ -176,6 +192,21 @@ export class TaboraVaultChild extends JSWindowActorChild {
       event.preventDefault();
       this.sendAsyncMessage("TaboraVault:OtpMove", { delta: event.key === "ArrowDown" ? 1 : -1 });
     }
+  }
+
+  /** Подсказку взвели заново (например, после разблокировки сейфа): поле берём из фокуса. */
+  reacquire() {
+    let el = this.document.activeElement;
+    while (el?.shadowRoot?.activeElement) {
+      el = el.shadowRoot.activeElement;
+    }
+    const kind = el && this.secure ? this.otpKind(el) : null;
+    if (!kind) {
+      return;
+    }
+    const group = kind === "group" ? this.digitGroup(el) : null;
+    this._otpTarget = group ? group[0] : el;
+    this._otpGroup = group;
   }
 
   resetOtp() {
@@ -248,7 +279,7 @@ export class TaboraVaultChild extends JSWindowActorChild {
   }
 
   onClick(event) {
-    if (event.button !== 0 || event.defaultPrevented) {
+    if (!event.isTrusted || event.button !== 0 || event.defaultPrevented) {
       return;
     }
     const a = event.target?.closest?.("a[href]");
@@ -268,9 +299,14 @@ export class TaboraVaultChild extends JSWindowActorChild {
     }
     switch (message.name) {
       case "TaboraVault:Arm":
-        if (message.data?.armed && this._otpTarget) {
-          this._armed = true;
-          this.attachScroll();
+        if (message.data?.armed) {
+          if (!this._otpTarget) {
+            this.reacquire();
+          }
+          if (this._otpTarget) {
+            this._armed = true;
+            this.attachScroll();
+          }
         } else {
           this.resetOtp(); // подсказка скрыта: следующий фокус на поле снова покажет её
         }
@@ -278,16 +314,37 @@ export class TaboraVaultChild extends JSWindowActorChild {
       case "TaboraVault:FillOtp":
         return this.fillOtp(message.data?.code);
       case "TaboraVault:ImageData":
-        return this.imageData(lazy.ContentDOMReference.resolve(message.data.targetIdentifier));
+        return this.imageData(lazy.ContentDOMReference.resolve(message.data?.targetIdentifier), MAX_SIDE);
       case "TaboraVault:PageImages":
         return this.pageImages(doc);
     }
     return null;
   }
 
-  /** Пиксели картинки или canvas в виде data: URL (PNG). Для чужих доменов это разрешено
-   * системному принципалу актора, как и встроенной команде «Копировать изображение». */
-  imageData(target) {
+  /** Холст с белым фоном (прозрачный фон QR иначе станет чёрным). */
+  canvasFor(w, h) {
+    const canvas = this.document.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, w, h);
+    return ctx;
+  }
+
+  /** Пиксели холста в оттенках серого: байт на пиксель, вчетверо меньше RGBA. */
+  grayOf(ctx, w, h) {
+    const px = ctx.getImageData(0, 0, w, h).data;
+    const gray = new Uint8Array(w * h);
+    for (let i = 0, j = 0; i < gray.length; i++, j += 4) {
+      gray[i] = (px[j] * 77 + px[j + 1] * 150 + px[j + 2] * 29) >> 8;
+    }
+    return gray;
+  }
+
+  /** Картинка или canvas → пиксели. Чтение пикселей чужих доменов разрешено системному
+   * принципалу актора, как и встроенной команде «Копировать изображение». */
+  imageData(target, maxSide = MAX_SIDE) {
     if (!target) {
       return null;
     }
@@ -295,30 +352,46 @@ export class TaboraVaultChild extends JSWindowActorChild {
       const win = this.contentWindow;
       let w;
       let h;
-      let source = target;
       if (win.HTMLCanvasElement.isInstance(target)) {
         w = target.width;
         h = target.height;
       } else if (win.HTMLImageElement.isInstance(target)) {
         w = target.naturalWidth;
         h = target.naturalHeight;
-      } else if (win.SVGSVGElement.isInstance(target) || target.closest?.("svg")) {
-        return null; // встроенный SVG отдаём отдельным путём (см. pageImages)
       } else {
-        return null;
+        const svg = win.SVGElement.isInstance(target) ? target.ownerSVGElement || target : null;
+        return svg ? this.svgData(svg, maxSide) : null;
       }
       if (!w || !h) {
         return null;
       }
-      const scale = Math.min(1, MAX_SIDE / Math.max(w, h));
-      const canvas = this.document.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
-      canvas.width = Math.round(w * scale);
-      canvas.height = Math.round(h * scale);
-      const ctx = canvas.getContext("2d");
-      ctx.fillStyle = "#fff"; // прозрачный фон QR иначе станет чёрным
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
-      return { dataURL: canvas.toDataURL("image/png"), w: canvas.width, h: canvas.height, alt: target.alt || "" };
+      const scale = Math.min(1, maxSide / Math.max(w, h));
+      const cw = Math.max(1, Math.round(w * scale));
+      const ch = Math.max(1, Math.round(h * scale));
+      const ctx = this.canvasFor(cw, ch);
+      ctx.drawImage(target, 0, 0, cw, ch);
+      return { gray: this.grayOf(ctx, cw, ch), w: cw, h: ch, alt: String(target.alt || "").slice(0, 200) };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** Встроенный SVG: снимок области страницы, где он нарисован (drawWindow доступен только
+   * системному коду). Разметка SVG никуда не передаётся. */
+  svgData(svg, maxSide) {
+    try {
+      const win = this.contentWindow;
+      const r = svg.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) {
+        return null;
+      }
+      const scale = Math.min(2, maxSide / Math.max(r.width, r.height));
+      const cw = Math.max(1, Math.round(r.width * scale));
+      const ch = Math.max(1, Math.round(r.height * scale));
+      const ctx = this.canvasFor(cw, ch);
+      ctx.scale(scale, scale);
+      ctx.drawWindow(win, r.left + win.scrollX, r.top + win.scrollY, r.width, r.height, "#fff");
+      return { gray: this.grayOf(ctx, cw, ch), w: cw, h: ch, alt: String(svg.getAttribute("aria-label") || "").slice(0, 200) };
     } catch (e) {
       return null;
     }
@@ -327,39 +400,32 @@ export class TaboraVaultChild extends JSWindowActorChild {
   /** Все заметные картинки, canvas и встроенные SVG страницы: кандидаты в QR. */
   pageImages(doc) {
     const out = [];
-    const win = this.contentWindow;
+    let bytes = 0;
     const visible = el => {
       const r = el.getBoundingClientRect();
       return r.width >= MIN_QR_SIDE && r.height >= MIN_QR_SIDE;
     };
+    const push = data => {
+      if (data && bytes + data.gray.length <= PAGE_BUDGET) {
+        bytes += data.gray.length;
+        out.push(data);
+      }
+    };
     for (const el of doc.querySelectorAll("img, canvas")) {
-      if (out.length >= MAX_IMAGES) {
+      if (out.length >= MAX_IMAGES || bytes >= PAGE_BUDGET) {
         break;
       }
-      if (!visible(el)) {
-        continue;
-      }
-      const data = this.imageData(el);
-      if (data) {
-        out.push(data);
+      if (visible(el)) {
+        push(this.imageData(el, PAGE_MAX_SIDE));
       }
     }
     for (const svg of doc.querySelectorAll("svg")) {
-      if (out.length >= MAX_IMAGES) {
+      if (out.length >= MAX_IMAGES || bytes >= PAGE_BUDGET) {
         break;
       }
-      if (!visible(svg) || svg.closest("svg") !== svg) {
-        continue;
+      if (visible(svg) && !svg.parentElement?.closest("svg")) {
+        push(this.svgData(svg, PAGE_MAX_SIDE));
       }
-      try {
-        const r = svg.getBoundingClientRect();
-        const clone = svg.cloneNode(true);
-        clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-        clone.setAttribute("width", String(Math.round(r.width)));
-        clone.setAttribute("height", String(Math.round(r.height)));
-        const xml = new win.XMLSerializer().serializeToString(clone);
-        out.push({ svg: xml, w: Math.round(r.width), h: Math.round(r.height), alt: svg.getAttribute("aria-label") || "" });
-      } catch (e) {}
     }
     return out;
   }

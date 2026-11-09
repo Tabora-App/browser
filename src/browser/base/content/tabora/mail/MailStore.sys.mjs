@@ -6,7 +6,16 @@
  * tabora://mail и окно нового письма в оболочке браузера. Данные пока
  * демонстрационные, лежат в профиле (tabora-mail.json). Когда появится почтовый
  * сервер, этот модуль станет его клиентом, интерфейс не меняется.
+ * Почта доступна только после входа в аккаунт Tabora и при разблокированном сейфе:
+ * кэш на диске зашифрован подключом сейфа "mail" (AES-GCM), при выходе из аккаунта
+ * или блокировке сейфа данные в памяти сбрасываются.
  * Об изменениях модуль сообщает через Services.obs "tabora-mail-changed". */
+
+const { Vault } = ChromeUtils.importESModule("chrome://tabora/content/vault/Vault.sys.mjs");
+const { Account } = ChromeUtils.importESModule("chrome://tabora/content/account/Account.sys.mjs");
+
+const FILE = () => PathUtils.join(PathUtils.profileDir, "tabora-mail.json");
+const FORMAT = 4; // { v: 4, enc: { iv, ct } }; v: 3 — прежний кэш открытым текстом
 
 export const ACCOUNT = { address: "felix@tabora.app", domain: "tabora.app", quotaUsedGb: 2.1, quotaTotalGb: 20 };
 export const SPACES = ["Личное", "Работа", "Проекты"];
@@ -143,50 +152,139 @@ export function seed() {
   return { v: 3, messages, aliases, blockedThisMonth: 312 };
 }
 
+function accessError(code) {
+  const text = code === "signed-out" ? "Почта доступна после входа в аккаунт Tabora" : "Сейф заблокирован: разблокируйте его, чтобы открыть почту";
+  return Object.assign(new Error(text), { code });
+}
+
 export const MailStore = {
   TOPIC: "tabora-mail-changed",
   data: null,
-  _ready: null,
-  _file: null,
+  _loading: null,
+  _writing: Promise.resolve(),
+  _observing: false,
 
-  /** Загружает данные один раз; повторные вызовы возвращают тот же промис. */
-  ready() {
-    if (!this._ready) {
-      this._file = PathUtils.join(PathUtils.profileDir, "tabora-mail.json");
-      this._ready = (async () => {
-        try {
-          const parsed = await IOUtils.readJSON(this._file);
-          if (parsed?.v === 3) {
-            this.data = parsed;
-          }
-        } catch (e) {}
-        if (!this.data) {
-          this.data = seed();
-          await this._write();
-        }
-      })();
-    }
-    return this._ready;
+  /** Есть ли доступ к почте прямо сейчас: вход выполнен и данные загружены. */
+  get available() {
+    return !!this.data && Account.signedIn && Vault.unlocked;
   },
 
-  async _write() {
+  _observe() {
+    if (this._observing) {
+      return;
+    }
+    this._observing = true;
+    Services.obs.addObserver((s, t, what) => {
+      if (what === "signed-out") {
+        this.forget();
+      }
+    }, Account.TOPIC);
+    Services.obs.addObserver((s, t, what) => {
+      if (what === "locked" || what === "reset") {
+        this.forget();
+      }
+    }, Vault.TOPIC);
+  },
+
+  /** Загружает данные один раз. Без входа в аккаунт или с заблокированным сейфом отклоняется
+   * с кодом "signed-out" или "vault-locked". Сейф здесь открывается только тихо: после явной
+   * блокировки нужна разблокировка пользователем. */
+  async ready() {
+    this._observe();
+    await Account.ready();
+    if (!Account.signedIn) {
+      throw accessError("signed-out");
+    }
+    if (this.data && Vault.unlocked) {
+      return;
+    }
+    if (!this._loading) {
+      this._loading = this._load().finally(() => {
+        this._loading = null;
+      });
+    }
+    await this._loading;
+  },
+
+  async _load() {
+    await Vault.ready();
+    if (!Vault.unlocked && Vault.exists) {
+      await Vault.unlock();
+    }
+    if (!Vault.unlocked) {
+      throw accessError("vault-locked");
+    }
+    let data = null;
+    let rewrite = false;
     try {
-      await IOUtils.writeJSON(this._file, this.data, { tmpPath: `${this._file}.tmp` });
+      const raw = await IOUtils.readJSON(FILE());
+      if (raw?.v === FORMAT && raw.enc) {
+        const bytes = await Vault.decrypt("mail", raw.enc);
+        data = JSON.parse(new TextDecoder().decode(bytes));
+        bytes.fill(0);
+      } else if (raw?.v === 3) {
+        data = raw; // кэш прежней версии лежал открытым текстом: перепишем зашифрованным
+        rewrite = true;
+      }
     } catch (e) {
-      console.error("Tabora mail: не удалось сохранить", e);
+      if (e.name !== "NotFoundError") {
+        console.error("Tabora mail: кэш не читается, начинаем заново", e);
+      }
+    }
+    if (data?.v !== 3 || !Array.isArray(data.messages) || !Array.isArray(data.aliases)) {
+      data = seed();
+      rewrite = true;
+    }
+    if (!Account.signedIn) {
+      throw accessError("signed-out");
+    }
+    if (!Vault.unlocked) {
+      throw accessError("vault-locked");
+    }
+    this.data = data;
+    if (rewrite) {
+      await this._write();
+    }
+  },
+
+  /** Записи по очереди: два одновременных сохранения не должны делить временный файл. */
+  _write() {
+    this._writing = this._writing.then(() => this._doWrite()).catch(e => console.error("Tabora mail: не удалось сохранить", e));
+    return this._writing;
+  },
+
+  async _doWrite() {
+    if (!this.data || !Vault.unlocked) {
+      return;
+    }
+    const enc = await Vault.encrypt("mail", new TextEncoder().encode(JSON.stringify(this.data)));
+    await IOUtils.writeJSON(FILE(), { v: FORMAT, enc }, { tmpPath: `${FILE()}.tmp` });
+    try {
+      await IOUtils.setPermissions(FILE(), 0o600);
+    } catch (e) {}
+  },
+
+  /** Выход из аккаунта или блокировка сейфа: данные в памяти больше не держим. */
+  forget() {
+    if (this.data) {
+      this.data = null;
+      Services.obs.notifyObservers(null, this.TOPIC, "closed");
     }
   },
 
   save() {
+    if (!this.data) {
+      return;
+    }
     this._write();
     Services.obs.notifyObservers(null, this.TOPIC);
   },
 
-  get messages() { return this.data.messages; },
-  get aliases() { return this.data.aliases; },
-  byId(id) { return this.data.messages.find(m => m.id === id); },
+  get messages() { return this.data?.messages || []; },
+  get aliases() { return this.data?.aliases || []; },
+  byId(id) { return this.messages.find(m => m.id === id); },
   thread(threadId) {
-    return this.data.messages.filter(m => m.thread === threadId && m.folder !== "trash").sort((a, b) => a.date.localeCompare(b.date));
+    return this.messages.filter(m => m.thread === threadId && m.folder !== "trash").sort((a, b) => a.date.localeCompare(b.date));
   },
   update(id, patch) {
     const m = this.byId(id);
@@ -197,14 +295,44 @@ export const MailStore = {
     return m;
   },
   add(message) {
+    if (!this.data) {
+      throw accessError(Account.signedIn ? "vault-locked" : "signed-out");
+    }
     this.data.messages.unshift(message);
     this.save();
   },
   remove(id) {
+    if (!this.data) {
+      return;
+    }
     this.data.messages = this.data.messages.filter(m => m.id !== id);
     this.save();
   },
   unreadInbox() {
-    return this.data.messages.filter(m => m.folder === "inbox" && m.unread).length;
+    return this.messages.filter(m => m.folder === "inbox" && m.unread).length;
   },
 };
+
+/* Смена ключа сейфа: кэш перешифровывается новым подключом. Не обязательна: если не
+ * удалась, кэш просто начнётся заново (данные демонстрационные, сервер их вернёт). */
+Vault.registerRekey("mail", async ({ decryptOld, encryptNew }) => {
+  if (MailStore.data) {
+    await MailStore._write(); // Vault.encrypt уже работает новым ключом
+    return;
+  }
+  let raw;
+  try {
+    raw = await IOUtils.readJSON(FILE());
+  } catch (e) {
+    return;
+  }
+  if (raw?.v !== FORMAT || !raw.enc) {
+    return;
+  }
+  const bytes = await decryptOld("mail", raw.enc);
+  try {
+    await IOUtils.writeJSON(FILE(), { v: FORMAT, enc: await encryptNew("mail", bytes) }, { tmpPath: `${FILE()}.tmp` });
+  } finally {
+    bytes.fill(0);
+  }
+});

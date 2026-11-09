@@ -6,8 +6,8 @@
  * и в главном потоке он замораживал интерфейс: кнопка не успевала показать загрузку.
  * Рабочий поток создаётся на один вызов и завершается, чтобы не держать 64 МБ. */
 
-const C = ChromeUtils.importESModule("chrome://browser/content/tabora/wallet/vendor/crypto.sys.mjs");
-const WORKER_URL = "chrome://browser/content/tabora/vault/kdf.worker.mjs";
+const C = ChromeUtils.importESModule("chrome://tabora/content/wallet/vendor/crypto.sys.mjs");
+const WORKER_URL = "chrome://tabora/content/vault/kdf.worker.mjs";
 
 /**
  * @param {Uint8Array} password байты пароля (после вызова затираются)

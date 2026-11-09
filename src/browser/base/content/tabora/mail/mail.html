@@ -6,9 +6,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="color-scheme" content="light dark" />
+  <!-- У страницы системные права: только свои скрипты, стили, шрифты и картинки из chrome://,
+       никаких встроенных скриптов и стилей (стили из кода — только через CSSOM), никакой сети,
+       рамок и объектов. Тело письма выводится только текстом (см. правило в mail.js). -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src chrome:; style-src chrome:; img-src chrome:; font-src chrome:; connect-src 'none'; media-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
   <title>Почта · Tabora</title>
-  <link rel="icon" href="chrome://browser/content/tabora/mail/icon.svg" />
-  <link rel="stylesheet" href="chrome://browser/content/tabora/mail/mail.css" />
+  <link rel="icon" href="chrome://tabora/content/mail/icon.svg" />
+  <link rel="stylesheet" href="chrome://tabora/content/mail/mail.css" />
 </head>
 <body>
   <div id="app" class="app" data-view="mail">
@@ -73,7 +77,7 @@
     <!-- Письмо -->
     <section class="reader" id="reader" aria-label="Письмо">
       <div class="reader-empty" id="reader-empty">
-        <div class="reader-empty-mark"><img src="chrome://browser/content/tabora/logo.svg" alt="" width="40" height="40"></div>
+        <div class="reader-empty-mark"><img src="chrome://tabora/content/logo.svg" alt="" width="40" height="40"></div>
         <div class="reader-empty-title">Выберите письмо</div>
         <div class="reader-empty-sub">J и K листают список, Enter открывает, E отправляет в архив, C пишет новое.</div>
       </div>
@@ -139,7 +143,7 @@
 
     <div class="toasts" id="toasts" aria-live="polite"></div>
   </div>
-  <script src="chrome://browser/content/tabora/select.js"></script>
-  <script src="chrome://browser/content/tabora/mail/mail.js"></script>
+  <script src="chrome://tabora/content/select.js"></script>
+  <script src="chrome://tabora/content/mail/mail.js"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 diff --git a/toolkit/components/passwordmgr/storage-rust.sys.mjs b/toolkit/components/passwordmgr/storage-rust.sys.mjs
-index 16af79d554..5b4e932672 100644
+index 16af79d554..c361213e9f 100644
 --- a/toolkit/components/passwordmgr/storage-rust.sys.mjs
 +++ b/toolkit/components/passwordmgr/storage-rust.sys.mjs
 @@ -28,6 +28,7 @@ import {
@@ -10,16 +10,224 @@ index 16af79d554..5b4e932672 100644
  } from "moz-src:///toolkit/components/uniffi-bindgen-gecko-js/components/generated/RustLogins.sys.mjs";
  
  // AuthenticationCanceled must come from db_crypto, not logins: it is the error
-@@ -519,6 +520,8 @@ class RustLoginStorageAuthenticator extends PrimaryPasswordAuthenticator {
+@@ -260,27 +261,56 @@ const guidToLoginInfo = guid => {
+ // An adapter which talks to the Rust Logins Store via LoginInfo objects
+ class RustLoginsStoreAdapter {
+   #store = null;
++  // Tabora: открывает хранилище заново (после блокировки сейфа хранилище закрыто, а ключ
++  // стёрт из памяти Rust); без него адаптер работает как в Firefox.
++  #reopen = null;
+ 
+-  constructor(store) {
++  constructor(store, reopen = null) {
+     this.#store = store;
++    this.#reopen = reopen;
++  }
++
++  // Tabora: забрать хранилище, чтобы закрыть его (блокировка сейфа, смена ключа)
++  takeStore() {
++    const store = this.#store;
++    this.#store = null;
++    return store;
++  }
++
++  setStore(store) {
++    this.#store = store;
++  }
++
++  get hasStore() {
++    return !!this.#store;
++  }
++
++  async #open() {
++    if (!this.#store && this.#reopen) {
++      await this.#reopen();
++    }
++    if (!this.#store) {
++      throw new Error("Rust login store is closed");
++    }
++    return this.#store;
+   }
+ 
+   async get(id) {
+-    const login = await this.#store.get(id);
++    const login = await (await this.#open()).get(id);
+     return login && loginToLoginInfo(login);
+   }
+ 
+   async list() {
+-    const logins = await this.#store.list();
++    const logins = await (await this.#open()).list();
+     return logins.map(loginToLoginInfo);
+   }
+ 
+   async listCandidates() {
+-    return this.#store.listCandidates();
++    return (await this.#open()).listCandidates();
+   }
+ 
+   async listCandidatesByOrigin(origins, domains) {
+-    return this.#store.listCandidatesByOrigin(origins, domains);
++    return (await this.#open()).listCandidatesByOrigin(origins, domains);
+   }
+ 
+   // getMany() returns the rows in whatever order the query gives it, so sort
+@@ -290,32 +320,32 @@ class RustLoginsStoreAdapter {
+   // candidates.
+   async getMany(ids) {
+     const order = new Map(ids.map((id, index) => [id, index]));
+-    const logins = await this.#store.getMany(ids);
++    const logins = await (await this.#open()).getMany(ids);
+     logins.sort((a, b) => order.get(a.id) - order.get(b.id));
+     return logins.map(loginToLoginInfo);
+   }
+ 
+   async update(id, loginInfo) {
+     const loginEntry = loginInfoToLoginEntry(loginInfo);
+-    const login = await this.#store.update(id, loginEntry);
++    const login = await (await this.#open()).update(id, loginEntry);
+     return loginToLoginInfo(login);
+   }
+ 
+   async add(loginInfo) {
+     const loginEntry = loginInfoToLoginEntry(loginInfo);
+-    const login = await this.#store.add(loginEntry);
++    const login = await (await this.#open()).add(loginEntry);
+     return loginToLoginInfo(login);
+   }
+ 
+   async addWithMeta(loginInfo) {
+     const loginEntryWithMeta = loginInfoToLoginEntryWithMeta(loginInfo);
+-    const login = await this.#store.addWithMeta(loginEntryWithMeta);
++    const login = await (await this.#open()).addWithMeta(loginEntryWithMeta);
+     return loginToLoginInfo(login);
+   }
+ 
+   async addManyWithMeta(loginInfos, continueOnDuplicates) {
+     const loginEntriesWithMeta = loginInfos.map(loginInfoToLoginEntryWithMeta);
+-    const results = await this.#store.addManyWithMeta(loginEntriesWithMeta);
++    const results = await (await this.#open()).addManyWithMeta(loginEntriesWithMeta);
+ 
+     // on continuous mode, return result objects, which could be either a login
+     // or an error containing the error message
+@@ -344,19 +374,19 @@ class RustLoginsStoreAdapter {
+   }
+ 
+   async delete(id) {
+-    return await this.#store.delete(id);
++    return await (await this.#open()).delete(id);
+   }
+ 
+   async deleteMany(ids) {
+-    return await this.#store.deleteMany(ids);
++    return await (await this.#open()).deleteMany(ids);
+   }
+ 
+   async deleteAll() {
+-    return await this.#store.deleteAll();
++    return await (await this.#open()).deleteAll();
+   }
+ 
+   async deleteAllExceptFxa() {
+-    return await this.#store.deleteAllExceptFxa();
++    return await (await this.#open()).deleteAllExceptFxa();
+   }
+ 
+   // reset() {
+@@ -364,45 +394,45 @@ class RustLoginsStoreAdapter {
+   // }
+ 
+   async wipeLocal() {
+-    return await this.#store.wipeLocal();
++    return await (await this.#open()).wipeLocal();
+   }
+ 
+   async wipeLocalExceptFxa() {
+-    return await this.#store.wipeLocalExceptFxa();
++    return await (await this.#open()).wipeLocalExceptFxa();
+   }
+ 
+   async count() {
+-    return await this.#store.count();
++    return await (await this.#open()).count();
+   }
+ 
+   async touch(id) {
+-    return await this.#store.touch(id);
++    return await (await this.#open()).touch(id);
+   }
+ 
+   async findLoginToUpdate(loginInfo) {
+     const loginEntry = loginInfoToLoginEntry(loginInfo);
+-    const login = await this.#store.findLoginToUpdate(loginEntry);
++    const login = await (await this.#open()).findLoginToUpdate(loginEntry);
+     return login && loginToLoginInfo(login);
+   }
+ 
+   async recordPotentiallyVulnerablePasswords(passwords) {
+-    await this.#store.recordPotentiallyVulnerablePasswords(passwords);
++    await (await this.#open()).recordPotentiallyVulnerablePasswords(passwords);
+   }
+ 
+   async isPotentiallyVulnerablePassword(id) {
+-    return this.#store.isPotentiallyVulnerablePassword(id);
++    return (await this.#open()).isPotentiallyVulnerablePassword(id);
+   }
+ 
+   async recordBreachAlertDismissal(id) {
+-    await this.#store.recordBreachAlertDismissal(id);
++    await (await this.#open()).recordBreachAlertDismissal(id);
+   }
+ 
+   async clearAllPotentiallyVulnerablePasswords() {
+-    await this.#store.resetAllBreaches();
++    await (await this.#open()).resetAllBreaches();
+   }
+ 
+   async arePotentiallyVulnerablePasswords(ids) {
+-    return this.#store.arePotentiallyVulnerablePasswords(ids);
++    return (await this.#open()).arePotentiallyVulnerablePasswords(ids);
+   }
+ 
+   async getBreachAlertDismissalsByLoginGUID() {
+@@ -410,7 +440,7 @@ class RustLoginsStoreAdapter {
+     for (const {
+       id,
+       timeLastBreachAlertDismissed: timeBreachAlertDismissed,
+-    } of await this.#store.list()) {
++    } of await (await this.#open()).list()) {
+       if (timeBreachAlertDismissed) {
+         result[id] = {
+           timeBreachAlertDismissed,
+@@ -421,11 +451,15 @@ class RustLoginsStoreAdapter {
+   }
+ 
+   bridgedEngine() {
++    if (!this.#store) {
++      throw new Error("Rust login store is closed");
++    }
+     return this.#store.bridgedEngine();
+   }
+ 
+   shutdown() {
+-    return this.#store.shutdown();
++    // Tabora: после блокировки сейфа хранилище уже закрыто
++    return this.#store?.shutdown();
+   }
+ }
+ 
+@@ -519,6 +553,10 @@ class RustLoginStorageAuthenticator extends PrimaryPasswordAuthenticator {
  export class LoginManagerRustStorage {
    #storageAdapter = null;
    #authenticator = null;
 +  // Tabora: ключ выдан сейфом, запросов мастер-пароля NSS не будет
 +  #taboraVault = false;
++  // Tabora: { Vault, path, usePrev, waiting, busy, observer }
++  #tabora = null;
    #initializationPromise = null;
    #initTimings = null;
    // Only the active backend fires storage-changed events to avoid duplicates
-@@ -575,11 +578,24 @@ export class LoginManagerRustStorage {
+@@ -575,16 +613,26 @@ export class LoginManagerRustStorage {
        await initRustComponents(profilePath);
        const componentsReadyAt = ChromeUtils.now();
  
@@ -32,13 +240,7 @@ index 16af79d554..5b4e932672 100644
 +      if (Services.prefs.getBoolPref("tabora.vault.passwords", false)) {
 +        // Tabora: ключ хранилища выдаёт сейф (связка ключей системы или
 +        // мастер-пароль); NSS и key4.db в шифровании паролей не участвуют.
-+        const { Vault } = ChromeUtils.importESModule(
-+          "chrome://browser/content/tabora/vault/Vault.sys.mjs"
-+        );
-+        const key = await Vault.ensureForPasswords();
-+        await this.#taboraRekey(path, key);
-+        store = await createLoginStoreWithStaticKeyManager(path, key);
-+        this.#taboraVault = true;
++        store = await this.#taboraInit(path);
 +      } else {
 +        this.#authenticator = new RustLoginStorageAuthenticator();
 +        store = await createLoginStoreWithNssKeymanager(
@@ -49,86 +251,399 @@ index 16af79d554..5b4e932672 100644
        this.#initTimings = {
          initRustComponentsMs: Math.round(componentsReadyAt - startedAt),
          createRustStoreMs: Math.round(ChromeUtils.now() - componentsReadyAt),
-@@ -605,6 +621,73 @@ export class LoginManagerRustStorage {
+       };
+-      this.#storageAdapter = new RustLoginsStoreAdapter(store);
++      this.#storageAdapter = new RustLoginsStoreAdapter(
++        store,
++        this.#taboraVault ? () => this.#taboraReopen() : null
++      );
+ 
+       this.log("Rust login storage ready.");
+       return this;
+@@ -605,6 +653,353 @@ export class LoginManagerRustStorage {
      }
    }
  
++  /* ---------- Tabora: ключ хранилища выдаёт сейф ---------- */
++
 +  /**
-+   * Tabora: одноразовое перешифрование существующей базы ключом сейфа. Обычный
-+   * Firefox шифровал поля ключом NSS; под статическим ключом такие записи молча
-+   * пропускаются при чтении, поэтому переносим их до первого обращения.
++   * Открывает хранилище под ключом сейфа. Перед этим однократно перешифровывает базу,
++   * созданную обычным Firefox под ключом NSS, и доделывает незавершённую смену ключа
++   * сейфа. Если перешифровать нельзя (основной пароль Firefox задан, а мастер-пароль сейфа
++   * нет; основной пароль не введён; ошибка), пароли этой сессии работают под ключом NSS,
++   * как в Firefox, и перешифровка повторится при следующем запуске.
 +   */
-+  async #taboraRekey(path, key) {
++  async #taboraInit(path) {
++    const { Vault } = ChromeUtils.importESModule(
++      "chrome://tabora/content/vault/Vault.sys.mjs"
++    );
++    const key = await Vault.ensureForPasswords();
++    let status;
++    try {
++      status = await this.#taboraRekey(path, key, Vault);
++    } catch (e) {
++      this.log(`Tabora rekey failed, NSS key for this session: ${e}`);
++      status = "nss";
++    }
++    if (status === "nss") {
++      // данные этой сессии остаются под NSS: перешифровать при следующем запуске
++      Services.prefs.setBoolPref("tabora.vault.passwordsRekeyed", false);
++      Vault.passwordsMode = "nss";
++      this.#authenticator = new RustLoginStorageAuthenticator();
++      return createLoginStoreWithNssKeymanager(path, this.#authenticator);
++    }
++    this.#tabora = {
++      Vault,
++      path,
++      usePrev: false,
++      waiting: false,
++      busy: Promise.resolve(),
++      observer: null,
++    };
++    Vault.passwordsMode = "vault";
++    const current = Vault.passwordsKeyJwk();
++    if (current !== key) {
++      // ключ сейфа сменился, пока шла перешифровка из-под NSS: переводим базу на новый
++      await this.#taboraSwitchKey(key, current);
++    }
++    if (Vault.rekeyPending) {
++      // прошлая смена ключа сейфа не дошла до паролей: доделываем до первого обращения
++      const prevJwk = await Vault.prevPasswordsKeyJwk().catch(() => null);
++      if (prevJwk) {
++        try {
++          await this.#taboraSwitchKey(prevJwk, current);
++        } catch (e) {
++          this.log(`Tabora: passwords stay under the previous vault key: ${e}`);
++          this.#tabora.usePrev = true;
++        }
++      }
++    }
++    Vault.registerRekey(
++      "passwords",
++      ctx => this.#taboraRotate(ctx.jwkOld("passwords"), ctx.jwkNew("passwords")),
++      { required: true }
++    );
++    this.#taboraObserve(Vault);
++    const store = await this.#taboraOpenInner();
++    this.#taboraVault = true;
++    return store;
++  }
++
++  /** Tabora: хранилище под ключом сейфа (для LoginStorageMigrator). */
++  get taboraVaultKeyed() {
++    return this.#taboraVault;
++  }
++
++  // Операции с файлом базы (закрытие, перешифровка, открытие) строго по очереди.
++  #taboraChain(fn) {
++    const t = this.#tabora;
++    const run = t.busy.then(fn, fn);
++    t.busy = run.catch(() => {});
++    return run;
++  }
++
++  // Блокировка сейфа закрывает хранилище: ключ стирается из памяти Rust вместе с
++  // соединением. Разблокировка открывает его снова.
++  #taboraObserve(Vault) {
++    const observer = {
++      observe: (_subject, _topic, what) => {
++        if (what === "locked") {
++          this.#taboraChain(() => this.#taboraCloseInner()).catch(e =>
++            this.log(`Tabora: closing the store failed: ${e}`)
++          );
++        } else if (what === "unlocked") {
++          this.#taboraChain(() => this.#taboraOpenInner()).then(
++            () => Services.obs.notifyObservers(null, "passwordmgr-crypto-login"),
++            e => this.log(`Tabora: reopening the store failed: ${e}`)
++          );
++        }
++      },
++    };
++    this.#tabora.observer = observer;
++    Services.obs.addObserver(observer, Vault.TOPIC);
++  }
++
++  async #taboraCloseInner() {
++    const store = this.#storageAdapter?.takeStore();
++    if (store) {
++      await store.shutdown();
++    }
++  }
++
++  async #taboraOpenInner() {
++    const t = this.#tabora;
++    if (this.#storageAdapter?.hasStore) {
++      return null;
++    }
++    const jwk = t.usePrev
++      ? await t.Vault.prevPasswordsKeyJwk()
++      : t.Vault.passwordsKeyJwk();
++    if (!jwk) {
++      throw new Error("Tabora: the vault key is not available");
++    }
++    const store = await createLoginStoreWithStaticKeyManager(t.path, jwk);
++    this.#storageAdapter?.setStore(store);
++    return store;
++  }
++
++  /**
++   * Хранилище закрыто (сейф заблокирован): просим разблокировку и ждём её до минуты.
++   * Сейф сам не открывается: интерфейс показывает разблокировку (Touch ID или пароль).
++   * Отказ или тайм-аут дают NS_ERROR_ABORT, как отменённый основной пароль Firefox.
++   */
++  async #taboraReopen() {
++    const t = this.#tabora;
++    if (!t.Vault.unlocked) {
++      t.waiting = true;
++      try {
++        await t.Vault.requestUnlock("passwords", { timeoutMs: 60000 });
++      } catch (e) {
++        Services.obs.notifyObservers(null, "passwordmgr-crypto-loginCanceled");
++        throw Components.Exception("Primary password locked", Cr.NS_ERROR_ABORT);
++      } finally {
++        t.waiting = false;
++      }
++    }
++    await this.#taboraChain(() => this.#taboraOpenInner());
++  }
++
++  /** Обработчик смены ключа сейфа (Vault.registerRekey): перешифровать базу новым ключом. */
++  #taboraRotate(oldJwk, newJwk) {
++    return this.#taboraChain(async () => {
++      const t = this.#tabora;
++      await this.#taboraCloseInner();
++      try {
++        await this.#taboraSwitchKey(oldJwk, newJwk);
++        t.usePrev = false;
++      } catch (e) {
++        // база осталась под прежним ключом: пока смена не завершена, открываем её им
++        t.usePrev = true;
++        throw e;
++      } finally {
++        if (t.Vault.unlocked) {
++          await this.#taboraOpenInner().catch(e =>
++            this.log(`Tabora: reopening after rekey failed: ${e}`)
++          );
++        }
++      }
++    });
++  }
++
++  /** База читается новым ключом — ничего не делать; иначе перешифровать со старого. */
++  async #taboraSwitchKey(oldJwk, newJwk) {
++    const path = this.#tabora.path;
++    if (!(await IOUtils.exists(path)) || (await this.#taboraReadable(path, newJwk))) {
++      return;
++    }
++    if (!(await this.#taboraReadable(path, oldJwk))) {
++      throw new Error("logins.db is readable with neither the old nor the new vault key");
++    }
++    await this.#taboraReencrypt(
++      path,
++      p => createLoginStoreWithStaticKeyManager(p, oldJwk),
++      newJwk
++    );
++    this.log("Tabora: logins re-encrypted with the new vault key");
++  }
++
++  /** Все записи базы расшифровываются этим ключом (пустая база читается любым). */
++  async #taboraReadable(path, jwk) {
++    const store = await createLoginStoreWithStaticKeyManager(path, jwk);
++    try {
++      const total = await store.count();
++      if (!total) {
++        // записей нет: отметки об утёкших паролях под чужим ключом только мешают
++        await store.resetAllBreaches().catch(() => {});
++        return true;
++      }
++      try {
++        return (await store.list()).length === total;
++      } catch (e) {
++        return false;
++      }
++    } finally {
++      await store.shutdown();
++    }
++  }
++
++  /**
++   * Tabora: однократное перешифрование базы, созданной обычным Firefox под ключом NSS.
++   * Под статическим ключом такие записи не читаются, поэтому переносим их до первого
++   * обращения. Возвращает "vault" (база под ключом сейфа) или "nss" (перешифровать сейчас
++   * нельзя: основной пароль Firefox задан, а мастер-пароль сейфа нет — пароли этой сессии
++   * остаются под NSS, сейф просит задать мастер-пароль). Флаг ставится только при успехе.
++   */
++  async #taboraRekey(path, key, Vault) {
 +    const REKEY_PREF = "tabora.vault.passwordsRekeyed";
 +    if (
 +      Services.prefs.getBoolPref(REKEY_PREF, false) ||
 +      !(await IOUtils.exists(path))
 +    ) {
 +      Services.prefs.setBoolPref(REKEY_PREF, true);
-+      return;
++      return "vault";
 +    }
-+    const Rust = ChromeUtils.importESModule(
-+      "moz-src:///toolkit/components/uniffi-bindgen-gecko-js/components/generated/RustLogins.sys.mjs"
++    if (await this.#taboraReadable(path, key)) {
++      // пустая база или уже под ключом сейфа (флаг потерялся)
++      Services.prefs.setBoolPref(REKEY_PREF, true);
++      return "vault";
++    }
++    const token = Cc["@mozilla.org/security/internalkeytoken;1"].createInstance(
++      Ci.nsIPKCS11Token
 +    );
++    if (token.hasPassword && !Vault.hasPassword) {
++      // Основной пароль Firefox защищал пароли. Перешифровать их под сейф без пароля
++      // значило бы молча снять защиту: просим задать мастер-пароль сейфа.
++      this.log("Tabora rekey deferred: NSS primary password set, vault has none");
++      Vault.requestPasswordForMigration();
++      return "nss";
++    }
++    // при основном пароле Firefox его спросит NSS (RustLoginStorageAuthenticator)
 +    const authenticator = new RustLoginStorageAuthenticator();
-+    const nss = await createLoginStoreWithNssKeymanager(path, authenticator);
-+    let records = [];
-+    try {
-+      records = await nss.list();
-+    } catch (e) {
-+      if (authenticator.authCanceled) {
-+        // без мастер-пароля NSS старые записи не прочитать: повторим при следующем запуске
-+        await nss.shutdown();
-+        throw e;
-+      }
-+      this.log(`Tabora rekey: nothing readable with the NSS key (${e.message})`);
-+    }
-+    if (records.length) {
-+      const moved = records.map(
-+        r =>
-+          new Rust.LoginEntryWithMeta({
-+            entry: new Rust.LoginEntry({
-+              origin: r.origin,
-+              httpRealm: r.httpRealm,
-+              formActionOrigin: r.formActionOrigin,
-+              usernameField: r.usernameField,
-+              passwordField: r.passwordField,
-+              password: r.password,
-+              username: r.username,
-+            }),
-+            meta: new Rust.LoginMeta({
-+              id: r.id,
-+              timesUsed: r.timesUsed,
-+              timeCreated: r.timeCreated,
-+              timeLastUsed: r.timeLastUsed,
-+              timePasswordChanged: r.timePasswordChanged,
-+              timeLastBreachAlertDismissed: r.timeLastBreachAlertDismissed,
-+            }),
-+          })
-+      );
-+      await nss.deleteMany(records.map(r => r.id));
-+      await nss.shutdown();
-+      const fresh = await createLoginStoreWithStaticKeyManager(path, key);
-+      await fresh.addManyWithMeta(moved);
-+      await fresh.shutdown();
-+      this.log(
-+        `Tabora rekey: ${moved.length} logins re-encrypted with the vault key`
-+      );
-+    } else {
-+      await nss.shutdown();
-+    }
++    await this.#taboraReencrypt(
++      path,
++      p => createLoginStoreWithNssKeymanager(p, authenticator),
++      key
++    );
 +    Services.prefs.setBoolPref(REKEY_PREF, true);
++    this.log("Tabora rekey: logins re-encrypted with the vault key");
++    return "vault";
++  }
++
++  /**
++   * Tabora: атомарное перешифрование logins.db. Все записи читаются старым ключом, пишутся
++   * в новый файл рядом под новым ключом, каждая запись и итог проверяются, и только потом
++   * новый файл заменяет старый одним переименованием. Сбой на любом шаге оставляет старую
++   * базу нетронутой. openOld(path) открывает базу старым ключом.
++   */
++  async #taboraReencrypt(path, openOld, newJwk) {
++    const work = `${path}.tabora-new`;
++    const removeDb = async p => {
++      for (const suffix of ["", "-wal", "-shm", "-journal"]) {
++        await IOUtils.remove(p + suffix, { ignoreAbsent: true });
++      }
++    };
++    await removeDb(work);
++    const old = await openOld(path);
++    let records;
++    let vulnerable = [];
++    try {
++      const total = await old.count();
++      records = await old.list(); // бросает, если хоть одна запись не расшифровывается
++      if (records.length !== total) {
++        throw new Error(`read ${records.length} of ${total} logins`);
++      }
++      if (records.length) {
++        try {
++          vulnerable = await old.arePotentiallyVulnerablePasswords(
++            records.map(r => r.id)
++          );
++        } catch (e) {
++          this.log(`Tabora rekey: breach marks not carried over: ${e}`);
++        }
++      }
++    } finally {
++      await old.shutdown();
++    }
++    if ((await IOUtils.exists(`${path}-wal`)) && (await IOUtils.stat(`${path}-wal`)).size > 0) {
++      // журнал не слит в базу после закрытия: заменять файл под ним небезопасно
++      throw new Error("logins.db-wal is not empty after closing the store");
++    }
++    const moved = records.map(
++      r =>
++        new LoginEntryWithMeta({
++          entry: new LoginEntry({
++            origin: r.origin,
++            httpRealm: r.httpRealm,
++            formActionOrigin: r.formActionOrigin,
++            usernameField: r.usernameField,
++            passwordField: r.passwordField,
++            password: r.password,
++            username: r.username,
++          }),
++          meta: new LoginMeta({
++            id: r.id,
++            timesUsed: r.timesUsed,
++            timeCreated: r.timeCreated,
++            timeLastUsed: r.timeLastUsed,
++            timePasswordChanged: r.timePasswordChanged,
++            timeLastBreachAlertDismissed: r.timeLastBreachAlertDismissed,
++          }),
++        })
++    );
++    const fresh = await createLoginStoreWithStaticKeyManager(work, newJwk);
++    try {
++      if (moved.length) {
++        const results = await fresh.addManyWithMeta(moved);
++        const failed = results.filter(
++          entry => !(entry instanceof BulkResultEntry.Success)
++        );
++        if (results.length !== moved.length || failed.length) {
++          throw new Error(
++            `${failed.length || moved.length - results.length} logins not re-encrypted: ${failed[0]?.message || "short result"}`
++          );
++        }
++      }
++      const check = await fresh.list();
++      const ids = new Set(check.map(l => l.id));
++      if (check.length !== records.length || records.some(r => !ids.has(r.id))) {
++        throw new Error("re-encrypted database does not match the original");
++      }
++      if (vulnerable.length) {
++        const byId = new Map(records.map(r => [r.id, r.password]));
++        await fresh.recordPotentiallyVulnerablePasswords(
++          vulnerable.map(id => byId.get(id)).filter(Boolean)
++        );
++      }
++    } catch (e) {
++      await fresh.shutdown();
++      await removeDb(work);
++      throw e;
++    }
++    await fresh.shutdown();
++    if ((await IOUtils.exists(`${work}-wal`)) && (await IOUtils.stat(`${work}-wal`)).size > 0) {
++      await removeDb(work);
++      throw new Error("re-encrypted database journal is not empty");
++    }
++    // старые служебные файлы SQLite относятся к старой базе: под новой их быть не должно
++    await IOUtils.remove(`${path}-wal`, { ignoreAbsent: true });
++    await IOUtils.remove(`${path}-shm`, { ignoreAbsent: true });
++    await IOUtils.move(work, path); // атомарное переименование в той же папке
++    await removeDb(work);
 +  }
 +
    /**
     * Terminate all pending writes. After this call, the store can't be used.
     */
-@@ -1241,7 +1324,7 @@ export class LoginManagerRustStorage {
+@@ -1139,6 +1534,11 @@ export class LoginManagerRustStorage {
+   }
+ 
+   async countLoginsAsync(origin, formActionOrigin, httpRealm) {
++    if (this.#taboraVault && !this.#tabora.Vault.unlocked) {
++      // Tabora: при заблокированном сейфе хранилище закрыто; счёт не стоит запроса
++      // разблокировки (в Firefox он тоже не спрашивает основной пароль)
++      return 0;
++    }
+     // The optimized adapter path only applies when all fields are the empty
+     // string wildcard. Origin and formActionOrigin must go through the generic
+     // search below so that count and search share the same strict matching
+@@ -1237,10 +1637,19 @@ export class LoginManagerRustStorage {
+   get uiBusy() {
+     // The Rust store shows its own primary-password prompt via the
+     // authenticator, which the SDR crypto is unaware of.
+-    return this.#authenticator?.uiBusy || this._crypto.uiBusy;
++    // Tabora: хранилище ждёт разблокировки сейфа
++    return (
++      !!this.#tabora?.waiting ||
++      this.#authenticator?.uiBusy ||
++      this._crypto.uiBusy
++    );
    }
  
    get isLoggedIn() {
--    return this._crypto.isLoggedIn;
-+    return this.#taboraVault || this._crypto.isLoggedIn;
++    // Tabora: пароли доступны, только пока сейф разблокирован
++    if (this.#taboraVault) {
++      return !!this.#tabora?.Vault.unlocked;
++    }
+     return this._crypto.isLoggedIn;
    }
  }
- 
