@@ -6,24 +6,7 @@
 <title>Tabora</title>
 <meta name="description" content="Tabora: браузер с почтой, кошельком, сейфом и кодами входа. Скоро.">
 <link rel="icon" href="/assets/mark.svg" type="image/svg+xml">
-<style>
-  :root { --bg: #0f1013; --panel: #17191d; --text: #e8e9ec; --muted: #9a9ea8; --accent: #c8f25a; --ink: #0b0c0e; }
-  @media (prefers-color-scheme: light) { :root { --bg: #efede8; --panel: #f7f6f2; --text: #16171a; --muted: #5e626b; } }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; }
-  body { background: var(--bg); color: var(--text); font: 16px/1.5 "Manrope", -apple-system, "Segoe UI", system-ui, sans-serif; display: grid; place-items: center; padding: max(16px, env(safe-area-inset-left)); }
-  main { max-width: 560px; text-align: left; }
-  .mark { width: 72px; height: 72px; border-radius: 20px; background: var(--accent); display: grid; place-items: center; box-shadow: 0 18px 50px rgba(200, 242, 90, 0.25); }
-  .mark svg { width: 44px; height: 44px; }
-  .mark .dot { animation: roll 2.6s cubic-bezier(0.3, 0, 0.1, 1) 0.6s 1 both; }
-  @keyframes roll { 0% { transform: translateX(-106px); } 45% { transform: translateX(0); } 70% { transform: translateX(-40px); } 100% { transform: translateX(0); } }
-  @media (prefers-reduced-motion: reduce) { .mark .dot { animation: none; } }
-  h1 { font-size: clamp(32px, 6vw, 48px); line-height: 1.05; letter-spacing: -0.02em; margin: 28px 0 12px; text-wrap: balance; }
-  p { color: var(--muted); margin: 0 0 10px; max-width: 46ch; }
-  .soon { display: inline-block; margin-top: 22px; padding: 8px 14px; border-radius: 999px; background: var(--panel); color: var(--text); font-weight: 600; font-size: 13px; letter-spacing: 0.02em; }
-  footer { margin-top: 56px; color: var(--muted); font-size: 13px; }
-  footer a { color: inherit; }
-</style>
+<link rel="stylesheet" href="/site.css">
 </head>
 <body>
 <main>

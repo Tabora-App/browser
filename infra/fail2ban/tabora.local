@@ -1,0 +1,46 @@
+# fail2ban для Tabora (/etc/fail2ban/jail.d/tabora.local, ставит infra/setup.sh).
+# backend задаётся в каждой тюрьме: ssh и Stalwart пишут в journald, nginx — в файлы.
+[DEFAULT]
+bantime = 1h
+findtime = 10m
+maxretry = 5
+ignoreip = 127.0.0.1/8 ::1
+banaction = nftables
+banaction_allports = nftables[type=allports]
+
+[sshd]
+enabled = true
+backend = systemd
+
+[nginx-http-auth]
+enabled = true
+backend = auto
+port = https
+logpath = /var/log/nginx/*.log
+
+[nginx-botsearch]
+enabled = true
+backend = auto
+port = https
+logpath = /var/log/nginx/*.log
+
+# 401/403 на /jmap почтового хоста (подбор паролей, вход администратором снаружи)
+[tabora-jmap]
+enabled = true
+backend = auto
+filter = tabora-jmap
+port = https
+logpath = /var/log/nginx/access.log
+maxretry = 10
+
+# неудачный вход в Stalwart: SMTP AUTH (465/587), IMAP (993), JMAP; адрес из журнала Stalwart
+[stalwart]
+enabled = true
+backend = systemd
+filter = stalwart
+journalmatch = _SYSTEMD_UNIT=stalwart.service
+port = smtp,submission,submissions,imaps,https
+
+# повторные баны: неделя на все порты
+[recidive]
+enabled = true

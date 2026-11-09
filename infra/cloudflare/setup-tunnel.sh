@@ -1,40 +1,46 @@
 #!/usr/bin/env bash
 # Cloudflare Tunnel для сайта и API: у tabora.app, www и api нет публичного адреса, трафик идёт
 # исходящим соединением сервера к Cloudflare. Наружу открыта только почта (mx.tabora.app).
-# Нужны переменные (в /etc/tabora/cloudflare.env): CF_API_TOKEN (права: Zone.DNS Edit, Account.Cloudflare Tunnel Edit),
-# CF_ACCOUNT_ID, CF_ZONE_ID. Идемпотентно.
+# Нужны в /etc/tabora/cloudflare.env (600): CF_ACCOUNT_ID, CF_ZONE_ID и CF_API_TOKEN с правами
+# Account › Cloudflare Tunnel › Edit и Zone › DNS › Edit. После настройки туннеля и DNS (dns.sh)
+# токен можно отозвать: службе cloudflared он не нужен. Идемпотентно.
 set -euo pipefail
 DOMAIN=${DOMAIN:-tabora.app}
+MAIL_HOST=${MAIL_HOST:-mx.$DOMAIN}
 API_HOST=${API_HOST:-api.$DOMAIN}
 TUNNEL_NAME=${TUNNEL_NAME:-tabora}
-. /etc/tabora/cloudflare.env
-log() { printf '\033[1;32m›\033[0m %s\n' "$*"; }
-cf() { curl -fsS -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" "$@"; }
+HERE=$(cd "$(dirname "$0")/.." && pwd)
+. "$HERE/lib.sh"
 
-if ! command -v cloudflared >/dev/null; then
-  log "cloudflared: установка"
-  mkdir -p --mode=0755 /usr/share/keyrings
-  curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg
-  echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" > /etc/apt/sources.list.d/cloudflared.list
-  apt-get update -q && apt-get install -y -q cloudflared
-fi
+load_cloudflare_env
+[ -n "${CF_ACCOUNT_ID:-}" ] && [ -n "${CF_ZONE_ID:-}" ] || die "в /etc/tabora/cloudflare.env нужны CF_ACCOUNT_ID и CF_ZONE_ID"
+[ -n "${CF_API_TOKEN:-}" ] || die "в /etc/tabora/cloudflare.env нет CF_API_TOKEN (Tunnel Edit + DNS Edit)"
+cf_init "$CF_API_TOKEN"
+unset CF_API_TOKEN
+
+command -v cloudflared >/dev/null || die "нет cloudflared: сначала infra/deploy.sh setup"
 
 log "туннель $TUNNEL_NAME"
-TUNNEL_ID=$(cf "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel?name=$TUNNEL_NAME&is_deleted=false" | jq -r '.result[0].id // empty')
+install -d -m 700 -o root -g root /etc/cloudflared
+TUNNEL_ID=$(cf "$CF_API/accounts/$CF_ACCOUNT_ID/cfd_tunnel?name=$TUNNEL_NAME&is_deleted=false" | jq -r '.result[0].id // empty')
 if [ -z "$TUNNEL_ID" ]; then
   SECRET=$(openssl rand -base64 32)
-  TUNNEL_ID=$(cf -X POST "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel" -d "{\"name\":\"$TUNNEL_NAME\",\"tunnel_secret\":\"$SECRET\",\"config_src\":\"cloudflare\"}" | jq -r '.result.id')
-  mkdir -p /etc/cloudflared
-  printf '{"AccountTag":"%s","TunnelSecret":"%s","TunnelID":"%s"}\n' "$CF_ACCOUNT_ID" "$SECRET" "$TUNNEL_ID" > /etc/cloudflared/$TUNNEL_ID.json
-  chmod 600 /etc/cloudflared/$TUNNEL_ID.json
+  # секрет только в stdin curl (printf — встроенная команда), не в аргументах
+  TUNNEL_ID=$(printf '{"name":"%s","tunnel_secret":"%s","config_src":"cloudflare"}' "$TUNNEL_NAME" "$SECRET" \
+    | cf -X POST "$CF_API/accounts/$CF_ACCOUNT_ID/cfd_tunnel" -d @- | jq -r '.result.id')
+  [ -n "$TUNNEL_ID" ] && [ "$TUNNEL_ID" != null ] || die "туннель не создан"
+  ( umask 077
+    printf '{"AccountTag":"%s","TunnelSecret":"%s","TunnelID":"%s"}\n' "$CF_ACCOUNT_ID" "$SECRET" "$TUNNEL_ID" > "/etc/cloudflared/$TUNNEL_ID.json" )
+  unset SECRET
   log "туннель создан: $TUNNEL_ID"
 else
   log "туннель уже есть: $TUNNEL_ID"
-  [ -f /etc/cloudflared/$TUNNEL_ID.json ] || { echo "нет файла учётных данных /etc/cloudflared/$TUNNEL_ID.json: удалите туннель в Cloudflare и запустите снова"; exit 1; }
+  [ -f "/etc/cloudflared/$TUNNEL_ID.json" ] || die "нет файла учётных данных /etc/cloudflared/$TUNNEL_ID.json: удалите туннель в Cloudflare и запустите снова"
 fi
+chown root:root "/etc/cloudflared/$TUNNEL_ID.json" && chmod 600 "/etc/cloudflared/$TUNNEL_ID.json"
 
 log "маршруты туннеля (ingress) → nginx на 127.0.0.1:8081"
-cf -X PUT "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/cfd_tunnel/$TUNNEL_ID/configurations" -d @- >/dev/null <<JSON
+cf -X PUT "$CF_API/accounts/$CF_ACCOUNT_ID/cfd_tunnel/$TUNNEL_ID/configurations" -d @- >/dev/null <<JSON
 {"config":{"ingress":[
   {"hostname":"$DOMAIN","service":"http://127.0.0.1:8081","originRequest":{"httpHostHeader":"$DOMAIN"}},
   {"hostname":"www.$DOMAIN","service":"http://127.0.0.1:8081","originRequest":{"httpHostHeader":"www.$DOMAIN"}},
@@ -45,18 +51,18 @@ JSON
 
 log "DNS: CNAME на туннель для $DOMAIN, www, $API_HOST (с прокси)"
 for name in "$DOMAIN" "www.$DOMAIN" "$API_HOST"; do
-  rid=$(cf "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records?name=$name" | jq -r '.result[0].id // empty')
-  body="{\"type\":\"CNAME\",\"name\":\"$name\",\"content\":\"$TUNNEL_ID.cfargotunnel.com\",\"proxied\":true,\"ttl\":1}"
-  if [ -n "$rid" ]; then cf -X PUT "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records/$rid" -d "$body" >/dev/null; else cf -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records" -d "$body" >/dev/null; fi
+  rid=$(cf "$CF_API/zones/$CF_ZONE_ID/dns_records?name=$name" | jq -r '.result[0].id // empty')
+  body=$(printf '{"type":"CNAME","name":"%s","content":"%s.cfargotunnel.com","proxied":true,"ttl":1}' "$name" "$TUNNEL_ID")
+  if [ -n "$rid" ]; then printf '%s' "$body" | cf -X PUT "$CF_API/zones/$CF_ZONE_ID/dns_records/$rid" -d @- >/dev/null
+  else printf '%s' "$body" | cf -X POST "$CF_API/zones/$CF_ZONE_ID/dns_records" -d @- >/dev/null; fi
 done
 
 log "служба cloudflared"
-cat > /etc/cloudflared/config.yml <<CONF
-tunnel: $TUNNEL_ID
-credentials-file: /etc/cloudflared/$TUNNEL_ID.json
-no-autoupdate: true
-CONF
-cloudflared service install 2>/dev/null || true
-systemctl enable --now cloudflared >/dev/null
+# старая служба от `cloudflared service install`, если была
+[ ! -f /etc/cloudflared/config.yml ] || rm -f /etc/cloudflared/config.yml
+render "$HERE/cloudflare/cloudflared.service" /etc/systemd/system/cloudflared.service "s/__TUNNEL_ID__/$TUNNEL_ID/g"
+systemctl daemon-reload
+systemctl enable cloudflared >/dev/null 2>&1
 systemctl restart cloudflared
-sleep 3; systemctl is-active cloudflared && log "туннель работает: https://$DOMAIN, https://$API_HOST"
+systemctl is-active -q cloudflared && log "туннель работает: https://$DOMAIN, https://$API_HOST"
+log "токен CF_API_TOKEN больше не нужен службе: после dns.sh удалите его из /etc/tabora/cloudflare.env и отзовите в Cloudflare"

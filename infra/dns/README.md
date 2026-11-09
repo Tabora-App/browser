@@ -1,7 +1,10 @@
 # DNS tabora.app
 
-`tabora.app.zone` — записи, которые публикует Stalwart для домена (DKIM, SPF, DMARC, MX, SRV, MTA-STS, автонастройка).
-Сгенерировано `stalwart/configure.py` на сервере (копия в `/etc/tabora/dns-tabora.app.zone`).
+`tabora.app.zone` — записи, которые публикует Stalwart для домена (DKIM rsa и ed25519, SPF, DMARC, MX,
+SRV для JMAP/IMAPS/SUBMISSIONS, MTA-STS, TLS-RPT, автонастройка). Копия `/etc/tabora/dns-tabora.app.zone`,
+её пишет `stalwart/configure.py`; в Cloudflare записи публикует `cloudflare/dns.sh`.
 
-Дополнительно к ним нужны адресные записи на сервер 2.29.138.249 / 2a01:4f9:c015:6ffa::1:
-`tabora.app`, `www`, `mx`, `api` (A и AAAA). Ротация DKIM в Stalwart заморожена, ключи не меняются без нашего участия.
+Адресные записи: только `mx` (A и AAAA, серое облако; адреса берутся с интерфейса сервера).
+`tabora.app`, `www` и `api` — CNAME на Cloudflare Tunnel (`cloudflare/setup-tunnel.sh`), публичного
+адреса у них нет. SRV для CalDAV/CardDAV/POP3 не публикуются: эти службы снаружи не доступны.
+Ротация DKIM в Stalwart заморожена, ключи не меняются без нашего участия.

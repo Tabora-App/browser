@@ -1,43 +1,33 @@
 #!/usr/bin/env bash
-# Включение TLS после появления DNS: сертификаты Let's Encrypt для сайта и почтового хоста,
-# боевые конфиги nginx, сертификат для Stalwart. Запускать на сервере: bash infra/enable-tls.sh
+# Включение TLS: сертификат Let's Encrypt почтового хоста через DNS-01 Cloudflare, почтовый хост
+# в nginx (443), сертификат в Stalwart (SMTP/IMAP), хук продления. Идемпотентно.
+# Сайту и API сертификат не нужен (они за туннелем, nginx на 127.0.0.1:8081 без TLS), поэтому
+# их имена не выпускаются и лишний раз не попадают в журналы Certificate Transparency.
+# Нужен /etc/tabora/certbot-cloudflare.ini (права 600) с токеном только Zone › DNS › Edit.
 set -euo pipefail
 DOMAIN=${DOMAIN:-tabora.app}
 MAIL_HOST=${MAIL_HOST:-mx.$DOMAIN}
 API_HOST=${API_HOST:-api.$DOMAIN}
 EMAIL=${EMAIL:-postmaster@$DOMAIN}
 HERE=$(cd "$(dirname "$0")" && pwd)
-log() { printf '\033[1;32m›\033[0m %s\n' "$*"; }
+. "$HERE/lib.sh"
 
-. /etc/tabora/cloudflare.env
-install -m 600 /dev/null /etc/tabora/certbot-cloudflare.ini
-echo "dns_cloudflare_api_token = $CF_API_TOKEN" > /etc/tabora/certbot-cloudflare.ini
-apt-get install -y -q python3-certbot-dns-cloudflare >/dev/null
+INI=/etc/tabora/certbot-cloudflare.ini
+[ -f "$INI" ] || die "нет $INI (см. infra/README.md)"
+chown root:root "$INI" && chmod 600 "$INI"
+[ -n "$(certbot_dns_token)" ] || die "в $INI не задан dns_cloudflare_api_token"
 
-log "сертификат сайта и API (DNS-01 через Cloudflare, за туннелем он нужен nginx для единообразия)"
-certbot certonly --dns-cloudflare --dns-cloudflare-credentials /etc/tabora/certbot-cloudflare.ini -d "$DOMAIN" -d "www.$DOMAIN" -d "$API_HOST" --non-interactive --agree-tos -m "$EMAIL" --keep-until-expiring
-log "сертификат почтового хоста"
-certbot certonly --dns-cloudflare --dns-cloudflare-credentials /etc/tabora/certbot-cloudflare.ini -d "$MAIL_HOST" -d "autoconfig.$DOMAIN" -d "autodiscover.$DOMAIN" -d "mta-sts.$DOMAIN" --non-interactive --agree-tos -m "$EMAIL" --keep-until-expiring
+log "сертификат почтового хоста (DNS-01 через Cloudflare)"
+certbot certonly --dns-cloudflare --dns-cloudflare-credentials "$INI" --dns-cloudflare-propagation-seconds 30 \
+  -d "$MAIL_HOST" -d "autoconfig.$DOMAIN" -d "autodiscover.$DOMAIN" -d "mta-sts.$DOMAIN" \
+  --cert-name "$MAIL_HOST" --non-interactive --agree-tos -m "$EMAIL" --keep-until-expiring
+tls_enabled || die "сертификата $MX_LIVE нет"
 
-log "nginx: боевые конфиги"
-install -m 644 "$HERE/nginx/proxy.inc" /etc/nginx/snippets/tabora-proxy.conf
-rm -f /etc/nginx/sites-enabled/tabora.app /etc/nginx/sites-enabled/mx
-# снаружи остаётся только 443 почтового хоста; 80 закрываем
-ufw delete allow 80/tcp >/dev/null 2>&1 || true
-for name in tabora.app mx api; do
-  sed -e "s/__DOMAIN__/$DOMAIN/g" -e "s/__MAIL_HOST__/$MAIL_HOST/g" -e "s/__API_HOST__/$API_HOST/g" "$HERE/nginx/$name.conf" > "/etc/nginx/sites-available/$name"
-  ln -sf "/etc/nginx/sites-available/$name" "/etc/nginx/sites-enabled/$name"
-done
-nginx -t && systemctl reload nginx
+install_lib "$HERE"
+install_nginx "$HERE/nginx"
 
 log "Stalwart: сертификат почтового хоста"
-# Stalwart хранит сертификат в своей базе: загружаем PEM и назначаем по умолчанию; хук certbot повторяет это при обновлении
-python3 "$HERE/stalwart/upload-cert.py" "/etc/letsencrypt/live/$MAIL_HOST"
-mkdir -p /etc/letsencrypt/renewal-hooks/deploy
-cat > /etc/letsencrypt/renewal-hooks/deploy/tabora.sh <<HOOK
-#!/bin/sh
-systemctl reload nginx
-python3 /root/tabora-infra/infra/stalwart/upload-cert.py /etc/letsencrypt/live/$MAIL_HOST
-HOOK
-chmod +x /etc/letsencrypt/renewal-hooks/deploy/tabora.sh
-log "готово: https://$DOMAIN, https://$MAIL_HOST/jmap, https://$API_HOST"
+# Stalwart хранит сертификат в своей базе: загружаем PEM и назначаем по умолчанию; хук certbot повторяет это при продлении
+python3 "$LIB/stalwart/upload-cert.py" "$MX_LIVE"
+install_certbot_hook "$HERE"
+log "готово: https://$MAIL_HOST/jmap, SMTP/IMAP с сертификатом Let's Encrypt. Дальше: infra/deploy.sh dns"
