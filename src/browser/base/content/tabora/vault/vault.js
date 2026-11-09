@@ -167,6 +167,13 @@ Object.assign(Tabora, {
     const body = h("div", { class: "w-settings" }, null, [head, entries.length ? list : empty, this.vaultCard()]);
     if (entries.length) {
       this.otpStartTicking();
+      if (Date.now() - Otp.clockCheckedAt > 86400000) {
+        Otp.checkClock().then(r => {
+          if (r.applied) {
+            this.notice(`Часы компьютера расходятся с сетью на ${Math.round(r.offset / 1000)} с: коды считаются с поправкой`);
+          }
+        }).catch(() => {});
+      }
     }
     return body;
   },
@@ -279,8 +286,9 @@ Object.assign(Tabora, {
     const r = anchor.getBoundingClientRect();
     this.showMenu([
       { label: "Найти QR на этой странице", icon: ["M4 4h6v6H4z", "M14 4h6v6h-6z", "M4 14h6v6H4z", "M14 14h3v3h-3z", "M20 20h-3"], run: () => this.otpScanPage() },
-      { label: "Сканировать с экрана", icon: ["M4 8V5a1 1 0 0 1 1-1h3", "M16 4h3a1 1 0 0 1 1 1v3", "M20 16v3a1 1 0 0 1-1 1h-3", "M8 20H5a1 1 0 0 1-1-1v-3"], hint: "скоро", disabled: true, run: () => {} },
+      { label: "Сканировать с экрана", icon: ["M4 8V5a1 1 0 0 1 1-1h3", "M16 4h3a1 1 0 0 1 1 1v3", "M20 16v3a1 1 0 0 1-1 1h-3", "M8 20H5a1 1 0 0 1-1-1v-3"], run: () => this.otpScanScreen() },
       { separator: true },
+      { label: "Импорт из файла (Google Authenticator, Aegis, 2FAS)", icon: ["M12 4v11", "M7 10l5 5 5-5", "M4 19h16"], run: () => this.otpImportFile() },
       { label: "Вставить ссылку otpauth://", icon: ["M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1", "M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"], run: () => this.otpLinkSheet() },
       { label: "Ввести вручную", icon: ["M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z", "M13.5 6.5l3 3"], run: () => this.otpManualSheet() },
     ], r.left, r.bottom + 4);
@@ -355,9 +363,13 @@ Object.assign(Tabora, {
     if (tab && tab !== gBrowser.selectedTab) {
       return;
     }
-    const { Otp, parseOtpauth } = this.otpMod();
+    const { Otp, parseOtpauth, parseMigration } = this.otpMod();
     if (/^otpauth-migration:/i.test(url)) {
-      this.notice("Экспорт Google Authenticator: импорт появится на следующем шаге");
+      try {
+        this.otpImportSheet(parseMigration(url), "Экспорт Google Authenticator");
+      } catch (e) {
+        this.notice(e.message);
+      }
       return;
     }
     let parsed;
@@ -401,19 +413,28 @@ Object.assign(Tabora, {
       img.onerror = () => reject(new Error("image"));
       img.src = src;
     });
-    const w = img.naturalWidth || data.w;
-    const h = img.naturalHeight || data.h;
-    if (!w || !h || w * h > 4_000_000) {
+    const w0 = img.naturalWidth || data.w;
+    const h0 = img.naturalHeight || data.h;
+    if (!w0 || !h0 || w0 * h0 > (data.screen ? 40_000_000 : 4_000_000)) {
       return null;
     }
-    const canvas = this.html("canvas", { width: String(w), height: String(h) });
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, w, h);
-    ctx.drawImage(img, 0, 0, w, h);
-    const px = ctx.getImageData(0, 0, w, h);
-    const found = jsQR(px.data, w, h, { inversionAttempts: "attemptBoth" });
-    return found?.data || null;
+    // снимок экрана большой: сначала уменьшенная копия (быстро), затем полный размер
+    const scales = data.screen && w0 * h0 > 2_000_000 ? [0.5, 1] : [1];
+    for (const scale of scales) {
+      const w = Math.round(w0 * scale);
+      const h = Math.round(h0 * scale);
+      const canvas = this.html("canvas", { width: String(w), height: String(h) });
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      const px = ctx.getImageData(0, 0, w, h);
+      const found = jsQR(px.data, w, h, { inversionAttempts: "attemptBoth" });
+      if (found?.data) {
+        return found.data;
+      }
+    }
+    return null;
   },
 
   async otpScanPage() {
@@ -434,6 +455,83 @@ Object.assign(Tabora, {
       }
     }
     this.notice(images.length ? `QR с кодом не найден (картинок проверено: ${images.length})` : "На странице нет подходящих картинок");
+  },
+
+  /** Снимок области экрана системным выделением (как ⌘⇧4): QR из любого приложения. */
+  async otpScanScreen() {
+    const path = PathUtils.join(PathUtils.tempDir, `tabora-qr-${Date.now()}.png`);
+    try {
+      const bin = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+      bin.initWithPath("/usr/sbin/screencapture");
+      if (!bin.exists()) {
+        this.notice("Захват экрана доступен только на macOS");
+        return;
+      }
+      const proc = Cc["@mozilla.org/process/util;1"].createInstance(Ci.nsIProcess);
+      proc.init(bin);
+      const args = ["-i", "-x", "-t", "png", path];
+      await new Promise(resolve => proc.runAsync(args, args.length, { observe: () => resolve() }));
+      if (!(await IOUtils.exists(path))) {
+        return; // выделение отменено (Esc)
+      }
+      const bytes = await IOUtils.read(path);
+      let bin64 = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        bin64 += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      }
+      const text = await this.otpDecodeImage({ dataURL: `data:image/png;base64,${btoa(bin64)}`, screen: true });
+      const host = gBrowser.selectedBrowser?.currentURI?.host || "";
+      if (text && /^otpauth(-migration)?:\/\//i.test(text)) {
+        this.otpAddFromUrl(text, { host: /^https?:/.test(gBrowser.selectedBrowser?.currentURI?.spec || "") ? host : "" });
+      } else {
+        this.notice(text ? "В этом QR нет кода аутентификатора" : "QR-код в выделенной области не распознан");
+      }
+    } catch (e) {
+      this.notice(`Захват экрана не удался: ${e.message}`);
+    } finally {
+      IOUtils.remove(path, { ignoreAbsent: true }).catch(() => {});
+    }
+  },
+
+  /** Импорт файла экспорта другого аутентификатора. */
+  otpImportFile() {
+    const fp = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
+    fp.init(window.browsingContext, "Импорт кодов", Ci.nsIFilePicker.modeOpen);
+    fp.appendFilter("Экспорт аутентификатора", "*.json; *.txt; *.2fas");
+    fp.appendFilters(Ci.nsIFilePicker.filterAll);
+    fp.open(async rv => {
+      if (rv !== Ci.nsIFilePicker.returnOK || !fp.file) {
+        return;
+      }
+      try {
+        const text = await IOUtils.readUTF8(fp.file.path);
+        this.otpImportSheet(this.otpMod().parseImportText(text), fp.file.leafName);
+      } catch (e) {
+        this.notice(e.message);
+      }
+    });
+  },
+
+  /** Предпросмотр импорта: что добавится, что пропущено. */
+  otpImportSheet({ entries, skipped }, source) {
+    const h = (t, a, x, c) => this.html(t, a, x, c);
+    const { Otp } = this.otpMod();
+    if (!entries.length) {
+      this.notice(skipped.length ? `Нечего импортировать: ${skipped[0]}` : "Нечего импортировать");
+      return;
+    }
+    const list = h("ul", { class: "w-points" }, null, entries.slice(0, 8).map(e => h("li", {}, `${e.issuer || "—"} · ${e.account || ""}`.trim())));
+    if (entries.length > 8) {
+      list.append(h("li", {}, `…и ещё ${entries.length - 8}`));
+    }
+    const body = [list];
+    if (skipped.length) {
+      body.push(h("p", { class: "w-hint" }, `Пропущено ${skipped.length}: ${skipped.slice(0, 3).join("; ")}${skipped.length > 3 ? "…" : ""}`));
+    }
+    this.vaultSheet(`Импорт: ${source}`, `Записей для добавления: ${entries.length}. Повторы будут пропущены.`, body, "Импортировать", async () => {
+      const r = await Otp.addMany(entries);
+      this.notice(`Добавлено ${r.added}${r.skipped ? `, повторов ${r.skipped}` : ""}${r.errors.length ? `, ошибок ${r.errors.length}` : ""}`);
+    });
   },
 
   /** Пункт «Добавить код в аутентификатор» в системном меню картинки. */
@@ -749,6 +847,19 @@ Object.assign(Tabora, {
       }));
     }
     kids.push(this.wButton("Заблокировать сейф", "ghost", () => Vault.lock()));
+    const { Otp } = this.otpMod();
+    const off = Otp.clockOffset;
+    const checked = Otp.clockCheckedAt;
+    const clockText = !checked ? "не сверялось" : off ? `поправка ${off > 0 ? "+" : "−"}${Math.round(Math.abs(off) / 1000)} с · часы компьютера ${off > 0 ? "отстают" : "спешат"}` : "совпадает с сетью";
+    kids.push(row("Время для кодов", clockText, off ? "" : "muted"));
+    kids.push(this.wButton("Сверить время с сетью", "ghost", async () => {
+      try {
+        const r = await Otp.checkClock();
+        this.notice(r.applied ? `Часы расходятся на ${Math.round(r.offset / 1000)} с: коды считаются с поправкой` : "Время совпадает с сетью");
+      } catch (e) {
+        this.notice(e.message);
+      }
+    }));
     return h("div", { class: "w-group" }, null, kids);
   },
 

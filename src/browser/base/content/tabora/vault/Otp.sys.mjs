@@ -9,6 +9,7 @@
  * в родительском процессе; страница получает только сам код после действия пользователя. */
 
 const { Vault } = ChromeUtils.importESModule("chrome://browser/content/tabora/vault/Vault.sys.mjs");
+const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 
 const FILE = () => PathUtils.join(PathUtils.profileDir, "tabora-otp.json");
 const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -149,6 +150,196 @@ export function parseOtpauth(input) {
   return out;
 }
 
+/* ---------- импорт: Google Authenticator, Aegis, 2FAS, списки ссылок ---------- */
+
+/** Минимальный protobuf-декодер: поля как список { field, wire, value } (varint → BigInt, bytes → Uint8Array). */
+function pbDecode(bytes) {
+  const out = [];
+  let i = 0;
+  const varint = () => {
+    let v = 0n;
+    let shift = 0n;
+    for (;;) {
+      if (i >= bytes.length) {
+        throw new Error("protobuf: обрыв");
+      }
+      const b = bytes[i++];
+      v |= BigInt(b & 0x7f) << shift;
+      shift += 7n;
+      if (!(b & 0x80)) {
+        return v;
+      }
+      if (shift > 70n) {
+        throw new Error("protobuf: varint слишком длинный");
+      }
+    }
+  };
+  while (i < bytes.length) {
+    const tag = varint();
+    const field = Number(tag >> 3n);
+    const wire = Number(tag & 7n);
+    if (wire === 0) {
+      out.push({ field, wire, value: varint() });
+    } else if (wire === 2) {
+      const len = Number(varint());
+      if (len < 0 || i + len > bytes.length) {
+        throw new Error("protobuf: длина вне данных");
+      }
+      out.push({ field, wire, value: bytes.slice(i, i + len) });
+      i += len;
+    } else if (wire === 1) {
+      i += 8;
+    } else if (wire === 5) {
+      i += 4;
+    } else {
+      throw new Error("protobuf: неизвестный тип поля");
+    }
+  }
+  return out;
+}
+
+function b64ToBytes(str) {
+  const clean = String(str).replace(/-/g, "+").replace(/_/g, "/").replace(/\s/g, "");
+  const bin = atob(clean + "=".repeat((4 - (clean.length % 4)) % 4));
+  return Uint8Array.from(bin, c => c.charCodeAt(0));
+}
+
+/** otpauth-migration://offline?data=… (экспорт Google Authenticator) → список записей. */
+export function parseMigration(input) {
+  const text = String(input || "").trim();
+  if (!/^otpauth-migration:\/\//i.test(text)) {
+    throw new Error("Это не ссылка экспорта Google Authenticator");
+  }
+  let data;
+  try {
+    data = new URL(text).searchParams.get("data");
+  } catch (e) {
+    throw new Error("Ссылка экспорта повреждена");
+  }
+  if (!data) {
+    throw new Error("В ссылке экспорта нет данных");
+  }
+  const payload = pbDecode(b64ToBytes(decodeURIComponent(data)));
+  const dec = new TextDecoder();
+  const out = [];
+  const skipped = [];
+  for (const f of payload) {
+    if (f.field !== 1 || f.wire !== 2) {
+      continue;
+    }
+    const p = pbDecode(f.value);
+    const get = n => p.find(x => x.field === n)?.value;
+    const secret = get(1);
+    const name = get(2) ? dec.decode(get(2)) : "";
+    const issuer = get(3) ? dec.decode(get(3)) : "";
+    const algorithm = { 1: "SHA1", 2: "SHA256", 3: "SHA512" }[Number(get(4) ?? 1n)] || null;
+    const digits = { 1: 6, 2: 8 }[Number(get(5) ?? 1n)] || 6;
+    const type = Number(get(6) ?? 2n);
+    const label = issuer || name || "запись";
+    if (type !== 2) {
+      skipped.push(`${label}: коды со счётчиком (HOTP) не поддерживаются`);
+      continue;
+    }
+    if (!algorithm) {
+      skipped.push(`${label}: алгоритм не поддерживается`);
+      continue;
+    }
+    if (!secret || !secret.length) {
+      skipped.push(`${label}: нет секрета`);
+      continue;
+    }
+    let account = cleanText(name, 96);
+    let iss = cleanText(issuer, 48);
+    const colon = account.indexOf(":");
+    if (!iss && colon > 0) {
+      iss = account.slice(0, colon).trim();
+      account = account.slice(colon + 1).trim();
+    }
+    out.push({ issuer: iss, account, secret: base32Encode(secret), algorithm, digits, period: 30 });
+  }
+  return { entries: out, skipped };
+}
+
+/** Файл экспорта: Aegis (JSON, без шифрования), 2FAS (JSON), либо список ссылок otpauth:// построчно. */
+export function parseImportText(text) {
+  const raw = String(text || "").trim();
+  if (!raw) {
+    throw new Error("Файл пустой");
+  }
+  const out = [];
+  const skipped = [];
+  const push = (fields, label) => {
+    try {
+      checkParams({ algorithm: fields.algorithm, digits: fields.digits, period: fields.period });
+      base32Decode(fields.secret);
+      out.push(fields);
+    } catch (e) {
+      skipped.push(`${label}: ${e.message}`);
+    }
+  };
+  if (raw.startsWith("{") || raw.startsWith("[")) {
+    let json;
+    try {
+      json = JSON.parse(raw);
+    } catch (e) {
+      throw new Error("Файл не разбирается как JSON");
+    }
+    if (json?.header?.slots || json?.db === undefined && json?.header?.params) {
+      throw new Error("Это зашифрованный экспорт Aegis: экспортируйте без шифрования");
+    }
+    if (json?.servicesEncrypted) {
+      throw new Error("Это зашифрованный экспорт 2FAS: экспортируйте без пароля");
+    }
+    const aegis = json?.db?.entries;
+    const twofas = json?.services;
+    if (Array.isArray(aegis)) {
+      for (const e of aegis) {
+        const label = e.issuer || e.name || "запись";
+        if ((e.type || "totp").toLowerCase() !== "totp") {
+          skipped.push(`${label}: тип ${e.type} не поддерживается`);
+          continue;
+        }
+        push({ issuer: cleanText(e.issuer, 48), account: cleanText(e.name, 96), secret: String(e.info?.secret || ""), algorithm: String(e.info?.algo || "SHA1").toUpperCase().replace("-", ""), digits: Number(e.info?.digits || 6), period: Number(e.info?.period || 30) }, label);
+      }
+    } else if (Array.isArray(twofas)) {
+      for (const sv of twofas) {
+        const label = sv.name || sv.otp?.issuer || "запись";
+        if ((sv.otp?.tokenType || "TOTP").toUpperCase() !== "TOTP") {
+          skipped.push(`${label}: тип ${sv.otp?.tokenType} не поддерживается`);
+          continue;
+        }
+        push({ issuer: cleanText(sv.otp?.issuer || sv.name, 48), account: cleanText(sv.otp?.account || sv.otp?.label || "", 96), secret: String(sv.secret || ""), algorithm: String(sv.otp?.algorithm || "SHA1").toUpperCase().replace("-", ""), digits: Number(sv.otp?.digits || 6), period: Number(sv.otp?.period || 30) }, label);
+      }
+    } else {
+      throw new Error("Формат файла не распознан (поддерживаются Aegis и 2FAS без шифрования)");
+    }
+  } else {
+    for (const line of raw.split(/\r?\n/)) {
+      const l = line.trim();
+      if (!l) {
+        continue;
+      }
+      if (/^otpauth-migration:/i.test(l)) {
+        const m = parseMigration(l);
+        out.push(...m.entries);
+        skipped.push(...m.skipped);
+      } else if (/^otpauth:/i.test(l)) {
+        try {
+          out.push(parseOtpauth(l));
+        } catch (e) {
+          skipped.push(`${l.slice(0, 40)}…: ${e.message}`);
+        }
+      } else {
+        skipped.push(`${l.slice(0, 40)}: не ссылка otpauth://`);
+      }
+    }
+  }
+  if (!out.length && !skipped.length) {
+    throw new Error("В файле нет записей");
+  }
+  return { entries: out, skipped };
+}
+
 export const Otp = {
   TOPIC: "tabora-otp-changed",
   data: null,
@@ -287,6 +478,35 @@ export const Otp = {
     return this.meta(entry);
   },
 
+  /** Несколько записей разом; повторы (тот же издатель, аккаунт и секрет) пропускаются. */
+  async addMany(list, { domainsFor = null } = {}) {
+    await this.ready();
+    Vault.requireUnlocked();
+    const seen = new Set();
+    for (const e of this.entries) {
+      const s = await this.secretOf(e.id).catch(() => null);
+      seen.add(`${e.issuer}\u0000${e.account}\u0000${s ? base32Encode(s) : ""}`);
+    }
+    let added = 0;
+    let skipped = 0;
+    const errors = [];
+    for (const f of list) {
+      const key = `${cleanText(f.issuer, 48)}\u0000${cleanText(f.account, 96)}\u0000${String(f.secret || "").toUpperCase().replace(/[\s-=]/g, "")}`;
+      if (seen.has(key)) {
+        skipped++;
+        continue;
+      }
+      try {
+        await this.add({ ...f, domains: f.domains || (domainsFor ? domainsFor(f) : this.guessDomain(f.issuer)) });
+        seen.add(key);
+        added++;
+      } catch (e) {
+        errors.push(`${f.issuer || f.account}: ${e.message}`);
+      }
+    }
+    return { added, skipped, errors };
+  },
+
   async update(id, fields) {
     await this.ready();
     const entry = this.entries.find(e => e.id === id);
@@ -378,6 +598,53 @@ export const Otp = {
       totp(secret, { algorithm: entry.algorithm, digits: entry.digits, period: entry.period, now: t + periodMs }),
     ]);
     return { code, next, remaining, period: entry.period, digits: entry.digits };
+  },
+
+  /* ---------- сверка времени ---------- */
+
+  CLOCK_OFFSET_PREF: "tabora.otp.clockOffsetMs",
+  CLOCK_CHECKED_PREF: "tabora.otp.clockCheckedAt",
+  CLOCK_HOSTS: ["https://www.cloudflare.com/cdn-cgi/trace", "https://www.google.com/generate_204", "https://www.apple.com/library/test/success.html"],
+
+  get clockOffset() {
+    return Services.prefs.getIntPref(this.CLOCK_OFFSET_PREF, 0);
+  },
+
+  get clockCheckedAt() {
+    return Number(Services.prefs.getStringPref(this.CLOCK_CHECKED_PREF, "0")) || 0;
+  },
+
+  /** Сверка часов по заголовку Date известных серверов: коды зависят от времени, системные часы не трогаем.
+   * Поправка применяется, если расхождение больше 5 с (точность заголовка — секунда). */
+  async checkClock() {
+    let lastError = null;
+    for (const url of this.CLOCK_HOSTS) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 6000);
+      try {
+        const t0 = Date.now();
+        const res = await fetch(url, { method: "HEAD", cache: "no-store", redirect: "manual", credentials: "omit", signal: ctrl.signal });
+        const rtt = Date.now() - t0;
+        const server = Date.parse(res.headers.get("date") || "");
+        if (!server || rtt > 5000) {
+          throw new Error("нет заголовка Date");
+        }
+        const offset = Math.round(server + rtt / 2 - Date.now());
+        if (Math.abs(offset) > 86400000) {
+          throw new Error("неправдоподобное время сервера");
+        }
+        const applied = Math.abs(offset) > 5000 ? offset : 0;
+        Services.prefs.setIntPref(this.CLOCK_OFFSET_PREF, applied);
+        Services.prefs.setStringPref(this.CLOCK_CHECKED_PREF, String(Date.now()));
+        this.notify("clock");
+        return { offset, applied, host: new URL(url).host, rtt };
+      } catch (e) {
+        lastError = e;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    throw new Error(`Не удалось сверить время: ${lastError?.message || "сеть недоступна"}`);
   },
 
   /** Ссылка otpauth:// для переноса записи в другое приложение (только по явному действию). */
