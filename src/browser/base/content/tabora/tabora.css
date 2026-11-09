@@ -609,15 +609,41 @@ sidebar-main {
   border-radius: 0;
 }
 
-/* Стартовая вкладка: фирменная точка вместо глобуса */
-#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[tabora-start] .tab-icon-image {
-  /* значок вкладки — html:img, поэтому подменяем через content */
-  content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='64' fill='%23c8f25a'/%3E%3Crect x='44' y='56' width='168' height='52' rx='26' fill='%230b0c0e'/%3E%3Crect x='102' y='56' width='52' height='150' rx='26' fill='%230b0c0e'/%3E%3C/svg%3E") !important;
+:root[tabora-private] #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[tabora-start] .tab-icon-image {
+  content: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23b9a6ff'><rect x='4' y='5' width='14' height='3.6' rx='1.8'/><rect x='9.2' y='5' width='3.6' height='14' rx='1.8'/><circle cx='18.2' cy='7.2' r='1.6'/></svg>") !important;
+}
+
+/* Вкладки наших страниц: контурные значки в цвете текста вместо лаймовых плашек
+   (в свёрнутой колонке плашки выглядели тяжело) */
+#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[tabora-start] .tab-icon-image,
+#tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://browser/content/tabora/mail/icon.svg"],
+#tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://browser/content/tabora/downloads/icon.svg"] {
+  border-radius: 0;
   opacity: 1;
 }
 
-:root[tabora-private] #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[tabora-start] .tab-icon-image {
-  content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='64' fill='%23b9a6ff'/%3E%3Crect x='44' y='56' width='168' height='52' rx='26' fill='%230b0c0e'/%3E%3Crect x='102' y='56' width='52' height='150' rx='26' fill='%230b0c0e'/%3E%3C/svg%3E") !important;
+#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[tabora-start] .tab-icon-image {
+  content: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23c9ccd3'><rect x='4' y='5' width='14' height='3.6' rx='1.8'/><rect x='9.2' y='5' width='3.6' height='14' rx='1.8'/><circle cx='18.2' cy='7.2' r='1.6'/></svg>") !important;
+}
+
+:root[tabora-theme="light"] #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[tabora-start] .tab-icon-image {
+  content: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%233d4047'><rect x='4' y='5' width='14' height='3.6' rx='1.8'/><rect x='9.2' y='5' width='3.6' height='14' rx='1.8'/><circle cx='18.2' cy='7.2' r='1.6'/></svg>") !important;
+}
+
+#tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://browser/content/tabora/mail/icon.svg"] {
+  content: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c9ccd3' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><path d='M3.5 6.5h17v11h-17z'/><path d='M3.5 7l8.5 6 8.5-6'/></svg>");
+}
+
+:root[tabora-theme="light"] #tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://browser/content/tabora/mail/icon.svg"] {
+  content: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233d4047' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><path d='M3.5 6.5h17v11h-17z'/><path d='M3.5 7l8.5 6 8.5-6'/></svg>");
+}
+
+#tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://browser/content/tabora/downloads/icon.svg"] {
+  content: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c9ccd3' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><path d='M12 4v11'/><path d='M7.5 10.5 12 15l4.5-4.5'/><path d='M5 19h14'/></svg>");
+}
+
+:root[tabora-theme="light"] #tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://browser/content/tabora/downloads/icon.svg"] {
+  content: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233d4047' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><path d='M12 4v11'/><path d='M7.5 10.5 12 15l4.5-4.5'/><path d='M5 19h14'/></svg>");
 }
 
 #tabbrowser-tabs[orient="vertical"] .tab-throbber {
