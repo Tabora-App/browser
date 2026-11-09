@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+<?csp default-src chrome: resource:; object-src 'none'; ?>
+<window xmlns:html="http://www.w3.org/1999/xhtml"
+        xmlns:svg="http://www.w3.org/2000/svg"
+        xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+        id="taboraAbout"
+        windowtype="Browser:About"
+        title="О Tabora"
+        role="dialog">
+  <linkset>
+    <html:link rel="stylesheet" href="chrome://global/skin/global.css"/>
+    <html:link rel="stylesheet" href="chrome://browser/content/tabora/fonts.css"/>
+    <html:link rel="stylesheet" href="chrome://browser/content/tabora/about/about.css"/>
+  </linkset>
+  <html:div id="about">
+    <html:div class="body">
+      <svg:svg class="mark" viewBox="0 0 256 256">
+        <svg:rect width="256" height="256" rx="58" fill="#c8f25a"/>
+        <svg:rect x="56" y="66" width="144" height="38" rx="19" fill="#0b0c0e"/>
+        <svg:rect x="109" y="66" width="38" height="134" rx="19" fill="#0b0c0e"/>
+        <svg:circle class="dot" cx="75" cy="85" r="11" fill="#c8f25a"/>
+      </svg:svg>
+      <html:div class="text">
+        <html:h1>Tabora</html:h1>
+        <html:p class="ver"><html:b id="version">Версия</html:b><html:span id="arch"></html:span></html:p>
+        <html:p class="ver muted" id="build"></html:p>
+        <html:p class="ver muted" id="updates"></html:p>
+        <html:div class="links">
+          <html:button class="link" data-url="releaseNotes">Что нового</html:button>
+          <html:button class="link" data-url="help">Справка</html:button>
+          <html:button class="link" data-url="help">Сообщить о проблеме</html:button>
+        </html:div>
+      </html:div>
+    </html:div>
+    <html:div class="foot">
+      <html:button class="link quiet" data-url="about:license">Лицензии открытого кода</html:button>
+      <html:button class="link quiet" data-url="terms">Условия использования</html:button>
+      <html:button class="link quiet" data-url="privacy">Конфиденциальность</html:button>
+    </html:div>
+  </html:div>
+  <script src="chrome://browser/content/tabora/about/about.js"/>
+</window>

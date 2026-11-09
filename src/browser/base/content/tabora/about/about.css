@@ -1,0 +1,142 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Окно «О Tabora»: тёмное, как ящик; без упоминаний стороннего движка. */
+:root {
+  --bg: #121316;
+  --foot: #0f1013;
+  --line: #26282d;
+  --fg: #ececf1;
+  --fg-2: #a4a7b0;
+  --fg-3: #6f727b;
+  --accent: #c8f25a;
+  --font: "Manrope", -apple-system, "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+
+/* корень XUL-окна и контейнер: фон задаём явно, иначе остаётся системный светлый */
+:root,
+window {
+  background-color: var(--bg) !important;
+  color: var(--fg);
+  font: 500 13px/1.5 var(--font);
+  appearance: none;
+}
+
+#about {
+  width: 600px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.body {
+  display: grid;
+  grid-template-columns: 168px 1fr;
+  gap: 28px;
+  align-items: center;
+  padding: 36px 36px 28px;
+}
+
+.mark {
+  width: 168px;
+  height: 168px;
+  filter: drop-shadow(0 16px 30px rgba(0, 0, 0, 0.45));
+}
+
+h1 {
+  margin: 0 0 12px;
+  font: 800 40px/1 var(--font);
+  letter-spacing: -0.03em;
+  color: var(--fg);
+}
+
+.ver {
+  margin: 0;
+  font: 500 13px/1.6 var(--mono);
+  color: var(--fg-2);
+}
+
+.ver b {
+  color: var(--fg);
+  font-weight: 600;
+  margin-inline-end: 8px;
+}
+
+.ver.muted {
+  color: var(--fg-3);
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 14px;
+}
+
+.link {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0 0 1px;
+  margin: 0;
+  color: var(--accent);
+  font: 600 13px/1.4 var(--font);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  cursor: pointer;
+}
+
+.link:hover {
+  border-bottom-color: var(--accent);
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.link.quiet {
+  color: var(--fg-2);
+  font-weight: 500;
+  border-bottom-color: #3a3c42;
+}
+
+.link.quiet:hover {
+  color: var(--fg);
+  border-bottom-color: var(--fg-2);
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 20px;
+  padding: 14px 36px;
+  background: var(--foot);
+  border-top: 1px solid var(--line);
+}
+
+.mark .dot {
+  transform-box: view-box;
+  animation: roll 2.6s cubic-bezier(0.55, 0, 0.3, 1) 0.3s 1 both;
+}
+
+@keyframes roll {
+  0% { transform: translateX(0); }
+  38% { transform: translateX(106px); }
+  62% { transform: translateX(22px); }
+  84% { transform: translateX(106px); }
+  92% { transform: translateX(100px); }
+  100% { transform: translateX(106px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mark .dot {
+    animation: none;
+    transform: translateX(106px);
+  }
+}

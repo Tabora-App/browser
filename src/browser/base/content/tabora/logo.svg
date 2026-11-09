@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Знак Tabora: лаймовый квадрат, монограмма T, точка на перекладине -->
+  <rect width="256" height="256" rx="58" fill="#c8f25a"/>
+  <rect x="56" y="66" width="144" height="38" rx="19" fill="#0b0c0e"/>
+  <rect x="109" y="66" width="38" height="134" rx="19" fill="#0b0c0e"/>
+  <circle cx="181" cy="85" r="11" fill="#c8f25a"/>
+</svg>

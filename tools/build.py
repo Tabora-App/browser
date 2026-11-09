@@ -353,6 +353,11 @@ def apply_branding(config: dict, brand: str) -> None:
         + 'pref("app.update.badgeWaitTime", 0);\n'
         + 'pref("devtools.selfxss.count", 5);\n'
         + pref("tabora.version", info.get("displayVersion", "0.0.0"))
+        + pref("tabora.url.homepage", home)
+        + pref("tabora.url.help", urls.get("help") or home)
+        + pref("tabora.url.releaseNotes", urls.get("releaseNotes") or home)
+        + pref("tabora.url.terms", urls.get("terms") or home)
+        + pref("tabora.url.privacy", urls.get("privacy") or home)
         + product_prefs(brand)
     )
     nsi = dest / "branding.nsi"

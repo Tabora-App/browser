@@ -65,21 +65,41 @@
 }
 
 #tabora-account-dialog .ta-orb {
-  width: 56px;
-  height: 56px;
-  border-radius: 18px;
-  background: var(--tabora-accent);
+  width: 64px;
+  height: 64px;
+  border-radius: 15px;
   position: relative;
   box-shadow: 0 10px 30px color-mix(in srgb, var(--tabora-accent) 35%, transparent);
   align-self: center;
+  overflow: hidden;
 }
 
-#tabora-account-dialog .ta-orb::after {
-  content: "";
-  position: absolute;
-  inset: 18px;
-  border-radius: 50%;
-  background: var(--tabora-accent-ink, #0b0c0e);
+#tabora-account-dialog .ta-mark {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* точка прокатывается по перекладине туда и обратно и останавливается на своём месте */
+#tabora-account-dialog .ta-mark .dot {
+  transform-box: view-box;
+  animation: ta-roll 2.6s cubic-bezier(0.55, 0, 0.3, 1) 0.2s 1 both;
+}
+
+@keyframes ta-roll {
+  0% { transform: translateX(0); }
+  38% { transform: translateX(106px); }
+  62% { transform: translateX(22px); }
+  84% { transform: translateX(106px); }
+  92% { transform: translateX(100px); }
+  100% { transform: translateX(106px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #tabora-account-dialog .ta-mark .dot {
+    animation: none;
+    transform: translateX(106px);
+  }
 }
 
 #tabora-account-dialog .ta-field {

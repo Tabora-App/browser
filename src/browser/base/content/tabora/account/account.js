@@ -78,6 +78,28 @@ Object.assign(Tabora, {
 
   /* ---- Элементы ---------------------------------------------------------- */
 
+  /** Знак Tabora с точкой, которая прокатывается по перекладине и останавливается на своём месте. */
+  taMark() {
+    const NS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 256 256");
+    svg.setAttribute("class", "ta-mark");
+    svg.setAttribute("aria-hidden", "true");
+    const add = (tag, attrs) => {
+      const el = document.createElementNS(NS, tag);
+      for (const [k, v] of Object.entries(attrs)) {
+        el.setAttribute(k, v);
+      }
+      svg.append(el);
+      return el;
+    };
+    add("rect", { width: 256, height: 256, rx: 58, fill: "#c8f25a" });
+    add("rect", { x: 56, y: 66, width: 144, height: 38, rx: 19, fill: "#0b0c0e" });
+    add("rect", { x: 109, y: 66, width: 38, height: 134, rx: 19, fill: "#0b0c0e" });
+    add("circle", { class: "dot", cx: 75, cy: 85, r: 11, fill: "#c8f25a" });
+    return svg;
+  },
+
   taField(label, attrs = {}, { suffix = null } = {}) {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const input = h("input", { class: "ta-input", ...attrs });
@@ -160,7 +182,7 @@ Object.assign(Tabora, {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { Account } = this.accountMod();
     return h("div", { class: "ta-step ta-welcome" }, null, [
-      h("div", { class: "ta-orb" }),
+      h("div", { class: "ta-orb" }, null, [this.taMark()]),
       h("h2", {}, "Добро пожаловать в Tabora"),
       h("p", { class: "ta-text" }, `Аккаунт даёт адрес почты в домене ${Account.domain}, сейф для паролей и кодов и перенос всего на другой компьютер. Один пароль на всё, данные зашифрованы на устройстве.`),
       h("div", { class: "ta-actions" }, null, [
@@ -228,7 +250,7 @@ Object.assign(Tabora, {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { Account } = this.accountMod();
     return h("div", { class: "ta-step" }, null, [
-      h("div", { class: "ta-orb" }),
+      h("div", { class: "ta-orb" }, null, [this.taMark()]),
       h("h2", {}, "Готово"),
       h("p", { class: "ta-text" }, `Аккаунт ${email || Account.email} создан на этом компьютере.`),
       h("ul", { class: "ta-points" }, null, [

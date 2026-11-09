@@ -9,7 +9,7 @@
  * приватных данных здесь нет: каждый запрос уходит в родительский процесс,
  * где пользователь подтверждает действие. */
 
-const ICON = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="18" fill="#c8f25a"/><circle cx="32" cy="32" r="11" fill="#0b0c0e"/></svg>');
+const ICON = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><rect width="256" height="256" rx="58" fill="#c8f25a"/><rect x="56" y="66" width="144" height="38" rx="19" fill="#0b0c0e"/><rect x="109" y="66" width="38" height="134" rx="19" fill="#0b0c0e"/><circle cx="181" cy="85" r="11" fill="#c8f25a"/></svg>');
 const UUID = "7f2b4a1e-6c3d-4a2f-9b1e-5c0a7ab0ra11";
 
 export class TaboraWalletChild extends JSWindowActorChild {

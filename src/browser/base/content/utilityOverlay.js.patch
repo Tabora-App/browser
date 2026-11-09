@@ -1,0 +1,14 @@
+diff --git a/browser/base/content/utilityOverlay.js b/browser/base/content/utilityOverlay.js
+index 3b8782f6fc..5d754f4dd5 100644
+--- a/browser/base/content/utilityOverlay.js
++++ b/browser/base/content/utilityOverlay.js
+@@ -428,7 +428,8 @@ function openAboutDialog() {
+   }
+ 
+   var win = BrowserWindowTracker.getTopWindow() || window;
+-  win.openDialog("chrome://browser/content/aboutDialog.xhtml", "", features);
++  // Tabora: своё окно «О программе» вместо стандартного
++  win.openDialog("chrome://browser/content/tabora/about/about.xhtml", "", features);
+ }
+ 
+ function openReferralsPage() {
