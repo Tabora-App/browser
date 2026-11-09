@@ -1407,6 +1407,38 @@ var Tabora = {
     }
   },
 
+  /** Знак Tabora (SVG) для окон и страниц; класс tb-mark даёт анимацию точки, см. tabora.css. */
+  markSvg(cls = "") {
+    const NS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 256 256");
+    svg.setAttribute("class", `tb-mark ${cls}`.trim());
+    svg.setAttribute("aria-hidden", "true");
+    const add = (tag, attrs) => {
+      const el = document.createElementNS(NS, tag);
+      for (const [k, v] of Object.entries(attrs)) {
+        el.setAttribute(k, v);
+      }
+      svg.append(el);
+      return el;
+    };
+    add("rect", { width: 256, height: 256, rx: 58, fill: "#c8f25a" });
+    add("rect", { x: 56, y: 66, width: 144, height: 38, rx: 19, fill: "#0b0c0e" });
+    add("rect", { x: 109, y: 66, width: 38, height: 134, rx: 19, fill: "#0b0c0e" });
+    add("circle", { class: "dot", cx: 75, cy: 85, r: 11, fill: "#c8f25a" });
+    return svg;
+  },
+
+  /** Перезапуск анимации точки: при повторном показе страницы или окна. */
+  markReplay(svg) {
+    const dot = svg?.querySelector(".dot");
+    if (!dot) {
+      return;
+    }
+    const fresh = dot.cloneNode(true);
+    dot.replaceWith(fresh);
+  },
+
   buildStartPage() {
     const tabbox = document.getElementById("tabbrowser-tabbox");
     const input = this.html("input", { id: "tabora-start-input", placeholder: "Найти, открыть или поручить агенту", "aria-label": "Поиск или адрес" });
@@ -1417,6 +1449,7 @@ var Tabora = {
     ]);
     const page = this.html("div", { id: "tabora-start", hidden: "true" }, null, [
       this.html("div", { class: "hero" }, null, [
+        this.markSvg("start-mark"),
         this.html("div", { class: "date", id: "tabora-start-date" }),
         this.html("h1", { class: "greeting", id: "tabora-start-greeting" }),
       ]),
@@ -1515,10 +1548,14 @@ var Tabora = {
     }
     const spec = browser.currentURI?.spec || "about:blank";
     const show = this.isStartUrl(spec);
+    const wasHidden = page.hidden;
     page.hidden = !show;
     this.markStartTab(gBrowser.selectedTab);
     if (!show) {
       return;
+    }
+    if (wasHidden) {
+      this.markReplay(page.querySelector(".start-mark")); // точка прокатывается при каждом показе
     }
     if (gBrowser.selectedTab.label !== this.startLabel()) {
       gBrowser.selectedTab.label = this.startLabel();

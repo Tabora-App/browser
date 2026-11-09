@@ -100,9 +100,13 @@
   width: 56px;
   height: 56px;
   border-radius: 13px;
-  background: url("chrome://browser/content/tabora/logo.svg") center / 100% 100% no-repeat;
   position: relative;
   box-shadow: 0 10px 30px color-mix(in srgb, var(--tabora-accent) 35%, transparent);
+}
+
+#tabora-drawer .w-orb .tb-mark {
+  width: 100%;
+  height: 100%;
 }
 
 #tabora-drawer .w-points {

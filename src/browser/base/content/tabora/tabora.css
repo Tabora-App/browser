@@ -3025,3 +3025,38 @@ toolbarseparator {
   text-transform: uppercase;
   color: var(--tabora-text-4);
 }
+
+
+/* Знак Tabora: точка прокатывается по перекладине туда и обратно и останавливается на своём месте */
+.tb-mark {
+  display: block;
+}
+
+.tb-mark .dot {
+  transform-box: view-box;
+  animation: tb-roll 2.6s cubic-bezier(0.55, 0, 0.3, 1) 0.2s 1 both;
+}
+
+@keyframes tb-roll {
+  0% { transform: translateX(0); }
+  38% { transform: translateX(106px); }
+  62% { transform: translateX(22px); }
+  84% { transform: translateX(106px); }
+  92% { transform: translateX(100px); }
+  100% { transform: translateX(106px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tb-mark .dot {
+    animation: none;
+    transform: translateX(106px);
+  }
+}
+
+#tabora-start .hero .start-mark {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 22px;
+  border-radius: 15px;
+  box-shadow: 0 14px 40px color-mix(in srgb, var(--tabora-accent) 30%, transparent);
+}

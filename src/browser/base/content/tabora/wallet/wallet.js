@@ -127,7 +127,7 @@ Object.assign(Tabora, {
     const create = this.wButton("Создать кошелёк", "primary", () => this.walletStartFlow("create"));
     const imp = this.wButton("Импортировать фразу", "", () => this.walletStartFlow("import"));
     return h("div", { class: "w-welcome" }, null, [
-      h("div", { class: "w-orb" }),
+      h("div", { class: "w-orb" }, null, [this.markSvg()]),
       h("b", {}, "Кошелёк Tabora"),
       h("p", {}, "Одна seed-фраза, сети Ethereum и L2, Bitcoin, Solana и TRON. Ключи только на этом устройстве, зашифрованы вашим паролем."),
       h("div", { class: "w-actions" }, null, [create, imp]),

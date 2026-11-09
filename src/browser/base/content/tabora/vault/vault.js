@@ -74,7 +74,7 @@ Object.assign(Tabora, {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const create = this.wButton("Создать сейф", "primary", () => this.vaultCreateSheet());
     return h("div", { class: "w-welcome" }, null, [
-      h("div", { class: "w-orb" }),
+      h("div", { class: "w-orb" }, null, [this.markSvg()]),
       h("b", {}, "Сейф Tabora"),
       h("p", {}, "Пароли сайтов и коды двухфакторной защиты шифруются одним ключом. Ключ хранится в связке ключей этого компьютера и, по желанию, под мастер-паролем для переноса."),
       h("div", { class: "w-actions" }, null, [create]),
