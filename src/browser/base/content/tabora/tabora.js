@@ -943,11 +943,30 @@ var Tabora = {
 
   applySidebarCompact(on, animate = true) {
     const root = document.documentElement;
-    root.toggleAttribute("tabora-sidebar-animating", animate);
-    if (on) {
-      root.setAttribute("tabora-sidebar", "compact");
-    } else {
+    clearTimeout(this._sidebarAnimTimer);
+    const finish = () => {
+      root.removeAttribute("tabora-sidebar-anim");
+      this._sidebarAnimTimer = null;
+      if (this.drawer?.open) {
+        this.sizeDrawer();
+      }
+    };
+    if (!animate) {
+      root.removeAttribute("tabora-sidebar-anim");
+      on ? root.setAttribute("tabora-sidebar", "compact") : root.removeAttribute("tabora-sidebar");
+    } else if (on) {
+      // сворачивание: ширина уезжает при развёрнутой раскладке, компактная включается в конце
       root.removeAttribute("tabora-sidebar");
+      root.setAttribute("tabora-sidebar-anim", "collapse");
+      this._sidebarAnimTimer = setTimeout(() => {
+        root.setAttribute("tabora-sidebar", "compact");
+        finish();
+      }, 330);
+    } else {
+      // разворачивание: раскладка сразу развёрнутая, ширина растёт, подписи проявляются
+      root.removeAttribute("tabora-sidebar");
+      root.setAttribute("tabora-sidebar-anim", "expand");
+      this._sidebarAnimTimer = setTimeout(finish, 360);
     }
     const tabs = document.getElementById("tabbrowser-tabs");
     if (tabs) {
@@ -965,10 +984,7 @@ var Tabora = {
       toggle.title = on ? "Развернуть панель (⌘B)" : "Свернуть панель (⌘B)";
     }
     this.tipHide();
-    if (animate) {
-      setTimeout(() => root.removeAttribute("tabora-sidebar-animating"), 260);
-    }
-    if (this.drawer?.open) {
+    if (!animate && this.drawer?.open) {
       this.sizeDrawer();
     }
   },

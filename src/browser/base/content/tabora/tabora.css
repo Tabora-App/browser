@@ -992,8 +992,95 @@ sidebar-main {
 
 #navigator-toolbox > #tabora-sidebar-foot { order: 8; }
 
-:root[tabora-sidebar-animating] #navigator-toolbox {
-  transition: width 220ms cubic-bezier(0.2, 0, 0, 1), min-width 220ms cubic-bezier(0.2, 0, 0, 1);
+/* Переход между режимами колонки в два такта: сначала ширина плавно меняется, а содержимое
+   остаётся в развёрнутой раскладке и подрезается (ничего не прыгает), подписи гаснут или
+   проявляются; компактная раскладка включается уже на узкой колонке. */
+:root[tabora-sidebar-anim] #navigator-toolbox {
+  transition: width 320ms cubic-bezier(0.2, 0, 0, 1), min-width 320ms cubic-bezier(0.2, 0, 0, 1);
+  overflow: hidden;
+}
+
+:root[tabora-sidebar-anim] #navigator-toolbox > * {
+  min-width: calc(236px - 10px);
+  flex-shrink: 0;
+}
+
+:root[tabora-sidebar-anim="collapse"] {
+  --tabora-sidebar-width: 52px;
+}
+
+:root[tabora-sidebar-anim="collapse"] #tabbrowser-tabs[orient="vertical"] .tab-label-container,
+:root[tabora-sidebar-anim="collapse"] #tabbrowser-tabs[orient="vertical"] .tab-close-button,
+:root[tabora-sidebar-anim="collapse"] #tabora-tabs-head > span,
+:root[tabora-sidebar-anim="collapse"] #tabora-wallet-card > span,
+:root[tabora-sidebar-anim="collapse"] #tabora-mail > span,
+:root[tabora-sidebar-anim="collapse"] #tabora-downloads .title,
+:root[tabora-sidebar-anim="collapse"] #tabora-downloads .head .kbd,
+:root[tabora-sidebar-anim="collapse"] #tabora-spaces .tabora-space,
+:root[tabora-sidebar-anim="collapse"] #urlbar-container,
+:root[tabora-sidebar-anim="collapse"] #nav-bar > #nav-bar-customization-target > #back-button,
+:root[tabora-sidebar-anim="collapse"] #nav-bar > #nav-bar-customization-target > #forward-button,
+:root[tabora-sidebar-anim="collapse"] #nav-bar > #nav-bar-customization-target > #stop-reload-button,
+:root[tabora-sidebar-anim="collapse"] #nav-bar #PanelUI-button {
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+:root[tabora-sidebar-anim="expand"] #tabbrowser-tabs[orient="vertical"] .tab-label-container,
+:root[tabora-sidebar-anim="expand"] #tabbrowser-tabs[orient="vertical"] .tab-close-button,
+:root[tabora-sidebar-anim="expand"] #tabora-tabs-head > span,
+:root[tabora-sidebar-anim="expand"] #tabora-wallet-card > span,
+:root[tabora-sidebar-anim="expand"] #tabora-mail > span,
+:root[tabora-sidebar-anim="expand"] #tabora-downloads .title,
+:root[tabora-sidebar-anim="expand"] #tabora-downloads .head .kbd,
+:root[tabora-sidebar-anim="expand"] #tabora-spaces .tabora-space,
+:root[tabora-sidebar-anim="expand"] #urlbar-container,
+:root[tabora-sidebar-anim="expand"] #nav-bar > #nav-bar-customization-target > #back-button,
+:root[tabora-sidebar-anim="expand"] #nav-bar > #nav-bar-customization-target > #forward-button,
+:root[tabora-sidebar-anim="expand"] #nav-bar > #nav-bar-customization-target > #stop-reload-button,
+:root[tabora-sidebar-anim="expand"] #nav-bar #PanelUI-button {
+  opacity: 1;
+  transition: opacity 200ms ease 140ms;
+}
+
+@starting-style {
+  :root[tabora-sidebar-anim="expand"] #tabbrowser-tabs[orient="vertical"] .tab-label-container,
+  :root[tabora-sidebar-anim="expand"] #tabbrowser-tabs[orient="vertical"] .tab-close-button,
+  :root[tabora-sidebar-anim="expand"] #tabora-tabs-head > span,
+  :root[tabora-sidebar-anim="expand"] #tabora-wallet-card > span,
+  :root[tabora-sidebar-anim="expand"] #tabora-mail > span,
+  :root[tabora-sidebar-anim="expand"] #tabora-downloads .title,
+  :root[tabora-sidebar-anim="expand"] #tabora-downloads .head .kbd,
+  :root[tabora-sidebar-anim="expand"] #tabora-spaces .tabora-space,
+  :root[tabora-sidebar-anim="expand"] #urlbar-container,
+  :root[tabora-sidebar-anim="expand"] #nav-bar > #nav-bar-customization-target > #back-button,
+  :root[tabora-sidebar-anim="expand"] #nav-bar > #nav-bar-customization-target > #forward-button,
+  :root[tabora-sidebar-anim="expand"] #nav-bar > #nav-bar-customization-target > #stop-reload-button,
+  :root[tabora-sidebar-anim="expand"] #nav-bar #PanelUI-button {
+    opacity: 0;
+  }
+}
+
+/* Компактные элементы проявляются, а не возникают рывком */
+:root[tabora-sidebar="compact"] #tabora-compact-search,
+:root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] .tab-icon-stack,
+:root[tabora-sidebar="compact"] #tabora-sidebar-foot .icon-btn,
+:root[tabora-sidebar="compact"] #tabora-spaces .tabora-space {
+  transition: opacity 180ms ease;
+}
+
+@starting-style {
+  :root[tabora-sidebar="compact"] #tabora-compact-search,
+  :root[tabora-sidebar="compact"] #tabora-spaces .tabora-space {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[tabora-sidebar-anim] #navigator-toolbox,
+  :root[tabora-sidebar-anim] #navigator-toolbox * {
+    transition: none !important;
+  }
 }
 
 #tabora-sidebar-foot {
@@ -1038,7 +1125,7 @@ sidebar-main {
 }
 
 :root[tabora-sidebar="compact"] {
-  --tabora-sidebar-width: 64px;
+  --tabora-sidebar-width: 52px;
 }
 
 :root[tabora-sidebar="compact"] #tabora-sidebar-toggle svg {
@@ -1122,13 +1209,13 @@ sidebar-main {
 }
 
 :root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] .tab-icon-stack {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
 }
 
 :root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] .tab-icon-image {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 
 /* Память: только число и полоска */
@@ -1156,8 +1243,8 @@ sidebar-main {
 :root[tabora-sidebar="compact"] #tabora-mail,
 :root[tabora-sidebar="compact"] #tabora-downloads .head {
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   margin-inline: auto;
   padding: 0;
   gap: 0;
@@ -1194,8 +1281,8 @@ sidebar-main {
 }
 
 :root[tabora-sidebar="compact"] #tabora-compact-search {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 12px;
   margin-top: 4px;
 }
@@ -1203,17 +1290,17 @@ sidebar-main {
 :root[tabora-sidebar="compact"] #tabora-spaces {
   background: transparent;
   padding: 2px 0;
-  gap: 10px;
+  gap: 6px;
 }
 
 :root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] #pinned-tabs-container::part(items-wrapper) {
-  grid-template-columns: repeat(2, 26px);
+  grid-template-columns: repeat(2, 22px);
   justify-content: center;
   gap: 4px;
 }
 
 :root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] #pinned-tabs-container .tabbrowser-tab {
-  height: 26px !important;
+  height: 22px !important;
 }
 
 :root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] #pinned-tabs-container .tab-background {
@@ -1226,10 +1313,10 @@ sidebar-main {
 }
 
 :root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab:not(#pinned-tabs-container .tabbrowser-tab) {
-  width: 40px !important;
-  min-width: 40px !important;
-  max-width: 40px !important;
-  height: 40px !important;
+  width: 36px !important;
+  min-width: 36px !important;
+  max-width: 36px !important;
+  height: 36px !important;
   margin-inline: auto !important;
   margin-block: 2px !important; /* плитки не слипаются */
   padding-block: 0 !important;
