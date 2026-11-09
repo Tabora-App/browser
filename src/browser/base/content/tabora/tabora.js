@@ -37,6 +37,7 @@ var Tabora = {
     Services.scriptloader.loadSubScript("chrome://browser/content/tabora/wallet/wallet.js", window);
     Services.scriptloader.loadSubScript("chrome://browser/content/tabora/wallet/provider.js", window);
     Services.scriptloader.loadSubScript("chrome://browser/content/tabora/wallet/send.js", window);
+    Services.scriptloader.loadSubScript("chrome://browser/content/tabora/vault/vault.js", window);
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
       "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initWalletProvider", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "startTimers", "updateTitle", "localizeUrlbar",
@@ -2366,8 +2367,8 @@ var Tabora = {
           this.openMail();
           e.preventDefault();
           e.stopPropagation();
-        } else if (e.shiftKey && this.drawer && { KeyJ: "downloads", KeyH: "history", KeyI: "media", KeyS: "spaces", KeyB: "bookmarks", KeyW: "wallet" }[e.code]) {
-          this.toggleDrawer({ KeyJ: "downloads", KeyH: "history", KeyI: "media", KeyS: "spaces", KeyB: "bookmarks", KeyW: "wallet" }[e.code]);
+        } else if (e.shiftKey && this.drawer && { KeyJ: "downloads", KeyH: "history", KeyI: "media", KeyS: "spaces", KeyB: "bookmarks", KeyW: "wallet", KeyK: "codes" }[e.code]) {
+          this.toggleDrawer({ KeyJ: "downloads", KeyH: "history", KeyI: "media", KeyS: "spaces", KeyB: "bookmarks", KeyW: "wallet", KeyK: "codes" }[e.code]);
           e.preventDefault();
           e.stopPropagation();
         } else if (!e.shiftKey && e.key === "Escape" && this.drawer?.open) {

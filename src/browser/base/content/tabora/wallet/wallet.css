@@ -731,6 +731,28 @@
   margin-bottom: 2px;
 }
 
+/* строка «название → значение» в карточках настроек: значение под названием, без переносов названия */
+#tabora-drawer .w-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 0;
+}
+
+#tabora-drawer .w-kv span {
+  font: 500 11px/1.2 var(--tabora-font);
+  color: var(--tabora-text-4);
+}
+
+#tabora-drawer .w-kv b {
+  font: 600 13px/1.3 var(--tabora-font);
+  color: var(--tabora-text);
+}
+
+#tabora-drawer .w-kv.muted b {
+  color: var(--tabora-text-3, var(--tabora-text-4));
+}
+
 #tabora-drawer .w-node {
   display: flex;
   align-items: center;
