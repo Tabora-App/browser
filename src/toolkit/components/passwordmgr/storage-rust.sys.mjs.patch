@@ -1,0 +1,134 @@
+diff --git a/toolkit/components/passwordmgr/storage-rust.sys.mjs b/toolkit/components/passwordmgr/storage-rust.sys.mjs
+index 16af79d554..5b4e932672 100644
+--- a/toolkit/components/passwordmgr/storage-rust.sys.mjs
++++ b/toolkit/components/passwordmgr/storage-rust.sys.mjs
+@@ -28,6 +28,7 @@ import {
+   LoginEntryWithMeta,
+   BulkResultEntry,
+   createLoginStoreWithNssKeymanager,
++  createLoginStoreWithStaticKeyManager,
+ } from "moz-src:///toolkit/components/uniffi-bindgen-gecko-js/components/generated/RustLogins.sys.mjs";
+ 
+ // AuthenticationCanceled must come from db_crypto, not logins: it is the error
+@@ -519,6 +520,8 @@ class RustLoginStorageAuthenticator extends PrimaryPasswordAuthenticator {
+ export class LoginManagerRustStorage {
+   #storageAdapter = null;
+   #authenticator = null;
++  // Tabora: ключ выдан сейфом, запросов мастер-пароля NSS не будет
++  #taboraVault = false;
+   #initializationPromise = null;
+   #initTimings = null;
+   // Only the active backend fires storage-changed events to avoid duplicates
+@@ -575,11 +578,24 @@ export class LoginManagerRustStorage {
+       await initRustComponents(profilePath);
+       const componentsReadyAt = ChromeUtils.now();
+ 
+-      this.#authenticator = new RustLoginStorageAuthenticator();
+-      const store = await createLoginStoreWithNssKeymanager(
+-        path,
+-        this.#authenticator
+-      );
++      let store;
++      if (Services.prefs.getBoolPref("tabora.vault.passwords", false)) {
++        // Tabora: ключ хранилища выдаёт сейф (связка ключей системы или
++        // мастер-пароль); NSS и key4.db в шифровании паролей не участвуют.
++        const { Vault } = ChromeUtils.importESModule(
++          "chrome://browser/content/tabora/vault/Vault.sys.mjs"
++        );
++        const key = await Vault.ensureForPasswords();
++        await this.#taboraRekey(path, key);
++        store = await createLoginStoreWithStaticKeyManager(path, key);
++        this.#taboraVault = true;
++      } else {
++        this.#authenticator = new RustLoginStorageAuthenticator();
++        store = await createLoginStoreWithNssKeymanager(
++          path,
++          this.#authenticator
++        );
++      }
+       this.#initTimings = {
+         initRustComponentsMs: Math.round(componentsReadyAt - startedAt),
+         createRustStoreMs: Math.round(ChromeUtils.now() - componentsReadyAt),
+@@ -605,6 +621,73 @@ export class LoginManagerRustStorage {
+     }
+   }
+ 
++  /**
++   * Tabora: одноразовое перешифрование существующей базы ключом сейфа. Обычный
++   * Firefox шифровал поля ключом NSS; под статическим ключом такие записи молча
++   * пропускаются при чтении, поэтому переносим их до первого обращения.
++   */
++  async #taboraRekey(path, key) {
++    const REKEY_PREF = "tabora.vault.passwordsRekeyed";
++    if (
++      Services.prefs.getBoolPref(REKEY_PREF, false) ||
++      !(await IOUtils.exists(path))
++    ) {
++      Services.prefs.setBoolPref(REKEY_PREF, true);
++      return;
++    }
++    const Rust = ChromeUtils.importESModule(
++      "moz-src:///toolkit/components/uniffi-bindgen-gecko-js/components/generated/RustLogins.sys.mjs"
++    );
++    const authenticator = new RustLoginStorageAuthenticator();
++    const nss = await createLoginStoreWithNssKeymanager(path, authenticator);
++    let records = [];
++    try {
++      records = await nss.list();
++    } catch (e) {
++      if (authenticator.authCanceled) {
++        // без мастер-пароля NSS старые записи не прочитать: повторим при следующем запуске
++        await nss.shutdown();
++        throw e;
++      }
++      this.log(`Tabora rekey: nothing readable with the NSS key (${e.message})`);
++    }
++    if (records.length) {
++      const moved = records.map(
++        r =>
++          new Rust.LoginEntryWithMeta({
++            entry: new Rust.LoginEntry({
++              origin: r.origin,
++              httpRealm: r.httpRealm,
++              formActionOrigin: r.formActionOrigin,
++              usernameField: r.usernameField,
++              passwordField: r.passwordField,
++              password: r.password,
++              username: r.username,
++            }),
++            meta: new Rust.LoginMeta({
++              id: r.id,
++              timesUsed: r.timesUsed,
++              timeCreated: r.timeCreated,
++              timeLastUsed: r.timeLastUsed,
++              timePasswordChanged: r.timePasswordChanged,
++              timeLastBreachAlertDismissed: r.timeLastBreachAlertDismissed,
++            }),
++          })
++      );
++      await nss.deleteMany(records.map(r => r.id));
++      await nss.shutdown();
++      const fresh = await createLoginStoreWithStaticKeyManager(path, key);
++      await fresh.addManyWithMeta(moved);
++      await fresh.shutdown();
++      this.log(
++        `Tabora rekey: ${moved.length} logins re-encrypted with the vault key`
++      );
++    } else {
++      await nss.shutdown();
++    }
++    Services.prefs.setBoolPref(REKEY_PREF, true);
++  }
++
+   /**
+    * Terminate all pending writes. After this call, the store can't be used.
+    */
+@@ -1241,7 +1324,7 @@ export class LoginManagerRustStorage {
+   }
+ 
+   get isLoggedIn() {
+-    return this._crypto.isLoggedIn;
++    return this.#taboraVault || this._crypto.isLoggedIn;
+   }
+ }
+ 

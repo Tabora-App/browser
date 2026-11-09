@@ -63,6 +63,8 @@ function checkPassword(password) {
   }
 }
 
+Services.obs.addObserver(() => Vault._onQuit(), "quit-application-granted");
+
 export const Vault = {
   TOPIC: "tabora-vault-changed",
   MIN_PASSWORD,
@@ -183,7 +185,61 @@ export const Vault = {
   _adopt(key) {
     wipe(this._key);
     this._key = key;
+    const waiters = this._waiters;
+    this._waiters = [];
+    waiters.forEach(w => w.resolve(true));
     this.notify("unlocked");
+  },
+
+  _waiters: [],
+  waiting: false, // хранилище паролей ждёт ключ (сейф настроен на мастер-пароль при запуске)
+
+  /** Ждёт разблокировки; при выходе из браузера отклоняется, чтобы не держать остановку. */
+  waitUnlocked() {
+    if (this.unlocked) {
+      return Promise.resolve(true);
+    }
+    return new Promise((resolve, reject) => this._waiters.push({ resolve, reject }));
+  },
+
+  _onQuit() {
+    const waiters = this._waiters;
+    this._waiters = [];
+    waiters.forEach(w => w.reject(new Error("Браузер закрывается")));
+  },
+
+  /* ---------- пароли сайтов (Rust-хранилище Firefox) ---------- */
+
+  /** Ключ для хранилища паролей в формате JWK, который принимает статический менеджер ключей
+   * app-services logins (kty oct, 32 байта). Сейф при необходимости создаётся сам: без
+   * мастер-пароля, только под связкой ключей системы. */
+  async ensureForPasswords() {
+    await this.ready();
+    if (!this.exists) {
+      await this.create({});
+    }
+    if (!this.unlocked) {
+      await this.unlock();
+    }
+    if (!this.unlocked) {
+      // интерфейс покажет просьбу ввести мастер-пароль: сразу, если окно уже есть,
+      // или при загрузке окна по флагу waiting
+      this.waiting = true;
+      this.notify("waiting");
+      try {
+        await this.waitUnlocked();
+      } finally {
+        this.waiting = false;
+      }
+    }
+    return this.passwordsKeyJwk();
+  },
+
+  passwordsKeyJwk() {
+    const k = this.subkey("passwords");
+    const b64url = base64.encode(k).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    wipe(k);
+    return JSON.stringify({ kty: "oct", k: b64url, kid: "tabora-passwords" });
   },
 
   /** Новый сейф: ключ K, обёртка системы и, если задан, мастер-пароль. */

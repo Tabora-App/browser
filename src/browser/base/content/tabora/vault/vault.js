@@ -14,9 +14,31 @@ Object.assign(Tabora, {
   vaultMod() {
     if (!this._vaultMod) {
       this._vaultMod = ChromeUtils.importESModule("chrome://browser/content/tabora/vault/Vault.sys.mjs");
-      Services.obs.addObserver(() => this.drawerDirty("codes"), this._vaultMod.Vault.TOPIC);
+      Services.obs.addObserver((subject, topic, what) => {
+        this.drawerDirty("codes");
+        if (what === "waiting") {
+          this.vaultAskUnlock();
+        }
+      }, this._vaultMod.Vault.TOPIC);
     }
     return this._vaultMod;
+  },
+
+  /** Хранилище паролей ждёт ключ: сейф настроен на мастер-пароль при запуске. Просим ввести его в активном окне. */
+  vaultAskUnlock() {
+    if (window !== Services.wm.getMostRecentBrowserWindow() || !this.drawer?.el) {
+      return;
+    }
+    this.notice("Введите мастер-пароль сейфа, чтобы включить пароли сайтов");
+    this.openDrawer("codes");
+  },
+
+  /** При загрузке окна: модуль мог начать ждать ключ до появления окна. */
+  vaultInit() {
+    const { Vault } = this.vaultMod();
+    if (Vault.waiting) {
+      setTimeout(() => this.vaultAskUnlock(), 400);
+    }
   },
 
   /* ---- Раздел ящика ---------------------------------------------------- */
@@ -231,6 +253,16 @@ Object.assign(Tabora, {
     );
   },
 });
+
+// наблюдатель сейфа регистрируется сразу после загрузки оболочки: хранилище паролей
+// могло начать ждать ключ ещё до появления окна
+setTimeout(() => {
+  try {
+    Tabora.vaultInit();
+  } catch (e) {
+    console.error("Tabora vault init", e);
+  }
+}, 1000);
 
 Tabora.SECTIONS.codes = { label: "Коды", key: "⌘⇧K", noSearch: true, icon: ["M4 7h16v10H4z", "M8 12h.01", "M12 12h.01", "M16 12h.01"], wide: false };
 if (!Tabora.SECTION_ORDER.includes("codes")) {

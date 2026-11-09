@@ -1,0 +1,34 @@
+diff --git a/toolkit/components/passwordmgr/LoginStorageMigrator.sys.mjs b/toolkit/components/passwordmgr/LoginStorageMigrator.sys.mjs
+index 2f06eec51d..77fd6b8b90 100644
+--- a/toolkit/components/passwordmgr/LoginStorageMigrator.sys.mjs
++++ b/toolkit/components/passwordmgr/LoginStorageMigrator.sys.mjs
+@@ -270,6 +270,13 @@ export class LoginStorageMigrator {
+       );
+ 
+       const activeStore = this.#completeMigration();
++      if (
++        Services.prefs.getBoolPref("tabora.vault.passwords", false) &&
++        numberOfLoginsMigrated === numberOfLoginsToMigrate
++      ) {
++        // Tabora: все пароли под ключом сейфа, копии под ключом NSS не нужны
++        await this.#jsonStorage.removeAllLoginsAsync();
++      }
+       endState = this.#state;
+       return activeStore;
+     } catch (e) {
+@@ -327,6 +334,15 @@ export class LoginStorageMigrator {
+   }
+ 
+   #exceedMigrationBudget() {
++    if (Services.prefs.getBoolPref("tabora.vault.passwords", false)) {
++      // Tabora: откат на JSON-хранилище запрещён, пароли должны быть под ключом
++      // сейфа. Остаёмся на JSON только до следующего запуска и пробуем снова.
++      this.#logger.log(
++        "Migration budget exceeded; Tabora keeps Rust enabled, retry next startup"
++      );
++      Services.prefs.setIntPref(PREFS.MIGRATION_ATTEMPTS, 0);
++      return this.#jsonStorage;
++    }
+     this.#logger.log("Migration budget exceeded; disabling Rust backend");
+     Services.prefs.setBoolPref(PREFS.RUST_ENABLED, false);
+     Services.prefs.setIntPref(PREFS.MIGRATION_ATTEMPTS, 0);

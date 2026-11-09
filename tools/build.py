@@ -428,12 +428,13 @@ def cmd_export(args: argparse.Namespace) -> None:
             continue
         if (ENGINE / rel).is_symlink():
             continue
-        diff = git(["diff", "--", rel])
+        # сырой вывод без strip(): хвостовые пустые строки контекста — часть патча
+        diff = run(["git", "diff", "--", rel], cwd=ENGINE, capture=True).stdout
         if not diff.strip():
             continue
         target = SRC / (rel + ".patch")
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(diff + "\n")
+        target.write_text(diff)
         exported += 1
         log(f"→ {target.relative_to(ROOT)}")
     if not exported:
