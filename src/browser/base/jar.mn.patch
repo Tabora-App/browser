@@ -2,7 +2,7 @@ diff --git a/browser/base/jar.mn b/browser/base/jar.mn
 index b2b5db6040..fbeefdc452 100644
 --- a/browser/base/jar.mn
 +++ b/browser/base/jar.mn
-@@ -33,6 +33,73 @@ browser.jar:
+@@ -33,6 +33,75 @@ browser.jar:
          content/browser/aboutTabCrashed.xhtml         (content/aboutTabCrashed.xhtml)
          content/browser/blanktab.html                 (content/blanktab.html)
          content/browser/browser.js                    (content/browser.js)
@@ -29,6 +29,8 @@ index b2b5db6040..fbeefdc452 100644
 +        content/browser/tabora/wallet/provider.js  (content/tabora/wallet/provider.js)
 +        content/browser/tabora/wallet/send.js  (content/tabora/wallet/send.js)
 +        content/browser/tabora/vault/Vault.sys.mjs  (content/tabora/vault/Vault.sys.mjs)
++        content/browser/tabora/vault/Kdf.sys.mjs  (content/tabora/vault/Kdf.sys.mjs)
++        content/browser/tabora/vault/kdf.worker.mjs  (content/tabora/vault/kdf.worker.mjs)
 +        content/browser/tabora/vault/vault.js  (content/tabora/vault/vault.js)
 +        content/browser/tabora/vault/vault.css  (content/tabora/vault/vault.css)
 +        content/browser/tabora/vault/Otp.sys.mjs  (content/tabora/vault/Otp.sys.mjs)

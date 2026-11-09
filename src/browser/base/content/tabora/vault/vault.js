@@ -102,6 +102,8 @@ Object.assign(Tabora, {
     const err = h("div", { class: "w-error", hidden: "true" });
     const go = this.wButton("Разблокировать", "primary", async () => {
       go.disabled = true;
+      go.classList.add("loading");
+      err.hidden = true;
       try {
         await Vault.unlockWithPassword(pass.input.value);
       } catch (e) {
@@ -109,6 +111,8 @@ Object.assign(Tabora, {
         err.hidden = false;
         go.disabled = false;
         pass.input.select();
+      } finally {
+        go.classList.remove("loading");
       }
     });
     pass.input.addEventListener("keydown", e => {

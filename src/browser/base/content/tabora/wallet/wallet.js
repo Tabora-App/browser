@@ -367,6 +367,8 @@ Object.assign(Tabora, {
     const err = h("div", { class: "w-error", hidden: "true" });
     const go = this.wButton("Разблокировать", "primary", async () => {
       go.disabled = true;
+      go.classList.add("loading");
+      err.hidden = true;
       try {
         await WalletStore.unlock(pass.input.value);
       } catch (e) {
@@ -374,6 +376,8 @@ Object.assign(Tabora, {
         err.hidden = false;
         go.disabled = false;
         pass.input.select();
+      } finally {
+        go.classList.remove("loading");
       }
     });
     pass.input.addEventListener("keydown", e => {
@@ -834,7 +838,7 @@ Object.assign(Tabora, {
           this.notice(e.message);
         }
       }), 13);
-      const row = h("div", { class: "w-node", style: `--c:${chain.color}` }, null, [h("img", { class: "w-logo small", src: chain.logo, alt: "" }), h("span", { class: "w-node-name" }, chain.name), select, add]);
+      const row = h("div", { class: "w-node rpc", style: `--c:${chain.color}` }, null, [h("img", { class: "w-logo small", src: chain.logo, alt: "" }), h("span", { class: "w-node-name" }, chain.name), select, add]);
       nodes.append(row);
       if (window.TaboraSelect) {
         window.TaboraSelect.enhance(select, { compact: true });
@@ -887,7 +891,7 @@ Object.assign(Tabora, {
       h("b", { class: "w-group-title" }, "Безопасность"),
       h("div", { class: "w-node" }, null, [h("span", { class: "w-node-name" }, "Автоблокировка"), autolock]),
       h("div", { class: "w-node" }, null, [h("span", { class: "w-node-name" }, "Пароль при подписи"), signSel]),
-      WalletStore.signPassword.skip ? h("p", { class: "w-hint" }, "Пока кошелёк разблокирован, подпись не спрашивает пароль: любой за этим компьютером сможет подписать транзакцию до автоблокировки. Опасные операции и суммы от порога спрашивают пароль всегда.") : null,
+      WalletStore.signPassword.skip ? h("p", { class: "w-hint" }, "Пока кошелёк разблокирован, подпись не спрашивает пароль: любой за этим компьютером сможет подписать транзакцию до автоблокировки. Опасные операции и суммы от порога спрашивают пароль всегда.") : h("span", { hidden: "true" }),
       this.wButton(`Показать фразу: ${wallet.name}`, "ghost", () => this.walletRevealFlow(wallet)),
       this.wButton(WalletStore.passwordless ? "Установить пароль" : "Сменить пароль", "ghost", () => this.walletChangePasswordFlow()),
       this.wButton(`Удалить кошелёк «${wallet.name}» из браузера`, "ghost danger", () => this.walletPassword("Удаление кошелька", "Фраза останется только у вас. Введите пароль для подтверждения.", async pass => {

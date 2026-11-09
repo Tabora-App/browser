@@ -1567,3 +1567,76 @@
   align-self: flex-end;
   color: var(--w-danger);
 }
+
+/* Маленькие кнопки в карточках кошелька (плюс у контактов и нод, крестик у сайтов):
+   один вид везде, без рамки и серого квадрата, подсветка только при наведении */
+#tabora-drawer .w-group-head .icon-btn,
+#tabora-drawer .w-head-row .icon-btn,
+#tabora-drawer .w-node .icon-btn,
+#tabora-drawer .w-site .icon-btn {
+  -moz-appearance: none;
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tabora-text-4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  outline: none;
+  transition: background-color var(--tabora-ease), color var(--tabora-ease);
+}
+
+#tabora-drawer .w-group-head .icon-btn:hover,
+#tabora-drawer .w-head-row .icon-btn:hover,
+#tabora-drawer .w-node .icon-btn:hover {
+  background: var(--tabora-raised);
+  color: var(--tabora-text-strong);
+}
+
+#tabora-drawer .w-site .icon-btn:hover {
+  background: var(--w-danger-soft);
+  color: var(--w-danger);
+  border: 0;
+}
+
+/* Строки «подпись — поле выбора»: подпись получает всё свободное место, поле по содержимому */
+#tabora-drawer .w-node {
+  gap: 8px;
+}
+
+#tabora-drawer .w-node-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#tabora-drawer .w-node .tsel {
+  flex: none;
+  width: auto;
+  max-width: 58%;
+}
+
+/* В настройках подпись может переноситься на две строки, чтобы не обрезаться */
+#tabora-drawer .w-node:not(.rpc) .w-node-name {
+  white-space: normal;
+  line-height: 1.25;
+}
+
+/* Строки нод: короткое имя сети фиксированной ширины, поле адреса одной ширины во всех строках */
+#tabora-drawer .w-node.rpc .w-node-name {
+  flex: 0 0 76px;
+}
+
+#tabora-drawer .w-node.rpc .tsel {
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+}

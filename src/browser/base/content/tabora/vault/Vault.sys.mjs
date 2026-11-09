@@ -13,8 +13,9 @@
  * он выдаёт ключ (или производные ключи) другим модулям. */
 
 const C = ChromeUtils.importESModule("chrome://browser/content/tabora/wallet/vendor/crypto.sys.mjs");
-const { argon2id, randomBytes, base64, utf8ToBytes, hmac, sha256 } = C;
+const { randomBytes, base64, utf8ToBytes, hmac, sha256 } = C;
 const { OSKeyStore } = ChromeUtils.importESModule("resource://gre/modules/OSKeyStore.sys.mjs");
+const { argon2idAsync } = ChromeUtils.importESModule("chrome://browser/content/tabora/vault/Kdf.sys.mjs");
 
 const FILE = () => PathUtils.join(PathUtils.profileDir, "tabora-vault.json");
 const KDF = { t: 3, m: 65536, p: 1, dkLen: 32 }; // Argon2id: 64 МБ, 3 прохода
@@ -88,7 +89,7 @@ async function decrypt(raw, box) {
   return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: base64.decode(box.iv) }, key, base64.decode(box.ct)));
 }
 
-function deriveKey(password, salt, kdf) {
+async function deriveKey(password, salt, kdf) {
   const t = Number(kdf?.t);
   const m = Number(kdf?.m);
   const p = Number(kdf?.p);
@@ -97,7 +98,7 @@ function deriveKey(password, salt, kdf) {
   if (!(t >= 1 && t <= 10) || !(m >= 8192 && m <= 1 << 20) || !(p >= 1 && p <= 4) || dkLen !== 32 || !(salt?.length >= 8)) {
     throw new Error("Файл сейфа повреждён: параметры KDF вне допустимых границ");
   }
-  return argon2id(utf8ToBytes(password.normalize("NFKC")), salt, { t, m, p, dkLen });
+  return argon2idAsync(utf8ToBytes(password.normalize("NFKC")), salt, { t, m, p, dkLen });
 }
 
 function checkPassword(password) {
@@ -195,7 +196,7 @@ export const Vault = {
   async _wrapPassword(key, password) {
     checkPassword(password);
     const salt = randomBytes(16);
-    const raw = deriveKey(password, salt, KDF);
+    const raw = await deriveKey(password, salt, KDF);
     try {
       return { kdf: { alg: "argon2id", salt: base64.encode(salt), ...KDF }, ...(await encrypt(raw, key)) };
     } finally {
@@ -204,7 +205,7 @@ export const Vault = {
   },
 
   async _unwrapPassword(box, password) {
-    const raw = deriveKey(password, base64.decode(box.kdf.salt), box.kdf);
+    const raw = await deriveKey(password, base64.decode(box.kdf.salt), box.kdf);
     try {
       return await decrypt(raw, box);
     } catch (e) {

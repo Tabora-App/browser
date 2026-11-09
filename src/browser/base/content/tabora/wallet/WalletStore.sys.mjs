@@ -11,6 +11,7 @@
 
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 const C = ChromeUtils.importESModule("chrome://browser/content/tabora/wallet/vendor/crypto.sys.mjs");
+const { argon2idAsync } = ChromeUtils.importESModule("chrome://browser/content/tabora/vault/Kdf.sys.mjs");
 const { sha256, keccak_256, hmac, sha512, argon2id, randomBytes, bytesToHex, hexToBytes, utf8ToBytes, secp256k1, ed25519, bip39, wordlistEnglish, HDKey, base58, base58check, base64, btc } = C;
 
 const FILE = () => PathUtils.join(PathUtils.profileDir, "tabora-wallet.json");
@@ -205,7 +206,7 @@ async function decrypt(raw, iv, ct) {
   return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: base64.decode(iv) }, key, base64.decode(ct)));
 }
 
-function deriveKey(password, salt, kdf) {
+async function deriveKey(password, salt, kdf) {
   const t = Number(kdf?.t);
   const m = Number(kdf?.m);
   const p = Number(kdf?.p);
@@ -214,7 +215,7 @@ function deriveKey(password, salt, kdf) {
   if (!(t >= 1 && t <= 10) || !(m >= 8192 && m <= 1 << 20) || !(p >= 1 && p <= 4) || dkLen !== 32 || !(salt?.length >= 8)) {
     throw new Error("Файл кошелька повреждён: параметры KDF вне допустимых границ");
   }
-  return argon2id(utf8ToBytes(password.normalize("NFKC")), salt, { t, m, p, dkLen });
+  return argon2idAsync(utf8ToBytes(password.normalize("NFKC")), salt, { t, m, p, dkLen });
 }
 
 async function removeLoginKey() {
@@ -448,7 +449,7 @@ export const WalletStore = {
   async create({ mnemonic, password, name = "Кошелёк 1" }) {
     const passwordless = !password;
     const salt = randomBytes(16);
-    const raw = passwordless ? await loginKey(true) : deriveKey(password, salt, KDF);
+    const raw = passwordless ? await loginKey(true) : await deriveKey(password, salt, KDF);
     this.data = {
       v: 2,
       createdAt: new Date().toISOString(),
@@ -555,7 +556,7 @@ export const WalletStore = {
     if (!this.data) {
       throw new Error("Кошелька нет");
     }
-    const raw = this.data.passwordless ? await loginKey(false) : deriveKey(password || "", base64.decode(this.data.kdf.salt), this.data.kdf);
+    const raw = this.data.passwordless ? await loginKey(false) : await deriveKey(password || "", base64.decode(this.data.kdf.salt), this.data.kdf);
     if (!raw) {
       throw new Error("Ключ хранилища не найден");
     }
@@ -681,7 +682,7 @@ export const WalletStore = {
       const passwordless = !newPassword;
       const salt = randomBytes(16);
       await removeLoginKey(); // старый ключ хранилища больше не нужен ни в одном из режимов
-      const raw = passwordless ? await loginKey(true) : deriveKey(newPassword, salt, KDF);
+      const raw = passwordless ? await loginKey(true) : await deriveKey(newPassword, salt, KDF);
       this.data.check = await encrypt(raw, utf8ToBytes(CHECK_V3));
       this._macRequired = true;
       for (let i = 0; i < this.wallets.length; i++) {
