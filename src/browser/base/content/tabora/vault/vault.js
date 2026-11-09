@@ -89,12 +89,14 @@ Object.assign(Tabora, {
   vaultLockedView() {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { Vault } = this.vaultMod();
+    const recovery = Vault.hasRecoveryKey ? this.wButton("Войти по ключу восстановления", "ghost", () => this.vaultRecoverySheet()) : null;
     if (!Vault.hasPassword) {
       return h("div", { class: "w-locked" }, null, [
         h("div", { class: "w-lock-mark" }, null, [this.wIcon(["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], 22, 1.8)]),
         h("b", {}, "Сейф недоступен"),
-        h("p", { class: "w-sub" }, "Ключ сейфа хранится в связке ключей системы, а мастер-пароль не задан. Если файл перенесён с другого компьютера, открыть его нельзя."),
-      ]);
+        h("p", { class: "w-sub" }, Vault.hasRecoveryKey ? "Ключ сейфа хранится в связке ключей другого компьютера, мастер-пароль не задан. Откройте сейф ключом восстановления и задайте пароль." : "Ключ сейфа хранится в связке ключей системы, а мастер-пароль не задан. Если файл перенесён с другого компьютера, открыть его нельзя."),
+        recovery,
+      ].filter(Boolean));
     }
     const pass = this.wField("Мастер-пароль", { type: "password", autocomplete: "off" });
     const err = h("div", { class: "w-error", hidden: "true" });
@@ -120,8 +122,8 @@ Object.assign(Tabora, {
       h("div", { class: "w-lock-mark" }, null, [this.wIcon(["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], 22, 1.8)]),
       h("b", {}, "Сейф заблокирован"),
       h("p", { class: "w-sub" }, Vault.hasOsKey && Vault.osUnlockEnabled ? "Связка ключей системы не ответила. Введите мастер-пароль." : "Введите мастер-пароль"),
-      pass.wrap, err, go,
-    ]);
+      pass.wrap, err, go, recovery,
+    ].filter(Boolean));
   },
 
   otpMod() {
@@ -805,7 +807,7 @@ Object.assign(Tabora, {
       this.notice(err.message);
       return;
     }
-    const pre = h("pre", { class: "mono w-phrase", masked: "true" }, url);
+    const pre = h("pre", { class: "v-secret", masked: "true" }, url);
     const reveal = this.wButton("Показать", "ghost small", () => {
       pre.toggleAttribute("masked");
       reveal.textContent = pre.hasAttribute("masked") ? "Показать" : "Скрыть";
@@ -845,6 +847,15 @@ Object.assign(Tabora, {
           this.notice(e.message);
         }
       }));
+    }
+    const rkAt = Vault.recoveryKeyCreatedAt;
+    kids.push(row("Ключ восстановления", rkAt ? `создан ${new Date(rkAt).toLocaleDateString("ru-RU")} · откроет сейф без мастер-пароля` : "не создан · забытый мастер-пароль не восстановить", rkAt ? "" : "muted"));
+    kids.push(this.wButton(rkAt ? "Создать новый ключ восстановления" : "Создать ключ восстановления", "ghost", () => this.vaultRecoveryCreateSheet()));
+    if (rkAt) {
+      kids.push(this.wButton("Отозвать ключ восстановления", "ghost", () => this.vaultOwnerCheck("Отзыв ключа восстановления", async () => {
+        await Vault.revokeRecoveryKey();
+        this.notice("Ключ восстановления отозван");
+      })));
     }
     kids.push(this.wButton("Заблокировать сейф", "ghost", () => Vault.lock()));
     const { Otp } = this.otpMod();
@@ -924,6 +935,63 @@ Object.assign(Tabora, {
     return box;
   },
 
+  /** Подтверждение владельца перед чувствительным действием: мастер-пароль, а без него — проверка системы (Touch ID или пароль macOS). */
+  vaultOwnerCheck(title, onOk) {
+    const { Vault } = this.vaultMod();
+    if (Vault.hasPassword) {
+      const pass = this.wField("Мастер-пароль", { type: "password", autocomplete: "current-password" });
+      this.vaultSheet(title, "Подтвердите, что это вы.", [pass.wrap], "Продолжить", async () => {
+        await Vault.verifyPassword(pass.input.value);
+        setTimeout(() => onOk().catch(e => this.notice(e.message)), 0);
+      });
+      return;
+    }
+    (async () => {
+      const { OSKeyStore } = ChromeUtils.importESModule("resource://gre/modules/OSKeyStore.sys.mjs");
+      const r = await OSKeyStore.ensureLoggedIn(`Tabora: ${title}`, "", window).catch(() => ({ authenticated: false }));
+      if (!r?.authenticated) {
+        this.notice("Подтверждение не пройдено");
+        return;
+      }
+      await onOk();
+    })().catch(e => this.notice(e.message));
+  },
+
+  vaultRecoveryCreateSheet() {
+    const { Vault } = this.vaultMod();
+    const h = (t, a, x, c) => this.html(t, a, x, c);
+    this.vaultOwnerCheck("Ключ восстановления", async () => {
+      const key = await Vault.createRecoveryKey();
+      const pre = h("pre", { class: "v-secret", masked: "true" }, key);
+      const reveal = this.wButton("Показать", "ghost small", () => {
+        pre.toggleAttribute("masked");
+        reveal.textContent = pre.hasAttribute("masked") ? "Показать" : "Скрыть";
+      });
+      const copy = this.wButton("Скопировать", "ghost small", () => {
+        this.copyWithExpiry(key, 60000);
+        this.notice("Ключ скопирован · буфер очистится через минуту");
+      });
+      const box = this.vaultSheet(
+        "Ключ восстановления",
+        "Запишите его и храните отдельно от компьютера. Он откроет сейф, если вы забудете мастер-пароль, и показывается только сейчас. Прежний ключ, если был, больше не действует.",
+        [pre, h("div", { class: "w-actions" }, null, [reveal, copy]), h("p", { class: "w-hint" }, "Кто знает этот ключ, сможет открыть сейф на любом компьютере.")],
+        "Я записал ключ",
+        async () => {}
+      );
+      box.classList.add("w-reveal");
+    });
+  },
+
+  vaultRecoverySheet() {
+    const { Vault } = this.vaultMod();
+    const key = this.wField("Ключ восстановления", { placeholder: "XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX", autocomplete: "off", spellcheck: "false" });
+    this.vaultSheet("Вход по ключу восстановления", "Введите ключ, записанный при настройке сейфа. После входа задайте новый мастер-пароль.", [key.wrap], "Открыть", async () => {
+      await Vault.unlockWithRecoveryKey(key.input.value);
+      this.notice("Сейф открыт ключом восстановления");
+      setTimeout(() => this.vaultPasswordSheet({ reset: true }), 400);
+    });
+  },
+
   vaultCreateSheet() {
     const { Vault } = this.vaultMod();
     const h = (t, a, x, c) => this.html(t, a, x, c);
@@ -941,14 +1009,14 @@ Object.assign(Tabora, {
     );
   },
 
-  vaultPasswordSheet() {
+  vaultPasswordSheet({ reset = false } = {}) {
     const { Vault } = this.vaultMod();
-    const change = Vault.hasPassword;
+    const change = Vault.hasPassword && !reset;
     const old = change ? this.wField("Текущий мастер-пароль", { type: "password", autocomplete: "current-password" }) : null;
     const f = this.vaultPasswordFields(change ? "Новый мастер-пароль" : "Мастер-пароль");
     this.vaultSheet(
-      change ? "Сменить мастер-пароль" : "Задать мастер-пароль",
-      change ? null : "С мастер-паролем файл сейфа можно перенести на другой компьютер. Забытый пароль восстановить нельзя.",
+      change ? "Сменить мастер-пароль" : reset ? "Новый мастер-пароль" : "Задать мастер-пароль",
+      change ? null : reset ? "Сейф открыт ключом восстановления. Задайте новый мастер-пароль: старый больше не действует." : "С мастер-паролем файл сейфа можно перенести на другой компьютер. Забытый пароль восстановить нельзя.",
       [old?.wrap, f.pass.wrap, f.again.wrap].filter(Boolean),
       "Сохранить",
       async () => {

@@ -20,6 +20,49 @@ const FILE = () => PathUtils.join(PathUtils.profileDir, "tabora-vault.json");
 const KDF = { t: 3, m: 65536, p: 1, dkLen: 32 }; // Argon2id: 64 МБ, 3 прохода
 const CHECK = "tabora-vault-v1";
 const MIN_PASSWORD = 8;
+const RK_INFO = "tabora-vault-recovery-v1";
+const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+/** Ключ восстановления: 20 случайных байт, показывается как 8 групп по 4 символа Base32. */
+function rkFormat(bytes) {
+  let out = "";
+  let bits = 0;
+  let value = 0;
+  for (const b of bytes) {
+    value = ((value << 8) | b) >>> 0;
+    bits += 8;
+    while (bits >= 5) {
+      out += B32[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+      value &= (1 << bits) - 1;
+    }
+  }
+  return out.match(/.{1,4}/g).join("-");
+}
+
+function rkParse(text) {
+  const clean = String(text || "").toUpperCase().replace(/[^A-Z2-7]/g, "").replace(/0/g, "O").replace(/1/g, "L").replace(/8/g, "B");
+  if (clean.length !== 32) {
+    throw new Error("Ключ восстановления: 32 символа в 8 группах по 4");
+  }
+  const out = [];
+  let bits = 0;
+  let value = 0;
+  for (const ch of clean) {
+    value = ((value << 5) | B32.indexOf(ch)) >>> 0;
+    bits += 5;
+    if (bits >= 8) {
+      out.push((value >>> (bits - 8)) & 0xff);
+      bits -= 8;
+      value &= (1 << bits) - 1;
+    }
+  }
+  return Uint8Array.from(out);
+}
+
+function rkDerive(rk) {
+  return hmac(sha256, rk, utf8ToBytes(RK_INFO));
+}
 
 function wipe(...arrays) {
   for (const a of arrays) {
@@ -347,6 +390,71 @@ export const Vault = {
     this.requireUnlocked();
     await this.verifyPassword(oldPassword);
     await this.setPassword(newPassword);
+  },
+
+  /* ---------- ключ восстановления ---------- */
+
+  get hasRecoveryKey() {
+    return !!this.data?.rk;
+  },
+
+  get recoveryKeyCreatedAt() {
+    return this.data?.rk?.createdAt || null;
+  },
+
+  /** Новый ключ восстановления (старый перестаёт действовать). Возвращает строку для записи: показывается один раз. */
+  async createRecoveryKey() {
+    this.requireUnlocked();
+    const rk = randomBytes(20);
+    const k = rkDerive(rk);
+    try {
+      this.data.rk = { ...(await encrypt(k, this._key)), createdAt: new Date().toISOString() };
+    } finally {
+      wipe(k);
+    }
+    await this.save();
+    const text = rkFormat(rk);
+    wipe(rk);
+    return text;
+  },
+
+  async revokeRecoveryKey() {
+    this.requireUnlocked();
+    this.data.rk = null;
+    await this.save();
+  },
+
+  /** Разблокировка ключом восстановления (мастер-пароль забыт); затем интерфейс просит задать новый пароль. */
+  async unlockWithRecoveryKey(text) {
+    await this.ready();
+    if (!this.exists) {
+      throw new Error("Сейф не создан");
+    }
+    if (!this.data.rk) {
+      throw new Error("Ключ восстановления для этого сейфа не создавался");
+    }
+    const rk = rkParse(text);
+    const k = rkDerive(rk);
+    let key;
+    try {
+      key = await decrypt(k, this.data.rk);
+    } catch (e) {
+      throw new Error("Неверный ключ восстановления");
+    } finally {
+      wipe(k, rk);
+    }
+    if (!(await this._verify(key))) {
+      wipe(key);
+      throw new Error("Файл сейфа повреждён");
+    }
+    this._adopt(key);
+    if (!this.data.os && this.osUnlockEnabled) {
+      this.data.os = await this._wrapOs(key);
+      if (this.data.os) {
+        await this.save();
+      }
+    }
+    return true;
   },
 
   /** Тихая разблокировка: выключить (ключ только по мастер-паролю) или включить обратно. */

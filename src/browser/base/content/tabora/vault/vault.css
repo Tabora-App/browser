@@ -242,3 +242,22 @@
   font: 500 10.5px/1.3 var(--tabora-font);
   color: var(--tabora-text-4);
 }
+
+/* Секрет в листе: ключ восстановления, ссылка для переноса. Размыт, пока не нажато «Показать». */
+#tabora-drawer .v-secret {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--tabora-field);
+  border: 1px solid var(--tabora-field-border);
+  font: 500 13px/1.5 var(--tabora-mono);
+  color: var(--tabora-text-strong);
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+}
+
+#tabora-drawer .v-secret[masked] {
+  filter: blur(6px);
+  user-select: none;
+}
