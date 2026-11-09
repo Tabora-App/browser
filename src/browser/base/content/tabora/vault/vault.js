@@ -90,7 +90,7 @@ Object.assign(Tabora, {
     if (window !== Services.wm.getMostRecentBrowserWindow() || !this.drawer?.el) {
       return;
     }
-    this.notice("Файл сейфа повреждён: выберите, как восстановиться");
+    this.notice(this.vaultMod().Vault.corrupt?.missing ? "Файл сейфа пропал: выберите, как восстановиться" : "Файл сейфа повреждён: выберите, как восстановиться");
     this.openDrawer("codes");
   },
 
@@ -238,7 +238,8 @@ Object.assign(Tabora, {
     ].filter(Boolean));
   },
 
-  /** Файл сейфа повреждён: варианты восстановления, новый сейф — только осознанно. */
+  /** Файл сейфа повреждён или пропал (а данные под его ключом остались): варианты
+   * восстановления, новый сейф — только осознанно. */
   vaultCorruptView() {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { Vault } = this.vaultMod();
@@ -258,8 +259,8 @@ Object.assign(Tabora, {
     };
     const kids = [
       h("div", { class: "w-lock-mark" }, null, [this.wIcon(["M12 9v4", "M12 17h.01", "M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"], 22, 1.8)]),
-      h("b", {}, "Файл сейфа повреждён"),
-      h("p", { class: "w-sub" }, `Причина: ${c.reason || "неизвестна"}. ${c.movedTo ? `Файл сохранён рядом как ${PathUtils.filename(c.movedTo)}. ` : ""}Пароли сайтов и коды недоступны, пока вы не выберете, как восстановиться.`),
+      h("b", {}, c.missing ? "Файл сейфа пропал" : "Файл сейфа повреждён"),
+      h("p", { class: "w-sub" }, `Причина: ${c.reason || "неизвестна"}. ${c.movedTo ? `Файл сохранён рядом как ${PathUtils.filename(c.movedTo)}. ` : ""}${c.missing && !c.backup ? "Если у вас есть копия файла tabora-vault.json, закройте браузер и верните её в папку профиля. " : ""}Пароли сайтов и коды недоступны, пока вы не выберете, как восстановиться.`),
       err,
     ];
     if (c.backup) {
@@ -322,6 +323,7 @@ Object.assign(Tabora, {
         allFrames: true,
         messageManagerGroups: ["browsers"],
         safeForUntrustedWebProcess: true,
+        remoteTypes: ["web"],
       });
     } catch (e) {
       // уже зарегистрирован другим окном
@@ -386,7 +388,7 @@ Object.assign(Tabora, {
       });
     }));
     return h("div", { class: "w-group" }, null, [
-      h("b", { class: "w-group-title" }, "Файл кодов повреждён"),
+      h("b", { class: "w-group-title" }, c.missing ? "Файл кодов пропал" : "Файл кодов повреждён"),
       h("p", { class: "w-hint" }, `Причина: ${c.reason}. ${c.movedTo ? `Файл сохранён как ${PathUtils.filename(c.movedTo)}. ` : ""}Пока вы не выберете, что делать, новые коды не сохраняются.`),
       h("div", { class: "w-actions" }, null, actions),
     ]);
@@ -1270,12 +1272,17 @@ Object.assign(Tabora, {
         this.notice(r.complete ? "Ключ восстановления отозван, ключ сейфа заменён" : "Ключ отозван; часть данных перешифруется при следующей разблокировке");
       })));
     }
+    if (rkAt && Account?.signedIn && Account.recoveryNeedsUpgrade) {
+      // на сервере лежит ключ проверки прежнего образца (общий секрет): заменить его открытым
+      // ключом можно только с самим ключом восстановления, а он нигде не хранится
+      kids.push(row("Сброс пароля аккаунта", "защищён по прежней схеме · создайте новый ключ восстановления, чтобы сервер хранил только открытый ключ", "muted"));
+    }
     if (Vault.rekeyPending) {
       kids.push(row("Смена ключа", "не завершена · данные перешифруются при следующей разблокировке", "muted"));
     }
     kids.push(this.wButton("Заблокировать сейф", "ghost", () => {
       Vault.lock();
-      this.notice("Сейф заблокирован: пароли сайтов и коды закрыты до проверки");
+      this.notice(Vault.lockPending ? "Сейф заблокируется, как только закончится текущая операция с ключом" : "Сейф заблокирован: пароли сайтов и коды закрыты до проверки");
     }));
     const { Otp } = this.otpMod();
     const off = Otp.clockOffset;

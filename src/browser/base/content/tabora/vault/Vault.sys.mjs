@@ -12,11 +12,12 @@
  * Блок check позволяет убедиться, что распакован именно K. Открытый K существует
  * только в памяти, пока сейф разблокирован. Пароли и секреты модуль не хранит:
  * он выдаёт производные ключи другим модулям и перешифровывает их данные при смене K
- * (registerRekey). Повреждённый файл не заменяется молча: он переносится в сторону,
- * а пользователь выбирает, как восстановиться. */
+ * (registerRekey). Повреждённый или пропавший файл не заменяется молча: пока в профиле
+ * есть следы прежнего сейфа (копия, повреждённый файл, данные под его ключом), новый ключ
+ * создаётся только по явному выбору пользователя. */
 
 const C = ChromeUtils.importESModule("chrome://tabora/content/wallet/vendor/crypto.sys.mjs");
-const { randomBytes, base64, utf8ToBytes, hmac, sha256 } = C;
+const { randomBytes, base64, utf8ToBytes, hmac, sha256, ed25519 } = C;
 const { OSKeyStore } = ChromeUtils.importESModule("resource://gre/modules/OSKeyStore.sys.mjs");
 const { argon2idAsync } = ChromeUtils.importESModule("chrome://tabora/content/vault/Kdf.sys.mjs");
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
@@ -24,18 +25,24 @@ const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/
 const FILE = () => PathUtils.join(PathUtils.profileDir, "tabora-vault.json");
 const BACKUP = () => PathUtils.join(PathUtils.profileDir, "tabora-vault.json.bak");
 const GUARD_FILE = () => PathUtils.join(PathUtils.profileDir, "tabora-auth-guard.json");
+const GUARD_PREF = "tabora.vault.guard"; // копия счётчика попыток в настройках профиля
+const MAX_DELAY = 15 * 60000; // наибольшая пауза после неверных паролей
+const REKEYED_PREF = "tabora.vault.passwordsRekeyed"; // хранилище паролей зашифровано ключом сейфа
 const KDF = { t: 3, m: 65536, p: 1, dkLen: 32 }; // Argon2id: 64 МБ, 3 прохода
 const CHECK = "tabora-vault-v1";
 const MIN_PASSWORD = 6;
 const RK_INFO = "tabora-vault-recovery-v1";
-const RK_ACCOUNT_INFO = "tabora-account-recovery-v1";
+const RK_ACCOUNT_INFO = "tabora-account-recovery-v1"; // прежняя схема: общий ключ HMAC (только для миграции)
+const RK_ACCOUNT_SIGN_INFO = "tabora-account-recovery-ed25519-v1"; // зерно пары Ed25519 для подписи сброса
 const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 // Модули, чьи данные зашифрованы подключами сейфа. Перед сменой ключа они загружаются,
 // чтобы успеть подписаться на перешифровку (см. registerRekey).
 const REKEY_MODULES = ["chrome://tabora/content/vault/Otp.sys.mjs", "chrome://tabora/content/mail/MailStore.sys.mjs"];
 // Файлы, зашифрованные ключом сейфа: при осознанном создании нового сейфа после
 // повреждения они переносятся в сторону, а не перезаписываются.
-const DEPENDENT_FILES = ["logins.db", "logins.db-wal", "logins.db-shm", "tabora-otp.json", "tabora-otp.json.bak", "tabora-mail.json"];
+const DEPENDENT_FILES = ["logins.db", "logins.db-wal", "logins.db-shm", "tabora-otp.json", "tabora-otp.json.bak", "tabora-mail.json", "tabora-agent.json"];
+const VAULT_CORRUPT_RE = /^tabora-vault\.json\.corrupt-[^.]+$/;
+const OTP_CORRUPT_RE = /^tabora-otp\.json\.corrupt-[^.]+$/;
 
 /** Ключ восстановления: 20 случайных байт, показывается как 8 групп по 4 символа Base32. */
 function rkFormat(bytes) {
@@ -99,6 +106,44 @@ function jwkOf(bytes) {
   return JSON.stringify({ kty: "oct", k: b64url, kid: "tabora-passwords" });
 }
 
+function isZeroKey(key) {
+  return !key || key.length !== 32 || typeof key.every !== "function" || key.every(b => b === 0);
+}
+
+function sameBytes(a, b) {
+  if (!a || !b || a.length !== b.length) {
+    return false;
+  }
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a[i] ^ b[i];
+  }
+  return diff === 0;
+}
+
+function sameBox(a, b) {
+  return !!a && !!b && a.iv === b.iv && a.ct === b.ct;
+}
+
+/** Запись JSON: атомарно (временный файл и переименование), со сбросом буферов на диск, права
+ * 0600, затем проверочное чтение. Ошибка, если на диске оказалось не то, что записывали. */
+export async function writeJsonVerified(path, data) {
+  const text = JSON.stringify(data);
+  await IOUtils.writeJSON(path, data, { tmpPath: path + ".tmp", flush: true });
+  try {
+    await IOUtils.setPermissions(path, 0o600);
+  } catch (e) {}
+  let back;
+  try {
+    back = JSON.stringify(await IOUtils.readJSON(path));
+  } catch (e) {
+    throw new Error(`Файл ${PathUtils.filename(path)} не читается после записи: ${e.message}`);
+  }
+  if (back !== text) {
+    throw new Error(`Файл ${PathUtils.filename(path)} записан с ошибкой`);
+  }
+}
+
 async function aesKey(raw) {
   return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
@@ -125,6 +170,30 @@ async function deriveKey(password, salt, kdf) {
     throw new Error("Файл сейфа повреждён: параметры KDF вне допустимых границ");
   }
   return argon2idAsync(utf8ToBytes(password.normalize("NFKC")), salt, { t, m, p, dkLen });
+}
+
+/** Открытый текст блока check: известная строка и, после перевода строки, признаки сейфа
+ * (JSON). Признаки защищены ключом K: убрать их из файла, не зная K, нельзя. */
+function checkPlain(flags) {
+  const on = Object.keys(flags || {}).filter(k => flags[k]).sort();
+  return on.length ? `${CHECK}\n${JSON.stringify(Object.fromEntries(on.map(k => [k, true])))}` : CHECK;
+}
+
+/** Признаки из блока check, если ключ к нему подходит; иначе null. */
+async function readCheck(key, check) {
+  try {
+    const text = new TextDecoder().decode(await decrypt(key, check));
+    if (text === CHECK) {
+      return {};
+    }
+    if (text.startsWith(`${CHECK}\n`)) {
+      const flags = JSON.parse(text.slice(CHECK.length + 1));
+      return flags && typeof flags === "object" && !Array.isArray(flags) ? flags : null;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
 }
 
 function checkPasswordLength(password) {
@@ -230,25 +299,60 @@ export function checkNewPassword(password) {
 /* ---------- счётчик неудачных попыток ---------- */
 
 /** Неверные пароли считаются во всех проверках (вход, разблокировка, смена пароля, перепривязка)
- * и хранятся в файле: перезапуск браузера паузу не снимает. После трёх ошибок пауза 5 с,
- * затем удваивается до 15 минут. */
+ * и хранятся в файле и, копией, в настройках профиля (берётся большее): перезапуск браузера и
+ * удаление одного из них паузу не снимают. После трёх ошибок пауза 5 с, затем удваивается до
+ * 15 минут. Попытка учитывается ДО проверки пароля (begin): параллельные проверки и
+ * закрытие браузера во время проверки не дают бесплатных попыток. Пауза никогда не длиннее
+ * 15 минут от текущего момента: сдвиг часов или правка файла не запирают владельца. */
 const Guard = {
+  MAX_DELAY,
   _d: null,
+  _resync: false,
+  _gen: 0, // растёт при каждом успехе: опоздавшая ошибка параллельной попытки не теряется
+  _chain: Promise.resolve(),
+
+  _serial(fn) {
+    const run = this._chain.then(fn, fn);
+    this._chain = run.catch(() => {});
+    return run;
+  },
+
+  _clean(d) {
+    const n = v => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.floor(Number(v)) : 0);
+    return { failures: Math.min(n(d?.failures), 1000), lockedUntil: n(d?.lockedUntil), lastAt: n(d?.lastAt) };
+  },
 
   async _load() {
     if (!this._d) {
-      let d = {};
+      let file = null;
       try {
-        d = (await IOUtils.readJSON(GUARD_FILE())) || {};
+        file = await IOUtils.readJSON(GUARD_FILE());
       } catch (e) {}
-      this._d = { failures: Number(d.failures) || 0, lockedUntil: Number(d.lockedUntil) || 0, lastAt: Number(d.lastAt) || 0 };
+      let pref = null;
+      try {
+        pref = JSON.parse(Services.prefs.getStringPref(GUARD_PREF, "") || "null");
+      } catch (e) {}
+      const a = this._clean(file);
+      const b = this._clean(pref);
+      this._d = { failures: Math.max(a.failures, b.failures), lockedUntil: Math.max(a.lockedUntil, b.lockedUntil), lastAt: Math.max(a.lastAt, b.lastAt) };
+      // файл и копия в настройках разошлись (один из них удалили или откатили): выровнять
+      const want = JSON.stringify(this._d);
+      this._resync = JSON.stringify(a) !== want || JSON.stringify(b) !== want;
     }
     return this._d;
   },
 
-  async _save() {
+  async _save({ urgent = false } = {}) {
     try {
-      await IOUtils.writeJSON(GUARD_FILE(), this._d, { tmpPath: GUARD_FILE() + ".tmp" });
+      Services.prefs.setStringPref(GUARD_PREF, JSON.stringify(this._d));
+      if (urgent) {
+        Services.prefs.savePrefFile?.(null); // иначе настройки запишутся только через некоторое время
+      }
+    } catch (e) {
+      console.error("Tabora vault: копия счётчика попыток не сохранена", e);
+    }
+    try {
+      await IOUtils.writeJSON(GUARD_FILE(), this._d, { tmpPath: GUARD_FILE() + ".tmp", flush: true });
       await IOUtils.setPermissions(GUARD_FILE(), 0o600);
     } catch (e) {
       console.error("Tabora vault: счётчик попыток не сохранён", e);
@@ -256,39 +360,111 @@ const Guard = {
   },
 
   delayFor(failures) {
-    return failures < 3 ? 0 : Math.min(15 * 60000, 5000 * 2 ** (failures - 3));
+    return failures < 3 ? 0 : Math.min(MAX_DELAY, 5000 * 2 ** Math.min(failures - 3, 30));
   },
 
-  async check() {
+  /** Приводит состояние к текущим часам. Время последней попытки в будущем (часы перевели
+   * назад или файл правили) — пауза один раз отсчитывается заново от текущего момента; пауза
+   * дольше положенной для этого числа ошибок обрезается. Возвращает true, если что-то изменилось. */
+  _normalize(now) {
+    const d = this._d;
+    const delay = this.delayFor(d.failures);
+    let changed = false;
+    if (d.lastAt > now) {
+      d.lastAt = now;
+      d.lockedUntil = delay ? now + delay : 0;
+      changed = true;
+    }
+    if (d.lockedUntil > now + delay) {
+      d.lockedUntil = now + delay;
+      changed = true;
+    }
+    return changed;
+  },
+
+  async _gate() {
     const d = await this._load();
     const now = Date.now();
-    let until = d.lockedUntil;
-    if (now < d.lastAt) {
-      // часы перевели назад: пауза отсчитывается от текущего момента
-      until = Math.max(until, now + this.delayFor(d.failures));
+    if (this._normalize(now) || this._resync) {
+      this._resync = false;
+      await this._save({ urgent: true });
     }
-    if (now < until) {
-      const s = Math.ceil((until - now) / 1000);
+    if (now < d.lockedUntil) {
+      const s = Math.ceil((d.lockedUntil - now) / 1000);
       const wait = s >= 120 ? `${Math.ceil(s / 60)} мин` : `${s} с`;
-      throw Object.assign(new Error(`Слишком много неверных попыток: подождите ${wait}`), { code: "locked-out", retryAt: until });
+      throw Object.assign(new Error(`Слишком много неверных попыток: подождите ${wait}`), { code: "locked-out", retryAt: d.lockedUntil });
     }
+    return d;
   },
 
-  async fail() {
+  async _bump() {
     const d = await this._load();
-    d.failures++;
+    d.failures = Math.min(d.failures + 1, 1000);
     d.lastAt = Date.now();
     d.lockedUntil = d.lastAt + this.delayFor(d.failures);
-    await this._save();
+    await this._save({ urgent: true });
   },
 
-  async success() {
-    const d = await this._load();
-    if (d.failures || d.lockedUntil) {
-      d.failures = 0;
-      d.lockedUntil = 0;
-      await this._save();
-    }
+  /** Можно ли сейчас проверять пароль (попытку не резервирует). */
+  check() {
+    return this._serial(async () => {
+      await this._gate();
+    });
+  },
+
+  /** Начать проверку пароля: попытка сразу записывается как неудачная. Затем вызывающий
+   * сообщает исход: ok() — пароль подошёл (счётчик сбрасывается), fail() — не подошёл
+   * (попытка уже учтена), cancel() — проверка не состоялась по другой причине (возврат). */
+  begin() {
+    return this._serial(async () => {
+      await this._gate();
+      await this._bump();
+      const gen = this._gen;
+      let done = false;
+      const once = fn => async () => {
+        if (!done) {
+          done = true;
+          await fn();
+        }
+      };
+      return {
+        ok: once(() => this.success()),
+        fail: once(() =>
+          this._serial(async () => {
+            if (gen !== this._gen) {
+              await this._bump(); // счётчик успели сбросить параллельным успехом: ошибка учитывается заново
+            }
+          })
+        ),
+        cancel: once(() =>
+          this._serial(async () => {
+            const d = await this._load();
+            if (gen === this._gen && d.failures > 0) {
+              d.failures--;
+              d.lockedUntil = d.failures >= 3 ? d.lastAt + this.delayFor(d.failures) : 0;
+              await this._save();
+            }
+          })
+        ),
+      };
+    });
+  },
+
+  /** Неверный пароль, проверенный не здесь (сервер аккаунта отклонил вход). */
+  fail() {
+    return this._serial(() => this._bump());
+  },
+
+  success() {
+    return this._serial(async () => {
+      const d = await this._load();
+      this._gen++;
+      if (d.failures || d.lockedUntil) {
+        d.failures = 0;
+        d.lockedUntil = 0;
+        await this._save();
+      }
+    });
   },
 };
 
@@ -323,7 +499,7 @@ export const Vault = {
   guard: Guard,
   data: null, // файл: обёртки ключа и настройки, секретов здесь нет
   state: "unknown", // absent | ok | corrupt
-  corrupt: null, // { reason, movedTo, backup, salvage, unreadable } для повреждённого файла
+  corrupt: null, // { reason, movedTo, backup, salvage, unreadable, missing } для повреждённого или пропавшего файла
   needsPassword: false, // перешифровке паролей из-под основного пароля Firefox нужен мастер-пароль
   passwordsMode: null, // vault | nss — каким ключом сейчас зашифровано хранилище паролей
   _key: null, // K, пока сейф разблокирован
@@ -333,6 +509,10 @@ export const Vault = {
   _loading: null,
   _unlocking: null,
   _queue: Promise.resolve(),
+  _running: 0, // идёт операция с файлом и ключом (_exclusive)
+  _lockPending: false, // блокировку попросили во время операции: применится сразу после неё
+  _lockWaiters: [],
+  _flags: null, // признаки из блока check (см. checkPlain), известны после проверки ключа
   _waiters: [],
   _rekeyHooks: new Map(),
 
@@ -356,7 +536,17 @@ export const Vault = {
     } catch (e) {
       if (e.name === "NotFoundError") {
         this.data = null;
-        this.state = "absent";
+        const traces = await this._tracesOfVault();
+        if (!traces.length) {
+          this.state = "absent";
+          this._loaded = true;
+          return;
+        }
+        // Файла нет, но сейф здесь был: новый ключ молча не создаём (данные под прежним
+        // стали бы нечитаемыми, а запасная копия была бы затёрта). Решает пользователь.
+        console.error(`Tabora vault: файла сейфа нет, но в профиле остались: ${traces.join(", ")}`);
+        this.state = "corrupt";
+        this.corrupt = { reason: `файл сейфа пропал, а в профиле остались ${traces.join(", ")}`, missing: true, unreadable: false, movedTo: null, backup: await this._readBackup(), salvage: await this._salvageFromCorrupt() };
         this._loaded = true;
         return;
       }
@@ -394,11 +584,85 @@ export const Vault = {
       console.error("Tabora vault: повреждённый файл не перенесён", e);
       movedTo = null;
     }
-    const salvage = data && typeof data === "object" ? { rk: validBox(data.rk) ? data.rk : null, check: validBox(data.check) ? data.check : null } : null;
+    const salvage = this._salvageOf(data) || (await this._salvageFromCorrupt());
     this.data = null;
     this.state = "corrupt";
-    this.corrupt = { reason, movedTo, backup: await this._readBackup(), salvage, unreadable: false };
+    this.corrupt = { reason, movedTo, backup: await this._readBackup(), salvage, unreadable: false, missing: false };
     this._loaded = true;
+  },
+
+  _salvageOf(data) {
+    if (!data || typeof data !== "object") {
+      return null;
+    }
+    const rk = validBox(data.rk) ? data.rk : null;
+    const check = validBox(data.check) ? data.check : null;
+    return rk || check ? { rk, check } : null;
+  },
+
+  async _profileNames() {
+    try {
+      return (await IOUtils.getChildren(PathUtils.profileDir)).map(p => PathUtils.filename(p));
+    } catch (e) {
+      return [];
+    }
+  },
+
+  /** Уцелевшие части из отложенных повреждённых файлов сейфа (самый свежий первым). */
+  async _salvageFromCorrupt() {
+    const names = (await this._profileNames()).filter(n => VAULT_CORRUPT_RE.test(n)).sort().reverse();
+    for (const name of names.slice(0, 10)) {
+      try {
+        const s = this._salvageOf(await IOUtils.readJSON(PathUtils.join(PathUtils.profileDir, name)));
+        if (s?.rk) {
+          return s;
+        }
+      } catch (e) {}
+    }
+    return null;
+  },
+
+  /** Следы прежнего сейфа в профиле, когда самого файла нет: запасная копия, отложенный
+   * повреждённый файл и данные, зашифрованные ключом сейфа. Пустой список — сейфа не было. */
+  async _tracesOfVault() {
+    const dir = PathUtils.profileDir;
+    const out = [];
+    const exists = name => IOUtils.exists(PathUtils.join(dir, name)).catch(() => true);
+    const json = async name => {
+      try {
+        return { data: await IOUtils.readJSON(PathUtils.join(dir, name)) };
+      } catch (e) {
+        return e.name === "NotFoundError" ? null : { data: undefined }; // есть, но не читается
+      }
+    };
+    const names = await this._profileNames();
+    if (await exists("tabora-vault.json.bak")) {
+      out.push("запасная копия сейфа");
+    }
+    if (names.some(n => VAULT_CORRUPT_RE.test(n))) {
+      out.push("повреждённый файл сейфа");
+    }
+    if (Services.prefs.getBoolPref(REKEYED_PREF, false) && (await exists("logins.db"))) {
+      out.push("пароли сайтов");
+    }
+    let otp = false;
+    for (const name of ["tabora-otp.json", "tabora-otp.json.bak"]) {
+      const f = await json(name);
+      // пустой список кодов ничего не теряет; непустой или нечитаемый файл — след сейфа
+      otp ||= !!f && !(f.data && typeof f.data === "object" && Array.isArray(f.data.entries) && !f.data.entries.length);
+    }
+    if (otp || names.some(n => OTP_CORRUPT_RE.test(n))) {
+      out.push("коды");
+    }
+    const agent = await json("tabora-agent.json");
+    if (agent && (agent.data === undefined || agent.data?.key)) {
+      out.push("ключ агента");
+    }
+    const mail = await json("tabora-mail.json");
+    if (mail && (mail.data === undefined || mail.data?.enc)) {
+      out.push("кэш почты");
+    }
+    return out;
   },
 
   async _readBackup() {
@@ -456,32 +720,142 @@ export const Vault = {
   },
 
   /** Изменения файла и ключа выполняются строго по очереди: иначе, например, два
-   * одновременных создания сейфа дали бы два разных K, и пароли под первым пропали бы. */
+   * одновременных создания сейфа дали бы два разных K, и пароли под первым пропали бы.
+   * Блокировка (lock) в эту же очередь не встаёт, но и не вмешивается в идущую операцию:
+   * она применяется сразу после неё, до следующей операции в очереди. */
   _exclusive(fn) {
-    const run = this._queue.then(fn, fn);
+    const guarded = async () => {
+      this._running++;
+      try {
+        return await fn();
+      } finally {
+        this._running--;
+        if (!this._running && this._lockPending) {
+          this._lockNow();
+        }
+      }
+    };
+    const run = this._queue.then(guarded, guarded);
     this._queue = run.catch(() => {});
     return run;
   },
 
-  async _save() {
+  /** Запись файла сейфа: атомарно, со сбросом на диск и проверочным чтением. Запасная копия
+   * обновляется только после этого. newKey: true — пользователь явно выбрал новый ключ
+   * (смена K), прежняя копия заменяется. */
+  async _save({ newKey = false } = {}) {
     this.data.rev = (this.data.rev || 0) + 1;
     this.data.updatedAt = new Date().toISOString();
-    await IOUtils.writeJSON(FILE(), this.data, { tmpPath: FILE() + ".tmp" });
+    await writeJsonVerified(FILE(), this.data);
     try {
-      await IOUtils.setPermissions(FILE(), 0o600);
-    } catch (e) {}
-    // копия того же содержимого: если основной файл повредят, сейф восстановится из неё
-    try {
-      await IOUtils.writeJSON(BACKUP(), this.data, { tmpPath: BACKUP() + ".tmp" });
-      await IOUtils.setPermissions(BACKUP(), 0o600);
+      await this._updateBackup(newKey);
     } catch (e) {
       console.error("Tabora vault: запасная копия не записана", e);
     }
     this.notify();
   },
 
+  /** Копия того же содержимого: если основной файл повредят, сейф восстановится из неё.
+   * Копию с другим ключом (её check не открывается текущим K и не совпадает с текущим) не
+   * перезаписываем: она переносится рядом как .bak.other-<дата>. */
+  async _updateBackup(newKey) {
+    let old = null;
+    let present = true;
+    try {
+      old = await IOUtils.readJSON(BACKUP());
+    } catch (e) {
+      present = e.name !== "NotFoundError";
+    }
+    if (present && !newKey) {
+      const check = old && typeof old === "object" && validBox(old.check) ? old.check : null;
+      const same = !!check && (sameBox(check, this.data.check) || (!isZeroKey(this._key) && !!(await readCheck(this._key, check))));
+      if (!same) {
+        const aside = `${BACKUP()}.other-${stamp()}`;
+        await IOUtils.move(BACKUP(), aside, { noOverwrite: true });
+        await IOUtils.setPermissions(aside, 0o600).catch(() => {});
+        console.error(`Tabora vault: запасная копия от другого ключа сохранена как ${PathUtils.filename(aside)}`);
+      }
+    }
+    await IOUtils.writeJSON(BACKUP(), this.data, { tmpPath: BACKUP() + ".tmp", flush: true });
+    await IOUtils.setPermissions(BACKUP(), 0o600).catch(() => {});
+  },
+
   save() {
     return this._save();
+  },
+
+  /** Изменить файл сейфа: правка применяется к копии данных и остаётся в памяти только после
+   * успешной записи. */
+  async _update(change, opts) {
+    const before = this.data;
+    const next = JSON.parse(JSON.stringify(before));
+    change(next);
+    this.data = next;
+    try {
+      await this._save(opts);
+    } catch (e) {
+      this.data = before;
+      throw e;
+    }
+  },
+
+  /* ---------- проверки ключа перед записью обёрток ---------- */
+
+  /** Ключ настоящий: 32 байта, не затёрт нулями и открывает блок check. Вызывается перед
+   * записью любой обёртки: завернуть затёртый ключ значило бы потерять сейф. */
+  async _assertKey(key, check) {
+    if (isZeroKey(key)) {
+      throw new Error("Сейф заблокирован: ключ недоступен, изменения не записаны");
+    }
+    if (!(await readCheck(key, check))) {
+      throw new Error("Ключ не проходит проверку сейфа: изменения не записаны");
+    }
+  },
+
+  /** Собственная проверенная копия K для операции (затереть после использования). */
+  async _liveKey() {
+    this.requireUnlocked();
+    const key = this._key.slice();
+    if (isZeroKey(key) || !(await this._verify(key))) {
+      wipe(key);
+      throw new Error("Сейф заблокирован: ключ недоступен, изменения не записаны");
+    }
+    this._stillLive(key);
+    return key;
+  },
+
+  /** Пока шла операция (Argon2, система), ключ в памяти не заменили и не стёрли. */
+  _stillLive(copy) {
+    if (isZeroKey(this._key) || !sameBytes(this._key, copy)) {
+      throw new Error("Сейф заблокирован во время операции: изменения не записаны");
+    }
+  },
+
+  /** Признак сейфа из блока check (известен, пока сейф разблокирован). */
+  flag(name) {
+    return !!this._key && !!this._flags?.[name];
+  },
+
+  /** Поставить признак (снять нельзя): блок check перешифровывается с ним. */
+  async setFlag(name) {
+    return this._exclusive(async () => {
+      const key = await this._liveKey();
+      try {
+        if (this._flags?.[name]) {
+          return;
+        }
+        const flags = { ...this._flags, [name]: true };
+        const check = await encrypt(key, utf8ToBytes(checkPlain(flags)));
+        await this._assertKey(key, check);
+        this._stillLive(key);
+        await this._update(d => {
+          d.check = check;
+        });
+        this._flags = flags;
+      } finally {
+        wipe(key);
+      }
+    });
   },
 
   /* ---------- создание и обёртки ---------- */
@@ -524,14 +898,11 @@ export const Vault = {
   },
 
   async _verify(key, check = this.data?.check) {
-    try {
-      const plain = await decrypt(key, check);
-      const ok = new TextDecoder().decode(plain) === CHECK;
-      wipe(plain);
-      return ok;
-    } catch (e) {
-      return false;
+    const flags = isZeroKey(key) ? null : await readCheck(key, check);
+    if (flags && sameBox(check, this.data?.check)) {
+      this._flags = flags;
     }
+    return !!flags;
   },
 
   _adopt(key) {
@@ -688,12 +1059,13 @@ export const Vault = {
       }
     }
     const key = randomBytes(32);
+    const flags = { otpSigned: true }; // у нового сейфа неподписанных записей кодов быть не может
     const data = {
       version: 1,
       createdAt: new Date().toISOString(),
       rev: 0,
       settings: { osUnlock: true },
-      check: await encrypt(key, utf8ToBytes(CHECK)),
+      check: await encrypt(key, utf8ToBytes(checkPlain(flags))),
       os: await this._wrapOs(key),
       pw: password ? await this._wrapPassword(key, password) : null,
     };
@@ -701,9 +1073,19 @@ export const Vault = {
       wipe(key);
       throw new Error("Хранилище ключей системы недоступно: задайте мастер-пароль");
     }
-    this.data = data;
-    this.state = "ok";
-    await this._save();
+    const before = { data: this.data, state: this.state };
+    try {
+      await this._assertKey(key, data.check);
+      this.data = data;
+      this.state = "ok";
+      await this._save();
+    } catch (e) {
+      this.data = before.data;
+      this.state = before.state;
+      wipe(key);
+      throw e;
+    }
+    this._flags = flags;
     if (password) {
       this._passwordSet();
     }
@@ -727,10 +1109,18 @@ export const Vault = {
       if (this.state !== "corrupt" || !backup) {
         throw new Error("Запасной копии сейфа нет");
       }
+      const before = this.corrupt;
       this.data = backup;
       this.state = "ok";
       this.corrupt = null;
-      await this._save();
+      try {
+        await this._save();
+      } catch (e) {
+        this.data = null;
+        this.state = "corrupt";
+        this.corrupt = before;
+        throw e;
+      }
       this.notify("restored");
     }).then(() => this.unlock());
   },
@@ -762,10 +1152,20 @@ export const Vault = {
       const base = c.backup ? { ...c.backup } : { version: 1, createdAt: new Date().toISOString(), rev: 0, settings: { osUnlock: true }, rk: box, pw: null };
       base.check = check || (await encrypt(key, utf8ToBytes(CHECK)));
       base.os = base.settings?.osUnlock !== false ? await this._wrapOs(key) : null;
-      this.data = base;
-      this.state = "ok";
-      this.corrupt = null;
-      await this._save();
+      try {
+        await this._assertKey(key, base.check);
+        this.data = base;
+        this.state = "ok";
+        this.corrupt = null;
+        await this._save();
+        await this._verify(key); // признаки из блока check
+      } catch (e) {
+        this.data = null;
+        this.state = "corrupt";
+        this.corrupt = c;
+        wipe(key);
+        throw e;
+      }
       this._adopt(key);
       return true;
     });
@@ -780,7 +1180,10 @@ export const Vault = {
         throw new Error("Сейф не повреждён");
       }
       const tag = `vault-lost-${stamp()}`;
-      for (const name of DEPENDENT_FILES) {
+      // данные под прежним ключом, отложенные повреждённые файлы кодов и прежняя запасная
+      // копия сейфа: всё остаётся рядом под новым именем
+      const names = [...DEPENDENT_FILES, "tabora-vault.json.bak", ...(await this._profileNames()).filter(n => OTP_CORRUPT_RE.test(n))];
+      for (const name of names) {
         const path = PathUtils.join(PathUtils.profileDir, name);
         try {
           if (await IOUtils.exists(path)) {
@@ -790,20 +1193,28 @@ export const Vault = {
           console.error(`Tabora vault: ${name} не перенесён`, e);
         }
       }
-      Services.prefs.setBoolPref("tabora.vault.passwordsRekeyed", true);
+      Services.prefs.setBoolPref(REKEYED_PREF, true);
+      const before = this.corrupt;
       this.state = "absent";
       this.corrupt = null;
       this.notify("reset"); // модули сбрасывают данные в памяти
-      return this._create({});
+      try {
+        return await this._create({});
+      } catch (e) {
+        this.state = "corrupt";
+        this.corrupt = before;
+        throw e;
+      }
     });
   },
 
   /* ---------- разблокировка ---------- */
 
   /** Разблокировка через хранилище ключей системы. Без user — тихо; после явной блокировки
-   * тихо не открывается. С user: true — системная проверка (Touch ID или пароль macOS).
-   * Возвращает true, если удалось. */
-  async unlock({ user = false, prompt = "разблокировать сейф Tabora" } = {}) {
+   * тихо не открывается. С user: true — системная проверка (Touch ID или пароль macOS);
+   * reauth: false вместе с user — проверку владельца вызывающий только что провёл сам
+   * (confirmOwner). Возвращает true, если удалось. */
+  async unlock({ user = false, prompt = "разблокировать сейф Tabora", reauth = true } = {}) {
     await this.ready();
     if (this.unlocked) {
       return true;
@@ -817,10 +1228,15 @@ export const Vault = {
     if (!this._unlocking || user) {
       const attempt = (async () => {
         try {
-          const key = await this._unwrapOs(this.data.os, user && OSKeyStore.canReauth() ? prompt : false);
+          const key = await this._unwrapOs(this.data.os, user && reauth && OSKeyStore.canReauth() ? prompt : false);
           if (!(await this._verify(key))) {
             wipe(key);
             console.error("Tabora vault: ключ из хранилища системы не подходит к сейфу");
+            return false;
+          }
+          if (this._explicitLock && !user) {
+            // пока система отдавала ключ, пользователь заблокировал сейф: тихо не открываем
+            wipe(key);
             return false;
           }
           if (!this.unlocked) {
@@ -855,21 +1271,7 @@ export const Vault = {
     if (!this.data.pw) {
       throw new Error("Мастер-пароль не задан: сейф открывается только на этом компьютере");
     }
-    if (count) {
-      await Guard.check();
-    }
-    let key;
-    try {
-      key = await this._unwrapPassword(this.data.pw, password);
-    } catch (e) {
-      if (count && e.code === "bad-password") {
-        await Guard.fail();
-      }
-      throw e;
-    }
-    if (count) {
-      await Guard.success();
-    }
+    const key = await this._checkedUnwrap(password, count);
     if (!(await this._verify(key))) {
       wipe(key);
       throw new Error("Файл сейфа повреждён");
@@ -879,16 +1281,51 @@ export const Vault = {
       return true;
     }
     this._adopt(key);
-    if (!this.data.os && this.osUnlockEnabled) {
+    await this._ensureOsWrap();
+    return true;
+  },
+
+  /** Распаковка K мастер-паролем с учётом попытки: попытка записывается до проверки пароля. */
+  async _checkedUnwrap(password, count) {
+    const box = this.data.pw;
+    const attempt = count ? await Guard.begin() : null;
+    let key;
+    try {
+      key = await this._unwrapPassword(box, password);
+    } catch (e) {
+      await (e.code === "bad-password" ? attempt?.fail() : attempt?.cancel());
+      throw e;
+    }
+    await attempt?.ok();
+    return key;
+  },
+
+  /** На новом компьютере (или после включения тихой разблокировки) добавить обёртку системы. */
+  async _ensureOsWrap() {
+    if (!this.data || this.data.os || !this.osUnlockEnabled) {
+      return;
+    }
+    try {
       await this._exclusive(async () => {
-        const os = await this._wrapOs(this._key);
-        if (os) {
-          this.data.os = os;
-          await this._save();
+        if (!this._key || !this.data || this.data.os || !this.osUnlockEnabled) {
+          return;
+        }
+        const key = await this._liveKey();
+        try {
+          const os = await this._wrapOs(key);
+          if (os) {
+            this._stillLive(key);
+            await this._update(d => {
+              d.os = os;
+            });
+          }
+        } finally {
+          wipe(key);
         }
       });
+    } catch (e) {
+      console.error("Tabora vault: обёртка системы не добавлена", e);
     }
-    return true;
   },
 
   /** Проверка мастер-пароля без разблокировки. count: false — не считать ошибку попыткой
@@ -898,23 +1335,37 @@ export const Vault = {
     if (!this.data?.pw) {
       throw new Error("Мастер-пароль не задан");
     }
-    if (count) {
-      await Guard.check();
-    }
-    let key;
-    try {
-      key = await this._unwrapPassword(this.data.pw, password);
-    } catch (e) {
-      if (count && e.code === "bad-password") {
-        await Guard.fail();
-      }
-      throw e;
-    }
-    wipe(key);
-    if (count) {
-      await Guard.success();
-    }
+    wipe(await this._checkedUnwrap(password, count));
     return true;
+  },
+
+  /** Системная проверка владельца (Touch ID или пароль системы) без мастер-пароля: перед
+   * действиями, которые меняют способ открытия сейфа. false — отказ или ошибка. */
+  async confirmOwner(reason = "подтвердить действие с сейфом Tabora") {
+    try {
+      let win = null;
+      try {
+        win = Services.wm.getMostRecentBrowserWindow();
+      } catch (e) {}
+      const r = await OSKeyStore.ensureLoggedIn(reason, "", win);
+      return !!r?.authenticated;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  /** Заменить обёртку мастер-пароля у текущего K (вызывается внутри _exclusive). */
+  async _rewrapPassword(password) {
+    const key = await this._liveKey();
+    try {
+      const pw = await this._wrapPassword(key, password);
+      this._stillLive(key); // Argon2 идёт долго: ключ за это время не должны были стереть
+      await this._update(d => {
+        d.pw = pw;
+      });
+    } finally {
+      wipe(key);
+    }
   },
 
   /** Задать или заменить мастер-пароль (без смены K). Новый пароль проверяется на стойкость;
@@ -926,9 +1377,7 @@ export const Vault = {
       checkPasswordLength(password);
     }
     return this._exclusive(async () => {
-      this.requireUnlocked();
-      this.data.pw = await this._wrapPassword(this._key, password);
-      await this._save();
+      await this._rewrapPassword(password);
       this._passwordSet();
     });
   },
@@ -943,11 +1392,7 @@ export const Vault = {
     if (rotate) {
       return this.rotateKey({ password: newPassword, reason: "password" });
     }
-    await this._exclusive(async () => {
-      this.requireUnlocked();
-      this.data.pw = await this._wrapPassword(this._key, newPassword);
-      await this._save();
-    });
+    await this._exclusive(() => this._rewrapPassword(newPassword));
     return { recoveryKey: null, complete: true };
   },
 
@@ -961,8 +1406,21 @@ export const Vault = {
     return this.data?.rk?.createdAt || null;
   },
 
-  /** Ключ для доказательства владения ключом восстановления на сервере аккаунта (не
-   * связан с обёрткой сейфа: по нему K не получить). */
+  /** Пара Ed25519 из ключа восстановления: закрытым зерном подписывается запрос сброса
+   * пароля аккаунта, серверу отдаётся только открытый ключ (подделать подпись по нему нельзя;
+   * с обёрткой сейфа пара не связана: по ней K не получить). Зерно затереть после использования. */
+  recoverySigner(text) {
+    const rk = rkParse(text);
+    try {
+      const seed = hmac(sha256, rk, utf8ToBytes(RK_ACCOUNT_SIGN_INFO));
+      return { seed, publicKey: ed25519.getPublicKey(seed), sign: message => ed25519.sign(message, seed) };
+    } finally {
+      wipe(rk);
+    }
+  },
+
+  /** Прежняя схема (до Ed25519): общий ключ HMAC, который знал и сервер. Нужен только чтобы
+   * один раз подтвердить сброс аккаунту, зарегистрированному по-старому, и перевести его. */
   recoveryAuthKey(text) {
     const rk = rkParse(text);
     try {
@@ -982,18 +1440,22 @@ export const Vault = {
       return r.recoveryKey;
     }
     return this._exclusive(async () => {
-      this.requireUnlocked();
+      const key = await this._liveKey();
       const rk = randomBytes(20);
       const k = rkDerive(rk);
       try {
-        this.data.rk = { ...(await encrypt(k, this._key)), createdAt: new Date().toISOString() };
+        if (this.data.rk) {
+          throw new Error("Ключ восстановления уже создан: повторите");
+        }
+        const box = { ...(await encrypt(k, key)), createdAt: new Date().toISOString() };
+        this._stillLive(key);
+        await this._update(d => {
+          d.rk = box;
+        });
+        return rkFormat(rk);
       } finally {
-        wipe(k);
+        wipe(k, rk, key);
       }
-      await this._save();
-      const text = rkFormat(rk);
-      wipe(rk);
-      return text;
     });
   },
 
@@ -1035,40 +1497,69 @@ export const Vault = {
     } else {
       this._adopt(key);
     }
-    if (!this.data.os && this.osUnlockEnabled) {
-      await this._exclusive(async () => {
-        const os = await this._wrapOs(this._key);
-        if (os) {
-          this.data.os = os;
-          await this._save();
-        }
-      });
-    }
+    await this._ensureOsWrap();
     return true;
   },
 
   /** Тихая разблокировка: выключить (ключ только по мастер-паролю) или включить обратно. */
   async setOsUnlock(enabled) {
     return this._exclusive(async () => {
-      this.requireUnlocked();
-      if (!enabled && !this.data.pw) {
-        throw new Error("Сначала задайте мастер-пароль, иначе сейф будет не открыть");
+      const key = await this._liveKey();
+      try {
+        if (!enabled && !this.data.pw) {
+          throw new Error("Сначала задайте мастер-пароль, иначе сейф будет не открыть");
+        }
+        const os = enabled ? await this._wrapOs(key) : null;
+        if (enabled && !os) {
+          throw new Error("Хранилище ключей системы недоступно");
+        }
+        this._stillLive(key);
+        await this._update(d => {
+          d.settings ||= {};
+          d.settings.osUnlock = !!enabled;
+          d.os = os;
+        });
+      } finally {
+        wipe(key);
       }
-      this.data.settings ||= {};
-      this.data.settings.osUnlock = !!enabled;
-      this.data.os = enabled ? await this._wrapOs(this._key) : null;
-      await this._save();
     });
   },
 
+  /** Блокировку попросили во время операции с ключом: она применится сразу после неё. */
+  get lockPending() {
+    return this._lockPending;
+  },
+
   /** Явная блокировка: ключи стираются из памяти, хранилище паролей закрывается (см. патч
-   * storage-rust), и до действия пользователя (Touch ID или пароль) сейф сам не откроется. */
+   * storage-rust), и до действия пользователя (Touch ID или пароль) сейф сам не откроется.
+   * Если прямо сейчас идёт операция с ключом (смена пароля, смена K с перешифровкой), ключ
+   * у неё из-под рук не выдёргивается: иначе в файл попала бы обёртка затёртого ключа.
+   * Блокировка применяется сразу после этой операции, тихая разблокировка запрещена уже
+   * сейчас. Возвращает обещание, которое выполняется, когда ключи стёрты. */
   lock() {
+    this._explicitLock = true;
+    if (this._running) {
+      this._lockPending = true;
+      const done = new Promise(resolve => this._lockWaiters.push(resolve));
+      this.notify("lock-pending");
+      return done;
+    }
+    this._lockNow();
+    return Promise.resolve();
+  },
+
+  _lockNow() {
+    this._lockPending = false;
     this._explicitLock = true;
     wipe(this._key, this._prevKey);
     this._key = null;
     this._prevKey = null;
+    const waiters = this._lockWaiters;
+    this._lockWaiters = [];
     this.notify("locked");
+    for (const resolve of waiters) {
+      resolve();
+    }
   },
 
   /* ---------- смена ключа K ---------- */
@@ -1106,7 +1597,18 @@ export const Vault = {
       return null;
     }
     if (!this._prevKey) {
-      this._prevKey = await decrypt(this._key, this.data.prev);
+      const key = this._key;
+      const prev = await decrypt(key, this.data.prev);
+      if (this._key !== key || isZeroKey(key)) {
+        // пока шла расшифровка, сейф заблокировали или сменили ключ: прежний K в памяти не оставляем
+        wipe(prev);
+        return null;
+      }
+      if (this._prevKey) {
+        wipe(prev);
+      } else {
+        this._prevKey = prev;
+      }
     }
     return this._prevKey;
   },
@@ -1130,14 +1632,34 @@ export const Vault = {
         }),
       ]);
       clearTimeout(timer);
-      if (this.passwordsMode === "vault" && !this._rekeyHooks.has("passwords")) {
-        throw new Error("Хранилище паролей не готово к смене ключа: повторите позже");
+      if (!this._rekeyHooks.has("passwords") && this.passwordsMode !== "nss") {
+        // Хранилище под ключом сейфа (или не успело/не смогло открыться, а база есть), но на
+        // смену ключа не подписано: без него смену нельзя ни начинать, ни завершать — база
+        // осталась бы под прежним K, который после завершения стирается.
+        const hasDb = await IOUtils.exists(PathUtils.join(PathUtils.profileDir, "logins.db")).catch(() => true);
+        if (this.passwordsMode === "vault" || hasDb) {
+          throw new Error("Хранилище паролей не готово к смене ключа: повторите позже");
+        }
       }
     }
   },
 
-  async _runRekeyHooks(reason, oldKey, newKey) {
-    const sub = (key, info) => subkeyOf(key, info);
+  /** Обработчики работают с собственными копиями ключей: что бы ни случилось с ключами
+   * сейфа в памяти, обработчик не зашифрует данные затёртым ключом. После выхода копии
+   * стираются, а сохранённый кем-то ctx перестаёт работать. */
+  async _runRekeyHooks(reason, oldKeyLive, newKeyLive) {
+    if (isZeroKey(oldKeyLive) || isZeroKey(newKeyLive)) {
+      return false;
+    }
+    const oldKey = oldKeyLive.slice();
+    const newKey = newKeyLive.slice();
+    let open = true;
+    const sub = (key, info) => {
+      if (!open) {
+        throw new Error("Перешифровка уже завершена");
+      }
+      return subkeyOf(key, info);
+    };
     const ctx = {
       reason,
       decryptOld: async (info, box) => {
@@ -1183,15 +1705,20 @@ export const Vault = {
       },
     };
     let ok = true;
-    for (const [name, h] of [...this._rekeyHooks]) {
-      try {
-        await h.fn(ctx);
-      } catch (e) {
-        console.error(`Tabora vault: перешифровка «${name}» не удалась`, e);
-        if (h.required) {
-          ok = false;
+    try {
+      for (const [name, h] of [...this._rekeyHooks]) {
+        try {
+          await h.fn(ctx);
+        } catch (e) {
+          console.error(`Tabora vault: перешифровка «${name}» не удалась`, e);
+          if (h.required) {
+            ok = false;
+          }
         }
       }
+    } finally {
+      open = false;
+      wipe(oldKey, newKey);
     }
     return ok;
   },
@@ -1221,13 +1748,14 @@ export const Vault = {
       if (this.data.pw && !password) {
         throw new Error("Для смены ключа нужен мастер-пароль");
       }
-      const oldKey = this._key.slice();
+      const oldKey = await this._liveKey(); // собственная проверенная копия прежнего K
       const newKey = randomBytes(32);
       const before = this.data;
+      const flags = { ...this._flags };
       let rkText = null;
       try {
         const data = JSON.parse(JSON.stringify(before));
-        data.check = await encrypt(newKey, utf8ToBytes(CHECK));
+        data.check = await encrypt(newKey, utf8ToBytes(checkPlain(flags)));
         data.os = this.osUnlockEnabled ? await this._wrapOs(newKey) : null;
         if (before.os && this.osUnlockEnabled && !data.os) {
           throw new Error("Хранилище ключей системы недоступно: ключ не сменён");
@@ -1252,17 +1780,30 @@ export const Vault = {
         }
         // прежний K остаётся под новым, пока все данные не перешифрованы (точка невозврата — запись файла)
         data.prev = { ...(await encrypt(newKey, oldKey)), at: new Date().toISOString(), reason };
+        // перед записью: оба ключа настоящие, прежний K действительно достаётся из prev,
+        // и ключ в памяти за время Argon2 и запроса к системе не стёрли
+        await this._assertKey(newKey, data.check);
+        await this._assertKey(oldKey, before.check);
+        const back = await decrypt(newKey, data.prev);
+        const prevOk = sameBytes(back, oldKey);
+        wipe(back);
+        if (!prevOk) {
+          throw new Error("Прежний ключ не сохранился под новым: ключ не сменён");
+        }
+        this._stillLive(oldKey);
         this.data = data;
-        await this._save();
+        await this._save({ newKey: true });
       } catch (e) {
         this.data = before;
         wipe(oldKey, newKey);
         throw e;
       }
-      wipe(this._key);
+      // Блокировка, запрошенная во время смены, здесь ключ не трогала (она отложена до конца
+      // операции и применится сразу после неё): флаг явной блокировки не снимаем.
+      wipe(this._key, this._prevKey);
       this._key = newKey;
-      wipe(this._prevKey);
       this._prevKey = oldKey;
+      this._flags = flags;
       if (password) {
         this._passwordSet();
       }
@@ -1277,31 +1818,37 @@ export const Vault = {
   },
 
   async _finishRekey() {
-    delete this.data.prev;
-    await this._save();
+    await this._update(d => {
+      delete d.prev;
+    });
     wipe(this._prevKey);
     this._prevKey = null;
   },
 
-  /** Доделать прерванную смену ключа (вызывается при разблокировке). */
+  /** Доделать прерванную смену ключа (вызывается при разблокировке). Не завершает смену,
+   * если обязательный участник (хранилище паролей) не готов: его данные остались бы под
+   * прежним K, который при завершении стирается. */
   async resumeRekey() {
     if (!this.rekeyPending || !this.unlocked) {
       return;
     }
-    await this._prepareRekeyParticipants().catch(e => console.error("Tabora vault", e));
+    try {
+      await this._prepareRekeyParticipants();
+    } catch (e) {
+      console.error("Tabora vault: смена ключа не доделана, повторим при следующей разблокировке", e);
+      return;
+    }
     await this._exclusive(async () => {
       if (!this.rekeyPending || !this.unlocked) {
         return;
       }
-      const oldKey = (await this._prev()).slice();
-      const newKey = this._key.slice();
-      try {
-        if (await this._runRekeyHooks("resume", oldKey, newKey)) {
-          await this._finishRekey();
-          this.notify("rekeyed");
-        }
-      } finally {
-        wipe(oldKey, newKey);
+      const prev = await this._prev();
+      if (!prev) {
+        return;
+      }
+      if (await this._runRekeyHooks("resume", prev, this._key)) {
+        await this._finishRekey();
+        this.notify("rekeyed");
       }
     });
   },

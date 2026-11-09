@@ -10,13 +10,15 @@
  * пока сейф разблокирован, и обнуляются при блокировке. Код считается в родительском
  * процессе; страница получает только сам код после действия пользователя. */
 
-const { Vault } = ChromeUtils.importESModule("chrome://tabora/content/vault/Vault.sys.mjs");
+const { Vault, writeJsonVerified } = ChromeUtils.importESModule("chrome://tabora/content/vault/Vault.sys.mjs");
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 const C = ChromeUtils.importESModule("chrome://tabora/content/wallet/vendor/crypto.sys.mjs");
 
 const FILE = () => PathUtils.join(PathUtils.profileDir, "tabora-otp.json");
 const BACKUP = () => PathUtils.join(PathUtils.profileDir, "tabora-otp.json.bak");
 const MAC_INFO = "otp-meta";
+const SIGNED_FLAG = "otpSigned"; // признак «файл кодов подписан» в блоке check сейфа (под ключом K)
+const CORRUPT_RE = /^tabora-otp\.json\.corrupt-[^.]+$/;
 const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 const ALG = { SHA1: "SHA-1", SHA256: "SHA-256", SHA512: "SHA-512" };
 const MAX_ENTRIES = 500;
@@ -366,7 +368,7 @@ function validEntries(data) {
 export const Otp = {
   TOPIC: "tabora-otp-changed",
   data: null,
-  loadError: null, // { reason, movedTo, backup, unreadable } для повреждённого файла
+  loadError: null, // { reason, movedTo, backup, unreadable, missing } для повреждённого или пропавшего файла
   _loaded: false,
   _loading: null,
   _secrets: new Map(), // id → Uint8Array, пока сейф разблокирован
@@ -412,7 +414,15 @@ export const Otp = {
       if (e.name !== "NotFoundError") {
         // файл есть, но не читается: не перезаписываем его пустым
         console.error("Tabora otp: файл кодов не читается", e);
-        this.loadError = { reason: `файл не читается (${e.message})`, unreadable: true, movedTo: null, backup: await this._readBackup() };
+        this.loadError = { reason: `файл не читается (${e.message})`, unreadable: true, missing: false, movedTo: null, backup: await this._readBackup() };
+      } else {
+        // Файла нет, но остались его копия или отложенный повреждённый файл: это не «кодов
+        // ещё не было». Пустой список поверх не пишем, копию не трогаем — решает пользователь.
+        const traces = await this._traces();
+        if (traces) {
+          console.error(`Tabora otp: файла кодов нет, но ${traces}`);
+          this.loadError = { reason: `файл кодов пропал, но ${traces}`, unreadable: false, missing: true, movedTo: null, backup: await this._readBackup() };
+        }
       }
       this._loaded = true;
       return;
@@ -439,8 +449,24 @@ export const Otp = {
     }
     console.error("Tabora otp: файл кодов повреждён");
     this.data = { version: 1, macs: 1, entries: [] };
-    this.loadError = { reason: data ? "неизвестный формат файла" : "файл не разбирается как JSON", unreadable: false, movedTo, backup: await this._readBackup() };
+    this.loadError = { reason: data ? "неизвестный формат файла" : "файл не разбирается как JSON", unreadable: false, missing: false, movedTo, backup: await this._readBackup() };
     this._loaded = true;
+  },
+
+  /** Следы прежнего файла кодов, когда самого файла нет ("" — кодов здесь не было). */
+  async _traces() {
+    let bak = false;
+    try {
+      const b = await IOUtils.readJSON(BACKUP());
+      bak = !(validEntries(b) && !b.entries.length); // пустая копия ничего не теряет
+    } catch (e) {
+      bak = e.name !== "NotFoundError";
+    }
+    let corrupt = false;
+    try {
+      corrupt = (await IOUtils.getChildren(PathUtils.profileDir)).some(p => CORRUPT_RE.test(PathUtils.filename(p)));
+    } catch (e) {}
+    return [bak ? "осталась запасная копия" : "", corrupt ? "остался повреждённый файл" : ""].filter(Boolean).join(" и ");
   },
 
   async _readBackup() {
@@ -463,22 +489,40 @@ export const Otp = {
     }
   },
 
-  /** Подписи записей. Файл прежнего формата (без подписей) подписывается при первой
-   * разблокировке как есть; после этого запись без верной подписи не выдаёт код. */
+  /** Файл кодов уже подписывался. Признак хранится в блоке check сейфа под ключом K, а не в
+   * самом файле кодов: удаление поля macs из файла подписи не отменяет. Поле macs — только
+   * запасной признак для сейфа, который ещё не успел получить свой (первая разблокировка). */
+  get _signedEra() {
+    return Vault.flag(SIGNED_FLAG) || !!this.data?.macs;
+  },
+
+  /** Подписи записей. Файл прежнего формата (без подписей, сейф без признака) подписывается
+   * один раз при первой разблокировке как есть, и сейф получает признак. После этого запись
+   * без верной подписи кода не выдаёт и молча не подписывается никогда. */
   async _ensureSigned() {
-    if (!this.data || this.data.macs || this.loadError || !Vault.unlocked) {
+    if (!this.data || this.loadError || !Vault.unlocked) {
       return;
     }
-    const key = Vault.subkey(MAC_INFO);
-    try {
-      for (const e of this.data.entries) {
-        e.mac = macWith(key, e);
-      }
-    } finally {
-      wipe(key);
+    if (Vault.flag(SIGNED_FLAG)) {
+      return;
     }
-    this.data.macs = 1;
-    await this.save();
+    if (!this.data.macs) {
+      const key = Vault.subkey(MAC_INFO);
+      try {
+        for (const e of this.data.entries) {
+          e.mac = macWith(key, e);
+        }
+      } finally {
+        wipe(key);
+      }
+      this.data.macs = 1;
+      await this.save();
+    }
+    // не ждём: признак записывается в очереди операций сейфа, а нас могли вызвать из неё же
+    Vault.setFlag(SIGNED_FLAG).then(
+      () => this.notify(),
+      e => console.error("Tabora otp: признак подписи не записан в сейф", e)
+    );
   },
 
   /** Подпись записи верна (null — сейф заблокирован и проверить нельзя). */
@@ -486,8 +530,8 @@ export const Otp = {
     if (!Vault.unlocked) {
       return null;
     }
-    if (!this.data?.macs) {
-      return true; // подпишется при разблокировке (_ensureSigned)
+    if (!this._signedEra) {
+      return true; // прежний формат: подпишется при разблокировке (_ensureSigned)
     }
     if (typeof entry?.mac !== "string") {
       return false;
@@ -526,13 +570,13 @@ export const Otp = {
     Services.obs.notifyObservers(null, this.TOPIC, what);
   },
 
+  /** Запись файла кодов: атомарно, со сбросом на диск и проверочным чтением; запасная копия
+   * обновляется только после этого. Сюда попадают только данные, загруженные из исправного
+   * файла или явно выбранные пользователем (save отказывает при loadError). */
   async _write(data) {
-    await IOUtils.writeJSON(FILE(), data, { tmpPath: FILE() + ".tmp" });
+    await writeJsonVerified(FILE(), data);
     try {
-      await IOUtils.setPermissions(FILE(), 0o600);
-    } catch (e) {}
-    try {
-      await IOUtils.writeJSON(BACKUP(), data, { tmpPath: BACKUP() + ".tmp" });
+      await IOUtils.writeJSON(BACKUP(), data, { tmpPath: BACKUP() + ".tmp", flush: true });
       await IOUtils.setPermissions(BACKUP(), 0o600);
     } catch (e) {
       console.error("Tabora otp: запасная копия не записана", e);
@@ -554,20 +598,42 @@ export const Otp = {
     if (!b) {
       throw new Error("Запасной копии кодов нет");
     }
+    const before = { data: this.data, loadError: this.loadError };
     this.forget();
     this.data = b;
     this.loadError = null;
     this._migrate();
-    await this.save();
+    try {
+      await this.save();
+    } catch (e) {
+      Object.assign(this, before);
+      throw e;
+    }
     await this._ensureSigned();
   },
 
-  /** Повреждённый файл: осознанно начать список заново (повреждённый остаётся рядом). */
+  /** Повреждённый файл: осознанно начать список заново. Повреждённый файл остаётся рядом, а
+   * прежняя запасная копия не затирается пустым списком: она переносится в .bak.replaced-<дата>. */
   async startFresh() {
+    const before = { data: this.data, loadError: this.loadError };
+    try {
+      if (await IOUtils.exists(BACKUP())) {
+        const aside = `${BACKUP()}.replaced-${stamp()}`;
+        await IOUtils.move(BACKUP(), aside, { noOverwrite: true });
+        await IOUtils.setPermissions(aside, 0o600).catch(() => {});
+      }
+    } catch (e) {
+      throw new Error(`Прежняя запасная копия кодов не перенесена: ${e.message}`);
+    }
     this.forget();
     this.data = { version: 1, macs: 1, entries: [] };
     this.loadError = null;
-    await this.save();
+    try {
+      await this.save();
+    } catch (e) {
+      Object.assign(this, before);
+      throw e;
+    }
   },
 
   forget() {
@@ -910,7 +976,7 @@ Vault.registerRekey("otp", async ctx => {
   try {
     const entries = [];
     for (const e of Otp.entries) {
-      const authentic = !Otp.data.macs || (typeof e.mac === "string" && (macWith(oldMac, e) === e.mac || macWith(newMac, e) === e.mac));
+      const authentic = !Otp._signedEra || (typeof e.mac === "string" && (macWith(oldMac, e) === e.mac || macWith(newMac, e) === e.mac));
       const secret = await ctx.decryptOld("otp", e.secret);
       const next = { ...e, secret: await ctx.encryptNew("otp", secret) };
       wipe(secret);
@@ -922,6 +988,8 @@ Vault.registerRekey("otp", async ctx => {
     Otp.data = data;
     Otp.forget();
     Otp.notify();
+    // файл прежнего формата подписан новым ключом: сейф получает признак (после смены ключа)
+    Promise.resolve().then(() => Otp._ensureSigned()).catch(e => console.error("Tabora otp", e));
   } finally {
     wipe(oldMac);
     wipe(newMac);

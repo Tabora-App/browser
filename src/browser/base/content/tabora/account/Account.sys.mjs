@@ -8,16 +8,19 @@
  * (Argon2id 64 МБ, 3 прохода — не слабее KDF сейфа — с солью из адреса, затем HMAC),
  * который отправляется на сервер. Сервер по хешу входа ключ сейфа восстановить не может.
  *
- * Сброс забытого пароля требует доказательства владения ключом восстановления: при
- * создании ключа на сервере регистрируется производный от него ключ проверки, а запрос
- * сброса подписывается HMAC(ключ проверки, email|newLoginHash|nonce) с одноразовым nonce.
+ * Сброс забытого пароля требует доказательства владения ключом восстановления. Из ключа
+ * восстановления детерминированно выводится пара Ed25519; при создании ключа на сервере
+ * регистрируется только открытый ключ, а запрос сброса подписывается закрытым:
+ * Ed25519("tabora-reset-v2|email|newLoginHash|nonce") с одноразовым nonce. Утечка базы сервера
+ * подделать сброс не позволяет. Аккаунты, зарегистрировавшие прежний общий ключ HMAC,
+ * переводятся при первом сбросе или при создании нового ключа восстановления.
  *
  * Бэкенд подменяемый: пока сервер не задан (pref tabora.account.server пуст), работает
  * локальный режим — аккаунт хранится на этом компьютере в tabora-account-local.json,
  * все окна и проверки настоящие. Контракт HTTP-бэкенда описан в HttpBackend. */
 
 const C = ChromeUtils.importESModule("chrome://tabora/content/wallet/vendor/crypto.sys.mjs");
-const { randomBytes, base64, utf8ToBytes, bytesToHex, hexToBytes, hmac, sha256 } = C;
+const { randomBytes, base64, utf8ToBytes, bytesToHex, hexToBytes, hmac, sha256, ed25519 } = C;
 const { Vault, passwordStrength, checkNewPassword } = ChromeUtils.importESModule("chrome://tabora/content/vault/Vault.sys.mjs");
 const { argon2idAsync } = ChromeUtils.importESModule("chrome://tabora/content/vault/Kdf.sys.mjs");
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
@@ -35,6 +38,8 @@ const AUTH_KDF = { 1: { t: 2, m: 16384, p: 1, dkLen: 32 }, 2: { t: 3, m: 65536, 
 const AUTH_SALT = { 1: "tabora-auth|", 2: "tabora-auth-v2|" };
 const KDF_CURRENT = 2;
 const RESET_NONCE_TTL = 5 * 60000;
+const KDF_SEEN_PREF = "tabora.account.kdfSeen"; // версии хеша входа, уже использованные на этом устройстве
+const VERIFIER_RE = /^ed25519:[0-9a-f]{64}$/;
 
 export { passwordStrength };
 
@@ -62,15 +67,35 @@ function sameHex(a, b) {
   return diff === 0;
 }
 
-/** Подпись запроса сброса: доказывает владение ключом восстановления, не раскрывая его. */
-function resetProof(authKey, email, newLoginHash, nonce) {
+/** Прежняя подпись запроса сброса общим ключом HMAC (его знал и сервер). Только для
+ * аккаунтов, зарегистрировавших ключ проверки по-старому: один раз, вместе с переводом. */
+function legacyResetProof(authKey, email, newLoginHash, nonce) {
   return bytesToHex(hmac(sha256, authKey, utf8ToBytes(`${email}|${newLoginHash}|${nonce}`)));
+}
+
+/** Сообщение, которое подписывается ключом Ed25519 из ключа восстановления. */
+function resetMessage(email, newLoginHash, nonce) {
+  return utf8ToBytes(`tabora-reset-v2|${email}|${newLoginHash}|${nonce}`);
+}
+
+/** Ключ проверки для сервера: только открытый ключ Ed25519. */
+function verifierOf(publicKey) {
+  return `ed25519:${bytesToHex(publicKey)}`;
+}
+
+/** Проверка подписи сброса открытым ключом (то, что обязан делать сервер). */
+function verifyResetProof(verifier, email, newLoginHash, nonce, proof) {
+  try {
+    return VERIFIER_RE.test(verifier) && /^[0-9a-f]{128}$/.test(String(proof || "")) && ed25519.verify(hexToBytes(proof), resetMessage(email, newLoginHash, nonce), hexToBytes(verifier.slice(8)));
+  } catch (e) {
+    return false;
+  }
 }
 
 /* ---------- бэкенды ---------- */
 
-/** Локальный режим: без сервера. Хранит только хеш от хеша входа с солью и ключ проверки
- * ключа восстановления; проверки те же, что обязан делать сервер. */
+/** Локальный режим: без сервера. Хранит только хеш от хеша входа с солью и открытый ключ
+ * проверки ключа восстановления; проверки те же, что обязан делать сервер. */
 class LocalBackend {
   get name() {
     return "local";
@@ -86,7 +111,7 @@ class LocalBackend {
   }
 
   async _save(d) {
-    await IOUtils.writeJSON(LOCAL_FILE(), d, { tmpPath: LOCAL_FILE() + ".tmp" });
+    await IOUtils.writeJSON(LOCAL_FILE(), d, { tmpPath: LOCAL_FILE() + ".tmp", flush: true });
     try {
       await IOUtils.setPermissions(LOCAL_FILE(), 0o600);
     } catch (e) {}
@@ -162,12 +187,16 @@ class LocalBackend {
     return true;
   }
 
-  /** Ключ проверки ключа восстановления (hex) или null — ключ отозван. */
+  /** Ключ проверки ключа восстановления ("ed25519:<открытый ключ hex>") или null — ключ
+   * отозван. Общий секрет прежней схемы больше не принимается. */
   async setRecovery({ email, recoveryVerifier }) {
     const d = await this._load();
     const u = d.users[email];
     if (!u) {
       throw new Error("Аккаунт не найден на этом компьютере");
+    }
+    if (recoveryVerifier && !VERIFIER_RE.test(recoveryVerifier)) {
+      throw new Error("Ключ проверки должен быть открытым ключом Ed25519");
     }
     u.recovery = recoveryVerifier ? { verifier: recoveryVerifier, at: new Date().toISOString() } : null;
     await this._save(d);
@@ -187,10 +216,12 @@ class LocalBackend {
     return { nonce };
   }
 
-  /** Сброс пароля: только с подписью ключом проверки ключа восстановления.
+  /** Сброс пароля: только с подписью Ed25519, которая проверяется открытым ключом.
+   * Аккаунт с ключом проверки прежней схемы (общий ключ HMAC) один раз принимает прежнюю
+   * подпись legacyRecoveryProof и тут же переводится на открытый ключ newRecoveryVerifier.
    * legacyVaultProof — аккаунт создан до появления ключа проверки, а ключ восстановления
    * только что открыл сейф на этом же компьютере; ключ проверки регистрируется заодно. */
-  async resetPassword({ email, nonce, recoveryProof, newLoginHash, kdf, newRecoveryVerifier = null, legacyVaultProof = false }) {
+  async resetPassword({ email, nonce, recoveryProof, legacyRecoveryProof = null, newLoginHash, kdf, newRecoveryVerifier = null, legacyVaultProof = false }) {
     const d = await this._load();
     const u = d.users[email];
     if (!u) {
@@ -202,19 +233,32 @@ class LocalBackend {
     if (!n || n.value !== nonce || Date.now() > n.exp) {
       throw Object.assign(new Error("Запрос сброса устарел: повторите"), { code: "bad-nonce" });
     }
-    if (u.recovery?.verifier) {
-      const expected = resetProof(hexToBytes(u.recovery.verifier), email, newLoginHash, nonce);
-      if (!sameHex(expected, recoveryProof)) {
-        throw Object.assign(new Error("Ключ восстановления не подходит к этому аккаунту"), { code: "bad-proof" });
+    const badProof = () => Object.assign(new Error("Ключ восстановления не подходит к этому аккаунту"), { code: "bad-proof" });
+    const current = u.recovery?.verifier || "";
+    const modern = VERIFIER_RE.test(current);
+    const upgrade = newRecoveryVerifier && VERIFIER_RE.test(newRecoveryVerifier) ? newRecoveryVerifier : null;
+    if (modern) {
+      if (!verifyResetProof(current, email, newLoginHash, nonce, recoveryProof)) {
+        throw badProof();
       }
-    } else if (!(legacyVaultProof && newRecoveryVerifier)) {
+    } else if (current) {
+      // прежняя схема: общий ключ HMAC. Принимается, только если заодно приходит открытый
+      // ключ, подпись которым тоже верна: после этого сброса общий ключ больше не действует
+      let expected = "";
+      try {
+        expected = legacyResetProof(hexToBytes(current), email, newLoginHash, nonce);
+      } catch (e) {}
+      if (!sameHex(expected, legacyRecoveryProof) || !upgrade || !verifyResetProof(upgrade, email, newLoginHash, nonce, recoveryProof)) {
+        throw badProof();
+      }
+    } else if (!(legacyVaultProof && upgrade && verifyResetProof(upgrade, email, newLoginHash, nonce, recoveryProof))) {
       throw Object.assign(new Error("Для аккаунта не зарегистрирован ключ восстановления"), { code: "no-recovery" });
     }
     u.salt = base64.encode(randomBytes(16));
     u.verifier = this._verifier(newLoginHash, u.salt);
     u.kdf = kdf;
-    if (newRecoveryVerifier) {
-      u.recovery = { verifier: newRecoveryVerifier, at: new Date().toISOString() };
+    if (!modern && upgrade) {
+      u.recovery = { verifier: upgrade, at: new Date().toISOString() };
     }
     await this._save(d);
     return true;
@@ -237,11 +281,16 @@ class LocalBackend {
  *  POST /v1/account/login     { email, loginHash, deviceId, deviceName }      → { userId, session, kdf } | 409 { needsDeviceConfirm }
  *  POST /v1/account/upgrade   { oldLoginHash, newLoginHash, kdf }  (Bearer)   → {}   замена хеша версии 1 на 2
  *  POST /v1/account/password  { oldLoginHash, newLoginHash, kdf }  (Bearer)   → {}
- *  POST /v1/account/recovery  { recoveryVerifier | null }          (Bearer)   → {}   ключ проверки ключа восстановления
+ *  POST /v1/account/recovery  { recoveryVerifier | null }          (Bearer)   → {}   ключ проверки ключа восстановления:
+ *       "ed25519:" + hex(открытый ключ, 32 байта); закрытый ключ сервер не получает никогда
  *  POST /v1/account/reset/challenge { email }                                  → { nonce }  одноразовый, 5 минут
- *  POST /v1/account/reset     { email, nonce, recoveryProof, newLoginHash, kdf } → {}
- *       recoveryProof = hex(HMAC-SHA256(recoveryVerifier, `${email}|${newLoginHash}|${nonce}`)); сервер
- *       обязан проверить подпись, срок и одноразовость nonce, иначе одного адреса хватило бы для захвата почты
+ *  POST /v1/account/reset     { email, nonce, recoveryProof, newLoginHash, kdf, legacyRecoveryProof?, newRecoveryVerifier? } → {}
+ *       recoveryProof = hex(Ed25519(`tabora-reset-v2|${email}|${newLoginHash}|${nonce}`)); сервер обязан проверить
+ *       подпись открытым ключом, срок и одноразовость nonce, иначе одного адреса хватило бы для захвата почты.
+ *       Аккаунт с ключом проверки прежней схемы (hex общего ключа HMAC без префикса): сервер проверяет
+ *       legacyRecoveryProof = hex(HMAC-SHA256(старый ключ, `${email}|${newLoginHash}|${nonce}`)) И подпись
+ *       recoveryProof открытым ключом newRecoveryVerifier, после чего заменяет ключ проверки на newRecoveryVerifier.
+ *       Если ключ проверки уже "ed25519:", поля legacyRecoveryProof и newRecoveryVerifier игнорируются.
  *  POST /v1/account/logout    (Bearer)                                         → {}
  *  GET  /v1/account/devices   (Bearer)                                         → [{ id, name, at }]
  * Сервер хранит только хеш от loginHash со своей солью и ключ проверки ключа восстановления;
@@ -318,8 +367,8 @@ class HttpBackend {
     return this._call("POST", "/v1/account/reset/challenge", { email });
   }
 
-  resetPassword({ email, nonce, recoveryProof, newLoginHash, kdf }) {
-    return this._call("POST", "/v1/account/reset", { email, nonce, recoveryProof, newLoginHash, kdf });
+  resetPassword({ email, nonce, recoveryProof, legacyRecoveryProof, newRecoveryVerifier, newLoginHash, kdf }) {
+    return this._call("POST", "/v1/account/reset", { email, nonce, recoveryProof, legacyRecoveryProof: legacyRecoveryProof || undefined, newRecoveryVerifier, newLoginHash, kdf });
   }
 
   logout({ session }) {
@@ -401,7 +450,7 @@ export const Account = {
       await IOUtils.remove(FILE(), { ignoreAbsent: true });
     } else {
       this.data.updatedAt = new Date().toISOString();
-      await IOUtils.writeJSON(FILE(), this.data, { tmpPath: FILE() + ".tmp" });
+      await IOUtils.writeJSON(FILE(), this.data, { tmpPath: FILE() + ".tmp", flush: true });
       try {
         await IOUtils.setPermissions(FILE(), 0o600);
       } catch (e) {}
@@ -458,35 +507,99 @@ export const Account = {
     }
   },
 
+  _kdfKey(email) {
+    return bytesToHex(sha256(utf8ToBytes(`tabora-kdf-seen|${email}`))).slice(0, 16);
+  },
+
+  _kdfSeenMap() {
+    try {
+      const m = JSON.parse(Services.prefs.getStringPref(KDF_SEEN_PREF, "") || "{}");
+      return m && typeof m === "object" && !Array.isArray(m) ? m : {};
+    } catch (e) {
+      return {};
+    }
+  },
+
+  /** Наименьшая допустимая версия хеша входа для адреса: та, что уже использовалась на этом
+   * устройстве. Ответ prelogin (его может подменить сервер или тот, кто между) не может
+   * заставить посчитать и отправить более слабый хеш того же пароля. */
+  _kdfFloor(email) {
+    const seen = Number(this._kdfSeenMap()[this._kdfKey(email)]) || 0;
+    const own = this.data?.email === email ? Number(this.data.kdf) || 0 : 0;
+    return Math.min(KDF_CURRENT, Math.max(seen, own, 1));
+  },
+
+  _noteKdf(email, kdf) {
+    try {
+      const m = this._kdfSeenMap();
+      const key = this._kdfKey(email);
+      if ((Number(m[key]) || 0) >= kdf) {
+        return;
+      }
+      delete m[key];
+      m[key] = kdf;
+      const keys = Object.keys(m);
+      for (const k of keys.slice(0, Math.max(0, keys.length - 32))) {
+        delete m[k]; // не больше 32 адресов, самые старые вытесняются
+      }
+      Services.prefs.setStringPref(KDF_SEEN_PREF, JSON.stringify(m));
+    } catch (e) {
+      console.error("Tabora account: версия хеша входа не запомнена", e);
+    }
+  },
+
+  /** Версия хеша входа для адреса: ответ сервера, но не ниже уже использованной здесь. */
+  async _kdfFor(email) {
+    const { kdf } = await this.backend.prelogin({ email });
+    return Math.max(Number(kdf) === 1 ? 1 : KDF_CURRENT, this._kdfFloor(email));
+  },
+
+  /** Системная проверка владельца перед тем, как задать мастер-пароль существующему сейфу
+   * без пароля: иначе любой, кто сел за открытый браузер, вошёл бы в свой аккаунт и получил
+   * пароль от чужого сейфа (и возможность унести его файл). */
+  async _confirmVaultOwner() {
+    if (!(await Vault.confirmOwner("задать мастер-пароль сейфа Tabora"))) {
+      throw Object.assign(new Error("Сейф этого компьютера уже создан. Чтобы задать ему пароль аккаунта, подтвердите, что вы владелец компьютера (Touch ID или пароль системы)"), { code: "owner-check" });
+    }
+    if (!Vault.unlocked) {
+      // проверку системы только что прошли: открываем без второго запроса
+      await Vault.unlock({ user: true, reauth: false });
+    }
+    if (!Vault.unlocked) {
+      throw new Error("Сейф заблокирован: разблокируйте его и повторите");
+    }
+  },
+
   /** Сейф принимает пароль аккаунта как мастер-пароль: задаёт его, если не задан, иначе сверяет.
-   * Пароль уже принят сервером, поэтому стойкость здесь не перепроверяется (старые аккаунты). */
-  async _syncVaultPassword(password) {
+   * Пароль уже принят сервером, поэтому стойкость здесь не перепроверяется (старые аккаунты).
+   * Сверка с сейфом считается попыткой подбора мастер-пароля, как любая другая: свой аккаунт
+   * на сервере не даёт перебирать пароль чужого сейфа без пауз. ownerConfirmed — системную
+   * проверку владельца вызывающий уже провёл (_confirmVaultOwner). */
+  async _syncVaultPassword(password, { ownerConfirmed = false } = {}) {
     await Vault.ready();
     if (Vault.state === "corrupt") {
-      throw new Error("Файл сейфа повреждён: восстановите его в разделе «Коды» и войдите снова");
+      throw new Error("Файл сейфа повреждён или утрачен: восстановите его в разделе «Коды» и войдите снова");
     }
     if (!Vault.exists) {
       await Vault.create({ password, checkStrength: false });
       return;
     }
     if (Vault.hasPassword) {
-      const mismatch = () => {
+      const mismatch = e => {
+        if (e.code !== "bad-password") {
+          throw e;
+        }
         throw Object.assign(new Error("Сейф этого компьютера защищён другим паролем. Введите его ниже, чтобы передать сейф этому аккаунту."), { code: "vault-mismatch" });
       };
-      // пароль аккаунта уже проверен сервером: несовпадение с сейфом — не подбор
       if (Vault.unlocked) {
-        await Vault.verifyPassword(password, { count: false }).catch(mismatch);
+        await Vault.verifyPassword(password).catch(mismatch);
       } else {
-        await Vault.unlockWithPassword(password, { count: false }).catch(e => (e.code === "bad-password" ? mismatch() : Promise.reject(e)));
+        await Vault.unlockWithPassword(password).catch(mismatch);
       }
       return;
     }
-    if (!Vault.unlocked) {
-      // вход — действие пользователя: после явной блокировки спросим Touch ID
-      await Vault.unlock({ user: true });
-    }
-    if (!Vault.unlocked) {
-      throw new Error("Сейф заблокирован: разблокируйте его и повторите");
+    if (!ownerConfirmed || !Vault.unlocked) {
+      await this._confirmVaultOwner();
     }
     await Vault.setPassword(password, { checkStrength: false });
   },
@@ -507,14 +620,23 @@ export const Account = {
     const email = this.normalizeEmail(nameInput);
     checkPassword(password);
     await Vault.ready();
+    if (Vault.state === "corrupt") {
+      throw new Error("Файл сейфа повреждён или утрачен: восстановите его в разделе «Коды» и повторите");
+    }
+    let ownerConfirmed = false;
     if (Vault.exists && Vault.hasPassword) {
       await Vault.verifyPassword(password).catch(e => {
         throw e.code === "locked-out" ? e : new Error("Пароль аккаунта должен совпадать с мастер-паролем сейфа этого компьютера");
       });
+    } else if (Vault.exists) {
+      // до обращения к серверу: отказ от проверки не должен оставлять занятый адрес без аккаунта здесь
+      await this._confirmVaultOwner();
+      ownerConfirmed = true;
     }
     const loginHash = await this.loginHash(email, password, KDF_CURRENT);
     const r = await this.backend.register({ email, loginHash, kdf: KDF_CURRENT, deviceId: this.deviceId(), deviceName: this.deviceName() });
-    await this._syncVaultPassword(password);
+    this._noteKdf(email, KDF_CURRENT);
+    await this._syncVaultPassword(password, { ownerConfirmed });
     this.data = { version: 1, email, userId: r.userId, session: r.session, server: this.serverUrl || null, kdf: KDF_CURRENT, createdAt: new Date().toISOString(), lastLoginAt: new Date().toISOString() };
     await this.save("signed-in");
     this.markFirstRunDone();
@@ -535,7 +657,15 @@ export const Account = {
     return text;
   },
 
-  /** Сообщить серверу ключ проверки для ключа восстановления (null — ключ отозван). */
+  /** Ключ проверки на сервере зарегистрирован по прежней схеме (общий ключ HMAC): перевести
+   * на открытый ключ можно только с самим ключом восстановления, а он нигде не хранится —
+   * поэтому интерфейс предлагает создать новый ключ восстановления. */
+  get recoveryNeedsUpgrade() {
+    return !!this.data?.recoveryRegisteredAt && this.data.recoveryScheme !== "ed25519";
+  },
+
+  /** Сообщить серверу ключ проверки для ключа восстановления (null — ключ отозван): только
+   * открытый ключ Ed25519, выведенный из ключа восстановления. */
   async registerRecoveryKey(text) {
     await this.ready();
     if (!this.signedIn) {
@@ -543,13 +673,14 @@ export const Account = {
     }
     let recoveryVerifier = null;
     if (text) {
-      const k = Vault.recoveryAuthKey(text);
-      recoveryVerifier = bytesToHex(k);
-      wipe(k);
+      const signer = Vault.recoverySigner(text);
+      recoveryVerifier = verifierOf(signer.publicKey);
+      wipe(signer.seed);
     }
     try {
       await this.backend.setRecovery({ email: this.email, session: this.data.session, recoveryVerifier });
       this.data.recoveryRegisteredAt = recoveryVerifier ? new Date().toISOString() : null;
+      this.data.recoveryScheme = recoveryVerifier ? "ed25519" : null;
       await this.save();
       return true;
     } catch (e) {
@@ -580,7 +711,7 @@ export const Account = {
     }
     const deviceId = this.deviceId();
     const deviceName = this.deviceName();
-    const { kdf } = await this.backend.prelogin({ email });
+    const kdf = await this._kdfFor(email);
     const loginHash = await this.loginHash(email, password, kdf);
     let r;
     try {
@@ -591,8 +722,9 @@ export const Account = {
       }
       throw e;
     }
-    await Vault.guard.success();
-    let usedKdf = Number(r.kdf) || kdf;
+    // Счётчик попыток здесь не сбрасывается: успешный вход в аккаунт на сервере ничего не
+    // говорит о пароле сейфа этого компьютера. Сбросит его только пароль, подошедший к сейфу.
+    let usedKdf = Math.max(Number(r.kdf) || kdf, kdf);
     if (usedKdf < KDF_CURRENT) {
       // аккаунт создан со слабым хешем входа: заменяем его сразу после успешного входа
       try {
@@ -603,17 +735,34 @@ export const Account = {
         console.error("Tabora account: хеш входа не обновлён, повторим при следующем входе", e);
       }
     }
+    this._noteKdf(email, usedKdf);
     let rebound = null;
-    try {
-      await this._syncVaultPassword(password);
-    } catch (e) {
-      if (e.code === "vault-mismatch" && vaultPassword) {
-        rebound = await this._rebindVault(vaultPassword, password);
+    await Vault.ready();
+    if (vaultPassword && Vault.exists && Vault.hasPassword) {
+      // Владелец назвал пароль сейфа: сначала проверяется он (это и есть попытка), и только
+      // после этого пароль аккаунта сверяется с сейфом без счёта — владение уже доказано.
+      await Vault.verifyPassword(vaultPassword).catch(e => {
+        throw e.code === "bad-password" ? new Error("Неверный мастер-пароль сейфа") : e;
+      });
+      const same = password === vaultPassword || (await Vault.verifyPassword(password, { count: false }).then(() => true, e => (e.code === "bad-password" ? false : Promise.reject(e))));
+      if (same) {
+        if (!Vault.unlocked) {
+          await Vault.unlockWithPassword(password);
+        }
       } else {
-        throw e;
+        rebound = await this._rebindVault(vaultPassword, password);
       }
+    } else {
+      await this._syncVaultPassword(password);
     }
-    this.data = { version: 1, email, userId: r.userId, session: r.session, server: this.serverUrl || null, kdf: usedKdf, createdAt: this.data?.email === email ? this.data.createdAt : new Date().toISOString(), lastLoginAt: new Date().toISOString() };
+    await Vault.guard.success(); // пароль подошёл к сейфу (или сейф привязан после проверки владельца)
+    const prior = this.data?.email === email ? this.data : null;
+    this.data = { version: 1, email, userId: r.userId, session: r.session, server: this.serverUrl || null, kdf: usedKdf, createdAt: prior ? prior.createdAt : new Date().toISOString(), lastLoginAt: new Date().toISOString() };
+    if (prior?.recoveryRegisteredAt && !rebound) {
+      // тот же аккаунт: сведения о ключе проверки на сервере сохраняются (см. recoveryNeedsUpgrade)
+      this.data.recoveryRegisteredAt = prior.recoveryRegisteredAt;
+      this.data.recoveryScheme = prior.recoveryScheme || null;
+    }
     await this.save("signed-in");
     this.markFirstRunDone();
     let recoveryKey = null;
@@ -621,7 +770,7 @@ export const Account = {
       recoveryKey = rebound.recoveryKey;
       await this.registerRecoveryKey(recoveryKey);
     }
-    return { email, rebound: !!rebound, recoveryKey, rekeyComplete: rebound ? rebound.complete : true };
+    return { email, rebound: !!rebound, recoveryKey, rekeyComplete: rebound ? rebound.complete : true, recoveryNeedsUpgrade: this.recoveryNeedsUpgrade };
   },
 
   /** Смена пароля аккаунта и мастер-пароля сейфа вместе. rotate: true — заодно сменить ключ
@@ -637,14 +786,20 @@ export const Account = {
       throw new Error("Новый пароль совпадает с текущим");
     }
     await Vault.ready();
+    let ownerConfirmed = false;
     if (Vault.hasPassword) {
       await Vault.verifyPassword(oldPassword).catch(e => {
         throw e.code === "locked-out" ? e : new Error("Неверный текущий пароль");
       });
     } else {
       await Vault.guard.check();
+      if (Vault.exists) {
+        // сейфу без пароля задаётся пароль: проверка владельца до обращения к серверу
+        await this._confirmVaultOwner();
+        ownerConfirmed = true;
+      }
     }
-    const { kdf } = await this.backend.prelogin({ email: this.email });
+    const kdf = await this._kdfFor(this.email);
     const [oldLoginHash, newLoginHash] = await Promise.all([this.loginHash(this.email, oldPassword, kdf), this.loginHash(this.email, newPassword, KDF_CURRENT)]);
     try {
       await this.backend.changePassword({ session: this.data.session, email: this.email, oldLoginHash, newLoginHash, kdf: KDF_CURRENT });
@@ -661,7 +816,7 @@ export const Account = {
       }
       result = await Vault.changePassword(oldPassword, newPassword, { rotate });
     } else {
-      await this._syncVaultPassword(newPassword);
+      await this._syncVaultPassword(newPassword, { ownerConfirmed });
       if (rotate) {
         result = await Vault.rotateKey({ password: newPassword, reason: "password" });
       }
@@ -669,15 +824,17 @@ export const Account = {
     if (result.recoveryKey) {
       await this.registerRecoveryKey(result.recoveryKey);
     }
+    this._noteKdf(this.email, KDF_CURRENT);
     this.data.kdf = KDF_CURRENT;
     this.data.passwordChangedAt = new Date().toISOString();
     await this.save();
     return result;
   },
 
-  /** Забытый пароль: сейф открывается ключом восстановления, сервер получает подпись запроса
-   * производным от него ключом и одноразовым nonce; затем новый пароль задаётся и аккаунту,
-   * и сейфу. */
+  /** Забытый пароль: сейф открывается ключом восстановления, сервер получает запрос с
+   * одноразовым nonce, подписанный ключом Ed25519 из ключа восстановления (у сервера только
+   * открытый ключ); затем новый пароль задаётся и аккаунту, и сейфу. Аккаунт с ключом
+   * проверки прежней схемы этим же запросом переводится на открытый ключ. */
   async resetPasswordWithRecovery(recoveryKey, newPassword) {
     await this.ready();
     if (!this.email) {
@@ -687,25 +844,33 @@ export const Account = {
     await Vault.ready();
     await Vault.unlockWithRecoveryKey(recoveryKey);
     const newLoginHash = await this.loginHash(this.email, newPassword, KDF_CURRENT);
-    const authKey = Vault.recoveryAuthKey(recoveryKey);
+    const signer = Vault.recoverySigner(recoveryKey);
+    const legacyKey = this.data.recoveryScheme === "ed25519" ? null : Vault.recoveryAuthKey(recoveryKey);
     try {
       const { nonce } = await this.backend.resetChallenge({ email: this.email });
-      const recoveryProof = resetProof(authKey, this.email, newLoginHash, String(nonce || ""));
+      const n = String(nonce || "");
       await this.backend.resetPassword({
         email: this.email,
         nonce,
-        recoveryProof,
+        recoveryProof: bytesToHex(signer.sign(resetMessage(this.email, newLoginHash, n))),
+        // прежняя схема: подпись общим ключом принимается один раз, вместе с переводом на
+        // открытый ключ; если аккаунт уже переведён, сервер эти поля игнорирует
+        legacyRecoveryProof: legacyKey ? legacyResetProof(legacyKey, this.email, newLoginHash, n) : null,
+        newRecoveryVerifier: verifierOf(signer.publicKey),
         newLoginHash,
         kdf: KDF_CURRENT,
         // только локальный режим: аккаунт старше ключа проверки, а ключ восстановления
-        // только что открыл сейф здесь же — регистрируем ключ проверки заодно
-        newRecoveryVerifier: this.isLocalMode ? bytesToHex(authKey) : undefined,
+        // только что открыл сейф на этом же компьютере — регистрируем ключ проверки заодно
         legacyVaultProof: this.isLocalMode,
       });
     } finally {
-      wipe(authKey);
+      wipe(signer.seed);
+      wipe(legacyKey);
     }
     await Vault.setPassword(newPassword);
+    this._noteKdf(this.email, KDF_CURRENT);
+    this.data.recoveryRegisteredAt ||= new Date().toISOString();
+    this.data.recoveryScheme = "ed25519";
     this.data.kdf = KDF_CURRENT;
     this.data.passwordChangedAt = new Date().toISOString();
     await this.save();
@@ -717,7 +882,7 @@ export const Account = {
   async logout() {
     await this.ready();
     if (!this.data) {
-      Vault.lock();
+      await Vault.lock();
       return;
     }
     try {
@@ -725,7 +890,7 @@ export const Account = {
     } catch (e) {}
     this.data.session = null;
     await this.save("signed-out");
-    Vault.lock();
+    await Vault.lock(); // если идёт операция с ключом, блокировка применится сразу после неё
   },
 
   async devices() {
