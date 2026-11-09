@@ -20,7 +20,7 @@ export class TaboraWalletChild extends JSWindowActorChild {
   }
 
   receiveMessage(message) {
-    if (message.name === "TaboraWallet:Event") {
+    if (message.name === "TaboraWallet:Event" && this._injected) {
       this.dispatch(message.data.chain, message.data.event, message.data.payload);
     }
   }
@@ -60,9 +60,20 @@ export class TaboraWalletChild extends JSWindowActorChild {
     );
   }
 
+  /** Провайдер только для обычных веб-документов: content-принципал http(s); без system/null/expanded
+   * принципалов, data:/blob: и песочниц без allow-same-origin. Родитель проверяет то же самое ещё раз. */
+  isWebDocument() {
+    try {
+      const principal = this.document?.nodePrincipal;
+      return !!principal && principal.isContentPrincipal && !principal.isSystemPrincipal && (principal.schemeIs("https") || principal.schemeIs("http"));
+    } catch (e) {
+      return false;
+    }
+  }
+
   inject() {
     const win = this.contentWindow;
-    if (!win || !/^https?:$/.test(win.location?.protocol || "")) {
+    if (!win || !/^https?:$/.test(win.location?.protocol || "") || !this.isWebDocument()) {
       return;
     }
     const page = this.page;

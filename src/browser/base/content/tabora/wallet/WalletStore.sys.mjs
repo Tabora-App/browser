@@ -10,32 +10,35 @@
  * только на время подписи и обнуляются. */
 
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
-const C = ChromeUtils.importESModule("chrome://browser/content/tabora/wallet/vendor/crypto.sys.mjs");
-const { argon2idAsync } = ChromeUtils.importESModule("chrome://browser/content/tabora/vault/Kdf.sys.mjs");
+const C = ChromeUtils.importESModule("chrome://tabora/content/wallet/vendor/crypto.sys.mjs");
+const { argon2idAsync } = ChromeUtils.importESModule("chrome://tabora/content/vault/Kdf.sys.mjs");
 const { sha256, keccak_256, hmac, sha512, argon2id, randomBytes, bytesToHex, hexToBytes, utf8ToBytes, secp256k1, ed25519, bip39, wordlistEnglish, HDKey, base58, base58check, base64, btc } = C;
 
 const FILE = () => PathUtils.join(PathUtils.profileDir, "tabora-wallet.json");
 const KDF = { t: 3, m: 65536, p: 1, dkLen: 32 }; // Argon2id: 64 МБ памяти, 3 прохода (старые файлы хранят свои параметры)
 const LOGIN_ORIGIN = "chrome://tabora-wallet";
+// Старые места хранения: автоблокировка и ноды теперь в подписанном файле, настройки профиля читаются только до переноса
 const AUTOLOCK_PREF = "tabora.wallet.autolockMinutes";
 const NODES_PREF = "tabora.wallet.nodes";
+const DEFAULT_AUTOLOCK = 15;
+const STABLE = /^(USDT|USDC|DAI)$/;
 const b58check = base58check(sha256);
 export const qrcodegen = C.qrcodegen;
 
-const LOGO = name => `chrome://browser/content/tabora/wallet/logos/${name}.png`;
+const LOGO = name => `chrome://tabora/content/wallet/logos/${name}.png`;
 
 export const CHAINS = {
-  ethereum: { id: "ethereum", logo: LOGO("ethereum"), name: "Ethereum", symbol: "ETH", kind: "evm", chainId: 1, decimals: 18, dust: 0.0001, color: "#8a92ff", path: "m/44'/60'/0'/0/{i}",
+  ethereum: { id: "ethereum", logo: LOGO("ethereum"), name: "Ethereum", symbol: "ETH", kind: "evm", chainId: 1, decimals: 18, dust: 0.0001, color: "#8a92ff", path: "m/44'/60'/0'/0/{i}", wrapped: { symbol: "WETH", address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2" },
     nodes: ["https://ethereum-rpc.publicnode.com", "https://cloudflare-eth.com", "https://rpc.ankr.com/eth", "https://eth.llamarpc.com"],
     explorer: "https://etherscan.io/address/", history: "https://eth.blockscout.com",
     tokens: [{ symbol: "USDT", logo: LOGO("usdt"), address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6 }, { symbol: "USDC", logo: LOGO("usdc"), address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6 }, { symbol: "DAI", logo: LOGO("dai"), address: "0x6B175474E89094C44Da98b954EedeAC495271d0F", decimals: 18 }] },
-  base: { id: "base", logo: LOGO("base"), name: "Base", symbol: "ETH", kind: "evm", chainId: 8453, decimals: 18, dust: 0.0001, color: "#4f7bff", path: "m/44'/60'/0'/0/{i}", sameAs: "ethereum",
+  base: { id: "base", logo: LOGO("base"), name: "Base", symbol: "ETH", kind: "evm", chainId: 8453, decimals: 18, dust: 0.0001, color: "#4f7bff", path: "m/44'/60'/0'/0/{i}", sameAs: "ethereum", wrapped: { symbol: "WETH", address: "0x4200000000000000000000000000000000000006" },
     nodes: ["https://base-rpc.publicnode.com", "https://mainnet.base.org", "https://base.llamarpc.com"], explorer: "https://basescan.org/address/", history: "https://base.blockscout.com",
     tokens: [{ symbol: "USDC", logo: LOGO("usdc"), address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 }, { symbol: "USDT", logo: LOGO("usdt"), address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 }] },
-  arbitrum: { id: "arbitrum", logo: LOGO("arbitrum"), name: "Arbitrum", symbol: "ETH", kind: "evm", chainId: 42161, decimals: 18, dust: 0.0001, color: "#6fb6ff", path: "m/44'/60'/0'/0/{i}", sameAs: "ethereum",
+  arbitrum: { id: "arbitrum", logo: LOGO("arbitrum"), name: "Arbitrum", symbol: "ETH", kind: "evm", chainId: 42161, decimals: 18, dust: 0.0001, color: "#6fb6ff", path: "m/44'/60'/0'/0/{i}", sameAs: "ethereum", wrapped: { symbol: "WETH", address: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1" },
     nodes: ["https://arbitrum-one-rpc.publicnode.com", "https://arb1.arbitrum.io/rpc"], explorer: "https://arbiscan.io/address/", history: "https://arbitrum.blockscout.com",
     tokens: [{ symbol: "USDT", logo: LOGO("usdt"), address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 }, { symbol: "USDC", logo: LOGO("usdc"), address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6 }] },
-  polygon: { id: "polygon", logo: LOGO("polygon"), name: "Polygon", symbol: "POL", kind: "evm", chainId: 137, decimals: 18, dust: 0.5, color: "#c39bff", path: "m/44'/60'/0'/0/{i}", sameAs: "ethereum",
+  polygon: { id: "polygon", logo: LOGO("polygon"), name: "Polygon", symbol: "POL", kind: "evm", chainId: 137, decimals: 18, dust: 0.5, color: "#c39bff", path: "m/44'/60'/0'/0/{i}", sameAs: "ethereum", wrapped: { symbol: "WPOL", address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270" },
     nodes: ["https://polygon-bor-rpc.publicnode.com", "https://polygon-rpc.com"], explorer: "https://polygonscan.com/address/", history: "https://polygon.blockscout.com",
     tokens: [{ symbol: "USDT", logo: LOGO("usdt"), address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", decimals: 6 }, { symbol: "USDC", logo: LOGO("usdc"), address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6 }] },
   bitcoin: { id: "bitcoin", logo: LOGO("bitcoin"), name: "Bitcoin", symbol: "BTC", kind: "btc", decimals: 8, dust: 0.00001, color: "#ff9f5a", path: "m/84'/0'/0'/0/{i}",
@@ -308,34 +311,128 @@ export const WalletStore = {
     return !!this.data;
   },
 
-  /** Пароль при подписи: каждый раз (по умолчанию) или только выше порога в долларах (0 — никогда до автоблокировки). */
-  get signPassword() {
-    const s = this.data?.settings?.signPassword;
-    return { skip: !!s?.skip, thresholdUsd: Number(s?.thresholdUsd ?? 500) };
+  /** Настройки из файла. Пока правки подменённого файла не подтверждены паролем, действуют значения по умолчанию. */
+  get settings() {
+    return this.tampered ? {} : this.data?.settings || {};
   },
 
-  async setSignPassword({ skip, thresholdUsd = 500 }) {
+  /** Изменения настроек, контактов и разрешений возможны только в доверенном (подписанном) файле. */
+  assertTrusted() {
     if (!this.unlocked) {
       throw new Error("Кошелёк заблокирован");
     }
+    if (this.tampered) {
+      throw new Error("Файл кошелька изменён вне Tabora: сначала подтвердите правки паролем");
+    }
+  },
+
+  /** Пароль при подписи: каждый раз (по умолчанию) или только выше порога в долларах (0 — никогда до автоблокировки). */
+  get signPassword() {
+    const s = this.settings.signPassword;
+    const t = Number(s?.thresholdUsd ?? 500);
+    return { skip: !!s?.skip, thresholdUsd: Number.isFinite(t) && t >= 0 ? t : 500 };
+  },
+
+  /** Ослабление защиты (пароль реже, порог выше, «никогда») требует пароль кошелька. */
+  async setSignPassword({ skip, thresholdUsd = 500 }, password) {
+    this.assertTrusted();
+    const next = { skip: !!skip, thresholdUsd: Math.max(0, Number(thresholdUsd) || 0) };
+    const cur = this.signPassword;
+    const limit = v => (v > 0 ? v : Infinity); // порог 0 — «никогда»: слабее любого
+    if (next.skip && (!cur.skip || limit(next.thresholdUsd) > limit(cur.thresholdUsd))) {
+      await this.verifyPassword(password);
+    }
     this.data.settings ||= {};
-    this.data.settings.signPassword = { skip: !!skip, thresholdUsd: Math.max(0, Number(thresholdUsd) || 0) };
+    this.data.settings.signPassword = next;
     await this.save();
   },
 
-  /** Нужен ли пароль для этой подписи: опасные операции и суммы от порога — всегда. */
-  signPasswordNeeded(usd = 0, danger = false) {
+  /** Нужен ли пароль для этой подписи: опасные операции и суммы от порога — всегда.
+   * usd = null — сумма неизвестна (нет курса, токен вне встроенного списка): считается выше порога. */
+  signPasswordNeeded(usd = null, danger = false) {
     if (this.passwordless) {
       return false;
     }
     const s = this.signPassword;
-    if (!s.skip || danger) {
+    if (!s.skip || danger || this.tampered) {
       return true;
     }
-    return s.thresholdUsd > 0 && Number(usd) >= s.thresholdUsd;
+    if (!(s.thresholdUsd > 0)) {
+      return false;
+    }
+    const n = usd === null || usd === undefined ? NaN : Number(usd);
+    return !Number.isFinite(n) || n >= s.thresholdUsd;
+  },
+
+  /* ---------- оценка в долларах ---------- */
+
+  /** Актив, для которого кошелёк знает цену: монета сети (token === null) или встроенный токен.
+   * Свои и неизвестные токены (в том числе undefined) не оцениваются. */
+  pricedAsset(chainId, token) {
+    const chain = CHAINS[chainId];
+    if (!chain) {
+      return null;
+    }
+    if (token === null) {
+      return { symbol: chain.symbol, decimals: chain.decimals };
+    }
+    if (!token || typeof token !== "object") {
+      return null;
+    }
+    const key = String(token.address || token.mint || "").toLowerCase();
+    const builtin = key && (chain.tokens || []).find(t => (t.address || t.mint || "").toLowerCase() === key);
+    return builtin ? { symbol: builtin.symbol, decimals: builtin.decimals } : null;
+  },
+
+  /** Цена единицы в $ или null, если она неизвестна. Встроенные стейблкоины стоят $1 и без ответа API. */
+  unitPrice(chainId, token, prices = {}) {
+    const a = this.pricedAsset(chainId, token);
+    if (!a) {
+      return null;
+    }
+    const p = Number(prices?.[a.symbol]);
+    if (Number.isFinite(p) && p > 0) {
+      return p;
+    }
+    return STABLE.test(a.symbol) ? 1 : null;
+  },
+
+  /** Сумма в $ по сырому значению; null, если цена неизвестна. Ноль стоит ноль. */
+  usdOf(chainId, token, raw, prices = {}) {
+    let v;
+    try {
+      v = BigInt(raw ?? 0);
+    } catch (e) {
+      return null;
+    }
+    if (v < 0n) {
+      v = -v;
+    }
+    if (v === 0n) {
+      return 0;
+    }
+    const a = this.pricedAsset(chainId, token);
+    const p = this.unitPrice(chainId, token, prices);
+    return a && p !== null ? this.toNumber(v, a.decimals) * p : null;
+  },
+
+  /** Сумма оценок: любая неизвестная часть делает неизвестной всю сумму. */
+  sumUsd(...values) {
+    let total = 0;
+    for (const v of values) {
+      if (v === null || v === undefined || !Number.isFinite(Number(v))) {
+        return null;
+      }
+      total += Number(v);
+    }
+    return total;
   },
 
   get unlocked() {
+    // проверка по настоящему времени: таймер мог не идти, пока система спала
+    if (this._key && this._deadline && Date.now() >= this._deadline) {
+      this.lock({ deferNotify: true });
+    }
     return !!this._key;
   },
 
@@ -375,12 +472,23 @@ export const WalletStore = {
 
   tampered: false,
 
-  /** Пользователь подтвердил, что правки файла сделаны им: подписываем текущее содержимое. */
-  async acceptFile() {
+  _addrFixed: 0, // сколько адресов подменённого файла не совпало с фразой
+
+  /** Пользователь подтвердил паролем, что правки файла сделаны им: подписываем текущее содержимое.
+   * Адреса к этому моменту уже пересчитаны из seed, поэтому подписываются настоящие. */
+  async acceptFile(password) {
+    if (!this.unlocked) {
+      throw new Error("Кошелёк заблокирован");
+    }
+    await this.verifyPassword(password);
     this.tampered = false;
+    this._addrFixed = 0;
     const known = await getRevMarker();
     this.data.rev = Math.max(this.data.rev || 0, known || 0);
     await this.save();
+    await this.migrateSettings();
+    await this.ensurePhishMark();
+    this.armAutolock();
   },
 
   /** Откат файла к старой подписанной копии: ревизия в файле ниже известной. */
@@ -458,19 +566,26 @@ export const WalletStore = {
       check: await encrypt(raw, utf8ToBytes(CHECK_V3)),
       wallets: [],
       active: null,
-      settings: { hiddenChains: [] },
+      settings: { hiddenChains: [], autolockMinutes: DEFAULT_AUTOLOCK, nodes: {} },
     };
     this._key = raw;
     this._macRequired = true;
-    await this.addWallet({ mnemonic, name });
+    this.tampered = false;
+    await this._addWallet({ mnemonic, name });
     await this.ensurePhishMark();
     this.armAutolock();
     this.notify("unlocked");
     return this.activeWallet;
   },
 
-  /** Добавить ещё один кошелёк по фразе (кошелёк должен быть разблокирован). */
-  async addWallet({ mnemonic, name }) {
+  /** Добавить ещё один кошелёк по фразе: только с паролем (чужая фраза = чужие адреса приёма). */
+  async addWallet({ mnemonic, name }, password) {
+    this.assertTrusted();
+    await this.verifyPassword(password);
+    return this._addWallet({ mnemonic, name });
+  },
+
+  async _addWallet({ mnemonic, name }) {
     if (!this.unlocked) {
       throw new Error("Кошелёк заблокирован");
     }
@@ -514,11 +629,16 @@ export const WalletStore = {
     if (!wallet) {
       throw new Error("Кошелёк не найден");
     }
-    const phrase = await this.mnemonicOf(wallet);
-    const seed = bip39.mnemonicToSeedSync(phrase);
-    const index = Math.max(-1, ...wallet.accounts.map(a => a.index)) + 1;
-    const account = { index, name: name || `Адрес ${index + 1}`, addresses: this.deriveAll(seed, index) };
-    wipe(seed);
+    // seed сразу байтами: фраза строкой JS здесь не нужна
+    const seed = await this.seedOf(wallet);
+    let account;
+    try {
+      const index = Math.max(-1, ...wallet.accounts.map(a => a.index)) + 1;
+      account = { index, name: name || `Адрес ${index + 1}`, addresses: this.deriveAll(seed, index) };
+    } finally {
+      wipe(seed);
+    }
+    const index = account.index;
     wallet.accounts.push(account);
     this.data.active = { wallet: wallet.id, account: index };
     await this.save();
@@ -581,37 +701,182 @@ export const WalletStore = {
     this._key = raw;
     this.verifyMac();
     await this.verifyRev();
-    if (!this.tampered && !this._macRequired) {
+    if (this.tampered) {
+      await this.rederiveAddresses();
+    } else if (!this._macRequired) {
       // старый файл: переводим на обязательную подпись (якорь внутри шифроблока)
       this.data.check = await encrypt(this._key, utf8ToBytes(CHECK_V3));
       this._macRequired = true;
       await this.save();
-    } else if (!this.data.mac && !this.tampered) {
+    } else if (!this.data.mac) {
       await this.save();
     }
+    await this.migrateSettings();
     await this.ensurePhishMark();
     this.armAutolock();
     this.notify("unlocked");
   },
 
-  lock() {
+  /** Подменённый файл: адреса приёма и отпечатки пересчитываются из seed (шифроблок без ключа не подделать).
+   * В файл ничего не пишется, пока пользователь не подтвердит правки. */
+  async rederiveAddresses() {
+    let fixed = 0;
+    const good = [];
+    for (const wallet of this.wallets) {
+      let seed;
+      try {
+        seed = await this.seedOf(wallet);
+      } catch (e) {
+        fixed++; // шифроблок испорчен: таким кошельком нельзя ни подписать, ни доверять его адресам
+        continue;
+      }
+      try {
+        const fingerprint = bytesToHex(sha256(HDKey.fromMasterSeed(seed).publicKey)).slice(0, 8);
+        if (wallet.fingerprint !== fingerprint) {
+          wallet.fingerprint = fingerprint;
+          fixed++;
+        }
+        const accounts = (Array.isArray(wallet.accounts) ? wallet.accounts : []).filter(a => Number.isInteger(a?.index) && a.index >= 0 && a.index < 0x80000000);
+        if (!accounts.length) {
+          accounts.push({ index: 0, name: "Адрес 1" });
+        }
+        for (const a of accounts) {
+          const real = this.deriveAll(seed, a.index);
+          if (CHAIN_ORDER.some(id => a.addresses?.[id] !== real[id])) {
+            fixed++;
+          }
+          a.addresses = real;
+          a.name = cleanText(a.name, 40) || `Адрес ${a.index + 1}`;
+        }
+        wallet.accounts = accounts;
+        wallet.name = cleanText(wallet.name, 40) || "Кошелёк";
+        good.push(wallet);
+      } finally {
+        wipe(seed);
+      }
+    }
+    if (good.length) {
+      this.data.wallets = good;
+    }
+    this._addrFixed = fixed;
+  },
+
+  lock({ deferNotify = false } = {}) {
     wipe(this._key);
     this._key = null;
     this._phishMark = "";
+    this._deadline = 0;
     clearTimeout(this._timer);
-    this.notify("locked");
-  },
-
-  armAutolock() {
-    clearTimeout(this._timer);
-    const minutes = Services.prefs.getIntPref(AUTOLOCK_PREF, 15);
-    if (minutes > 0) {
-      this._timer = setTimeout(() => this.lock(), minutes * 60 * 1000);
+    if (deferNotify) {
+      setTimeout(() => this.notify("locked"), 0); // из геттера: подписчики перерисуют панель уже после текущего кода
+    } else {
+      this.notify("locked");
     }
   },
 
+  /** Автоблокировка, минут (0 — никогда). Хранится в подписанном файле; старые файлы — из настройки профиля до переноса. */
+  get autolockMinutes() {
+    const ok = v => Number.isInteger(v) && v >= 0 && v <= 1440;
+    const v = this.settings.autolockMinutes;
+    if (ok(v)) {
+      return v;
+    }
+    if (this.tampered || this.data?.settings?.autolockMinutes !== undefined) {
+      return DEFAULT_AUTOLOCK;
+    }
+    const legacy = Services.prefs.getIntPref(AUTOLOCK_PREF, DEFAULT_AUTOLOCK);
+    return ok(legacy) ? legacy : DEFAULT_AUTOLOCK;
+  },
+
+  /** Удлинение или отключение автоблокировки требует пароль кошелька. */
+  async setAutolock(minutes, password) {
+    this.assertTrusted();
+    minutes = Number(minutes);
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) {
+      throw new Error("Недопустимое время автоблокировки");
+    }
+    const limit = v => (v > 0 ? v : Infinity);
+    if (limit(minutes) > limit(this.autolockMinutes)) {
+      await this.verifyPassword(password);
+    }
+    this.data.settings ||= {};
+    this.data.settings.autolockMinutes = minutes;
+    await this.save();
+    this.armAutolock();
+  },
+
+  /** Перенос автоблокировки и нод из настроек профиля (их меняют через about:config без пароля) в подписанный файл. */
+  async migrateSettings() {
+    if (!this._key || this.tampered || !this.data) {
+      return;
+    }
+    const s = (this.data.settings ||= {});
+    let changed = false;
+    if (s.autolockMinutes === undefined) {
+      s.autolockMinutes = this.autolockMinutes;
+      changed = true;
+    }
+    if (s.nodes === undefined) {
+      const clean = {};
+      let saved = {};
+      try {
+        saved = JSON.parse(Services.prefs.getStringPref(NODES_PREF, "{}")) || {};
+      } catch (e) {}
+      for (const id of Object.keys(CHAINS)) {
+        const entry = saved[id];
+        if (!Array.isArray(entry?.list) || !entry.list.length) {
+          continue;
+        }
+        try {
+          const list = entry.list.map(u => this.validateNodeUrl(u));
+          clean[id] = { list, index: Math.max(0, Math.min(list.length - 1, Number(entry.index) | 0)) };
+        } catch (e) {}
+      }
+      s.nodes = clean;
+      changed = true;
+    }
+    if (changed) {
+      await this.save();
+    }
+  },
+
+  _deadline: 0, // настоящее время автоблокировки (Date.now), 0 — без автоблокировки
+
+  armAutolock() {
+    clearTimeout(this._timer);
+    const minutes = this.autolockMinutes;
+    this._deadline = minutes > 0 ? Date.now() + minutes * 60 * 1000 : 0;
+    if (minutes > 0) {
+      this._timer = setTimeout(() => this.checkAutolock(), minutes * 60 * 1000);
+    }
+    this.watchSleep();
+  },
+
+  /** Блокировка по настоящему времени: после сна системы таймер мог отстать. */
+  checkAutolock() {
+    if (!this._key || !this._deadline) {
+      return;
+    }
+    const left = this._deadline - Date.now();
+    if (left <= 0) {
+      this.lock();
+      return;
+    }
+    clearTimeout(this._timer);
+    this._timer = setTimeout(() => this.checkAutolock(), Math.max(1000, left));
+  },
+
+  watchSleep() {
+    if (this._sleepObs) {
+      return;
+    }
+    this._sleepObs = { observe: () => this.checkAutolock() };
+    Services.obs.addObserver(this._sleepObs, "wake_notification");
+    Services.obs.addObserver(this._sleepObs, "sleep_notification");
+  },
+
   touch() {
-    if (this._key) {
+    if (this.unlocked) {
       this.armAutolock();
     }
   },
@@ -639,6 +904,9 @@ export const WalletStore = {
     const parsed = JSON.parse(new TextDecoder().decode(plain));
     wipe(plain);
     const seed = parsed.seed ? hexToBytes(parsed.seed) : bip39.mnemonicToSeedSync(parsed.mnemonic);
+    if (this.tampered) {
+      return seed; // недоверенный файл не переписываем
+    }
     try {
       wallet.vaultSeed = await encrypt(this._key, seed);
       const onlyPhrase = utf8ToBytes(JSON.stringify({ mnemonic: parsed.mnemonic }));
@@ -780,22 +1048,39 @@ export const WalletStore = {
 
   /* ---------- узлы ---------- */
 
-  nodesFor(chainId) {
-    let saved = {};
+  /** Сохранённые ноды: из подписанного файла; до переноса — из настройки профиля; у подменённого файла — ничего. */
+  savedNodes() {
+    const s = this.settings.nodes;
+    if (s && typeof s === "object") {
+      return s;
+    }
+    if (this.tampered || this.data?.settings?.nodes !== undefined) {
+      return {};
+    }
     try {
-      saved = JSON.parse(Services.prefs.getStringPref(NODES_PREF, "{}"));
-    } catch (e) {}
+      return JSON.parse(Services.prefs.getStringPref(NODES_PREF, "{}")) || {};
+    } catch (e) {
+      return {};
+    }
+  },
+
+  nodesFor(chainId) {
+    const saved = this.savedNodes();
     const chain = CHAINS[chainId];
     let list = chain.nodes;
-    if (saved[chainId]?.list?.length) {
+    if (Array.isArray(saved[chainId]?.list) && saved[chainId].list.length) {
       try {
-        list = saved[chainId].list.map(u => this.validateNodeUrl(u)); // prefs не под подписью файла: проверяем при каждом чтении
+        list = saved[chainId].list.map(u => this.validateNodeUrl(u)); // проверяем при каждом чтении
       } catch (e) {
         list = chain.nodes;
       }
     }
-    const index = Math.min(saved[chainId]?.index || 0, list.length - 1);
+    const index = Math.max(0, Math.min(Number(saved[chainId]?.index) | 0, list.length - 1));
     return { list, index, url: list[index] };
+  },
+
+  isBuiltinNode(chainId, url) {
+    return CHAINS[chainId].nodes.some(u => this.validateNodeUrl(u) === url);
   },
 
   /** Нода допустима только по https (http — лишь для localhost). */
@@ -813,15 +1098,28 @@ export const WalletStore = {
     return u.href.replace(/\/$/, "");
   },
 
-  setNodes(chainId, list, index, { quiet = false } = {}) {
+  /** Список нод сети и активная нода. Своя нода (новая в списке или выбранная активной) требует пароль:
+   * нода видит ваши адреса и может лгать о балансах, комиссиях и результатах симуляции. */
+  async setNodes(chainId, list, index, { quiet = false, password } = {}) {
+    this.assertTrusted();
+    if (!CHAINS[chainId]) {
+      throw new Error("Неизвестная сеть");
+    }
     list = list.map(u => this.validateNodeUrl(u));
-    let saved = {};
-    try {
-      saved = JSON.parse(Services.prefs.getStringPref(NODES_PREF, "{}"));
-    } catch (e) {}
-    saved[chainId] = { list, index };
-    Services.prefs.setStringPref(NODES_PREF, JSON.stringify(saved));
+    index = Number(index);
+    if (!list.length || !Number.isInteger(index) || index < 0 || index >= list.length) {
+      throw new Error("Неверный выбор ноды");
+    }
+    const current = new Set(this.nodesFor(chainId).list);
+    const weaker = list.some(u => !this.isBuiltinNode(chainId, u) && !current.has(u)) || !this.isBuiltinNode(chainId, list[index]);
+    if (weaker) {
+      await this.verifyPassword(password);
+    }
+    const saved = { ...this.savedNodes(), [chainId]: { list, index } };
+    this.data.settings ||= {};
+    this.data.settings.nodes = saved;
     delete this._nodeOverride[chainId];
+    await this.save();
     if (!quiet) {
       this.notify("nodes");
     }
@@ -883,6 +1181,7 @@ export const WalletStore = {
   },
 
   async grantPermission(origin, chain, grant) {
+    this.assertTrusted();
     this.data.permissions ||= {};
     this.data.permissions[origin] ||= { since: new Date().toISOString() };
     this.data.permissions[origin][chain] = { ...grant, at: new Date().toISOString() };
@@ -950,7 +1249,7 @@ export const WalletStore = {
   },
 
   get contacts() {
-    return this.data?.contacts || [];
+    return this.tampered ? [] : this.data?.contacts || [];
   },
 
   CONTACT_ADDRESS: { evm: /^0x[0-9a-fA-F]{40}$/, bitcoin: /^(bc1[02-9ac-hj-np-z]{11,87}|[13][1-9A-HJ-NP-Za-km-z]{25,34})$/, solana: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/, tron: /^T[1-9A-HJ-NP-Za-km-z]{33}$/ },
@@ -970,12 +1269,15 @@ export const WalletStore = {
     return out;
   },
 
-  async addContact({ name, addresses, note = "" }) {
+  /** Контакт помечает получателя как доверенного: новый контакт и смена адресов требуют пароль. */
+  async addContact({ name, addresses, note = "" }, password) {
+    this.assertTrusted();
     const clean = this.cleanAddresses(addresses);
     const cleanName = cleanText(name, 40);
     if (!cleanName || !Object.keys(clean).length) {
       throw new Error("Нужны имя и хотя бы один адрес");
     }
+    await this.verifyPassword(password);
     this.data.contacts ||= [];
     const contact = { id: `c${Date.now().toString(36)}`, name: cleanName, addresses: clean, note: cleanText(note, 200), at: new Date().toISOString() };
     this.data.contacts.push(contact);
@@ -983,19 +1285,28 @@ export const WalletStore = {
     return contact;
   },
 
-  async updateContact(id, patch) {
+  async updateContact(id, patch, password) {
+    this.assertTrusted();
     const c = this.contacts.find(x => x.id === id);
     if (!c) {
       throw new Error("Контакт не найден");
     }
-    if (patch.name !== undefined) {
-      c.name = cleanText(patch.name, 40) || c.name;
-    }
+    let clean = null;
     if (patch.addresses) {
-      const clean = this.cleanAddresses(patch.addresses);
+      clean = this.cleanAddresses(patch.addresses);
       if (!Object.keys(clean).length) {
         throw new Error("Нужен хотя бы один адрес");
       }
+      if (canonical(clean) !== canonical(c.addresses || {})) {
+        await this.verifyPassword(password);
+      } else {
+        clean = null;
+      }
+    }
+    if (patch.name !== undefined) {
+      c.name = cleanText(patch.name, 40) || c.name;
+    }
+    if (clean) {
       c.addresses = clean;
     }
     if (patch.note !== undefined) {
@@ -1005,6 +1316,7 @@ export const WalletStore = {
   },
 
   async removeContact(id) {
+    this.assertTrusted();
     this.data.contacts = this.contacts.filter(x => x.id !== id);
     await this.save();
   },
@@ -1029,7 +1341,7 @@ export const WalletStore = {
   /* ---------- история операций ---------- */
 
   get activity() {
-    return this.data?.activity || [];
+    return this.tampered ? [] : this.data?.activity || [];
   },
 
   async addActivity(entry) {
@@ -1041,17 +1353,39 @@ export const WalletStore = {
 
   /* ---------- токены ---------- */
 
+  /** Сети, скрытые пользователем. */
+  get hiddenChains() {
+    const list = this.settings.hiddenChains;
+    return new Set(Array.isArray(list) ? list : []);
+  },
+
+  async setChainHidden(chainId, hide) {
+    this.assertTrusted();
+    const set = this.hiddenChains;
+    if (hide) {
+      set.add(chainId);
+    } else {
+      set.delete(chainId);
+    }
+    this.data.settings ||= {};
+    this.data.settings.hiddenChains = [...set];
+    await this.save();
+  },
+
   tokensFor(chainId) {
     const chain = CHAINS[chainId];
-    const custom = this.data?.settings?.customTokens?.[chainId] || [];
-    const hidden = new Set(this.data?.settings?.hiddenTokens?.[chainId] || []);
+    const s = this.settings;
+    const custom = Array.isArray(s.customTokens?.[chainId]) ? s.customTokens[chainId] : [];
+    const hidden = new Set(Array.isArray(s.hiddenTokens?.[chainId]) ? s.hiddenTokens[chainId] : []);
     const key = t => (t.address || t.mint || "").toLowerCase();
     const all = [...(chain.tokens || []), ...custom.filter(c => !(chain.tokens || []).some(t => key(t) === key(c)))];
     return all.filter(t => !hidden.has(key(t)));
   },
 
   async addToken(chainId, token) {
+    this.assertTrusted();
     token = { ...token, symbol: cleanText(token.symbol, 12) || "TOKEN", decimals: safeDecimals(token.decimals) };
+    this.data.settings ||= {};
     this.data.settings.customTokens ||= {};
     const list = (this.data.settings.customTokens[chainId] ||= []);
     const kind = CHAINS[chainId]?.kind;
@@ -1071,7 +1405,9 @@ export const WalletStore = {
   },
 
   async hideToken(chainId, token) {
+    this.assertTrusted();
     const key = (token.address || token.mint || "").toLowerCase();
+    this.data.settings ||= {};
     this.data.settings.hiddenTokens ||= {};
     const list = (this.data.settings.hiddenTokens[chainId] ||= []);
     if (!list.includes(key)) {
@@ -1268,16 +1604,20 @@ export const WalletStore = {
         return (await fetchJson(`${chain.history}/api/v2/addresses/${address}${path}`, {}, { timeout: 15000 })).items || [];
       };
       const [txs, transfers] = await Promise.all([get("/transactions").catch(() => []), get("/token-transfers?type=ERC-20").catch(() => [])]);
+      // транзакции, которые подписали вы: «исходящий» перевод токена в чужой транзакции — подделка (transferFrom на 0, событие контракта)
+      const signed = new Set(txs.filter(t => t.from?.hash?.toLowerCase() === me).map(t => String(t.hash || "").toLowerCase()));
       for (const t of txs.slice(0, 30)) {
         const value = BigInt(t.value || 0);
         if (value === 0n && !t.to?.hash) {
           continue;
         }
-        raw.push({ hash: t.hash, at: Date.parse(t.timestamp), dir: dirOf(t.from?.hash, t.to?.hash), from: t.from?.hash, to: t.to?.hash, rawAmount: value, decimals: chain.decimals, symbol: chain.symbol, logo: chain.logo, kind: "native", status: t.status === "ok" ? "ok" : t.status === null ? "pending" : "failed", scam: t.from?.is_scam || (t.from?.reputation && t.from.reputation !== "ok"), call: value === 0n && t.method ? t.method : null });
+        const dir = dirOf(t.from?.hash, t.to?.hash);
+        raw.push({ hash: t.hash, at: Date.parse(t.timestamp), dir, from: t.from?.hash, to: t.to?.hash, rawAmount: value, decimals: chain.decimals, symbol: chain.symbol, logo: chain.logo, kind: "native", status: t.status === "ok" ? "ok" : t.status === null ? "pending" : "failed", scam: t.from?.is_scam || (t.from?.reputation && t.from.reputation !== "ok"), call: value === 0n && dir !== "in" ? cleanText(t.method, 40) || "Вызов контракта" : null, mine: dir !== "in" ? t.from?.hash?.toLowerCase() === me : undefined });
       }
       for (const t of transfers.slice(0, 40)) {
         const token = known.get((t.token?.address || t.token?.address_hash || "").toLowerCase());
-        raw.push({ hash: t.tx_hash || t.transaction_hash, at: Date.parse(t.timestamp), dir: dirOf(t.from?.hash, t.to?.hash), from: t.from?.hash, to: t.to?.hash, rawAmount: BigInt(t.total?.value || 0), decimals: safeDecimals(t.total?.decimals ?? token?.decimals ?? 18, 18), symbol: token?.symbol || "?", logo: token?.logo || null, kind: "token", known: !!token, custom: !!token?.custom, status: "ok", scam: t.from?.is_scam || (t.from?.reputation && t.from.reputation !== "ok") || t.token?.reputation === "scam" });
+        const hash = t.tx_hash || t.transaction_hash;
+        raw.push({ hash, at: Date.parse(t.timestamp), dir: dirOf(t.from?.hash, t.to?.hash), from: t.from?.hash, to: t.to?.hash, rawAmount: BigInt(t.total?.value || 0), decimals: safeDecimals(t.total?.decimals ?? token?.decimals ?? 18, 18), symbol: token?.symbol || "?", logo: token?.logo || null, kind: "token", known: !!token, custom: !!token?.custom, status: "ok", scam: t.from?.is_scam || (t.from?.reputation && t.from.reputation !== "ok") || t.token?.reputation === "scam", mine: signed.has(String(hash || "").toLowerCase()) });
       }
     } else if (chain.kind === "btc") {
       const txs = await this.rpc(chainId, null, `/address/${address}/txs`);
@@ -1300,6 +1640,8 @@ export const WalletStore = {
         }
         const keys = tx.transaction.message.accountKeys.map(k => k.pubkey || k);
         const idx = keys.indexOf(address);
+        // списание без вашей подписи возможно только через делегата (approve): такие «исходящие» не показываем
+        const mine = tx.transaction.message.accountKeys.some(k => (k.pubkey || k) === address && k.signer === true);
         const failed = !!tx.meta?.err;
         const at = (tx.blockTime || sg.blockTime || 0) * 1000;
         if (idx !== -1) {
@@ -1308,7 +1650,7 @@ export const WalletStore = {
           const amount = delta < 0n ? -delta - fee : delta;
           if (amount !== 0n || (delta < 0n && !tx.meta.postTokenBalances?.length)) {
             const other = keys.find((k, j) => j !== idx && !/^(11111111111111111111111111111111|ComputeBudget|Tokenkeg|ATokenGP)/.test(k));
-            raw.push({ hash: sg.signature, at, dir: delta < 0n ? "out" : "in", from: delta < 0n ? address : other, to: delta < 0n ? other : address, rawAmount: amount, decimals: 9, symbol: "SOL", logo: chain.logo, kind: "native", status: failed ? "failed" : "ok" });
+            raw.push({ hash: sg.signature, at, dir: delta < 0n ? "out" : "in", from: delta < 0n ? address : other, to: delta < 0n ? other : address, rawAmount: amount, decimals: 9, symbol: "SOL", logo: chain.logo, kind: "native", status: failed ? "failed" : "ok", mine });
           }
         }
         const pre = new Map((tx.meta.preTokenBalances || []).filter(b => b.owner === address).map(b => [b.mint, BigInt(b.uiTokenAmount.amount)]));
@@ -1322,11 +1664,11 @@ export const WalletStore = {
             continue;
           }
           const token = known.get(b.mint.toLowerCase());
-          raw.push({ hash: sg.signature, at, dir: d < 0n ? "out" : "in", rawAmount: d < 0n ? -d : d, decimals: safeDecimals(b.uiTokenAmount.decimals, 0), symbol: token?.symbol || "?", logo: token?.logo || null, kind: "token", known: !!token, custom: !!token?.custom, status: failed ? "failed" : "ok", from: d < 0n ? address : null, to: d < 0n ? null : address });
+          raw.push({ hash: sg.signature, at, dir: d < 0n ? "out" : "in", rawAmount: d < 0n ? -d : d, decimals: safeDecimals(b.uiTokenAmount.decimals, 0), symbol: token?.symbol || "?", logo: token?.logo || null, kind: "token", known: !!token, custom: !!token?.custom, status: failed ? "failed" : "ok", from: d < 0n ? address : null, to: d < 0n ? null : address, mine });
         }
         for (const [mint, amount] of pre) {
           const token = known.get(mint.toLowerCase());
-          raw.push({ hash: sg.signature, at, dir: "out", rawAmount: amount, decimals: token?.decimals ?? 0, symbol: token?.symbol || "?", logo: token?.logo || null, kind: "token", known: !!token, custom: !!token?.custom, status: failed ? "failed" : "ok", from: address, to: null });
+          raw.push({ hash: sg.signature, at, dir: "out", rawAmount: amount, decimals: token?.decimals ?? 0, symbol: token?.symbol || "?", logo: token?.logo || null, kind: "token", known: !!token, custom: !!token?.custom, status: failed ? "failed" : "ok", from: address, to: null, mine });
         }
       });
     } else if (chain.kind === "tron") {
@@ -1334,7 +1676,7 @@ export const WalletStore = {
       const get = async path => {
         return (await fetchJson(`${base}/v1/accounts/${address}${path}`, {}, { timeout: 15000 })).data || [];
       };
-      const [txs, trc20] = await Promise.all([get("/transactions?limit=30&only_confirmed=true").catch(() => []), get("/transactions/trc20?limit=40&only_confirmed=true").catch(() => [])]);
+      const [txs, trc20] = await Promise.all([get("/transactions?limit=50&only_confirmed=true").catch(() => []), get("/transactions/trc20?limit=40&only_confirmed=true").catch(() => [])]);
       const b58 = hex => {
         try {
           return b58check.encode(hexToBytes(hex));
@@ -1342,7 +1684,9 @@ export const WalletStore = {
           return hex;
         }
       };
-      for (const t of txs) {
+      // транзакции, где владелец (подписант) — вы
+      const signed = new Set(txs.filter(t => b58(t.raw_data?.contract?.[0]?.parameter?.value?.owner_address || "") === address).map(t => String(t.txID || "").toLowerCase()));
+      for (const t of txs.slice(0, 30)) {
         const c = t.raw_data?.contract?.[0];
         const v = c?.parameter?.value || {};
         const ok = t.ret?.[0]?.contractRet === "SUCCESS";
@@ -1359,17 +1703,19 @@ export const WalletStore = {
           continue;
         }
         const token = known.get((t.token_info?.address || "").toLowerCase());
-        raw.push({ hash: t.transaction_id, at: t.block_timestamp, dir: dirOf(t.from, t.to), from: t.from, to: t.to, rawAmount: BigInt(t.value || 0), decimals: safeDecimals(t.token_info?.decimals ?? token?.decimals ?? 6, 6), symbol: token?.symbol || "?", logo: token?.logo || null, kind: "token", known: !!token, custom: !!token?.custom, status: "ok" });
+        raw.push({ hash: t.transaction_id, at: t.block_timestamp, dir: dirOf(t.from, t.to), from: t.from, to: t.to, rawAmount: BigInt(t.value || 0), decimals: safeDecimals(t.token_info?.decimals ?? token?.decimals ?? 6, 6), symbol: token?.symbol || "?", logo: token?.logo || null, kind: "token", known: !!token, custom: !!token?.custom, status: "ok", mine: signed.has(String(t.transaction_id || "").toLowerCase()) });
       }
     }
     return this.filterHistory(chainId, raw, prices);
   },
 
-  /** Фильтр спама и нормализация. Скрываем: входящие неизвестные токены, пыль (< $0.01),
-   * нулевые переводы, «отравление адреса», помеченных скамеров, неудачные входящие. */
+  /** Фильтр спама и нормализация. Скрываем: неизвестные токены, пыль (< $0.5), нулевые переводы в любую
+   * сторону, «исходящие», которые вы не подписывали (отравление адреса), помеченных скамеров, неудачные входящие.
+   * suspects — адреса контрагентов скрытых операций: экран отправки предупреждает о них. */
   filterHistory(chainId, raw, prices) {
     const chain = CHAINS[chainId];
     const items = [];
+    const suspects = new Set();
     let hidden = 0;
     const seen = new Set();
     for (const r of raw) {
@@ -1380,21 +1726,28 @@ export const WalletStore = {
       const usd = price === null ? null : parseFloat(amount) * price;
       const incoming = r.dir === "in";
       let spam = false;
+      let poison = false; // признаки отравления адреса: контрагента запоминаем
       if (r.scam) {
         spam = true;
       } else if (r.kind === "token" && !r.known) {
         spam = true; // неизвестный токен в любую сторону: контракт может эмитить любые события от вашего имени
-      } else if (incoming && r.rawAmount === 0n) {
-        spam = true; // нулевой перевод (отравление адреса)
+      } else if (r.rawAmount === 0n && !(r.call && r.dir === "out" && r.mine !== false)) {
+        spam = poison = true; // нулевой перевод в любую сторону (отравление адреса); свои вызовы контрактов остаются
+      } else if (!incoming && r.mine === false) {
+        spam = poison = true; // «исходящий» перевод в транзакции, которую вы не подписывали
       } else if (incoming && ((usd !== null && usd < 0.5) || (r.kind === "native" && chain.dust && parseFloat(amount) < chain.dust))) {
-        spam = true; // пыль (в т. ч. «отравление адреса» мелкими суммами), даже если курс не загрузился
+        spam = poison = true; // пыль (в т. ч. «отравление адреса» мелкими суммами), даже если курс не загрузился
       } else if (incoming && r.status === "failed") {
         spam = true;
       } else if (incoming && r.kind === "token" && /^(USDT|USDC|DAI)$/.test(r.symbol) && usd !== null && usd < 0.5 && r.decimals >= 6) {
-        spam = true; // «1 USDT» от неизвестного — классическое отравление с мелкой суммой
+        spam = poison = true; // «1 USDT» от неизвестного — классическое отравление с мелкой суммой
       }
       if (spam) {
         hidden++;
+        const other = incoming ? r.from : r.to;
+        if (poison && other && r.dir !== "self") {
+          suspects.add(String(other));
+        }
         continue;
       }
       const id = `${chainId}:${r.hash}:${r.kind}:${r.symbol}:${r.dir}`;
@@ -1405,7 +1758,7 @@ export const WalletStore = {
       items.push({ id, hash: r.hash, chain: chainId, chainName: chain.name, chainLogo: chain.logo, at: r.at || 0, dir: r.dir, amount, symbol: r.symbol, logo: r.logo || chain.logo, counterparty: incoming ? r.from : r.to, usd, status: r.status, kind: r.kind, call: r.call || null });
     }
     items.sort((a, b) => b.at - a.at);
-    return { items, hidden };
+    return { items, hidden, suspects: [...suspects].slice(0, 200).map(address => ({ chain: chainId, address })) };
   },
 
   /** Самопроверка деривации на эталонной фразе BIP-39 (для тестов). */

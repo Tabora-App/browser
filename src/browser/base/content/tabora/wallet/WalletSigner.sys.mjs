@@ -7,8 +7,8 @@
  * и обнуляется здесь сразу после подписи. */
 
 const { setTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
-const C = ChromeUtils.importESModule("chrome://browser/content/tabora/wallet/vendor/crypto.sys.mjs");
-const { WalletStore, CHAINS } = ChromeUtils.importESModule("chrome://browser/content/tabora/wallet/WalletStore.sys.mjs");
+const C = ChromeUtils.importESModule("chrome://tabora/content/wallet/vendor/crypto.sys.mjs");
+const { WalletStore, CHAINS } = ChromeUtils.importESModule("chrome://tabora/content/wallet/WalletStore.sys.mjs");
 const { sha256, keccak_256, secp256k1, ed25519, bytesToHex, hexToBytes, utf8ToBytes, base58, base58check, base64, EthTransaction, ethPersonal, ethSignTyped, ethDecodeData } = C;
 const b58check = base58check(sha256);
 
@@ -100,49 +100,207 @@ export const WalletSigner = {
     return ethSignTyped(data, priv);
   },
 
-  /** Человекочитаемый разбор calldata: ERC-20 transfer/approve и известные контракты. */
-  evmDecode(to, data, value) {
+  /** Permit2 (Uniswap): один адрес во всех EVM-сетях. */
+  PERMIT2: "0x000000000022d473030f116ddee9f6b43ac78ba3",
+
+  /** «Фактически без лимита»: 2^96−1 и больше (USDC/Uniswap-стиль) либо сумма, недостижимая для любого токена. */
+  isUnlimited(amount) {
+    return amount >= (1n << 96n) - 1n || amount >= 10n ** 30n;
+  },
+
+  /** Строгое чтение аргументов ABI: длина, чистые старшие байты адресов и ширина чисел проверяются. */
+  abiReader(hex) {
+    if (!/^[0-9a-fA-F]*$/.test(hex) || hex.length % 2) {
+      throw new Error("abi: не hex");
+    }
+    const count = Math.floor(hex.length / 64);
+    const word = i => {
+      if (!Number.isInteger(i) || i < 0 || i >= count) {
+        throw new Error("abi: данных меньше, чем нужно");
+      }
+      return hex.slice(i * 64, (i + 1) * 64);
+    };
+    const num = i => BigInt("0x" + word(i));
+    const uint = (i, bits = 256) => {
+      const v = num(i);
+      if (v >> BigInt(bits)) {
+        throw new Error("abi: число шире типа");
+      }
+      return v;
+    };
+    const addr = i => {
+      const w = word(i);
+      if (!/^0{24}/.test(w)) {
+        throw new Error("abi: неверный адрес");
+      }
+      return "0x" + w.slice(24);
+    };
+    const bool = i => {
+      const v = num(i);
+      if (v > 1n) {
+        throw new Error("abi: неверный bool");
+      }
+      return v === 1n;
+    };
+    /** Смещение в байтах → номер слова (смещения кратны 32 и не выходят за данные). */
+    const offset = (i, base = 0) => {
+      const v = num(i);
+      if (v % 32n || v / 32n >= BigInt(count)) {
+        throw new Error("abi: неверное смещение");
+      }
+      return base + Number(v / 32n);
+    };
+    /** bytes по номеру слова с длиной. */
+    const bytesAt = w => {
+      const len = num(w);
+      if (len > BigInt(hex.length)) {
+        throw new Error("abi: длина за границей");
+      }
+      const start = (w + 1) * 64;
+      const end = start + Number(len) * 2;
+      if (end > hex.length) {
+        throw new Error("abi: длина за границей");
+      }
+      return hex.slice(start, end);
+    };
+    const length = (w, max) => {
+      const n = num(w);
+      if (n > BigInt(max)) {
+        throw new Error("abi: слишком много элементов");
+      }
+      return Number(n);
+    };
+    return { count, word, num, uint, addr, bool, offset, bytesAt, length };
+  },
+
+  /** Человекочитаемый разбор calldata по белому списку. Всё, что не распознано строго, — kind "unknown":
+   * лист показывает такой вызов как опасный. opts.chainId — сеть EVM (WETH, Permit2, известные контракты). */
+  evmDecode(to, data, value, { chainId = null, depth = 0 } = {}) {
     if (!data || data === "0x") {
       return null;
     }
     const sel = data.slice(0, 10).toLowerCase();
-    const word = i => "0x" + data.slice(10 + i * 64, 10 + (i + 1) * 64);
-    const addrOf = i => "0x" + word(i).slice(-40);
-    const num = i => toBig(word(i));
-    if (sel === "0xa9059cbb") {
-      return { kind: "transfer", to: addrOf(0), amount: num(1) };
+    const unknown = (reason = null) => ({ kind: "unknown", selector: sel, reason });
+    if (!/^0x[0-9a-fA-F]{8}/.test(data)) {
+      return unknown("данные короче селектора");
     }
-    if (sel === "0x095ea7b3") {
-      const amount = num(1);
-      // «фактически без лимита»: 2^96−1 и больше (USDC/Uniswap-стиль) либо сумма, недостижимая для любого токена
-      return { kind: "approve", spender: addrOf(0), amount, unlimited: amount >= (1n << 96n) - 1n || amount >= 10n ** 30n };
-    }
-    if (sel === "0x23b872dd") {
-      return { kind: "transferFrom", from: addrOf(0), to: addrOf(1), amount: num(2) };
-    }
-    if (sel === "0xa22cb465") {
-      return { kind: "setApprovalForAll", operator: addrOf(0), approved: num(1) !== 0n };
-    }
-    if (sel === "0x39509351") {
-      const amount = num(1);
-      return { kind: "approve", spender: addrOf(0), amount, unlimited: amount >= (1n << 96n) - 1n || amount >= 10n ** 30n, increase: true };
-    }
-    if (sel === "0x42842e0e" || sel === "0xb88d4fde") {
-      return { kind: "nftTransfer", from: addrOf(0), to: addrOf(1), tokenId: num(2) };
-    }
-    if (sel === "0x2e1a7d4d") {
-      return { kind: "withdraw", amount: num(0) };
-    }
-    if (sel === "0xd0e30db0") {
-      return { kind: "deposit" };
-    }
+    const target = String(to || "").toLowerCase();
     try {
-      const d = ethDecodeData(to, data, toBig(value || 0));
-      if (d) {
-        return { kind: "known", text: typeof d === "string" ? d : JSON.stringify(d, (k, v) => (typeof v === "bigint" ? v.toString() : v)) };
+      const a = this.abiReader(data.slice(10));
+      if (sel === "0xa9059cbb") {
+        return { kind: "transfer", to: a.addr(0), amount: a.uint(1) };
       }
-    } catch (e) {}
-    return { kind: "unknown", selector: sel };
+      if (sel === "0x095ea7b3" || sel === "0x39509351") {
+        const amount = a.uint(1);
+        return { kind: "approve", spender: a.addr(0), amount, unlimited: this.isUnlimited(amount), increase: sel === "0x39509351" };
+      }
+      if (sel === "0xa457c2d7") {
+        return { kind: "allowanceDown", spender: a.addr(0), amount: a.uint(1) };
+      }
+      if (sel === "0x23b872dd") {
+        return { kind: "transferFrom", from: a.addr(0), to: a.addr(1), amount: a.uint(2) };
+      }
+      if (sel === "0xa22cb465") {
+        return { kind: "setApprovalForAll", operator: a.addr(0), approved: a.bool(1) };
+      }
+      if (sel === "0x42842e0e" || sel === "0xb88d4fde") {
+        return { kind: "nftTransfer", from: a.addr(0), to: a.addr(1), tokenId: a.uint(2) };
+      }
+      // обёртка монеты — только у WETH этой сети: deposit()/withdraw() есть у любого контракта
+      const wrapped = chainId && CHAINS[chainId]?.wrapped;
+      if (wrapped && target === wrapped.address.toLowerCase()) {
+        if (sel === "0xd0e30db0") {
+          return { kind: "wrap", symbol: wrapped.symbol };
+        }
+        if (sel === "0x2e1a7d4d") {
+          return { kind: "unwrap", amount: a.uint(0), symbol: wrapped.symbol };
+        }
+      }
+      if (chainId && CHAINS[chainId]?.kind === "evm" && target === this.PERMIT2) {
+        const p2 = this.permit2Decode(sel, a);
+        if (p2) {
+          return p2;
+        }
+      }
+      // multicall на том же контракте: вложенные вызовы исполняются от вашего имени (delegatecall)
+      if (sel === "0xac9650d8" || sel === "0x5ae401dc" || sel === "0x1f0464d1") {
+        if (depth > 0) {
+          return unknown("вложенный multicall");
+        }
+        const head = sel === "0xac9650d8" ? 0 : 1;
+        const arr = a.offset(head);
+        const n = a.length(arr, 32);
+        const calls = [];
+        for (let i = 0; i < n; i++) {
+          const el = a.offset(arr + 1 + i, arr + 1);
+          calls.push(this.evmDecode(to, "0x" + a.bytesAt(el), 0n, { chainId, depth: depth + 1 }) || unknown("пустой вызов"));
+        }
+        return { kind: "multicall", calls, deadline: sel === "0x5ae401dc" ? a.uint(0) : null };
+      }
+    } catch (e) {
+      return unknown(e.message);
+    }
+    // известные контракты библиотеки (роутеры Uniswap, Kyber, WETH): только mainnet и только точное совпадение адреса
+    if (chainId === "ethereum" && depth === 0) {
+      try {
+        const d = ethDecodeData(to, data, toBig(value || 0));
+        if (d && !Array.isArray(d)) {
+          const text = typeof d.hint === "string" && d.hint ? d.hint : `${d.name}: ${JSON.stringify(d.value ?? null, (k, v) => (typeof v === "bigint" ? v.toString() : v))}`;
+          return { kind: "known", text };
+        }
+      } catch (e) {}
+    }
+    return unknown();
+  },
+
+  /** Вызовы Permit2 от вашего адреса: approve, permit (single/batch), transferFrom, lockdown, invalidateNonces. */
+  permit2Decode(sel, a) {
+    const detail = w => ({ token: a.addr(w), amount: a.uint(w + 1, 160), expiration: a.uint(w + 2, 48), nonce: a.uint(w + 3, 48) });
+    if (sel === "0x87517c45") {
+      const amount = a.uint(2, 160);
+      return { kind: "permit2Approve", details: [{ token: a.addr(0), amount, expiration: a.uint(3, 48) }], spender: a.addr(1) };
+    }
+    if (sel === "0x2b67b570") {
+      // permit(owner, PermitSingle{details{token,amount,expiration,nonce}, spender, sigDeadline}, signature)
+      return { kind: "permit2Approve", owner: a.addr(0), details: [detail(1)], spender: a.addr(5), sigDeadline: a.uint(6), viaPermit: true };
+    }
+    if (sel === "0x2a2d80d1") {
+      // permit(owner, PermitBatch{details[], spender, sigDeadline}, signature)
+      const t = a.offset(1);
+      const arr = a.offset(t, t);
+      const n = a.length(arr, 32);
+      const details = [];
+      for (let i = 0; i < n; i++) {
+        details.push(detail(arr + 1 + i * 4));
+      }
+      return { kind: "permit2Approve", owner: a.addr(0), details, spender: a.addr(t + 1), sigDeadline: a.uint(t + 2), viaPermit: true };
+    }
+    if (sel === "0x36c78516") {
+      return { kind: "permit2Transfer", items: [{ from: a.addr(0), to: a.addr(1), amount: a.uint(2, 160), token: a.addr(3) }] };
+    }
+    if (sel === "0x0d58b1db") {
+      const arr = a.offset(0);
+      const n = a.length(arr, 32);
+      const items = [];
+      for (let i = 0; i < n; i++) {
+        const w = arr + 1 + i * 4;
+        items.push({ from: a.addr(w), to: a.addr(w + 1), amount: a.uint(w + 2, 160), token: a.addr(w + 3) });
+      }
+      return { kind: "permit2Transfer", items };
+    }
+    if (sel === "0xcc53287f") {
+      const arr = a.offset(0);
+      const n = a.length(arr, 64);
+      const pairs = [];
+      for (let i = 0; i < n; i++) {
+        pairs.push({ token: a.addr(arr + 1 + i * 2), spender: a.addr(arr + 2 + i * 2) });
+      }
+      return { kind: "permit2Revoke", pairs };
+    }
+    if (sel === "0x65d9723c") {
+      return { kind: "permit2Revoke", pairs: [{ token: a.addr(0), spender: a.addr(1) }], nonces: true };
+    }
+    return null;
   },
 
   /* ---------- TRON ---------- */
@@ -245,6 +403,16 @@ export const WalletSigner = {
       return hexToBytes(hex);
     }
     throw new Error("Неверный адрес TRON");
+  },
+
+  /** Баланс TRC-20 через ноду (для проверки «approve больше баланса»). */
+  async tronTokenBalance(owner, contract) {
+    const r = await this.tronPost("/wallet/triggerconstantcontract", { owner_address: owner, contract_address: contract, function_selector: "balanceOf(address)", parameter: this.abiEncodeParam("address", owner), visible: true });
+    const hex = r?.constant_result?.[0];
+    if (typeof hex !== "string" || !/^[0-9a-fA-F]{1,64}$/.test(hex)) {
+      throw new Error("TRON: нода не вернула баланс токена");
+    }
+    return BigInt("0x" + hex);
   },
 
   async tronBroadcast(signed) {
@@ -770,6 +938,7 @@ export const WalletSigner = {
   solDescribe(parsed, ourAddress, tokens = []) {
     const lines = [];
     let danger = false;
+    let unknown = 0; // программы, которые кошелёк не расшифровывает: с вашей подписью они могут через CPI сделать что угодно с вашими счетами
     const short = a => (a ? `${a.slice(0, 4)}…${a.slice(-4)}` : "?");
     const key = i => (i < parsed.keys.length ? parsed.keys[i] : null);
     const name = i => {
@@ -850,10 +1019,13 @@ export const WalletSigner = {
         lines.push("Создание токен-счёта (ATA)");
         continue;
       }
-      if (!p) {
-        danger = true;
+      if (p === this.SOL_MEMO || p === this.SOL_MEMO_V1) {
+        lines.push(`Memo: ${this.safeText(new TextDecoder().decode(d), 80).text}`);
+        continue;
       }
-      lines.push(`Программа ${p ? short(p) : "из таблицы адресов"}: ${ix.data.length} байт данных`);
+      danger = true;
+      unknown++;
+      lines.push(`Программа ${p ? short(p) : "из таблицы адресов"}: ${ix.data.length} байт данных, не расшифрована`);
       } catch (e) {
         lines.push(`Инструкция с некорректными данными (${ix.program ? short(ix.program) : "программа из таблицы"})`);
         danger = true;
@@ -863,8 +1035,11 @@ export const WalletSigner = {
       danger = true;
       lines.push(`Часть адресов берётся из ${parsed.lookups} таблиц(ы): их нельзя проверить заранее`);
     }
-    return { lines, danger, feePayer: parsed.keys[0] === ourAddress };
+    return { lines, danger, unknown, feePayer: parsed.keys[0] === ourAddress };
   },
+
+  SOL_MEMO: "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",
+  SOL_MEMO_V1: "Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo",
 
   async solSend(bytes, options = {}) {
     const r = await WalletStore.rpc("solana", { jsonrpc: "2.0", id: 1, method: "sendTransaction", params: [base64.encode(bytes), { encoding: "base64", skipPreflight: !!options.skipPreflight, preflightCommitment: options.preflightCommitment || "confirmed", maxRetries: options.maxRetries }] });
@@ -952,8 +1127,21 @@ export const WalletSigner = {
     return tx;
   },
 
+  /** Программа токена: только Token и Token-2022 (владельца mint сообщает RPC, ему на слово не верим). */
+  solTokenProgram(program) {
+    if (program !== this.SOL_TOKEN && program !== this.SOL_TOKEN_2022) {
+      throw new Error("Mint принадлежит неизвестной программе: перевод такого токена не поддерживается");
+    }
+    return program;
+  },
+
   /** Перевод SPL: при необходимости создаём ATA получателя (idempotent), затем TransferChecked. */
   solBuildTokenTransfer({ from, to, mint, amount, blockhash, program = this.SOL_TOKEN, fromAta, toAta, createAta, decimals }) {
+    program = this.solTokenProgram(program);
+    // адреса счетов пересчитываем сами: план мог прийти с подменёнными ATA
+    if ((fromAta && fromAta !== this.solAta(from, mint, program)) || (toAta && toAta !== this.solAta(to, mint, program))) {
+      throw new Error("Счёт токена не совпадает с адресом: пересчитайте перевод");
+    }
     fromAta ||= this.solAta(from, mint, program);
     toAta ||= this.solAta(to, mint, program);
     const ixs = [];

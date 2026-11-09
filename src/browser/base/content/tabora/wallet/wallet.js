@@ -12,13 +12,19 @@ Object.assign(Tabora, {
 
   walletStore() {
     if (!this._walletMod) {
-      this._walletMod = ChromeUtils.importESModule("chrome://browser/content/tabora/wallet/WalletStore.sys.mjs");
+      this._walletMod = ChromeUtils.importESModule("chrome://tabora/content/wallet/WalletStore.sys.mjs");
       Services.obs.addObserver((subject, topic, what) => {
         this.drawerDirty("wallet");
         if (what === "locked" || what === "destroyed") {
           const pill = document.getElementById("tabora-wallet-total");
           if (pill) {
             pill.hidden = true;
+          }
+          // после блокировки на экране не остаётся показанной фразы, а в памяти — слов недописанного кошелька
+          this.walletHideSecrets();
+          clearTimeout(this.wallet.hideTimer);
+          if (this.wallet.flow?.kind?.startsWith("add")) {
+            this.wallet.flow = null;
           }
         }
       }, this._walletMod.WalletStore.TOPIC);
@@ -109,7 +115,9 @@ Object.assign(Tabora, {
     } else {
       node = this.walletMainView();
     }
-    d.body.replaceChildren(node);
+    // предупреждение о подменённом файле видно на всех экранах кошелька
+    const tamper = WalletStore.exists && WalletStore.unlocked && WalletStore.tampered && !w.flow ? this.walletTamperBanner() : null;
+    d.body.replaceChildren(...[tamper, node].filter(Boolean));
     if (WalletStore.exists && WalletStore.unlocked && !w.flow && w.view === "main") {
       this.walletLoadBalances(seq);
     }
@@ -118,6 +126,26 @@ Object.assign(Tabora, {
   walletGo(view) {
     this.wallet.view = view;
     this.renderDrawer();
+  },
+
+  /** Файл кошелька изменён вне Tabora: что это значит и подтверждение правок паролем. */
+  walletTamperBanner() {
+    const h = (t, a, x, c) => this.html(t, a, x, c);
+    const { WalletStore } = this.walletStore();
+    const fixed = WalletStore._addrFixed;
+    const accept = this.wButton("Это мои правки, принять…", "small ghost", () => this.walletPassword(
+      "Принять файл кошелька",
+      "Вы подтверждаете, что файл изменили вы. После этого кошелёк снова будет доверять контактам, нодам, своим токенам, настройкам и подключённым сайтам из файла. Если вы файл не меняли, не принимайте: восстановите кошелёк по фразе.",
+      async pass => {
+        await WalletStore.acceptFile(pass);
+        this.notice("Файл кошелька подтверждён");
+        this.renderDrawer();
+      }
+    ));
+    return h("div", { class: "w-badge-danger w-tamper" }, null, [
+      h("span", {}, `Файл кошелька изменён вне Tabora. Пока вы не подтвердите правки паролем, кошелёк ему не доверяет: адреса приёма пересчитаны из фразы${fixed ? ` (не совпадало: ${fixed})` : ""}, контакты, ноды, свои токены и настройки из файла не используются, сайты отключены.`),
+      accept,
+    ]);
   },
 
   /* ---- Приветствие ------------------------------------------------------- */
@@ -345,7 +373,15 @@ Object.assign(Tabora, {
     try {
       this.agentStatus?.("", false);
       if (f.kind.startsWith("add")) {
-        await WalletStore.addWallet({ mnemonic: phrase, name: f.name || `Кошелёк ${WalletStore.wallets.length + 1}` });
+        // новый кошелёк = новые адреса приёма: добавление только с паролем
+        this.walletPassword("Добавить кошелёк", "Введите пароль кошелька, чтобы добавить фразу.", async pass => {
+          await WalletStore.addWallet({ mnemonic: phrase, name: f.name || `Кошелёк ${WalletStore.wallets.length + 1}` }, pass);
+          this.wallet.flow = null;
+          this.wallet.view = "main";
+          this.notice(f.kind.includes("import") ? "Кошелёк импортирован" : "Кошелёк создан");
+          this.renderDrawer();
+        });
+        return;
       } else {
         await WalletStore.create({ mnemonic: phrase, password: f.passwordless ? "" : f.password, name: "Кошелёк 1" });
       }
@@ -390,7 +426,7 @@ Object.assign(Tabora, {
     return h("div", { class: "w-locked" }, null, [
       h("div", { class: "w-lock-mark" }, null, [this.wIcon(["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], 22, 1.8)]),
       h("b", {}, "Кошелёк заблокирован"),
-      h("p", { class: "w-sub" }, `${WalletStore.wallets.length} ${this.plural(WalletStore.wallets.length, "кошелёк", "кошелька", "кошельков")} · ${Services.prefs.getIntPref("tabora.wallet.autolockMinutes", 15) ? `автоблокировка через ${Services.prefs.getIntPref("tabora.wallet.autolockMinutes", 15)} мин` : "без автоблокировки"}`),
+      h("p", { class: "w-sub" }, `${WalletStore.wallets.length} ${this.plural(WalletStore.wallets.length, "кошелёк", "кошелька", "кошельков")} · ${WalletStore.autolockMinutes ? `автоблокировка через ${WalletStore.autolockMinutes} мин` : "без автоблокировки"}`),
       pass.wrap, err, go,
     ]);
   },
@@ -402,7 +438,7 @@ Object.assign(Tabora, {
     const { WalletStore, CHAINS, CHAIN_ORDER } = this.walletStore();
     const wallet = WalletStore.activeWallet;
     const account = WalletStore.activeAccount;
-    const hidden = new Set(WalletStore.data.settings?.hiddenChains || []);
+    const hidden = WalletStore.hiddenChains;
     const w = this.wallet;
     w.tab ||= "assets";
 
@@ -447,7 +483,6 @@ Object.assign(Tabora, {
       total,
       h("div", { class: "w-head-actions" }, null, [sendBtn, receiveBtn]),
       WalletStore.passwordless ? h("div", { class: "w-badge-danger" }, "Без пароля · незащищённый режим") : h("span"),
-      WalletStore.tampered ? h("div", { class: "w-badge-danger w-tamper" }, null, [h("span", {}, "Файл кошелька изменён вне Tabora: проверьте адреса и подключённые сайты."), this.wButton("Это я, принять", "small ghost", () => WalletStore.acceptFile())]) : h("span"),
     ]);
 
     const seg = h("div", { class: "w-seg wide" }, null, [["assets", "Активы"], ["chains", "Сети"], ["activity", "История"]].map(([id, label]) => {
@@ -508,7 +543,7 @@ Object.assign(Tabora, {
             { label: "Показать адрес и QR", run: () => { w.receive = id; this.walletGo("receive"); } },
             { label: "Открыть в обозревателе", run: () => this.openInSpace(chain.explorer + address, true) },
             { separator: true },
-            { label: "Скрыть сеть", run: async () => { WalletStore.data.settings.hiddenChains = [...hidden, id]; await WalletStore.save(); } },
+            { label: "Скрыть сеть", run: () => WalletStore.setChainHidden(id, true).catch(e => this.notice(e.message)) },
           ], e.clientX, e.clientY);
         });
         list.append(row);
@@ -543,7 +578,7 @@ Object.assign(Tabora, {
   walletAssets() {
     const { WalletStore, CHAINS, CHAIN_ORDER } = this.walletStore();
     const account = WalletStore.activeAccount;
-    const hidden = new Set(WalletStore.data.settings?.hiddenChains || []);
+    const hidden = WalletStore.hiddenChains;
     const prices = this.wallet.prices || {};
     const out = [];
     for (const id of CHAIN_ORDER) {
@@ -559,7 +594,8 @@ Object.assign(Tabora, {
       }
       out.push({ key: `${id}:native`, chain: id, chainName: chain.name, color: chain.color, symbol: chain.symbol, logo: chain.logo, chainLogo: chain.logo, amount: bal.native, usd: parseFloat(bal.native) * (prices[chain.symbol] || 0), native: true, address });
       for (const t of bal.tokens || []) {
-        out.push({ key: `${id}:${t.address || t.mint}`, chain: id, chainName: chain.name, color: chain.color, symbol: t.symbol, logo: t.logo, chainLogo: chain.logo, amount: t.amount, usd: parseFloat(t.amount) * (prices[t.symbol] || 0), token: t, address });
+        // свои токены не оцениваются: символ «USDT» у своего токена ничего не стоит
+        out.push({ key: `${id}:${t.address || t.mint}`, chain: id, chainName: chain.name, color: chain.color, symbol: t.symbol, logo: t.logo, chainLogo: chain.logo, amount: t.amount, usd: parseFloat(t.amount) * (WalletStore.unitPrice(id, t, prices) || 0), token: t, address });
       }
     }
     out.sort((a, b) => (b.usd || 0) - (a.usd || 0) || (parseFloat(b.amount) || 0) - (parseFloat(a.amount) || 0));
@@ -673,7 +709,7 @@ Object.assign(Tabora, {
     const { WalletStore, CHAIN_ORDER } = this.walletStore();
     const account = WalletStore.activeAccount;
     const w = this.wallet;
-    const hidden = new Set(WalletStore.data.settings?.hiddenChains || []);
+    const hidden = WalletStore.hiddenChains;
     const stale = CHAIN_ORDER.filter(id => !hidden.has(id)).filter(id => {
       const b = w.balances[`${id}:${account.addresses[id]}`];
       return !b || Date.now() - b.at > 60000;
@@ -813,7 +849,12 @@ Object.assign(Tabora, {
     const { WalletStore, CHAINS, CHAIN_ORDER } = this.walletStore();
     const back = this.wButton("Назад", "ghost small", () => this.walletGo("main"));
     const wallet = WalletStore.activeWallet;
-    const hidden = new Set(WalletStore.data.settings?.hiddenChains || []);
+    const hidden = WalletStore.hiddenChains;
+    // смена нод, автоблокировки и режима пароля — только с паролем кошелька (кто угодно за разблокированным компьютером не ослабит защиту)
+    const guarded = (title, sub, run) => this.walletPassword(title, sub, async pass => {
+      await run(pass);
+      this.renderDrawer();
+    }, () => this.renderDrawer());
 
     const nodes = h("div", { class: "w-group" }, null, [h("b", { class: "w-group-title" }, "Ноды (публичные, можно менять)")]);
     for (const id of CHAIN_ORDER) {
@@ -827,16 +868,24 @@ Object.assign(Tabora, {
         return o;
       }));
       select.addEventListener("change", () => {
-        WalletStore.setNodes(id, list, parseInt(select.value, 10));
-        this.wallet.balances = {};
+        const next = parseInt(select.value, 10);
+        guarded(`Нода ${chain.name}`, `Переключить на ${this.hostOf(list[next])}? Нода видит ваши адреса и сообщает балансы, комиссии и результаты симуляции.`, async pass => {
+          await WalletStore.setNodes(id, list, next, { password: pass });
+          this.wallet.balances = {};
+        });
       });
       const add = this.iconButton("", "Добавить свою ноду", ["M12 5v14", "M5 12h14"], () => this.walletPrompt(`Адрес ноды для ${chain.name}`, "https://", v => {
+        let url;
         try {
-          WalletStore.setNodes(id, [...list, v.trim()], list.length);
-          this.wallet.balances = {};
+          url = WalletStore.validateNodeUrl(v.trim());
         } catch (e) {
           this.notice(e.message);
+          return;
         }
+        guarded(`Своя нода ${chain.name}`, `Добавить и выбрать ${this.hostOf(url)}? Своя нода видит ваши адреса и может сообщать ложные балансы, комиссии и результаты симуляции.`, async pass => {
+          await WalletStore.setNodes(id, list.includes(url) ? list : [...list, url], list.includes(url) ? list.indexOf(url) : list.length, { password: pass });
+          this.wallet.balances = {};
+        });
       }), 13);
       const row = h("div", { class: "w-node rpc", style: `--c:${chain.color}` }, null, [h("img", { class: "w-logo small", src: chain.logo, alt: "" }), h("span", { class: "w-node-name" }, chain.name), select, add]);
       nodes.append(row);
@@ -849,25 +898,27 @@ Object.assign(Tabora, {
     for (const id of CHAIN_ORDER) {
       const cb = h("input", { type: "checkbox" });
       cb.checked = !hidden.has(id);
-      cb.addEventListener("change", async () => {
-        const set = new Set(WalletStore.data.settings.hiddenChains || []);
-        cb.checked ? set.delete(id) : set.add(id);
-        WalletStore.data.settings.hiddenChains = [...set];
-        await WalletStore.save();
-      });
+      cb.addEventListener("change", () => WalletStore.setChainHidden(id, !cb.checked).catch(e => {
+        this.notice(e.message);
+        this.renderDrawer();
+      }));
       chains.append(h("label", { class: "w-check" }, null, [cb, h("span", {}, CHAINS[id].name)]));
     }
 
-    const autolock = h("select", {}, null, [5, 15, 30, 60, 0].map(v => {
+    const autolockNow = WalletStore.autolockMinutes;
+    const autolock = h("select", {}, null, [...new Set([5, 15, 30, 60, 0, autolockNow])].map(v => {
       const o = h("option", { value: String(v) }, v ? `${v} мин` : "никогда");
-      if (v === Services.prefs.getIntPref("tabora.wallet.autolockMinutes", 15)) {
+      if (v === autolockNow) {
         o.selected = true;
       }
       return o;
     }));
     autolock.addEventListener("change", () => {
-      Services.prefs.setIntPref("tabora.wallet.autolockMinutes", parseInt(autolock.value, 10));
-      WalletStore.armAutolock();
+      const v = parseInt(autolock.value, 10);
+      guarded("Автоблокировка", v ? `Блокировать кошелёк через ${v} мин без действий?` : "Отключить автоблокировку? Кошелёк останется открытым, пока вы не заблокируете его вручную.", async pass => {
+        await WalletStore.setAutolock(v, pass);
+        this.notice(v ? `Автоблокировка через ${v} мин` : "Автоблокировка выключена");
+      });
     });
     const sp = WalletStore.signPassword;
     const spCurrent = !sp.skip ? "always" : sp.thresholdUsd ? String(sp.thresholdUsd) : "never";
@@ -878,20 +929,18 @@ Object.assign(Tabora, {
       }
       return o;
     }));
-    signSel.addEventListener("change", async () => {
+    signSel.addEventListener("change", () => {
       const v = signSel.value;
-      try {
-        await WalletStore.setSignPassword(v === "always" ? { skip: false } : { skip: true, thresholdUsd: v === "never" ? 0 : Number(v) });
+      guarded("Пароль при подписи", v === "always" ? "Спрашивать пароль на каждую подпись?" : "Подписи без пароля до автоблокировки: любой за этим компьютером сможет подписать операцию ниже порога. Суммы без известного курса и опасные операции по-прежнему спросят пароль.", async pass => {
+        await WalletStore.setSignPassword(v === "always" ? { skip: false } : { skip: true, thresholdUsd: v === "never" ? 0 : Number(v) }, pass);
         this.notice(v === "always" ? "Пароль нужен на каждую подпись" : "Пароль только при разблокировке, крупных суммах и опасных операциях");
-      } catch (e) {
-        this.notice(e.message);
-      }
+      });
     });
     const security = h("div", { class: "w-group" }, null, [
       h("b", { class: "w-group-title" }, "Безопасность"),
       h("div", { class: "w-node" }, null, [h("span", { class: "w-node-name" }, "Автоблокировка"), autolock]),
       h("div", { class: "w-node" }, null, [h("span", { class: "w-node-name" }, "Пароль при подписи"), signSel]),
-      WalletStore.signPassword.skip ? h("p", { class: "w-hint" }, "Пока кошелёк разблокирован, подпись не спрашивает пароль: любой за этим компьютером сможет подписать транзакцию до автоблокировки. Опасные операции и суммы от порога спрашивают пароль всегда.") : h("span", { hidden: "true" }),
+      WalletStore.signPassword.skip ? h("p", { class: "w-hint" }, "Пока кошелёк разблокирован, подпись не спрашивает пароль: любой за этим компьютером сможет подписать транзакцию до автоблокировки. Опасные операции, суммы от порога и суммы без известного курса спрашивают пароль всегда.") : h("span", { hidden: "true" }),
       this.wButton(`Показать фразу: ${wallet.name}`, "ghost", () => this.walletRevealFlow(wallet)),
       this.wButton(WalletStore.passwordless ? "Установить пароль" : "Сменить пароль", "ghost", () => this.walletChangePasswordFlow()),
       this.wButton(`Удалить кошелёк «${wallet.name}» из браузера`, "ghost danger", () => this.walletPassword("Удаление кошелька", "Фраза останется только у вас. Введите пароль для подтверждения.", async pass => {
@@ -910,8 +959,8 @@ Object.assign(Tabora, {
     return h("div", { class: "w-settings" }, null, [h("div", { class: "w-flow-head" }, null, [h("b", {}, "Настройки кошелька"), back]), security, this.walletMarkCard(), this.walletContactsCard(), this.walletSitesCard(), nodes, chains]);
   },
 
-  /** Запрос пароля в панели: колбэк получает пароль, при ошибке показываем текст. */
-  walletPassword(title, sub, onOk) {
+  /** Запрос пароля в панели: колбэк получает пароль, при ошибке показываем текст; onCancel — при отмене. */
+  walletPassword(title, sub, onOk, onCancel = null) {
     const { WalletStore } = this.walletStore();
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const pass = this.wField("Пароль", { type: "password", autocomplete: "current-password" });
@@ -927,7 +976,10 @@ Object.assign(Tabora, {
         ok.disabled = false;
       }
     });
-    const cancel = this.wButton("Отмена", "ghost", () => box.remove());
+    const cancel = this.wButton("Отмена", "ghost", () => {
+      box.remove();
+      onCancel?.();
+    });
     const box = h("div", { class: "w-sheet" }, null, [h("div", { class: "w-sheet-card" }, null, [h("b", {}, title), h("p", { class: "w-sub" }, sub), WalletStore.passwordless ? h("span") : pass.wrap, err, h("div", { class: "w-actions" }, null, [cancel, ok])])]);
     pass.input.addEventListener("keydown", e => {
       e.stopPropagation();

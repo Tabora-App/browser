@@ -12,7 +12,7 @@ Object.assign(Tabora, {
 
   walletSigner() {
     if (!this._walletSigner) {
-      this._walletSigner = ChromeUtils.importESModule("chrome://browser/content/tabora/wallet/WalletSigner.sys.mjs");
+      this._walletSigner = ChromeUtils.importESModule("chrome://tabora/content/wallet/WalletSigner.sys.mjs");
     }
     return this._walletSigner;
   },
@@ -73,7 +73,7 @@ Object.assign(Tabora, {
     const { CHAINS } = this.walletStore();
     const { WalletSigner } = this.walletSigner();
     const chain = CHAINS[chainId];
-    const C = this._walletMod ? ChromeUtils.importESModule("chrome://browser/content/tabora/wallet/vendor/crypto.sys.mjs") : null;
+    const C = this._walletMod ? ChromeUtils.importESModule("chrome://tabora/content/wallet/vendor/crypto.sys.mjs") : null;
     to = String(to || "").trim();
     if (!to) {
       return { ok: false, note: "" };
@@ -112,6 +112,68 @@ Object.assign(Tabora, {
     return { ok: true, note: `Адрес ${chain.name} верный` };
   },
 
+  /** Отравление адреса: получатель похож на знакомый адрес (совпадают первые и последние символы), но не равен ему,
+   * или встречался в скрытых подозрительных операциях истории. Возвращает { text } или null. */
+  wAddressRisk(chainId, to) {
+    const { WalletStore, CHAINS } = this.walletStore();
+    to = String(to || "").trim();
+    const kind = CHAINS[chainId]?.kind;
+    if (!to || !kind) {
+      return null;
+    }
+    const family = c => (kind === "evm" ? CHAINS[c]?.kind === "evm" : c === chainId); // у EVM-сетей общий адрес
+    const norm = a => (kind === "evm" ? String(a).toLowerCase() : String(a));
+    const strip = a => (kind === "evm" ? a.replace(/^0x/, "") : kind === "tron" ? a.replace(/^T/, "") : kind === "btc" ? a.replace(/^(bc1[qp]|[13])/, "") : a);
+    const known = new Map();
+    const add = (a, label) => {
+      if (a && !known.has(norm(a))) {
+        known.set(norm(a), { address: String(a), label });
+      }
+    };
+    for (const w of WalletStore.wallets) {
+      for (const acc of w.accounts) {
+        add(acc.addresses?.[chainId], `ваш адрес «${acc.name}»`);
+      }
+    }
+    for (const c of WalletStore.contactsFor(chainId)) {
+      add(c.address, `контакт «${c.name}»`);
+    }
+    for (const a of WalletStore.activity) {
+      if (a.to && family(a.chain)) {
+        add(a.to, "адрес из ваших отправок");
+      }
+    }
+    for (const it of this.wallet.history?.items || []) {
+      if (it.counterparty && family(it.chain)) {
+        add(it.counterparty, "адрес из истории");
+      }
+    }
+    const t = norm(to);
+    if (known.has(t)) {
+      return null;
+    }
+    if ((this.wallet.history?.suspects || []).some(s => family(s.chain) && norm(s.address) === t)) {
+      return { text: "Этот адрес встречался в скрытых подозрительных операциях (нулевые переводы, пыль, «исходящие», которые вы не подписывали). Так готовят подмену адреса: не отправляйте, если скопировали его из истории или обозревателя." };
+    }
+    const ts = strip(t);
+    for (const k of known.values()) {
+      const a = strip(norm(k.address));
+      const max = Math.min(a.length, ts.length);
+      let head = 0;
+      while (head < max && a[head] === ts[head]) {
+        head++;
+      }
+      let tail = 0;
+      while (tail < max - head && a[a.length - 1 - tail] === ts[ts.length - 1 - tail]) {
+        tail++;
+      }
+      if ((head >= 3 && tail >= 3) || tail >= 5 || head >= 6) {
+        return { text: `Адрес похож на ${k.label} (${this.shortAddr(k.address)}): совпадают начало и конец, но это другой адрес. Так выглядит «отравление адреса»: сверьте все символы.` };
+      }
+    }
+    return null;
+  },
+
   /* ---- Экран «Отправить» -------------------------------------------------- */
 
   walletSendStart(assetKey) {
@@ -139,7 +201,7 @@ Object.assign(Tabora, {
       this.walletLoadBalances(this.drawer.seq);
     }
     const available = pending ? null : BigInt(asset.native ? this.wParseAmount(asset.amount, decimals) ?? 0n : asset.token.raw || 0);
-    const price = (this.wallet.prices || {})[asset.symbol] || 0;
+    const price = WalletStore.unitPrice(asset.chain, asset.native ? null : asset.token, this.wallet.prices || {}) || 0;
 
     const back = this.wButton("Отмена", "ghost small", () => this.walletGo("main"));
 
@@ -173,11 +235,13 @@ Object.assign(Tabora, {
       this.showMenu(items, r.left, r.bottom + 6);
     }, 14);
     const toNote = h("span", { class: "w-note" });
+    this.walletLoadHistory(); // адреса из истории нужны для проверки на похожие (кэш 60 с)
     const refreshToNote = () => {
       const c = this.wCheckAddress(asset.chain, to.value);
       const contact = c.ok ? WalletStore.contactFor(asset.chain, to.value.trim()) : null;
-      toNote.textContent = contact ? `Контакт: ${contact.name} · ${c.note}` : c.note;
-      toNote.className = `w-note${c.ok ? (c.danger ? " danger" : " ok") : to.value.trim() ? " bad" : ""}`;
+      const risk = c.ok ? this.wAddressRisk(asset.chain, to.value) : null;
+      toNote.textContent = risk ? risk.text : contact ? `Контакт: ${contact.name} · ${c.note}` : c.note;
+      toNote.className = `w-note${c.ok ? (c.danger || risk ? " danger" : " ok") : to.value.trim() ? " bad" : ""}`;
       return c;
     };
 
@@ -421,8 +485,9 @@ Object.assign(Tabora, {
       let plan = {};
       if (!asset.native) {
         const mintInfo = await WalletStore.rpc("solana", { jsonrpc: "2.0", id: 1, method: "getAccountInfo", params: [asset.token.mint, { encoding: "base64" }] });
-        const program = mintInfo.result?.value?.owner || "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
         const S = this.walletSigner().WalletSigner;
+        // владельца mint сообщает нода: принимаем только Token и Token-2022
+        const program = S.solTokenProgram(mintInfo.result?.value?.owner || S.SOL_TOKEN);
         const fromAta = S.solAta(from, asset.token.mint, program);
         const toAta = S.solAta(to, asset.token.mint, program);
         const toInfo = await WalletStore.rpc("solana", { jsonrpc: "2.0", id: 2, method: "getAccountInfo", params: [toAta, { encoding: "base64" }] });
@@ -535,20 +600,33 @@ Object.assign(Tabora, {
     const from = account.addresses[asset.chain];
     const decimals = asset.native ? chain.decimals : asset.token.decimals;
     const amountText = this.wFmt(BigInt(fee.plan.raw), decimals, decimals);
-    const price = (this.wallet.prices || {})[asset.symbol] || 0;
+    // цена только у монет сетей и встроенных токенов; неизвестная цена — сумма считается выше порога пароля
+    const usd = WalletStore.usdOf(asset.chain, asset.native ? null : asset.token, BigInt(fee.plan.raw), this.wallet.prices || {});
     const feeRow = fee.rows.find(r => r[0] === "Комиссия сети");
+    const contact = WalletStore.contactFor(asset.chain, fee.plan.to);
+    const check = this.wCheckAddress(asset.chain, fee.plan.to);
+    const risk = this.wAddressRisk(asset.chain, fee.plan.to);
+    const warns = [];
+    if (risk) {
+      warns.push(risk.text);
+    }
+    if (check.danger) {
+      warns.push(`${check.note}.`);
+    }
+    warns.push(contact ? "Перевод необратим. Получатель из ваших контактов." : "Перевод необратим. Получатель не в контактах: сверьте все символы адреса, а не только начало и конец.", "Подпись выполняется локально, фраза не покидает устройство.");
     this.walletConfirm({
       title: "Подтверждение",
       amount: `${amountText} ${asset.symbol}`,
-      usd: price ? parseFloat(amountText) * price : 0,
-      amountNote: `${price ? `≈ ${this.wFmtUsd(parseFloat(amountText) * price)} · ` : ""}сеть ${chain.name}`,
+      usd,
+      danger: !!risk || !!check.danger,
+      amountNote: `${usd ? `≈ ${this.wFmtUsd(usd)} · ` : usd === null ? "курс неизвестен · " : ""}сеть ${chain.name}`,
       rows: [
         ["Откуда", `${account.name} · ${this.shortAddr(from)}`],
-        ["Куда", WalletStore.contactFor(asset.chain, fee.plan.to) ? `${WalletStore.contactFor(asset.chain, fee.plan.to).name} · ${fee.plan.to}` : fee.plan.to, "mono"],
+        ["Куда", contact ? `${contact.name} · ${fee.plan.to}` : fee.plan.to, "mono"],
         ["Комиссия сети", feeRow ? feeRow[1] : "—"],
         ["Нода", this.hostOf(WalletStore.nodesFor(asset.chain).url)],
       ],
-      warning: WalletStore.contactFor(asset.chain, fee.plan.to) ? "Перевод необратим. Получатель из ваших контактов. Подпись выполняется локально, фраза не покидает устройство." : "Перевод необратим. Получатель не в контактах: проверьте первые и последние символы адреса. Подпись выполняется локально, фраза не покидает устройство.",
+      warning: warns.join(" "),
       okLabel: "Подписать и отправить",
       onSign: async pass => {
         const hash = await this.walletExecuteSend(asset, fee.plan, pass);
@@ -564,7 +642,7 @@ Object.assign(Tabora, {
   async walletExecuteSend(asset, plan, pass) {
     const { WalletStore, CHAINS } = this.walletStore();
     const { WalletSigner } = this.walletSigner();
-    const C = ChromeUtils.importESModule("chrome://browser/content/tabora/wallet/vendor/crypto.sys.mjs");
+    const C = ChromeUtils.importESModule("chrome://tabora/content/wallet/vendor/crypto.sys.mjs");
     const chain = CHAINS[asset.chain];
     // подписываем тем кошельком и счётом, для которых строился план, а не «активным на момент нажатия»
     const wallet = WalletStore.wallets.find(w => w.id === plan.walletId) || WalletStore.activeWallet;
@@ -626,7 +704,8 @@ Object.assign(Tabora, {
     });
   },
 
-  /** Общий лист подтверждения с паролем. opts: title, origin{host,secure,icon}, amount, amountNote, summary, rows, warning, details, extra(node), okLabel, onSign(pass). */
+  /** Общий лист подтверждения с паролем. opts: title, origin{host,secure,icon,lookalike}, amount, amountNote, summary, rows, warning,
+   * danger, usd (оценка в $; null — неизвестна и считается выше порога; без поля — 0), details, extra(node), okLabel, onSign(pass). */
   walletConfirm(opts) {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { WalletStore } = this.walletStore();
@@ -634,31 +713,59 @@ Object.assign(Tabora, {
       const pass = this.wField("Пароль кошелька", { type: "password", autocomplete: "off" });
       const err = h("div", { class: "w-error", hidden: "true" });
       let done = false;
-      // Защита от кликджекинга и перехвата ввода: кнопка включается через паузу,
-      // клики, начатые до показа, игнорируются, Enter работает только после ввода в этом листе.
-      const ARM_MS = opts.fromSite ? 900 : 500;
-      const needPass = !opts.noPassword && WalletStore.signPasswordNeeded(opts.usd || 0, !!opts.danger);
-      const shownAt = Date.now();
-      let armed = false;
+      // Защита от кликджекинга и перехвата ввода: кнопка включается через паузу (лист сайта — 1,5 с),
+      // пауза начинается заново при потере фокуса окна, сворачивании и смене вкладки; мышью кнопку можно нажать,
+      // только если курсор после включения реально в неё вошёл; Enter — только после ввода пароля в этом листе.
+      const ARM_MS = opts.fromSite ? 1500 : 1000;
+      const lookalike = opts.origin?.lookalike || null;
+      const danger = !!opts.danger || !!lookalike || WalletStore.tampered;
+      const usd = "usd" in opts ? opts.usd : 0;
+      const needPass = !opts.noPassword && WalletStore.signPasswordNeeded(usd, danger);
+      let armedAt = 0;
+      let armTimer = null;
+      let pointerIn = false;
       let typedHere = false;
+      let busy = false; // идёт подпись: кнопку не включаем и не выключаем, иначе возможна двойная отправка
+      const cleanups = [];
       let finish = (fn, v) => {
         if (!done) {
           done = true;
+          clearTimeout(armTimer);
+          for (const f of cleanups) {
+            try {
+              f();
+            } catch (e) {}
+          }
           box.remove();
           fn(v);
         }
       };
+      const listen = (target, type, fn, capture = false) => {
+        target.addEventListener(type, fn, capture);
+        cleanups.push(() => target.removeEventListener(type, fn, capture));
+      };
       const ok = this.wButton(opts.okLabel || "Подписать", "primary", async e => {
-        if (!armed || Date.now() - shownAt < ARM_MS) {
+        if (!armedAt) {
           return;
         }
-        if (e && e.detail === 0 && needPass && !typedHere) {
-          return; // Enter без ввода пароля в этом листе
+        if (!e || e.detail === 0) {
+          // клавиатура: только после ввода пароля в этом листе; лист сайта без пароля — только мышью
+          if (needPass ? !typedHere : opts.fromSite) {
+            return;
+          }
+        } else if (!pointerIn) {
+          err.textContent = "Наведите курсор на кнопку и нажмите ещё раз";
+          err.hidden = false;
+          return;
         }
         if (opts.guard && !opts.guard.alive()) {
           finish(reject, Object.assign(new Error("Страница запроса закрыта или ушла: запрос отклонён"), { code: 4001 }));
           return;
         }
+        if (busy) {
+          return;
+        }
+        busy = true;
         ok.disabled = true;
         cancel.disabled = true;
         ok.classList.add("loading");
@@ -669,6 +776,7 @@ Object.assign(Tabora, {
           const result = await opts.onSign(pass.input.value);
           finish(resolve, result);
         } catch (e) {
+          busy = false;
           err.textContent = e.message || String(e);
           err.hidden = false;
           ok.disabled = false;
@@ -683,87 +791,103 @@ Object.assign(Tabora, {
         opts.fromSite && WalletStore.phishMark ? h("div", { class: "w-mark", title: "Знак подлинности: его знает только ваш кошелёк, сайт подделать не может" }, null, [h("span", {}, WalletStore.phishMark), h("i", {}, "настоящий лист Tabora")]) : null,
         opts.onDisconnect ? (() => { const b = h("button", { class: "w-link small w-right", type: "button" }, "Отключить сайт и отклонить"); b.addEventListener("click", async () => { await opts.onDisconnect(); finish(reject, Object.assign(new Error("Сайт отключён"), { code: 4001 })); }); return b; })() : null,
         opts.origin ? this.wOriginCard(opts.origin) : null,
+        lookalike ? h("div", { class: "w-warn danger" }, lookalike) : null,
+        WalletStore.tampered ? h("div", { class: "w-warn danger" }, "Файл кошелька изменён вне Tabora и не подтверждён: адреса пересчитаны из фразы, контакты и настройки из файла не используются.") : null,
         opts.amount ? h("div", { class: "w-confirm-amount" }, null, [h("span", {}, opts.amountLabel || "Отправляете"), h("b", { class: "mono" }, opts.amount), h("span", {}, opts.amountNote || "")]) : null,
         opts.summary ? h("div", { class: "w-confirm-summary" }, null, [h("span", { class: "w-label" }, "Что произойдёт"), ...[].concat(opts.summary).map(t => h("div", { class: "w-summary-line" }, t))]) : null,
         rows.length ? h("div", { class: "w-fee" }, null, rows) : null,
         opts.extra || null,
-        opts.warning ? h("div", { class: `w-warn${opts.danger ? " danger" : ""}` }, opts.warning) : null,
+        opts.warning ? h("div", { class: `w-warn${danger ? " danger" : ""}` }, opts.warning) : null,
         opts.details ? h("details", { class: "w-details" }, null, [h("summary", {}, opts.detailsLabel || "Данные вызова"), h("pre", { class: "mono" }, opts.details)]) : null,
-        opts.noPassword ? null : WalletStore.passwordless ? h("p", { class: "w-badge-danger" }, "Без пароля · подпись без подтверждения паролем") : needPass ? pass.wrap : h("p", { class: "w-hint" }, "Пароль не нужен: он введён при разблокировке. Крупные суммы и опасные операции спросят его снова."),
+        opts.noPassword ? null : WalletStore.passwordless ? h("p", { class: "w-badge-danger" }, "Без пароля · подпись без подтверждения паролем") : needPass ? pass.wrap : h("p", { class: "w-hint" }, "Пароль не нужен: он введён при разблокировке. Крупные суммы, суммы без известного курса и опасные операции спросят его снова."),
         err,
         h("div", { class: "w-actions" }, null, [cancel, ok]),
       ].filter(Boolean));
       const box = h("div", { class: "w-sheet" }, null, [card]);
-      ok.disabled = true;
-      ok.classList.add("arming");
+      const disarm = () => {
+        if (busy) {
+          return;
+        }
+        armedAt = 0;
+        pointerIn = false;
+        clearTimeout(armTimer);
+        ok.disabled = true;
+        ok.classList.add("arming");
+      };
+      const arm = () => {
+        if (busy) {
+          return;
+        }
+        disarm();
+        armTimer = setTimeout(() => {
+          if (!done && !busy && document.hasFocus() && !document.hidden) {
+            armedAt = Date.now();
+            ok.disabled = false;
+            ok.classList.remove("arming");
+          }
+        }, ARM_MS);
+      };
       let downAt = 0;
       ok.addEventListener("mousedown", () => { downAt = Date.now(); });
       ok.addEventListener("click", e => {
-        if (e.detail !== 0 && (downAt === 0 || downAt - shownAt < ARM_MS)) {
+        if (e.detail !== 0 && (!armedAt || downAt < armedAt)) {
           e.stopImmediatePropagation(); // клик начался до того, как лист «вооружился»
         }
       }, true);
-      let moved = !opts.fromSite || needPass;
-      setTimeout(() => {
-        if (!done) {
-          armed = true;
-          ok.disabled = !moved;
-          ok.classList.remove("arming");
+      // курсор должен войти в кнопку после включения: синтезированные события без движения не считаются
+      let lastXY = null;
+      box.addEventListener("mousemove", e => {
+        const moved = lastXY && (e.screenX !== lastXY[0] || e.screenY !== lastXY[1]);
+        lastXY = [e.screenX, e.screenY];
+        if (!armedAt || !moved || pointerIn) {
+          return;
         }
-      }, ARM_MS);
-      if (!moved) {
-        // без пароля: нужно реальное движение указателя внутри листа, иначе «кликер» подпишет вслепую
-        card.addEventListener("mousemove", () => {
-          moved = true;
-          if (armed && !done) {
-            ok.disabled = false;
-          }
-        }, { once: true });
-      }
+        const r = ok.getBoundingClientRect();
+        if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+          pointerIn = true;
+        }
+      });
+      listen(window, "blur", disarm);
+      listen(window, "focus", () => !done && arm());
+      listen(document, "visibilitychange", () => (document.hidden ? disarm() : arm()));
+      listen(gBrowser.tabContainer, "TabSelect", () => !done && arm());
+      // любой лист исчезает при блокировке кошелька
+      const obs = (s, t, what) => {
+        if (what === "locked") {
+          finish(reject, Object.assign(new Error("Кошелёк заблокирован"), { code: 4001 }));
+        }
+      };
+      Services.obs.addObserver(obs, WalletStore.TOPIC);
+      cleanups.push(() => Services.obs.removeObserver(obs, WalletStore.TOPIC));
       if (opts.fromSite) {
         if (!this.drawer.open || this.drawer.section !== "wallet") {
           this.openDrawer("wallet"); // экран пользователя не сбрасываем: лист ложится поверх
         }
-        // лист сайта живёт не дольше 2 минут, исчезает при блокировке кошелька,
-        // при уходе с вкладки запроса и при навигации/закрытии страницы-отправителя
+        // лист сайта живёт не дольше 2 минут, исчезает при уходе с вкладки запроса и при навигации/закрытии страницы-отправителя
         const ttl = setTimeout(() => finish(reject, Object.assign(new Error("Время ожидания истекло"), { code: 4001 })), 120000);
-        const obs = (s, t, what) => {
-          if (what === "locked") {
-            finish(reject, Object.assign(new Error("Кошелёк заблокирован"), { code: 4001 }));
-          }
-        };
-        Services.obs.addObserver(obs, WalletStore.TOPIC);
+        cleanups.push(() => clearTimeout(ttl));
         const g = opts.guard;
-        const onTab = () => {
+        listen(gBrowser.tabContainer, "TabSelect", () => {
           if (g?.tab && gBrowser.selectedTab !== g.tab) {
             finish(reject, Object.assign(new Error("Вкладка запроса переключена: запрос отклонён"), { code: 4001 }));
           }
-        };
-        gBrowser.tabContainer.addEventListener("TabSelect", onTab);
+        });
         const aliveTimer = setInterval(() => {
           if (g && !g.alive()) {
             finish(reject, Object.assign(new Error("Страница запроса закрыта или ушла: запрос отклонён"), { code: 4001 }));
           }
         }, 1000);
-        const origFinish = finish;
-        finish = (fn, v) => {
-          clearTimeout(ttl);
-          clearInterval(aliveTimer);
-          gBrowser.tabContainer.removeEventListener("TabSelect", onTab);
-          try {
-            Services.obs.removeObserver(obs, WalletStore.TOPIC);
-          } catch (e) {}
-          origFinish(fn, v);
-        };
+        cleanups.push(() => clearInterval(aliveTimer));
       }
       pass.input.addEventListener("input", () => { typedHere = true; });
       pass.input.addEventListener("keydown", e => {
         e.stopPropagation();
-        if (e.key === "Enter" && armed && (typedHere || !needPass)) {
+        if (e.key === "Enter" && armedAt && needPass && typedHere) {
           ok.click();
         }
       });
       this.wSheetShow(box);
+      arm();
       box._cancel = () => finish(reject, Object.assign(new Error("Отклонено"), { code: 4001 }));
       if (!opts.fromSite) {
         setTimeout(() => pass.input.focus(), 60);
@@ -821,10 +945,10 @@ Object.assign(Tabora, {
       return;
     }
     w.historyLoading = true;
-    const hidden = new Set(WalletStore.data.settings?.hiddenChains || []);
+    const hidden = WalletStore.hiddenChains;
     const prices = w.prices || (await WalletStore.prices());
     const results = await Promise.all(CHAIN_ORDER.filter(id => !hidden.has(id)).map(id => WalletStore.history(id, account.addresses[id], prices).catch(e => ({ items: [], hidden: 0, error: `${id}: ${e.message}` }))));
-    w.history = { key, at: Date.now(), items: results.flatMap(r => r.items), hidden: results.reduce((n, r) => n + r.hidden, 0), errors: results.map(r => r.error).filter(Boolean) };
+    w.history = { key, at: Date.now(), items: results.flatMap(r => r.items), hidden: results.reduce((n, r) => n + r.hidden, 0), suspects: results.flatMap(r => r.suspects || []), errors: results.map(r => r.error).filter(Boolean) };
     w.historyLoading = false;
     if (this.drawer.open && this.drawer.section === "wallet" && w.tab === "activity" && w.view === "main") {
       this.renderDrawer();
@@ -891,7 +1015,7 @@ Object.assign(Tabora, {
       list.append(row);
     }
     if (w.history?.hidden) {
-      list.append(h("div", { class: "w-hint w-center" }, `Скрыто подозрительных операций: ${w.history.hidden} (пыль, неизвестные токены, нулевые переводы)`));
+      list.append(h("div", { class: "w-hint w-center" }, `Скрыто подозрительных операций: ${w.history.hidden} (пыль, неизвестные токены, нулевые переводы, «исходящие», которые вы не подписывали)`));
     }
     if (w.history?.errors?.length) {
       list.append(h("div", { class: "w-hint w-center" }, `Нет связи: ${w.history.errors.map(e => e.split(":")[0]).join(", ")}`));
@@ -936,6 +1060,8 @@ Object.assign(Tabora, {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { WalletStore } = this.walletStore();
     const name = this.wField("Имя", { type: "text", value: contact.name || "", placeholder: "Например, Биржа или Алиса", maxlength: "40" });
+    // контакт помечает получателя как доверенного: новый контакт и смена адресов подтверждаются паролем
+    const pass = this.wField("Пароль кошелька", { type: "password", autocomplete: "off" });
     const fields = this.CONTACT_FIELDS.map(([key, label, chainId]) => {
       const f = this.wField(label, { type: "text", class: "w-input mono", value: contact.addresses?.[key] || "", spellcheck: "false", autocomplete: "off" });
       const note = h("span", { class: "w-note" });
@@ -965,9 +1091,9 @@ Object.assign(Tabora, {
       const addresses = Object.fromEntries(fields.map(x => [x.key, x.f.input.value.trim()]));
       try {
         if (contact.id) {
-          await WalletStore.updateContact(contact.id, { name: name.input.value, addresses });
+          await WalletStore.updateContact(contact.id, { name: name.input.value, addresses }, pass.input.value);
         } else {
-          await WalletStore.addContact({ name: name.input.value, addresses });
+          await WalletStore.addContact({ name: name.input.value, addresses }, pass.input.value);
         }
         box.remove();
         this.notice(contact.id ? "Контакт обновлён" : "Контакт добавлен");
@@ -986,7 +1112,7 @@ Object.assign(Tabora, {
         this.renderDrawer();
       }), h("span", { class: "spacer" }));
     }
-    const box = h("div", { class: "w-sheet" }, null, [h("div", { class: "w-sheet-card w-confirm" }, null, [h("b", {}, contact.id ? "Контакт" : "Новый контакт"), name.wrap, ...fields.map(x => x.f.wrap), err, h("div", { class: "w-actions" }, null, actions)])]);
+    const box = h("div", { class: "w-sheet" }, null, [h("div", { class: "w-sheet-card w-confirm" }, null, [h("b", {}, contact.id ? "Контакт" : "Новый контакт"), name.wrap, ...fields.map(x => x.f.wrap), WalletStore.passwordless ? null : pass.wrap, err, h("div", { class: "w-actions" }, null, actions)].filter(Boolean))]);
     box.querySelectorAll("input").forEach(i => i.addEventListener("keydown", e => e.stopPropagation()));
     this.wSheetShow(box);
     setTimeout(() => (contact.name ? fields[0].f.input : name.input).focus(), 60);
@@ -1035,7 +1161,7 @@ Object.assign(Tabora, {
     }
     const w = this.wallet;
     w.seen ||= {};
-    const hidden = new Set(WalletStore.data.settings?.hiddenChains || []);
+    const hidden = WalletStore.hiddenChains;
     const prices = await WalletStore.prices();
     w.prices = prices;
     w.pricesAt = Date.now();

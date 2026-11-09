@@ -261,24 +261,109 @@ Object.assign(Tabora, {
 
   originInfo(req, perm) {
     const note = perm ? `подключён ${this.relativeTime(perm.at)}` : "первое подключение";
-    return { host: req.host, secure: req.secure, url: req.origin + "/", note, topHost: req.topHost && req.topHost !== req.host ? req.topHost : null };
+    const topHost = req.topHost && req.topHost !== req.host ? req.topHost : null;
+    const lookalike = this.wLookalike(req.host) || (topHost ? this.wLookalike(topHost) : null);
+    return { host: req.host, secure: req.secure, url: req.origin + "/", note, topHost, lookalike };
   },
 
-  /** Sign-In with Ethereum/Solana: домен в сообщении обязан совпадать с сайтом,
-   * иначе подпись можно переиграть для входа в ваш аккаунт на другом сайте. */
+  /** Популярные dApp и сервисы: подключение с похожего, но другого домена — признак фишинга. */
+  KNOWN_DAPPS: [
+    "uniswap.org", "opensea.io", "metamask.io", "pancakeswap.finance", "curve.fi", "aave.com", "lido.fi", "1inch.io", "1inch.com",
+    "sushi.com", "compound.finance", "blur.io", "looksrare.org", "magiceden.io", "jup.ag", "raydium.io", "orca.so", "phantom.app",
+    "tronscan.org", "tronlink.org", "sun.io", "sunswap.com", "justlend.org", "etherscan.io", "basescan.org", "arbiscan.io",
+    "polygonscan.com", "solscan.io", "ens.domains", "rarible.com", "zora.co", "stargate.finance", "across.to", "polymarket.com",
+    "coinbase.com", "binance.com", "kraken.com", "revoke.cash", "debank.com", "zapper.xyz", "gmx.io", "dydx.exchange",
+    "hyperliquid.xyz", "pump.fun", "tensor.trade", "marinade.finance", "eigenlayer.xyz", "balancer.fi", "cow.fi", "paraswap.io",
+    "matcha.xyz", "safe.global", "rabby.io", "arbitrum.io", "base.org", "optimism.io", "layerzero.network", "wormhole.com",
+    "lifi.fi", "jumper.exchange", "relay.link", "morpho.org", "pendle.finance", "ethena.fi", "etherfi.org", "blast.io",
+    "phantom.com", "curve.finance", "magiceden.us", "binance.us",
+  ],
+
+  /** Похож ли домен сайта на известный, не являясь им: смешанные алфавиты, punycode, опечатка, другой TLD,
+   * известное имя внутри чужого домена. Возвращает текст предупреждения или null. */
+  wLookalike(hostPort) {
+    const host = String(hostPort || "").toLowerCase().replace(/:\d+$/, "").replace(/\.$/, "");
+    if (!host || /^[\d.]+$|^\[/.test(host) || host === "localhost" || host.endsWith(".localhost")) {
+      return null;
+    }
+    this._lookalikeCache ||= new Map();
+    if (this._lookalikeCache.has(host)) {
+      return this._lookalikeCache.get(host);
+    }
+    let base = host;
+    let suffix = "";
+    let unicode = host;
+    try {
+      base = Services.eTLD.getBaseDomainFromHost(host);
+      suffix = Services.eTLD.getPublicSuffixFromHost(host);
+    } catch (e) {
+      return null;
+    }
+    try {
+      unicode = Cc["@mozilla.org/network/idn-service;1"].getService(Ci.nsIIDNService).convertACEtoUTF8(host);
+    } catch (e) {}
+    let result = null;
+    if (!this.KNOWN_DAPPS.includes(base)) {
+      // скелет: похожие символы других алфавитов и цифры → латиница
+      const map = { а: "a", б: "b", в: "b", е: "e", ё: "e", к: "k", м: "m", н: "h", о: "o", р: "p", с: "c", т: "t", у: "y", х: "x", і: "i", ї: "i", ј: "j", ѕ: "s", ԁ: "d", ɡ: "g", ո: "n", ս: "u", α: "a", ο: "o", ρ: "p", ν: "v", τ: "t", ι: "i", κ: "k", υ: "u", χ: "x", "0": "o", "1": "l", "3": "e", "5": "s", "|": "l", ı: "i" };
+      const skeleton = s => s.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/./gu, ch => map[ch] ?? ch).replace(/rn/g, "m").replace(/vv/g, "w").replace(/i/g, "l").replace(/[-_]/g, "");
+      let uBase = base;
+      try {
+        uBase = Cc["@mozilla.org/network/idn-service;1"].getService(Ci.nsIIDNService).convertACEtoUTF8(base);
+      } catch (e) {}
+      const uSuffix = uBase.endsWith("." + suffix) ? suffix : uBase.split(".").slice(-suffix.split(".").length).join(".");
+      const label = uBase.slice(0, uBase.length - uSuffix.length - 1);
+      const sub = unicode.slice(0, Math.max(0, unicode.length - uBase.length - 1));
+      const L = skeleton(label);
+      const scripts = ["Latin", "Cyrillic", "Greek", "Armenian"].filter(s => new RegExp(`\\p{Script=${s}}`, "u").test(label));
+      const distance = (a, b) => {
+        const d = Array.from({ length: b.length + 1 }, (_, i) => i);
+        for (let i = 1; i <= a.length; i++) {
+          let prev = d[0];
+          d[0] = i;
+          for (let j = 1; j <= b.length; j++) {
+            const t = d[j];
+            d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+            prev = t;
+          }
+        }
+        return d[b.length];
+      };
+      for (const known of this.KNOWN_DAPPS) {
+        const kLabel = known.split(".")[0];
+        const K = skeleton(kLabel);
+        const long = K.length >= 5;
+        if (L === K || (long && distance(L, K) <= (K.length >= 8 ? 2 : 1)) || (long && L.includes(K)) || (long && skeleton(sub).includes(K))) {
+          result = `Адрес сайта похож на ${known}, но это другой домен (${unicode !== host ? `${unicode} · ${host}` : base}). Так выглядят фишинговые копии: проверьте адрес в строке браузера.`;
+          break;
+        }
+      }
+      if (!result && scripts.length > 1) {
+        result = `В имени сайта смешаны алфавиты (${scripts.join(" + ")}): ${unicode} записан как ${host}. Так подделывают известные адреса.`;
+      }
+    }
+    if (this._lookalikeCache.size > 300) {
+      this._lookalikeCache.clear();
+    }
+    this._lookalikeCache.set(host, result);
+    return result;
+  },
+
+  /** Sign-In with Ethereum/Solana: домен в сообщении обязан совпадать с сайтом, который просит подпись
+   * (не с верхним документом: фрейм не должен получать вход за родительский сайт). */
   wSiweCheck(text, req) {
     const m = /^([^\s]+) wants you to sign in with your (Ethereum|Solana) account:/m.exec(text);
     if (!m) {
       return null;
     }
     const domain = m[1].toLowerCase().replace(/^https?:\/\//, "").replace(/:\d+$/, "");
-    const hosts = [req.host, req.topHost].filter(Boolean).map(h => String(h).toLowerCase().replace(/:\d+$/, ""));
+    const host = String(req.host || "").toLowerCase().replace(/:\d+$/, "");
     const uriLine = /^URI:\s*(\S+)/m.exec(text);
     let uriHost = null;
     try {
       uriHost = uriLine ? new URL(uriLine[1]).hostname.toLowerCase() : null;
     } catch (e) {}
-    const ok = hosts.includes(domain) && (!uriHost || hosts.includes(uriHost));
+    const ok = domain === host && (!uriHost || uriHost === host);
     return ok ? null : `Это запрос входа (Sign-In) для сайта «${domain}», а подписать просит ${req.host}. Такой подписью можно войти в ваш аккаунт на том сайте. Отклоните, если вы сейчас не на ${domain}.`;
   },
 
@@ -606,7 +691,9 @@ Object.assign(Tabora, {
           Listing: "листинг на продажу",
         };
         const dangerText = DANGEROUS[primary] || null;
-        const rows = [["Тип", primary], ["Домен", `${this.wSafe(domain.name || "—").text}${domain.version ? " v" + this.wSafe(String(domain.version)).text : ""}`]];
+        // белый список: безопасны только вход и голосования без контракта-исполнителя; всё прочее — опасно
+        const safeType = !isPermit && !dangerText && this.wTypedSafe(primary, domain, msg);
+        const rows = [["Тип", this.wSafe(primary).text.slice(0, 80)], ["Домен", `${this.wSafe(domain.name || "—").text}${domain.version ? " v" + this.wSafe(String(domain.version)).text : ""}`]];
         const knownToken = domain.verifyingContract && (CHAINS[chainId].tokens || []).concat(WalletStore.tokensFor(chainId)).find(t => t.address?.toLowerCase() === String(domain.verifyingContract).toLowerCase());
         if (knownToken) {
           rows.push(["Контракт токена", `${knownToken.symbol}: подпись может распоряжаться этими токенами`, "bad"]);
@@ -615,27 +702,25 @@ Object.assign(Tabora, {
           rows.push(["Контракт", domain.verifyingContract, "mono"]);
         }
         let warning = null;
-        const when = v => (v ? new Date(Number(v) * (Number(v) > 1e12 ? 1 : 1000)).toLocaleString("ru-RU", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : null);
         if (isPermit) {
-          const details = Array.isArray(msg.details) ? msg.details : msg.details ? [msg.details] : [msg];
-          const spender = msg.spender || details[0]?.spender;
-          const parts = [];
-          let unlimitedAny = false;
-          for (const d of details) {
-            const value = d.value ?? d.amount;
-            const unlimited = d.allowed === true || (value !== undefined && value !== null && BigInt(value) >= (1n << 128n) - 1n);
-            unlimitedAny ||= unlimited;
-            parts.push(`${d.token ? this.shortAddr(d.token) + ": " : ""}${unlimited ? "без лимита" : String(value ?? "—")}`);
+          const P = this.wPermitInfo(chainId, domain, msg);
+          const spender = P.spender ? this.wSafe(String(P.spender)).text.slice(0, 100) : null;
+          rows.push(["Spender", spender || "—", "mono"], ["Лимит", P.limits.join(" · ") + (P.more ? ` · и ещё ${P.more}` : ""), P.unlimited ? "bad" : ""]);
+          if (P.oneTime) {
+            rows.push(["Тип разрешения", "разовое списание по подписи (Permit2 SignatureTransfer)"]);
+          } else {
+            rows.push(["Разрешение действует", P.until.length ? [...new Set(P.until)].join(" · ") : "до отзыва"]);
           }
-          const deadline = when(msg.deadline || msg.expiry || msg.sigDeadline || details[0]?.expiration);
-          warning = `Permit: разрешение тратить токены${spender ? " для " + this.shortAddr(spender) : ""}${unlimitedAny ? " без лимита" : ""}${deadline ? " до " + deadline : ""}. Это равносильно approve.`;
-          rows.push(["Spender", spender || "—", "mono"], ["Лимит", parts.join(" · ")]);
-          if (deadline) {
-            rows.push(["Действует до", deadline]);
+          if (P.sigUntil) {
+            rows.push(["Подпись действительна до", P.sigUntil]);
           }
+          warning = `Permit: ${P.oneTime ? "разовое списание" : "разрешение тратить"} токенов${spender ? " для " + this.shortAddr(spender) : ""}${P.unlimited ? " без лимита" : ""}${!P.oneTime && P.until.length ? " до " + P.until[0] : ""}. Это равносильно approve.`;
         }
         if (dangerText) {
           warning = `${primary}: ${dangerText}.${warning ? " " + warning : ""}`;
+        }
+        if (!safeType && !isPermit && !dangerText) {
+          warning = `Неизвестный тип подписи «${this.wSafe(primary).text.slice(0, 60)}»${domain.verifyingContract ? ` для контракта ${this.shortAddr(String(domain.verifyingContract))}` : ""}: кошелёк не знает, что сделает с ней контракт. Так подписывают ордера на продажу NFT и токенов (Blur, LooksRare, 0x) и мета-транзакции. Подписывайте, только если доверяете сайту.`;
         }
         return this.walletConfirm({
           fromSite: true, guard: this.walletGuard(req),
@@ -643,10 +728,10 @@ Object.assign(Tabora, {
           title: "Подпись данных",
           badge: "EIP-712",
           origin: this.originInfo(req, perm),
-          summary: [isPermit ? "Сайт просит подписать разрешение на трату токенов" : dangerText ? `Сайт просит подписать: ${dangerText}` : "Структурированная подпись: средства не списываются сразу, но подпись может быть использована контрактом"],
+          summary: [isPermit ? "Сайт просит подписать разрешение на трату токенов" : dangerText ? `Сайт просит подписать: ${dangerText}` : safeType ? "Подпись без распоряжения средствами: вход или голосование" : "Структурированная подпись неизвестного типа: контракт может использовать её для распоряжения вашими активами"],
           rows,
           warning,
-          danger: isPermit || !!dangerText || !!knownToken,
+          danger: !safeType || !!knownToken,
           details: this.wSafe(JSON.stringify(msg, null, 2)).text,
           detailsLabel: "Сообщение",
           okLabel: "Подписать",
@@ -665,79 +750,346 @@ Object.assign(Tabora, {
     }
   },
 
+  /** EIP-712 из белого списка: вход и голосования Snapshot без контракта-исполнителя и без полей,
+   * похожих на распоряжение активами. Название типа выбирает сайт, поэтому поля проверяются тоже. */
+  wTypedSafe(primary, domain, msg) {
+    if (domain?.verifyingContract) {
+      return false;
+    }
+    const snapshot = String(domain?.name || "").toLowerCase() === "snapshot" && /^(Vote|Vote2|VoteString|VoteArray|Proposal|CancelProposal|UpdateProposal|Space|Follow|Unfollow|Subscribe|Unsubscribe|Profile|Statement)$/.test(primary);
+    const login = /^(Login|SignIn|Signin|Authentication|Auth)$/.test(primary);
+    if (!snapshot && !login) {
+      return false;
+    }
+    const risky = /spender|amount|value|token|operator|allowance|allowed|deadline|expir|calldata|^data$|recipient|wad|price|consideration|offer|delegat|nonce|salt|signer|contract|transfer|order|^to$/i;
+    const walk = (v, depth) => depth <= 5 && v && typeof v === "object" && Object.keys(v).some(k => risky.test(k) || walk(v[k], depth + 1));
+    return !walk(msg, 0);
+  },
+
+  /** Срок из Permit: секунды или миллисекунды; 0 у разрешения Permit2 — только текущий блок. */
+  wPermitTime(v, allowance = false) {
+    if (v === undefined || v === null || v === "") {
+      return null;
+    }
+    let n;
+    try {
+      n = BigInt(v);
+    } catch (e) {
+      return this.wSafe(String(v)).text.slice(0, 40);
+    }
+    if (allowance && n === 0n) {
+      return "до конца текущего блока";
+    }
+    if (n <= 0n) {
+      return "срок не указан";
+    }
+    const ms = n > 10n ** 12n ? n : n * 1000n;
+    if (n >= (1n << 48n) - 1n || ms > 4102444800000n) {
+      return "бессрочно";
+    }
+    return new Date(Number(ms)).toLocaleString("ru-RU", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  },
+
+  /** Permit: лимиты, срок разрешения и срок подписи (ERC-2612, DAI, Permit2 AllowanceTransfer и SignatureTransfer). */
+  wPermitInfo(chainId, domain, msg) {
+    const { WalletStore, CHAINS } = this.walletStore();
+    const { WalletSigner } = this.walletSigner();
+    const known = (CHAINS[chainId].tokens || []).concat(WalletStore.tokensFor(chainId));
+    const tokenOf = a => known.find(t => t.address && t.address.toLowerCase() === String(a || "").toLowerCase());
+    const big = v => {
+      if (v === undefined || v === null || v === "") {
+        return null;
+      }
+      try {
+        return BigInt(v);
+      } catch (e) {
+        return -1n;
+      }
+    };
+    const items = [];
+    if (msg.details !== undefined) {
+      for (const d of [].concat(msg.details)) {
+        items.push({ token: d?.token, amount: big(d?.amount), until: d?.expiration });
+      }
+    } else if (msg.permitted !== undefined) {
+      for (const p of [].concat(msg.permitted)) {
+        items.push({ token: p?.token, amount: big(p?.amount), oneTime: true });
+      }
+    } else {
+      const amount = msg.allowed === true ? (1n << 256n) - 1n : msg.allowed === false ? 0n : big(msg.value ?? msg.amount);
+      items.push({ token: domain.verifyingContract, amount });
+    }
+    let unlimited = false;
+    const limits = items.slice(0, 8).map(it => {
+      const t = tokenOf(it.token);
+      const name = t ? t.symbol : it.token ? this.shortAddr(this.wSafe(String(it.token)).text) : "токен";
+      if (it.amount === null || it.amount < 0n) {
+        unlimited = true;
+        return `${name}: сумма не указана`;
+      }
+      if (WalletSigner.isUnlimited(it.amount)) {
+        unlimited = true;
+        return `${name}: без лимита`;
+      }
+      return `${name}: ${t ? WalletStore.format(it.amount, t.decimals, 6) : `${it.amount} единиц`}`;
+    });
+    const until = items.filter(it => !it.oneTime && it.until !== undefined && it.until !== null).map(it => this.wPermitTime(it.until, true));
+    return {
+      spender: msg.spender ?? null,
+      limits,
+      unlimited,
+      until,
+      sigUntil: this.wPermitTime(msg.sigDeadline ?? msg.deadline ?? msg.expiry ?? null),
+      oneTime: items.some(it => it.oneTime),
+      more: Math.max(0, items.length - 8),
+    };
+  },
+
   async walletEvmSendTx(req, chainId, address, tx, perm) {
     const { WalletStore, CHAINS } = this.walletStore();
     const { WalletSigner } = this.walletSigner();
     const chain = CHAINS[chainId];
     const prices = await WalletStore.prices();
-    const price = prices[chain.symbol] || 0;
     const est = await WalletSigner.evmPrepare(chainId, tx, address);
-    const decoded = WalletSigner.evmDecode(tx.to, tx.data, tx.value);
     const value = est.value;
+    const decoded = WalletSigner.evmDecode(tx.to, tx.data, value, { chainId });
+    const me = address.toLowerCase();
     const fmt = (raw, d = chain.decimals, max = 6) => WalletStore.format(raw, d, max);
-    const usd = raw => (price ? ` · ${this.wFmtUsd(WalletStore.toNumber(raw, chain.decimals) * price)}` : "");
-    let token = (chain.tokens || []).concat(WalletStore.tokensFor(chainId)).find(t => t.address?.toLowerCase() === (tx.to || "").toLowerCase());
-    if (!token && decoded && ["transfer", "approve", "transferFrom"].includes(decoded.kind)) {
-      try {
-        const info = await WalletStore.tokenInfo(chainId, tx.to);
-        if (info?.symbol && info.decimals !== undefined) {
-          token = { symbol: `${this.wSafe(info.symbol, 12).text} (не из списка)`, decimals: info.decimals, address: tx.to, unverified: true };
+    const usd = raw => {
+      const u = WalletStore.usdOf(chainId, null, raw, prices);
+      return u === null ? "" : ` · ${this.wFmtUsd(u)}`;
+    };
+    const sh = a => this.shortAddr(a);
+    const isMe = a => String(a || "").toLowerCase() === me;
+    // токены и балансы по адресу контракта: один запрос на адрес
+    const tokenCache = new Map();
+    const tokenOf = async addr => {
+      const key = String(addr || "").toLowerCase();
+      if (!tokenCache.has(key)) {
+        let t = (chain.tokens || []).concat(WalletStore.tokensFor(chainId)).find(x => x.address?.toLowerCase() === key) || null;
+        if (!t && /^0x[0-9a-f]{40}$/.test(key)) {
+          try {
+            const info = await WalletStore.tokenInfo(chainId, addr);
+            if (info?.symbol && info.decimals !== undefined) {
+              t = { symbol: `${this.wSafe(info.symbol).text.slice(0, 12)} (не из списка)`, decimals: info.decimals, address: addr, unverified: true };
+            }
+          } catch (e) {}
         }
-      } catch (e) {}
-    }
-    const tokenAmount = (amount, t) => (t ? `${fmt(amount, t.decimals, 6)} ${t.symbol}` : `${amount} единиц токена ${this.shortAddr(tx.to)}`);
+        tokenCache.set(key, t);
+      }
+      return tokenCache.get(key);
+    };
+    const balCache = new Map();
+    const balanceOf = async tokenAddr => {
+      const key = String(tokenAddr).toLowerCase();
+      if (!balCache.has(key)) {
+        let v = null;
+        try {
+          const hex = await WalletStore.evm(chainId, "eth_call", [{ to: tokenAddr, data: "0x70a08231" + me.slice(2).padStart(64, "0") }, "latest"]);
+          if (/^0x[0-9a-fA-F]{1,64}$/.test(hex || "")) {
+            v = BigInt(hex);
+          }
+        } catch (e) {}
+        balCache.set(key, v);
+      }
+      return balCache.get(key);
+    };
+    const amountOf = (amount, t, tokenAddr) => (t ? `${fmt(amount, t.decimals, 6)} ${t.symbol}` : `${amount} единиц токена ${sh(tokenAddr)}`);
+    const tokUsd = (t, tokenAddr, amount) => WalletStore.usdOf(chainId, t || { address: tokenAddr }, amount, prices);
     const summary = [];
-    let warning = null;
+    const warns = new Set();
     let danger = false;
-    let extra = null;
-    let decodedPlan = null;
+    let tokenUsd = 0; // оценка средств, которыми распоряжается вызов (переводы и разрешения); null — неизвестно
+    const addUsd = v => {
+      tokenUsd = WalletStore.sumUsd(tokenUsd, v);
+    };
+    const notToken = addr => {
+      danger = true;
+      warns.add(`Контракт ${sh(addr)} не отвечает как токен: что сделает этот вызов, неизвестно.`);
+    };
+    /** Разрешение опасно без лимита, больше баланса или если баланс не удалось узнать. */
+    const allowance = async (tokenAddr, t, amount) => {
+      if (amount === 0n) {
+        return { text: `отзыв разрешения ${t?.symbol || ""}`.trim(), risky: false, revoke: true };
+      }
+      if (WalletSigner.isUnlimited(amount)) {
+        return { text: `все ваши ${t?.symbol || "токены"} без лимита`, risky: true, why: "без лимита" };
+      }
+      const bal = await balanceOf(tokenAddr);
+      if (bal === null) {
+        return { text: amountOf(amount, t, tokenAddr), risky: true, why: "баланс токена проверить не удалось" };
+      }
+      if (amount > bal) {
+        return { text: `${amountOf(amount, t, tokenAddr)} (больше вашего баланса ${t ? fmt(bal, t.decimals, 6) : bal})`, risky: true, why: "больше вашего баланса" };
+      }
+      return { text: amountOf(amount, t, tokenAddr), risky: false };
+    };
+    let approveRisky = false;
+    const explain = async (d, depth) => {
+      const pre = depth ? "• " : "";
+      switch (d.kind) {
+        case "transfer": {
+          const t = await tokenOf(tx.to);
+          summary.push(`${pre}Перевод ${amountOf(d.amount, t, tx.to)} на ${sh(d.to)}`);
+          if (!t) {
+            notToken(tx.to);
+          }
+          addUsd(tokUsd(t, tx.to, d.amount));
+          break;
+        }
+        case "transferFrom": {
+          const t = await tokenOf(tx.to);
+          summary.push(`${pre}transferFrom ${amountOf(d.amount, t, tx.to)}: ${isMe(d.from) ? "ваш адрес" : sh(d.from)} → ${sh(d.to)}`);
+          if (!t) {
+            notToken(tx.to);
+          }
+          if (isMe(d.from)) {
+            addUsd(tokUsd(t, tx.to, d.amount));
+          }
+          break;
+        }
+        case "approve": {
+          const t = await tokenOf(tx.to);
+          const a = await allowance(tx.to, t, d.amount);
+          summary.push(`${pre}${a.revoke ? a.text[0].toUpperCase() + a.text.slice(1) : `${d.increase ? "Увеличить разрешение тратить" : "Разрешение тратить"} ${a.text}`} для ${sh(d.spender)}`);
+          if (!t) {
+            notToken(tx.to);
+          }
+          if (a.risky) {
+            danger = true;
+            approveRisky ||= depth === 0;
+            warns.add(`Разрешение ${a.why}: ${sh(d.spender)} сможет тратить ваши ${t?.symbol || "токены"} в любой момент.${depth === 0 ? " Можно ограничить суммой ниже." : ""}`);
+          }
+          addUsd(a.risky ? null : tokUsd(t, tx.to, d.amount));
+          break;
+        }
+        case "allowanceDown":
+          summary.push(`${pre}Уменьшить разрешение для ${sh(d.spender)}`);
+          break;
+        case "setApprovalForAll":
+          summary.push(`${pre}${d.approved ? `Полный доступ ко ВСЕМ NFT коллекции ${sh(tx.to)} для оператора ${sh(d.operator)}` : `Отзыв доступа оператора ${sh(d.operator)} к коллекции ${sh(tx.to)}`}`);
+          if (d.approved) {
+            danger = true;
+            warns.add("setApprovalForAll: оператор сможет забрать любые NFT этой коллекции в любой момент. Так устроено большинство краж NFT. Подтверждайте только на проверенном маркетплейсе.");
+            addUsd(null);
+          }
+          break;
+        case "nftTransfer":
+          summary.push(`${pre}Передача NFT #${d.tokenId.toString().slice(0, 24)} коллекции ${sh(tx.to)}: ${sh(d.from)} → ${sh(d.to)}`);
+          danger = true;
+          warns.add("Передача NFT необратима.");
+          addUsd(null);
+          break;
+        case "wrap":
+          summary.push(`${pre}Обёртка ${fmt(value)} ${chain.symbol} в ${d.symbol}`);
+          break;
+        case "unwrap":
+          summary.push(`${pre}Вывод ${fmt(d.amount)} ${d.symbol} в ${chain.symbol}`);
+          break;
+        case "permit2Approve": {
+          const own = !d.owner || isMe(d.owner);
+          for (const det of d.details.slice(0, 8)) {
+            const t = await tokenOf(det.token);
+            const a = own ? await allowance(det.token, t, det.amount) : { text: amountOf(det.amount, t, det.token), risky: false };
+            summary.push(`${pre}Permit2${own ? "" : ` (адрес ${sh(d.owner)})`}: ${a.revoke ? a.text : `${sh(d.spender)} сможет тратить ${a.text}`} · срок ${this.wPermitTime(det.expiration, true)}`);
+            if (a.risky) {
+              danger = true;
+              warns.add(`Разрешение Permit2 ${a.why}: ${sh(d.spender)} сможет списывать ваши ${t?.symbol || "токены"} до ${this.wPermitTime(det.expiration, true)}.`);
+            }
+            addUsd(own ? (a.risky ? null : tokUsd(t, det.token, det.amount)) : 0);
+          }
+          if (d.details.length > 8) {
+            danger = true;
+            summary.push(`${pre}…и ещё ${d.details.length - 8} разрешений`);
+            addUsd(null);
+          }
+          break;
+        }
+        case "permit2Transfer":
+          for (const it of d.items.slice(0, 8)) {
+            const t = await tokenOf(it.token);
+            summary.push(`${pre}Перевод через Permit2 ${amountOf(it.amount, t, it.token)}: ${isMe(it.from) ? "ваш адрес" : sh(it.from)} → ${sh(it.to)}`);
+            if (isMe(it.from)) {
+              addUsd(tokUsd(t, it.token, it.amount));
+            }
+          }
+          if (d.items.length > 8) {
+            danger = true;
+            summary.push(`${pre}…и ещё ${d.items.length - 8} переводов`);
+            addUsd(null);
+          }
+          break;
+        case "permit2Revoke":
+          summary.push(`${pre}${d.nonces ? "Отмена подписей Permit2" : `Отзыв разрешений Permit2 (${d.pairs.length})`}`);
+          break;
+        case "multicall":
+          summary.push(`${pre}Пакет из ${d.calls.length} вызовов контракта ${sh(tx.to)}:`);
+          if (!d.calls.length) {
+            danger = true;
+          }
+          for (const c of d.calls.slice(0, 12)) {
+            await explain(c, depth + 1);
+          }
+          if (d.calls.length > 12) {
+            danger = true;
+            summary.push(`• …и ещё ${d.calls.length - 12}`);
+            addUsd(null);
+          }
+          break;
+        case "known":
+          summary.push(`${pre}${d.text.slice(0, 300)}`);
+          addUsd(null); // сумма обмена в токенах кошельку неизвестна
+          break;
+        default:
+          danger = true;
+          summary.push(`${pre}Вызов контракта ${sh(tx.to)} (${d.selector})${!depth && value ? ` с ${fmt(value)} ${chain.symbol}${usd(value)}` : ""}`);
+          warns.add(`Кошелёк не может расшифровать вызов ${d.selector}${d.reason ? ` (${d.reason})` : ""}: что сделает контракт ${sh(tx.to)}, неизвестно. Так выглядят и обычные операции сайтов, и кражи: подписывайте, только если доверяете сайту.`);
+          addUsd(null);
+      }
+    };
     if (!tx.to) {
       summary.push("Развёртывание контракта");
-    } else if (!decoded) {
-      summary.push(`Перевод ${fmt(value)} ${chain.symbol}${usd(value)} на ${this.shortAddr(tx.to)}`);
-    } else if (decoded.kind === "transfer") {
-      summary.push(`Перевод ${tokenAmount(decoded.amount, token)} на ${this.shortAddr(decoded.to)}`);
-    } else if (decoded.kind === "approve") {
-      summary.push(`${decoded.increase ? "Увеличить разрешение тратить" : "Разрешение тратить"} ${decoded.unlimited ? "все ваши " + (token?.symbol || "токены") : tokenAmount(decoded.amount, token)} для ${this.shortAddr(decoded.spender)}`);
-      if (decoded.unlimited) {
-        danger = true;
-        warning = `Неограниченный approve. Сайт просит право тратить все ваши ${token?.symbol || "токены"} без лимита. Можно ограничить разумной суммой.`;
-        extra = this.wApproveLimit(tx, token, decoded, plan => {
-          decodedPlan = plan;
-          const line = extra?.closest?.(".w-sheet-card")?.querySelector(".w-summary-line");
-          if (line) {
-            line.textContent = plan ? `Разрешение тратить ${plan.label} для ${this.shortAddr(decoded.spender)}` : summary[0];
-          }
-        });
-      }
-    } else if (decoded.kind === "setApprovalForAll") {
-      summary.push(decoded.approved ? `Полный доступ ко ВСЕМ NFT коллекции ${this.shortAddr(tx.to)} для оператора ${this.shortAddr(decoded.operator)}` : `Отзыв доступа оператора ${this.shortAddr(decoded.operator)} к коллекции ${this.shortAddr(tx.to)}`);
-      if (decoded.approved) {
-        danger = true;
-        warning = "setApprovalForAll: оператор сможет забрать любые NFT этой коллекции в любой момент. Так устроено большинство краж NFT. Подтверждайте только на проверенном маркетплейсе.";
-      }
-    } else if (decoded.kind === "nftTransfer") {
-      summary.push(`Передача NFT #${decoded.tokenId.toString().slice(0, 24)} коллекции ${this.shortAddr(tx.to)}: ${this.shortAddr(decoded.from)} → ${this.shortAddr(decoded.to)}`);
       danger = true;
-      warning = "Передача NFT необратима.";
-    } else if (decoded.kind === "transferFrom") {
-      summary.push(`transferFrom ${tokenAmount(decoded.amount, token)}: ${this.shortAddr(decoded.from)} → ${this.shortAddr(decoded.to)}`);
-    } else if (decoded.kind === "withdraw") {
-      summary.push(`Вывод ${fmt(decoded.amount)} из обёрнутой монеты`);
-    } else if (decoded.kind === "deposit") {
-      summary.push(`Обёртка ${fmt(value)} ${chain.symbol}`);
-    } else if (decoded.kind === "known") {
-      summary.push(decoded.text.slice(0, 300));
+      warns.add("Развёртывание контракта с вашего адреса: кошелёк не может проверить его код.");
+      addUsd(null);
+    } else if (!decoded) {
+      summary.push(`Перевод ${fmt(value)} ${chain.symbol}${usd(value)} на ${sh(tx.to)}`);
+      // перевод на контракт исполняет его код (receive/fallback): расшифровать нечего
+      let code = null;
+      try {
+        code = await WalletStore.evm(chainId, "eth_getCode", [tx.to, "latest"]);
+      } catch (e) {}
+      if (typeof code === "string" && code.length > 2 && !/^0xef0100/i.test(code)) {
+        if (chain.wrapped && tx.to.toLowerCase() === chain.wrapped.address.toLowerCase()) {
+          summary[0] = `Обёртка ${fmt(value)} ${chain.symbol} в ${chain.wrapped.symbol}`;
+        } else {
+          danger = true;
+          warns.add(`Получатель ${sh(tx.to)} — контракт: монеты получит его код, и что он с ними сделает, неизвестно.`);
+        }
+      }
     } else {
-      summary.push(`Вызов контракта ${this.shortAddr(tx.to)} (${decoded.selector})${value ? ` с ${fmt(value)} ${chain.symbol}${usd(value)}` : ""}`);
+      await explain(decoded, 0);
+    }
+    const token = decoded?.kind === "approve" ? await tokenOf(tx.to) : null;
+    let extra = null;
+    let decodedPlan = null;
+    if (approveRisky && token) {
+      extra = this.wApproveLimit(tx, token, decoded, plan => {
+        decodedPlan = plan;
+        const line = extra?.closest?.(".w-sheet-card")?.querySelector(".w-summary-line");
+        if (line) {
+          line.textContent = plan ? `Разрешение тратить ${plan.label} для ${sh(decoded.spender)}` : summary[0];
+        }
+      });
     }
     // Вложенная монета показывается всегда: вызов токена с приложенным ETH — классическая маскировка перевода
-    const tokenLike = ["transfer", "approve", "transferFrom", "withdraw", "setApprovalForAll", "nftTransfer"].includes(decoded?.kind);
-    if (value > 0n && decoded && decoded.kind !== "deposit" && decoded.kind !== "unknown") {
+    const tokenLike = ["transfer", "approve", "transferFrom", "allowanceDown", "unwrap", "setApprovalForAll", "nftTransfer", "permit2Approve", "permit2Transfer", "permit2Revoke"].includes(decoded?.kind);
+    const lead = [];
+    if (value > 0n && decoded && decoded.kind !== "wrap" && decoded.kind !== "unknown") {
       summary.push(`Плюс к вызову приложено ${fmt(value)} ${chain.symbol}${usd(value)}: эти монеты получит контракт`);
       if (tokenLike) {
         danger = true;
-        warning = `К вызову токена приложено ${fmt(value)} ${chain.symbol}. Стандартные токены так не работают: монеты уйдут контракту ${this.shortAddr(tx.to)}.${warning ? " " + warning : ""}`;
+        lead.push(`К вызову токена приложено ${fmt(value)} ${chain.symbol}. Стандартные токены так не работают: монеты уйдут контракту ${sh(tx.to)}.`);
       }
     }
     const rows = [
@@ -750,19 +1102,21 @@ Object.assign(Tabora, {
     if (est.capped?.length) {
       rows.push(["Комиссия от сайта", `завышена (${est.capped.join(", ")}): заменена на сетевую`, "muted"]);
     }
-    const feeUsd = price ? WalletStore.toNumber(est.fee, chain.decimals) * price : 0;
-    if (feeUsd >= 50 || (value > 0n && est.fee > value)) {
+    const feeUsd = WalletStore.usdOf(chainId, null, est.fee, prices);
+    if ((feeUsd !== null && feeUsd >= 50) || (value > 0n && est.fee > value)) {
       danger = true;
-      warning = `Комиссия необычно велика: до ${fmt(est.fee, chain.decimals, 8)} ${chain.symbol}${usd(est.fee)}.${warning ? " " + warning : ""}`;
+      lead.unshift(`Комиссия необычно велика: до ${fmt(est.fee, chain.decimals, 8)} ${chain.symbol}${usd(est.fee)}.`);
     }
     const nativeBal = BigInt(await WalletStore.evm(chainId, "eth_getBalance", [address, "latest"]));
     const need = value + est.fee;
+    const tail = [];
     if (nativeBal < need) {
       rows.push([`${chain.symbol} на балансе`, `${fmt(nativeBal)} · не хватает`, "bad"]);
       // предупреждение безопасности важнее нехватки средств: не затираем его
-      warning = `${warning ? warning + " " : ""}Не хватает ${chain.symbol} на комиссию${value ? " и сумму" : ""}: нужно ещё около ${fmt(need - nativeBal, chain.decimals, 8)} ${chain.symbol}.`;
+      tail.push(`Не хватает ${chain.symbol} на комиссию${value ? " и сумму" : ""}: нужно ещё около ${fmt(need - nativeBal, chain.decimals, 8)} ${chain.symbol}.`);
       danger = true;
     }
+    const warning = [...lead, ...warns, ...tail].join(" ") || null;
     const hash = await this.walletConfirm({
       fromSite: true, guard: this.walletGuard(req),
       onDisconnect: () => WalletStore.revokePermission(req.origin, req.chain).catch(() => {}),
@@ -775,16 +1129,8 @@ Object.assign(Tabora, {
       danger,
       extra,
       details: `to: ${tx.to || "—"}\nvalue: ${fmt(value)} ${chain.symbol}\ndata: ${tx.data.slice(0, 400)}${tx.data.length > 400 ? "…" : ""}`,
-      // оценка суммы в долларах для порога пароля: монеты сети плюс стейблкоины в calldata
-      usd: (() => {
-        let u = price ? WalletStore.toNumber(value + est.fee, chain.decimals) * price : 0;
-        if (token && /^(USDT|USDC|DAI)$/i.test(token.symbol) && decoded?.amount !== undefined) {
-          try {
-            u += Number(decoded.amount) / 10 ** token.decimals;
-          } catch (e) {}
-        }
-        return u;
-      })(),
+      // оценка суммы для порога пароля: монеты сети, комиссия и токены, которыми распоряжается вызов; неизвестное — выше порога
+      usd: WalletStore.sumUsd(WalletStore.usdOf(chainId, null, value + est.fee, prices), tokenUsd),
       okLabel: nativeBal < need ? "Отправить всё равно" : "Подписать и отправить",
       onSign: async pass => {
         let prepared = est.prepared;
@@ -842,12 +1188,15 @@ Object.assign(Tabora, {
     const p = Array.isArray(req.params) ? req.params : req.params ? [req.params] : [];
     const perm = this.walletPerm(req);
     const address = perm && WalletStore.exists ? this.walletPermAddress(req, "tron") : null;
+    // пока кошелёк заблокирован, адрес сайту не отдаём (как и в EVM)
+    const visible = WalletStore.unlocked ? address : null;
     switch (m) {
       case "tabora_state":
-        return { address: address ? this.tronAddrPayload(address) : null };
+        return { address: visible ? this.tronAddrPayload(visible) : null };
       case "tron_requestAccounts": {
         if (address) {
           await this.walletEnsureUnlocked(req);
+          this.walletEmit(req, "tron", "accountsChanged", this.tronAddrPayload(address));
           return { code: 200, message: "ok" };
         }
         const account = await this.walletConnectSheet(req, "TRON");
@@ -855,7 +1204,7 @@ Object.assign(Tabora, {
         return { code: 200, message: "ok" };
       }
       case "tron_getBalance": {
-        const who = p[0] || address;
+        const who = p[0] || visible;
         if (typeof who !== "string" || !/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(who)) {
           throw this.wErr(-32602, "Неверный адрес");
         }
@@ -863,7 +1212,7 @@ Object.assign(Tabora, {
         return r.balance || 0;
       }
       case "tron_getAccount": {
-        const who = p[0] || address;
+        const who = p[0] || visible;
         if (typeof who !== "string" || !/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(who)) {
           throw this.wErr(-32602, "Неверный адрес");
         }
@@ -877,9 +1226,9 @@ Object.assign(Tabora, {
         }
         return WalletSigner.tronPost("/wallet/gettransactioninfobyid", { value: p[0] });
       case "tron_buildSendTrx":
-        return WalletSigner.tronBuildSendTrx(p[0], p[1], p[2] || address);
+        return WalletSigner.tronBuildSendTrx(p[0], p[1], p[2] || visible);
       case "tron_triggerSmartContract":
-        return WalletSigner.tronTriggerSmartContract(p[0], p[1], p[2] || {}, p[3] || [], p[4] || address);
+        return WalletSigner.tronTriggerSmartContract(p[0], p[1], p[2] || {}, p[3] || [], p[4] || visible);
       case "tron_sendRawTransaction": {
         const signed = p[0];
         // через кошелёк уходят только транзакции, подписанные в нём: он не ретранслятор чужих транзакций
@@ -962,7 +1311,7 @@ Object.assign(Tabora, {
       throw this.wErr(-32602, `Не удалось разобрать транзакцию: ${e.message}`);
     }
     if (tx.txID) {
-      const C = ChromeUtils.importESModule("chrome://browser/content/tabora/wallet/vendor/crypto.sys.mjs");
+      const C = ChromeUtils.importESModule("chrome://tabora/content/wallet/vendor/crypto.sys.mjs");
       const real = C.bytesToHex(C.sha256(C.hexToBytes(tx.raw_data_hex)));
       if (String(tx.txID).toLowerCase() !== real) {
         throw this.wErr(-32602, "txID не совпадает с данными транзакции: запрос отклонён");
@@ -986,8 +1335,12 @@ Object.assign(Tabora, {
     const rows = [["Сеть", "TRON"], ["Тип", type]];
     let warning = null;
     let danger = false;
+    let tokenUsd = 0; // токены, которыми распоряжается вызов; null — неизвестно (считается выше порога)
     const prices = await WalletStore.prices();
-    const trxUsd = sun => (prices.TRX ? ` · ${this.wFmtUsd((Number(sun) / 1e6) * prices.TRX)}` : "");
+    const trxUsd = sun => {
+      const u = WalletStore.usdOf("tron", null, sun, prices);
+      return u === null ? "" : ` · ${this.wFmtUsd(u)}`;
+    };
     const hexToB58 = hex => {
       try {
         return WalletSigner.tronBase58("41" + hex.slice(2));
@@ -1002,22 +1355,41 @@ Object.assign(Tabora, {
       const to = c.contractAddress;
       const token = CHAINS.tron.tokens.concat(WalletStore.tokensFor("tron")).find(t => t.address === to);
       const d = WalletSigner.evmDecode(to, c.data, 0n);
+      const tokUsd = amount => WalletStore.usdOf("tron", token || { address: to }, amount, prices);
       if (d?.kind === "transfer") {
         summary.push(`Перевод ${token ? WalletStore.format(d.amount, token.decimals, 6) + " " + token.symbol : d.amount + " единиц токена"} на ${this.shortAddr(hexToB58(d.to))}`);
+        tokenUsd = tokUsd(d.amount);
       } else if (d?.kind === "approve") {
-        summary.push(`Разрешение тратить ${d.unlimited ? "все " + (token?.symbol || "токены") : token ? WalletStore.format(d.amount, token.decimals, 6) + " " + token.symbol : d.amount} для ${this.shortAddr(hexToB58(d.spender))}`);
-        if (d.unlimited) {
-          danger = true;
-          warning = "Неограниченный approve: сайт сможет тратить все токены этого вида.";
+        // «безлимит» — не только огромное число, но и больше баланса; баланс не узнать — тоже опасно
+        let why = d.unlimited ? "без лимита" : null;
+        if (!why && d.amount > 0n) {
+          let bal = null;
+          try {
+            bal = await WalletSigner.tronTokenBalance(address, to);
+          } catch (e) {}
+          why = bal === null ? "баланс токена проверить не удалось" : d.amount > bal ? "больше вашего баланса" : null;
         }
+        summary.push(`${d.amount === 0n ? "Отзыв разрешения" : `${d.increase ? "Увеличить разрешение тратить" : "Разрешение тратить"} ${d.unlimited ? "все " + (token?.symbol || "токены") : token ? WalletStore.format(d.amount, token.decimals, 6) + " " + token.symbol : d.amount}`} для ${this.shortAddr(hexToB58(d.spender))}`);
+        if (why) {
+          danger = true;
+          warning = `Разрешение ${why}: сайт сможет тратить ваши ${token?.symbol || "токены"} этого вида в любой момент.`;
+        }
+        tokenUsd = why ? null : tokUsd(d.amount);
+      } else if (d?.kind === "allowanceDown") {
+        summary.push(`Уменьшить разрешение для ${this.shortAddr(hexToB58(d.spender))}`);
       } else if (d?.kind === "setApprovalForAll") {
         summary.push(d.approved ? `Полный доступ ко ВСЕМ NFT коллекции ${this.shortAddr(to)} для оператора ${this.shortAddr(hexToB58(d.operator))}` : `Отзыв доступа оператора ${this.shortAddr(hexToB58(d.operator))}`);
         if (d.approved) {
           danger = true;
           warning = "setApprovalForAll: оператор сможет забрать любые NFT этой коллекции. Так устроено большинство краж NFT.";
+          tokenUsd = null;
         }
       } else {
-        summary.push(`Вызов контракта ${this.shortAddr(to)}${c.callValue ? ` с ${WalletStore.format(c.callValue, 6, 6)} TRX` : ""}`);
+        // белый список: всё нерасшифрованное — опасно
+        summary.push(`Вызов контракта ${this.shortAddr(to)}${d?.selector ? ` (${d.selector})` : ""}${c.callValue ? ` с ${WalletStore.format(c.callValue, 6, 6)} TRX` : ""}`);
+        danger = true;
+        warning = "Кошелёк не может расшифровать этот вызов контракта: что он сделает, неизвестно. Подписывайте, только если доверяете сайту.";
+        tokenUsd = null;
       }
       if (c.callValue > 0n) {
         const trx = `${WalletStore.format(c.callValue, 6, 6)} TRX${trxUsd(c.callValue)}`;
@@ -1033,6 +1405,7 @@ Object.assign(Tabora, {
       if (c.callTokenValue > 0n) {
         rows.push(["Вложено TRC-10", `${c.callTokenValue} (id ${c.tokenId})`, "bad"]);
         danger = true;
+        tokenUsd = null;
       }
       rows.push(["Контракт", to, "mono"], ["Лимит комиссии", `${(decoded.feeLimit / 1e6).toFixed(2)} TRX`]);
     } else {
@@ -1062,18 +1435,8 @@ Object.assign(Tabora, {
       warning,
       danger,
       details: JSON.stringify(c, (k, val) => (typeof val === "bigint" ? val.toString() : val), 2).slice(0, 1500),
-      // оценка суммы для порога пароля: TRX перевода или вложенные в вызов плюс стейблкоины TRC-20
-      usd: (() => {
-        let u = prices.TRX ? (Number(c.type === 1 ? c.amount || 0n : c.callValue || 0n) / 1e6) * prices.TRX : 0;
-        if (c.type === 31) {
-          const token = CHAINS.tron.tokens.concat(WalletStore.tokensFor("tron")).find(t => t.address === c.contractAddress);
-          const d = WalletSigner.evmDecode(c.contractAddress, c.data, 0n);
-          if (token && /^(USDT|USDC)$/i.test(token.symbol) && d?.amount !== undefined) {
-            u += Number(d.amount) / 10 ** token.decimals;
-          }
-        }
-        return u;
-      })(),
+      // оценка суммы для порога пароля: TRX перевода или вложенные в вызов плюс токены; неизвестное — выше порога
+      usd: WalletStore.sumUsd(WalletStore.usdOf("tron", null, c.type === 1 ? c.amount || 0n : c.type === 31 ? c.callValue || 0n : 0n, prices), c.type === 31 ? tokenUsd : c.type === 1 ? 0 : null),
       okLabel: "Подписать",
       onSign: async pass => {
         const signed = await WalletSigner.withKey(perm.walletId, perm.index, "tron", priv => WalletSigner.tronSignTx({ raw_data_hex: tx.raw_data_hex, visible: tx.visible }, priv));
@@ -1104,10 +1467,14 @@ Object.assign(Tabora, {
     const address = perm && WalletStore.exists ? this.walletPermAddress(req, "solana") : null;
     switch (m) {
       case "tabora_state":
-        return { account: address ? this.solAccountPayload(address, "Tabora") : null };
+        // пока кошелёк заблокирован, адрес сайту не отдаём
+        return { account: address && WalletStore.unlocked ? this.solAccountPayload(address, "Tabora") : null };
       case "sol_connectSilent":
         if (!address) {
           throw this.wErr(4001, "Сайт не подключён");
+        }
+        if (!WalletStore.unlocked) {
+          throw this.wErr(4001, "Кошелёк заблокирован: подключитесь заново");
         }
         return { accounts: [this.solAccountPayload(address, "Tabora")] };
       case "sol_connect": {
@@ -1197,7 +1564,7 @@ Object.assign(Tabora, {
   async walletSolSignTx(req, address, bytes, perm, send, options) {
     const { WalletStore } = this.walletStore();
     const { WalletSigner } = this.walletSigner();
-    const C = ChromeUtils.importESModule("chrome://browser/content/tabora/wallet/vendor/crypto.sys.mjs");
+    const C = ChromeUtils.importESModule("chrome://tabora/content/wallet/vendor/crypto.sys.mjs");
     if (bytes.length > 1644) {
       throw this.wErr(-32602, "Транзакция больше допустимого размера");
     }
@@ -1219,9 +1586,9 @@ Object.assign(Tabora, {
     if (desc.lines.length > 6) {
       summary.push(`…и ещё ${desc.lines.length - 6}`);
     }
-    let warning = desc.danger ? "В транзакции есть опасные инструкции (approve, смена владельца, закрытие или сжигание). Убедитесь, что это ожидаемо." : null;
+    let warning = desc.unknown ? `В транзакции ${desc.unknown} ${desc.unknown === 1 ? "программа, которую" : "программ, которые"} кошелёк не расшифровывает: с вашей подписью они могут распоряжаться вашими счетами. Подписывайте, только если доверяете сайту.` : desc.danger ? "В транзакции есть опасные инструкции (approve, смена владельца, закрытие или сжигание). Убедитесь, что это ожидаемо." : null;
     let danger = desc.danger;
-    let simUsd = 0; // оценка списания для порога пароля: SOL и стейблкоины по симуляции
+    let simUsd = null; // оценка списания для порога пароля по симуляции; null — неизвестно (выше порога)
     // Симуляция: изменение SOL и известных токенов
     try {
       const atas = tokens.map(t => ({ t, ata: WalletSigner.solAta(address, t.mint) }));
@@ -1259,6 +1626,37 @@ Object.assign(Tabora, {
           const raw = C.base64.decode(acc.data[0]);
           return raw.length >= 72 ? new DataView(raw.buffer, raw.byteOffset).getBigUint64(64, true) : 0n;
         };
+        // смена владельца счёта, делегат или право закрытия у токен-счёта не видны по балансам: сверяем поля после симуляции
+        const field = (acc, from, to) => {
+          if (!acc?.data?.[0]) {
+            return "";
+          }
+          const raw = C.base64.decode(acc.data[0]);
+          return raw.length >= to ? C.bytesToHex(raw.slice(from, to)) : "";
+        };
+        const authority = [];
+        if (cur.result?.value?.[0] && r.accounts[0] && cur.result.value[0].owner !== r.accounts[0].owner) {
+          authority.push("у вашего адреса сменится программа-владелец");
+        }
+        atas.forEach(({ t }, i) => {
+          const a = cur.result?.value?.[i + 1];
+          const b = r.accounts[i + 1];
+          if (!a || !b) {
+            return;
+          }
+          if (field(a, 32, 64) !== field(b, 32, 64)) {
+            authority.push(`сменится владелец счёта ${t.symbol}`);
+          } else if (field(a, 72, 108) !== field(b, 72, 108) && field(b, 72, 76) !== "00000000") {
+            authority.push(`появится делегат у счёта ${t.symbol}`);
+          } else if (field(a, 129, 165) !== field(b, 129, 165) && field(b, 129, 133) !== "00000000") {
+            authority.push(`сменится право закрытия счёта ${t.symbol}`);
+          }
+        });
+        if (authority.length) {
+          danger = true;
+          simUsd = null;
+          warning = `Симуляция: ${authority.join(", ")}. Так угоняют токены без явного перевода.${warning ? " " + warning : ""}`;
+        }
         const before = BigInt(cur.result?.value?.[0]?.lamports || 0);
         const after = BigInt(r.accounts[0]?.lamports || 0);
         const sol = Number(after - before) / 1e9;
@@ -1267,12 +1665,15 @@ Object.assign(Tabora, {
           danger = true;
           warning ||= `Баланс SOL уменьшится на ${Math.abs(sol).toLocaleString("en-US", { maximumFractionDigits: 6 })} без явного перевода в инструкциях.`;
         }
-        const deltas = [`${sol >= 0 ? "+" : ""}${sol.toLocaleString("en-US", { maximumFractionDigits: 6 })} SOL${prices.SOL ? ` (${this.wFmtUsd(Math.abs(sol) * prices.SOL)})` : ""}`];
-        simUsd = sol < 0 ? Math.abs(sol) * (prices.SOL || 0) : 0;
+        const solUsd = WalletStore.usdOf("solana", null, after - before, prices);
+        const deltas = [`${sol >= 0 ? "+" : ""}${sol.toLocaleString("en-US", { maximumFractionDigits: 6 })} SOL${solUsd ? ` (${this.wFmtUsd(solUsd)})` : ""}`];
+        if (!authority.length) {
+          simUsd = after < before ? solUsd : 0;
+        }
         atas.forEach(({ t }, i) => {
           const d = tokenAmount(r.accounts[i + 1]) - tokenAmount(cur.result?.value?.[i + 1]);
-          if (d < 0n && /^(USDT|USDC)$/i.test(t.symbol)) {
-            simUsd += Number(-d) / 10 ** t.decimals;
+          if (d < 0n) {
+            simUsd = WalletStore.sumUsd(simUsd, WalletStore.usdOf("solana", t, -d, prices)); // свои и неизвестные токены — без цены
           }
           if (d !== 0n) {
             deltas.push(`${d > 0n ? "+" : "−"}${WalletStore.format(d < 0n ? -d : d, t.decimals, 6)} ${t.symbol}`);
@@ -1330,6 +1731,15 @@ Object.assign(Tabora, {
         if (perms.evm) {
           const addr = what === "unlocked" ? this.walletPermAddress({ origin, chain: "evm" }, perms.evm.chainId || "ethereum") : null;
           this.walletEmit({ origin }, "evm", "accountsChanged", addr ? [addr] : []);
+        }
+        // TRON и Solana: адрес тоже не виден сайту, пока кошелёк заблокирован
+        if (perms.tron) {
+          const addr = what === "unlocked" ? this.walletPermAddress({ origin, chain: "tron" }, "tron") : null;
+          this.walletEmit({ origin }, "tron", "accountsChanged", addr ? this.tronAddrPayload(addr) : null);
+        }
+        if (perms.sol) {
+          const addr = what === "unlocked" ? this.walletPermAddress({ origin, chain: "sol" }, "solana") : null;
+          this.walletEmit({ origin }, "sol", "accountsChanged", addr ? this.solAccountPayload(addr, "Tabora") : null);
         }
       }
     };
