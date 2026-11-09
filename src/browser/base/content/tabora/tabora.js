@@ -1114,9 +1114,9 @@ var Tabora = {
     walletCard.addEventListener("click", () => this.toggleDrawer("wallet"));
     const downloads = this.buildDownloadsCard();
     if (sidebar) {
-      sidebar.after(memory, walletCard, mail, downloads);
+      sidebar.after(walletCard, mail, downloads); // карточка «Память» убрана по решению пользователя (9 ноября 2026)
     } else {
-      toolbox.append(memory, walletCard, mail, downloads);
+      toolbox.append(walletCard, mail, downloads);
     }
   },
 
@@ -1386,6 +1386,22 @@ var Tabora = {
   },
 
   openMail(hash = "") {
+    // почта — часть аккаунта: без входа показываем окно входа, после входа открываем почту
+    const { Account } = this.accountMod();
+    if (!Account._loaded || !Account.signedIn) {
+      Account.ready().then(() => {
+        if (Account.signedIn) {
+          this.openMailTab(hash);
+        } else {
+          this.accountDialog(Account.email ? "login" : "welcome", { after: () => this.openMailTab(hash) });
+        }
+      });
+      return;
+    }
+    this.openMailTab(hash);
+  },
+
+  openMailTab(hash = "") {
     const url = this.MAIL_URL + (hash ? `#${hash}` : "");
     const existing = gBrowser.tabs.find(t => this.isMailUrl(t.linkedBrowser?.currentURI?.spec) && !t.hidden);
     if (existing) {

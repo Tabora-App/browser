@@ -8,7 +8,7 @@
 
 Object.assign(Tabora, {
   _accountMod: null,
-  account: { el: null, step: null },
+  account: { el: null, step: null, after: null },
 
   accountMod() {
     if (!this._accountMod) {
@@ -51,7 +51,17 @@ Object.assign(Tabora, {
       this.account.el = root;
     }
     root.hidden = false;
+    this.account.after = typeof opts.after === "function" ? opts.after : null; // что открыть после входа
     this.accountRender(step, opts);
+  },
+
+  /** Вход или регистрация завершены: выполнить отложенное действие (например, открыть почту). */
+  accountAfter() {
+    const fn = this.account.after;
+    this.account.after = null;
+    if (fn) {
+      setTimeout(() => fn(), 0);
+    }
   },
 
   accountClose() {
@@ -66,6 +76,7 @@ Object.assign(Tabora, {
     root.hidden = true;
     root.querySelector(".ta-card").replaceChildren();
     this.account.step = null;
+    this.account.after = null;
   },
 
   accountRender(step, opts = {}) {
@@ -238,7 +249,12 @@ Object.assign(Tabora, {
         h("li", {}, "Кошелёк: ⌘⇧W, почта и алиасы: ⌘⇧M"),
         h("li", {}, Account.isLocalMode ? "Синхронизация между компьютерами включится, когда появится сервер" : "Синхронизация с сервером включена"),
       ]),
-      this.taButton("Начать", "primary", () => this.accountClose()),
+      this.taButton("Начать", "primary", () => {
+        const after = this.account.after;
+        this.accountClose();
+        this.account.after = after;
+        this.accountAfter();
+      }),
     ]);
   },
 
@@ -254,7 +270,10 @@ Object.assign(Tabora, {
       onOk: async () => {
         const r = await Account.login(email.input.value, pass.input.value);
         this.notice(`Вы вошли как ${r.email}`);
+        const after = this.account.after;
         this.accountClose();
+        this.account.after = after;
+        this.accountAfter();
       },
       links: [
         this.taLink("Забыли пароль? Ключ восстановления", () => this.accountRender("forgot")),
