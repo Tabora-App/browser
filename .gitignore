@@ -8,4 +8,5 @@ dist/
 !.env.example
 __pycache__/
 tools/wallet-vendor/node_modules
+tools/vault-vendor/node_modules
 tools/wallet-vendor/package-lock.json

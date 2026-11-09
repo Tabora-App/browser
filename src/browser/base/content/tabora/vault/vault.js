@@ -139,7 +139,7 @@ Object.assign(Tabora, {
         parent: { esModuleURI: "chrome://browser/content/tabora/actors/TaboraVaultParent.sys.mjs" },
         child: {
           esModuleURI: "chrome://browser/content/tabora/actors/TaboraVaultChild.sys.mjs",
-          events: { click: { capture: true } },
+          events: { click: { capture: true }, focusin: { capture: true }, focusout: { capture: true }, keydown: { capture: true } },
         },
         allFrames: true,
         messageManagerGroups: ["browsers"],
@@ -479,6 +479,189 @@ Object.assign(Tabora, {
     } catch (e) {
       this.notice("Не удалось прочитать картинку");
     }
+  },
+
+  /* ---- Подсказка в поле одноразового кода ----------------------------------------- */
+
+  otpPop: { el: null, actor: null, entries: [], active: 0, timer: null, host: "" },
+
+  /** Поле кода получило фокус: показываем коды сайта (только активная вкладка, только совпадающий домен). */
+  async otpFieldFocused(data, actor) {
+    const browser = actor.browsingContext?.top?.embedderElement;
+    if (!browser || browser !== gBrowser.selectedBrowser) {
+      return;
+    }
+    const { Vault } = this.vaultMod();
+    const { Otp } = this.otpMod();
+    await Vault.ready();
+    if (Vault.exists && !Vault.unlocked) {
+      await Vault.unlock();
+    }
+    if (!Vault.unlocked) {
+      return; // сейф на мастер-пароле: без подсказок, кодов всё равно не посчитать
+    }
+    await Otp.ready();
+    const entries = Otp.forHost(data.host);
+    if (!entries.length) {
+      return;
+    }
+    const pop = this.otpPop;
+    pop.actor = actor;
+    pop.entries = entries;
+    pop.active = 0;
+    pop.host = data.host;
+    pop.maxLength = data.maxLength || 0;
+    this.otpPopRender(browser, data.rect, data.zoom || 1);
+    actor.sendAsyncMessage("TaboraVault:Arm", { armed: true });
+  },
+
+  otpFieldBlurred(actor) {
+    if (this.otpPop.actor === actor) {
+      this.otpPopHide();
+    }
+  },
+
+  otpPopEl() {
+    let el = this.otpPop.el;
+    if (!el) {
+      const h = (t, a, x, c) => this.html(t, a, x, c);
+      el = h("div", { id: "tabora-otp-pop", role: "listbox", hidden: "true" });
+      document.getElementById("browser").append(el);
+      el.addEventListener("pointerdown", e => e.preventDefault()); // не отбираем фокус у поля
+      window.addEventListener("pointerdown", e => {
+        if (!el.hidden && !el.contains(e.target)) {
+          this.otpPopHide();
+        }
+      }, true);
+      gBrowser.tabContainer.addEventListener("TabSelect", () => this.otpPopHide());
+      window.addEventListener("blur", () => this.otpPopHide());
+      this.otpPop.el = el;
+    }
+    return el;
+  },
+
+  otpPopRender(browser, rect, zoom) {
+    const h = (t, a, x, c) => this.html(t, a, x, c);
+    const pop = this.otpPop;
+    const el = this.otpPopEl();
+    el.replaceChildren();
+    pop.entries.forEach((e, i) => {
+      const row = h("div", { class: `otp-pop-row${i === pop.active ? " active" : ""}`, role: "option", "data-id": e.id }, null, [
+        h("span", { class: "otp-icon" }, e.domains?.[0] ? null : (e.issuer || e.account || "?")[0].toUpperCase(), e.domains?.[0] ? [h("img", { src: `page-icon:https://${e.domains[0]}/`, alt: "" })] : []),
+        h("div", { class: "otp-text" }, null, [h("b", {}, e.issuer || e.account), h("span", {}, e.issuer ? e.account || "" : "")]),
+        h("span", { class: "otp-code" }, "··· ···"),
+        h("span", { class: "otp-ring", style: "--p:100" }),
+      ]);
+      row.addEventListener("click", () => {
+        pop.active = i;
+        this.otpPopAccept(pop.actor);
+      });
+      row.addEventListener("mouseenter", () => this.otpPopSetActive(i));
+      el.append(row);
+    });
+    el.append(h("div", { class: "otp-pop-hint" }, "Enter — вставить код · Esc — закрыть · форма не отправляется"));
+    el.hidden = false;
+    // координаты поля страницы → координаты окна: масштаб страницы и смещение области браузера
+    const b = browser.getBoundingClientRect();
+    const root = document.getElementById("browser").getBoundingClientRect();
+    const x = b.left - root.left + rect.x * zoom;
+    const yTop = b.top - root.top + rect.y * zoom;
+    const yBottom = yTop + rect.h * zoom;
+    el.style.left = `${Math.max(8, Math.min(x, root.width - el.offsetWidth - 8))}px`;
+    const below = yBottom + 6;
+    const fits = below + el.offsetHeight <= root.height - 8;
+    el.style.top = `${fits ? below : Math.max(8, yTop - el.offsetHeight - 6)}px`;
+    this.otpPopTick();
+    clearInterval(pop.timer);
+    pop.timer = setInterval(() => this.otpPopTick(), 1000);
+  },
+
+  async otpPopTick() {
+    const pop = this.otpPop;
+    const el = pop.el;
+    if (!el || el.hidden) {
+      clearInterval(pop.timer);
+      pop.timer = null;
+      return;
+    }
+    // документ, для которого показана подсказка, ушёл (навигация, закрытие) — прячем
+    try {
+      if (pop.actor.browsingContext.currentWindowGlobal !== pop.actor.manager) {
+        this.otpPopHide();
+        return;
+      }
+    } catch (e) {
+      this.otpPopHide();
+      return;
+    }
+    const { Otp } = this.otpMod();
+    for (const row of el.querySelectorAll(".otp-pop-row[data-id]")) {
+      try {
+        const c = await Otp.code(row.dataset.id);
+        row.querySelector(".otp-code").textContent = this.otpFmt(c.code);
+        row.querySelector(".otp-ring").style.setProperty("--p", String(Math.round((c.remaining / c.period) * 100)));
+        row.classList.toggle("ending", c.remaining <= 5);
+      } catch (e) {
+        row.querySelector(".otp-code").textContent = "—";
+      }
+    }
+  },
+
+  otpPopSetActive(i) {
+    const pop = this.otpPop;
+    pop.active = (i + pop.entries.length) % pop.entries.length;
+    pop.el?.querySelectorAll(".otp-pop-row").forEach((r, k) => r.classList.toggle("active", k === pop.active));
+  },
+
+  otpPopMove(actor, delta) {
+    if (this.otpPop.actor === actor && this.otpPop.entries.length) {
+      this.otpPopSetActive(this.otpPop.active + delta);
+    }
+  },
+
+  /** Вставить активный код в поле: следующий код, если текущий вот-вот истечёт. */
+  async otpPopAccept(actor) {
+    const pop = this.otpPop;
+    if (!pop.el || pop.el.hidden || pop.actor !== actor) {
+      return;
+    }
+    const entry = pop.entries[pop.active];
+    if (!entry) {
+      return;
+    }
+    const { Otp } = this.otpMod();
+    try {
+      const c = await Otp.code(entry.id);
+      const code = c.remaining <= 3 ? c.next : c.code;
+      const ok = await actor.sendQuery("TaboraVault:FillOtp", { code });
+      this.otpPopHide();
+      if (ok) {
+        Otp.touch(entry.id).catch(() => {});
+      } else {
+        this.notice("Поле кода больше недоступно");
+      }
+    } catch (e) {
+      this.otpPopHide();
+      this.notice(e.message);
+    }
+  },
+
+  otpPopHide(actor) {
+    const pop = this.otpPop;
+    if (actor && pop.actor !== actor) {
+      return;
+    }
+    if (pop.el) {
+      pop.el.hidden = true;
+      pop.el.replaceChildren();
+    }
+    clearInterval(pop.timer);
+    pop.timer = null;
+    try {
+      pop.actor?.sendAsyncMessage("TaboraVault:Arm", { armed: false });
+    } catch (e) {}
+    pop.actor = null;
+    pop.entries = [];
   },
 
   /* ---- Меню записи ------------------------------------------------------------ */
