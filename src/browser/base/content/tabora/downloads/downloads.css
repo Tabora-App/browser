@@ -172,7 +172,7 @@ kbd { font: 500 10px/1 var(--mono); color: var(--text-4); border: 1px solid var(
 .plate[data-kind="video"] { --k: #ff8fd1; }
 .plate[data-kind="image"] { --k: #7ddf6a; }
 .plate svg { width: 24px; height: 24px; }
-.plate .ext { font: 800 9px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.04em; color: inherit; opacity: 0.9; max-width: 48px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plate .ext { font: 800 9px/1.3 var(--mono); text-transform: uppercase; letter-spacing: 0.04em; color: inherit; opacity: 0.9; max-width: 48px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (prefers-color-scheme: light) {
   .plate { background: color-mix(in srgb, var(--k) 22%, #ffffff); color: color-mix(in srgb, var(--k) 55%, #16171a); }
 }

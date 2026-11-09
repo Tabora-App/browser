@@ -957,6 +957,9 @@ Object.assign(Tabora, {
   },
 });
 
+// Фоновое наблюдение за поступлениями (раз в минуту, с уведомлением)
+setTimeout(() => Tabora.walletStartWatch?.(), 5000);
+
 // Регистрация раздела в ящике
 Tabora.SECTIONS.wallet = { label: "Кошелёк", key: "⌘⇧W", noSearch: true, icon: ["M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v2", "M3 7v10a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-7a1 1 0 0 0-1-1H5a2 2 0 0 1-2-2z", "M16 14h.01"], wide: false };
 if (!Tabora.SECTION_ORDER.includes("wallet")) {

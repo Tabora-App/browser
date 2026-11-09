@@ -713,37 +713,202 @@ Object.assign(Tabora, {
 
   /* ---- История операций --------------------------------------------------- */
 
+  /** Загрузка истории из сетей (кэш 60 с), затем перерисовка вкладки. */
+  async walletLoadHistory(force = false) {
+    const { WalletStore, CHAIN_ORDER } = this.walletStore();
+    const w = this.wallet;
+    const account = WalletStore.activeAccount;
+    if (!account) {
+      return;
+    }
+    const key = `${WalletStore.activeWallet.id}:${account.index}`;
+    if (!force && w.history?.key === key && Date.now() - w.history.at < 60000) {
+      return;
+    }
+    if (w.historyLoading) {
+      return;
+    }
+    w.historyLoading = true;
+    const hidden = new Set(WalletStore.data.settings?.hiddenChains || []);
+    const prices = w.prices || (await WalletStore.prices());
+    const results = await Promise.all(CHAIN_ORDER.filter(id => !hidden.has(id)).map(id => WalletStore.history(id, account.addresses[id], prices).catch(e => ({ items: [], hidden: 0, error: `${id}: ${e.message}` }))));
+    w.history = { key, at: Date.now(), items: results.flatMap(r => r.items), hidden: results.reduce((n, r) => n + r.hidden, 0), errors: results.map(r => r.error).filter(Boolean) };
+    w.historyLoading = false;
+    if (this.drawer.open && this.drawer.section === "wallet" && w.tab === "activity" && w.view === "main") {
+      this.renderDrawer();
+    }
+  },
+
   walletActivityList() {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { WalletStore, CHAINS } = this.walletStore();
-    const items = WalletStore.activity;
+    const w = this.wallet;
     const list = h("div", { class: "w-chains" });
-    if (!items.length) {
-      list.append(h("div", { class: "w-empty" }, "Здесь появятся отправки и подписи, сделанные в Tabora."));
+    this.walletLoadHistory();
+    const onchain = w.history?.items || [];
+    const hashes = new Set(onchain.map(i => i.hash));
+    const local = WalletStore.activity.filter(it => !it.hash || !hashes.has(it.hash)).map(it => ({ id: `local:${it.at}`, local: it, at: Date.parse(it.at), chain: it.chain }));
+    const items = [...onchain, ...local].sort((a, b) => b.at - a.at).slice(0, 80);
+    if (!w.history && !local.length) {
+      list.append(h("div", { class: "w-empty" }, "Загружаем операции из сетей…"));
       return list;
     }
+    if (!items.length) {
+      list.append(h("div", { class: "w-empty" }, w.historyLoading ? "Загружаем операции из сетей…" : "Пока операций нет. Поступления появятся здесь и в уведомлении."));
+    }
+    const when = ms => new Date(ms).toLocaleString("ru-RU", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
     for (const it of items) {
-      const chain = CHAINS[it.chain];
-      const row = h("div", { class: "w-asset w-activity", style: `--c:${chain?.color || "#888"}` }, null, [
-        h("span", { class: "w-coin" }, null, [chain?.logo ? h("img", { src: chain.logo, alt: "" }) : h("b", {}, "?")]),
-        h("div", { class: "w-chain-text" }, null, [
-          h("b", {}, it.kind === "sign" ? `Подпись · ${it.origin || ""}` : it.kind === "dapp" ? `${it.origin}` : `Отправка ${it.symbol}`),
-          h("span", { class: "w-sub-line" }, `${new Date(it.at).toLocaleString("ru-RU", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })} · ${it.hash ? this.shortAddr(it.hash) : it.note || ""}`),
-        ]),
-        h("div", { class: "w-chain-bal" }, null, [h("b", { class: "w-native" }, it.amount ? `−${it.amount}` : ""), h("span", { class: "w-usd" }, it.symbol && it.amount ? it.symbol : "")]),
-      ]);
-      if (it.hash) {
-        row.addEventListener("click", () => this.openInSpace(this.wTxUrl(it.chain, it.hash), true));
-        row.addEventListener("contextmenu", e => {
-          e.preventDefault();
-          this.showMenu([
-            { label: "Открыть в обозревателе", run: () => this.openInSpace(this.wTxUrl(it.chain, it.hash), true) },
-            { label: "Копировать хеш", run: () => this.copyText(it.hash, "Хеш скопирован") },
-          ], e.clientX, e.clientY);
-        });
+      let row;
+      if (it.local) {
+        const l = it.local;
+        const chain = CHAINS[l.chain];
+        row = h("div", { class: "w-asset w-activity", style: `--c:${chain?.color || "#888"}` }, null, [
+          h("span", { class: "w-coin" }, null, [chain?.logo ? h("img", { src: chain.logo, alt: "" }) : h("b", {}, "?")]),
+          h("div", { class: "w-chain-text" }, null, [
+            h("b", {}, l.kind === "sign" ? `Подпись · ${l.origin || ""}` : l.kind === "dapp" ? `${l.origin}` : `Отправка ${l.symbol}`),
+            h("span", { class: "w-sub-line" }, `${when(it.at)} · ${l.hash ? this.shortAddr(l.hash) : l.note || ""}`),
+          ]),
+          h("div", { class: "w-chain-bal" }, null, [h("b", { class: "w-native" }, l.amount ? `−${l.amount}` : ""), h("span", { class: "w-usd" }, l.symbol && l.amount ? l.symbol : "")]),
+        ]);
+        if (l.hash) {
+          this.wActivityMenu(row, l.chain, l.hash);
+        }
+      } else {
+        const chain = CHAINS[it.chain];
+        const title = it.call ? `${it.call} · ${it.chainName}` : it.dir === "in" ? `Получено ${it.symbol}` : it.dir === "self" ? `Перевод себе ${it.symbol}` : `Отправка ${it.symbol}`;
+        const sign = it.dir === "in" ? "+" : it.dir === "self" ? "" : "−";
+        row = h("div", { class: `w-asset w-activity ${it.dir === "in" ? "in" : ""} ${it.status !== "ok" ? "muted" : ""}`.trim(), style: `--c:${chain?.color || "#888"}` }, null, [
+          h("span", { class: "w-coin" }, null, [h("img", { src: it.logo, alt: "" }), h("i", { class: "w-coin-chain" }, null, [h("img", { src: it.chainLogo, alt: "" })])]),
+          h("div", { class: "w-chain-text" }, null, [
+            h("b", {}, title),
+            h("span", { class: "w-sub-line" }, `${when(it.at)} · ${it.status === "pending" ? "ожидает · " : it.status === "failed" ? "ошибка · " : ""}${it.counterparty ? this.shortAddr(it.counterparty) : this.shortAddr(it.hash)}`),
+          ]),
+          h("div", { class: "w-chain-bal" }, null, [
+            h("b", { class: "w-native" }, it.call && it.amount === "0" ? "" : `${sign}${it.amount}`),
+            h("span", { class: "w-usd" }, it.usd !== null && it.usd >= 0.01 ? this.wFmtUsd(it.usd) : it.symbol),
+          ]),
+        ]);
+        this.wActivityMenu(row, it.chain, it.hash);
       }
       list.append(row);
     }
+    if (w.history?.hidden) {
+      list.append(h("div", { class: "w-hint w-center" }, `Скрыто подозрительных операций: ${w.history.hidden} (пыль, неизвестные токены, нулевые переводы)`));
+    }
+    if (w.history?.errors?.length) {
+      list.append(h("div", { class: "w-hint w-center" }, `Нет связи: ${w.history.errors.map(e => e.split(":")[0]).join(", ")}`));
+    }
+    const refresh = h("button", { class: "w-link", type: "button" }, w.historyLoading ? "Обновляем…" : "Обновить историю");
+    refresh.disabled = !!w.historyLoading;
+    refresh.addEventListener("click", () => {
+      this.walletLoadHistory(true);
+      this.renderDrawer();
+    });
+    list.append(h("div", { class: "w-zero-toggle" }, null, [refresh]));
     return list;
+  },
+
+  wActivityMenu(row, chain, hash) {
+    row.addEventListener("click", () => this.openInSpace(this.wTxUrl(chain, hash), true));
+    row.addEventListener("contextmenu", e => {
+      e.preventDefault();
+      this.showMenu([
+        { label: "Открыть в обозревателе", run: () => this.openInSpace(this.wTxUrl(chain, hash), true) },
+        { label: "Копировать хеш", run: () => this.copyText(hash, "Хеш скопирован") },
+      ], e.clientX, e.clientY);
+    });
+  },
+
+  /* ---- Фоновое наблюдение: поступления и уведомления ---------------------- */
+
+  walletStartWatch() {
+    if (this._walletWatch) {
+      return;
+    }
+    const tick = () => this.walletWatchTick().catch(() => {});
+    this._walletWatch = setInterval(tick, 60000);
+    setTimeout(tick, 15000);
+  },
+
+  async walletWatchTick() {
+    const { WalletStore, CHAINS, CHAIN_ORDER } = this.walletStore();
+    await WalletStore.ready();
+    const account = WalletStore.activeAccount;
+    if (!WalletStore.exists || !account) {
+      return;
+    }
+    const w = this.wallet;
+    w.seen ||= {};
+    const hidden = new Set(WalletStore.data.settings?.hiddenChains || []);
+    const prices = await WalletStore.prices();
+    w.prices = prices;
+    w.pricesAt = Date.now();
+    const incoming = [];
+    await Promise.all(CHAIN_ORDER.filter(id => !hidden.has(id)).map(async id => {
+      const address = account.addresses[id];
+      let bal;
+      try {
+        bal = await WalletStore.balance(id, address);
+      } catch (e) {
+        return;
+      }
+      const key = `${id}:${address}`;
+      const snapshot = { native: bal.native, tokens: Object.fromEntries((bal.tokens || []).map(t => [t.symbol, t.raw || "0"])) };
+      const prev = w.seen[key];
+      if (prev) {
+        const chain = CHAINS[id];
+        if (parseFloat(bal.native) > parseFloat(prev.native) + 1e-12) {
+          const delta = parseFloat(bal.native) - parseFloat(prev.native);
+          const usd = delta * (prices[chain.symbol] || 0);
+          if (!prices[chain.symbol] || usd >= 0.01) {
+            incoming.push({ chain, text: `${delta.toLocaleString("en-US", { maximumFractionDigits: 6 })} ${chain.symbol}`, usd });
+          }
+        }
+        for (const t of bal.tokens || []) {
+          const before = BigInt(prev.tokens[t.symbol] || "0");
+          const now = BigInt(t.raw || "0");
+          if (now > before) {
+            const delta = WalletStore.format(now - before, t.decimals, 6);
+            const usd = parseFloat(delta) * (prices[t.symbol] || 0);
+            if (usd >= 0.5 || !prices[t.symbol]) {
+              incoming.push({ chain, text: `${delta} ${t.symbol}`, usd });
+            }
+          }
+        }
+      }
+      w.seen[key] = snapshot;
+      w.balances[key] = { ...bal, at: Date.now() };
+    }));
+    if (incoming.length) {
+      for (const it of incoming) {
+        this.walletNotifyIncoming(it);
+      }
+      this.walletLoadHistory(true);
+      this.updateWalletCard?.();
+      if (this.drawer.open && this.drawer.section === "wallet" && !w.flow) {
+        this.renderDrawer();
+      }
+    }
+  },
+
+  walletNotifyIncoming({ chain, text, usd }) {
+    const title = `Пришло ${text}`;
+    const body = `${chain.name}${usd ? ` · ${this.wFmtUsd(usd)}` : ""} · кошелёк Tabora`;
+    this.notice(`${title} · ${chain.name}`);
+    try {
+      const alerts = Cc["@mozilla.org/alerts-service;1"].getService(Ci.nsIAlertsService);
+      const alert = Cc["@mozilla.org/alert-notification;1"].createInstance(Ci.nsIAlertNotification);
+      alert.init(`tabora-wallet-${Date.now()}`, chain.logo, title, body, true, "", null, null, null, null, Services.scriptSecurityManager.getSystemPrincipal(), false, false);
+      alerts.showAlert(alert, (subject, topic) => {
+        if (topic === "alertclickcallback") {
+          window.focus();
+          this.wallet.view = "main";
+          this.wallet.tab = "activity";
+          this.openDrawer("wallet");
+        }
+      });
+    } catch (e) {
+      console.warn("wallet alert", e);
+    }
   },
 });

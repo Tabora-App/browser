@@ -24,25 +24,25 @@ export const qrcodegen = C.qrcodegen;
 const LOGO = name => `chrome://browser/content/tabora/wallet/logos/${name}.png`;
 
 export const CHAINS = {
-  ethereum: { id: "ethereum", logo: LOGO("ethereum"), name: "Ethereum", symbol: "ETH", kind: "evm", chainId: 1, decimals: 18, color: "#8a92ff", path: "m/44'/60'/0'/0/{i}",
+  ethereum: { id: "ethereum", logo: LOGO("ethereum"), name: "Ethereum", symbol: "ETH", kind: "evm", chainId: 1, decimals: 18, dust: 0.0001, color: "#8a92ff", path: "m/44'/60'/0'/0/{i}",
     nodes: ["https://ethereum-rpc.publicnode.com", "https://cloudflare-eth.com", "https://rpc.ankr.com/eth", "https://eth.llamarpc.com"],
-    explorer: "https://etherscan.io/address/",
+    explorer: "https://etherscan.io/address/", history: "https://eth.blockscout.com",
     tokens: [{ symbol: "USDT", logo: LOGO("usdt"), address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6 }, { symbol: "USDC", logo: LOGO("usdc"), address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6 }, { symbol: "DAI", logo: LOGO("dai"), address: "0x6B175474E89094C44Da98b954EedeAC495271d0F", decimals: 18 }] },
-  base: { id: "base", logo: LOGO("base"), name: "Base", symbol: "ETH", kind: "evm", chainId: 8453, decimals: 18, color: "#4f7bff", path: "m/44'/60'/0'/0/{i}", sameAs: "ethereum",
-    nodes: ["https://base-rpc.publicnode.com", "https://mainnet.base.org", "https://base.llamarpc.com"], explorer: "https://basescan.org/address/",
+  base: { id: "base", logo: LOGO("base"), name: "Base", symbol: "ETH", kind: "evm", chainId: 8453, decimals: 18, dust: 0.0001, color: "#4f7bff", path: "m/44'/60'/0'/0/{i}", sameAs: "ethereum",
+    nodes: ["https://base-rpc.publicnode.com", "https://mainnet.base.org", "https://base.llamarpc.com"], explorer: "https://basescan.org/address/", history: "https://base.blockscout.com",
     tokens: [{ symbol: "USDC", logo: LOGO("usdc"), address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 }, { symbol: "USDT", logo: LOGO("usdt"), address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 }] },
-  arbitrum: { id: "arbitrum", logo: LOGO("arbitrum"), name: "Arbitrum", symbol: "ETH", kind: "evm", chainId: 42161, decimals: 18, color: "#6fb6ff", path: "m/44'/60'/0'/0/{i}", sameAs: "ethereum",
-    nodes: ["https://arbitrum-one-rpc.publicnode.com", "https://arb1.arbitrum.io/rpc"], explorer: "https://arbiscan.io/address/",
+  arbitrum: { id: "arbitrum", logo: LOGO("arbitrum"), name: "Arbitrum", symbol: "ETH", kind: "evm", chainId: 42161, decimals: 18, dust: 0.0001, color: "#6fb6ff", path: "m/44'/60'/0'/0/{i}", sameAs: "ethereum",
+    nodes: ["https://arbitrum-one-rpc.publicnode.com", "https://arb1.arbitrum.io/rpc"], explorer: "https://arbiscan.io/address/", history: "https://arbitrum.blockscout.com",
     tokens: [{ symbol: "USDT", logo: LOGO("usdt"), address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 }, { symbol: "USDC", logo: LOGO("usdc"), address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6 }] },
-  polygon: { id: "polygon", logo: LOGO("polygon"), name: "Polygon", symbol: "POL", kind: "evm", chainId: 137, decimals: 18, color: "#c39bff", path: "m/44'/60'/0'/0/{i}", sameAs: "ethereum",
-    nodes: ["https://polygon-bor-rpc.publicnode.com", "https://polygon-rpc.com"], explorer: "https://polygonscan.com/address/",
+  polygon: { id: "polygon", logo: LOGO("polygon"), name: "Polygon", symbol: "POL", kind: "evm", chainId: 137, decimals: 18, dust: 0.5, color: "#c39bff", path: "m/44'/60'/0'/0/{i}", sameAs: "ethereum",
+    nodes: ["https://polygon-bor-rpc.publicnode.com", "https://polygon-rpc.com"], explorer: "https://polygonscan.com/address/", history: "https://polygon.blockscout.com",
     tokens: [{ symbol: "USDT", logo: LOGO("usdt"), address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", decimals: 6 }, { symbol: "USDC", logo: LOGO("usdc"), address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6 }] },
-  bitcoin: { id: "bitcoin", logo: LOGO("bitcoin"), name: "Bitcoin", symbol: "BTC", kind: "btc", decimals: 8, color: "#ff9f5a", path: "m/84'/0'/0'/0/{i}",
+  bitcoin: { id: "bitcoin", logo: LOGO("bitcoin"), name: "Bitcoin", symbol: "BTC", kind: "btc", decimals: 8, dust: 0.00001, color: "#ff9f5a", path: "m/84'/0'/0'/0/{i}",
     nodes: ["https://mempool.space/api", "https://blockstream.info/api"], explorer: "https://mempool.space/address/" },
-  solana: { id: "solana", logo: LOGO("solana"), name: "Solana", symbol: "SOL", kind: "sol", decimals: 9, color: "#5ee0d0", path: "m/44'/501'/{i}'/0'",
+  solana: { id: "solana", logo: LOGO("solana"), name: "Solana", symbol: "SOL", kind: "sol", decimals: 9, dust: 0.003, color: "#5ee0d0", path: "m/44'/501'/{i}'/0'",
     nodes: ["https://api.mainnet-beta.solana.com", "https://solana-rpc.publicnode.com", "https://rpc.ankr.com/solana"], explorer: "https://solscan.io/account/",
     tokens: [{ symbol: "USDC", logo: LOGO("usdc"), mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6 }, { symbol: "USDT", logo: LOGO("usdt"), mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", decimals: 6 }] },
-  tron: { id: "tron", logo: LOGO("tron"), name: "TRON", symbol: "TRX", kind: "tron", decimals: 6, color: "#ff7b7b", path: "m/44'/195'/0'/0/{i}",
+  tron: { id: "tron", logo: LOGO("tron"), name: "TRON", symbol: "TRX", kind: "tron", decimals: 6, dust: 1, color: "#ff7b7b", path: "m/44'/195'/0'/0/{i}",
     nodes: ["https://api.trongrid.io", "https://api.tronstack.io", "https://tron-rpc.publicnode.com/jsonrpc"], explorer: "https://tronscan.org/#/address/",
     tokens: [{ symbol: "USDT", logo: LOGO("usdt"), address: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", decimals: 6 }, { symbol: "USDC", logo: LOGO("usdc"), address: "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8", decimals: 6 }] },
 };
@@ -91,6 +91,13 @@ function slip10Ed25519(seed, path) {
     chain = I.slice(32);
   }
   return key;
+}
+
+/** Сигнал отмены по таймауту (в sys.mjs нет AbortSignal.timeout). */
+function timeoutSignal(ms) {
+  const c = new AbortController();
+  setTimeout(() => c.abort(new Error(`таймаут ${ms / 1000} с`)), ms);
+  return c.signal;
 }
 
 /** Каноничный JSON (ключи отсортированы) для HMAC открытой части файла. */
@@ -608,6 +615,7 @@ export const WalletStore = {
       const url = forced || list[i];
       try {
         const res = await fetch(url + path, {
+          signal: timeoutSignal(12000),
           method: body ? "POST" : "GET",
           headers: body ? { "Content-Type": "application/json" } : {},
           body: body ? JSON.stringify(body) : undefined,
@@ -881,6 +889,170 @@ export const WalletStore = {
     } catch (e) {
       return this._prices?.data || {};
     }
+  },
+
+  /* ---------- история из сети ---------- */
+
+  /** Операции по адресу из публичных источников, нормализованные и очищенные от спама.
+   * entry: { id, hash, chain, at, dir: in|out|self, amount, symbol, logo, counterparty, usd, status, kind } */
+  async history(chainId, address = this.activeAccount?.addresses?.[chainId], prices = {}) {
+    const chain = CHAINS[chainId];
+    if (!address) {
+      return { items: [], hidden: 0 };
+    }
+    const known = new Map(this.tokensFor(chainId).map(t => [(t.address || t.mint).toLowerCase(), t]));
+    const raw = [];
+    const me = address.toLowerCase();
+    const dirOf = (from, to) => (from?.toLowerCase() === me && to?.toLowerCase() === me ? "self" : from?.toLowerCase() === me ? "out" : "in");
+    if (chain.kind === "evm" && chain.history) {
+      const get = async path => {
+        const res = await fetch(`${chain.history}/api/v2/addresses/${address}${path}`, { signal: timeoutSignal(15000) });
+        if (!res.ok) {
+          throw new Error(`${new URL(chain.history).host}: HTTP ${res.status}`);
+        }
+        return (await res.json()).items || [];
+      };
+      const [txs, transfers] = await Promise.all([get("/transactions").catch(() => []), get("/token-transfers?type=ERC-20").catch(() => [])]);
+      for (const t of txs.slice(0, 30)) {
+        const value = BigInt(t.value || 0);
+        if (value === 0n && !t.to?.hash) {
+          continue;
+        }
+        raw.push({ hash: t.hash, at: Date.parse(t.timestamp), dir: dirOf(t.from?.hash, t.to?.hash), from: t.from?.hash, to: t.to?.hash, rawAmount: value, decimals: chain.decimals, symbol: chain.symbol, logo: chain.logo, kind: "native", status: t.status === "ok" ? "ok" : t.status === null ? "pending" : "failed", scam: t.from?.is_scam || (t.from?.reputation && t.from.reputation !== "ok"), call: value === 0n && t.method ? t.method : null });
+      }
+      for (const t of transfers.slice(0, 40)) {
+        const token = known.get((t.token?.address || t.token?.address_hash || "").toLowerCase());
+        raw.push({ hash: t.tx_hash || t.transaction_hash, at: Date.parse(t.timestamp), dir: dirOf(t.from?.hash, t.to?.hash), from: t.from?.hash, to: t.to?.hash, rawAmount: BigInt(t.total?.value || 0), decimals: Number(t.total?.decimals ?? token?.decimals ?? 18), symbol: token?.symbol || t.token?.symbol || "?", logo: token?.logo || null, kind: "token", known: !!token, status: "ok", scam: t.from?.is_scam || (t.from?.reputation && t.from.reputation !== "ok") || t.token?.reputation === "scam" });
+      }
+    } else if (chain.kind === "btc") {
+      const txs = await this.rpc(chainId, null, `/address/${address}/txs`);
+      for (const t of txs.slice(0, 30)) {
+        const inMine = t.vin.filter(v => v.prevout?.scriptpubkey_address === address).reduce((n, v) => n + BigInt(v.prevout.value), 0n);
+        const outMine = t.vout.filter(v => v.scriptpubkey_address === address).reduce((n, v) => n + BigInt(v.value), 0n);
+        const delta = outMine - inMine;
+        const dir = inMine > 0n ? (outMine > 0n && delta >= 0n ? "self" : "out") : "in";
+        const other = dir === "in" ? t.vin.find(v => v.prevout?.scriptpubkey_address && v.prevout.scriptpubkey_address !== address)?.prevout.scriptpubkey_address : t.vout.find(v => v.scriptpubkey_address && v.scriptpubkey_address !== address)?.scriptpubkey_address;
+        raw.push({ hash: t.txid, at: t.status?.confirmed ? t.status.block_time * 1000 : Date.now(), dir, from: dir === "in" ? other : address, to: dir === "in" ? address : other, rawAmount: delta < 0n ? -delta - (dir === "out" ? BigInt(t.fee || 0) : 0n) : delta, decimals: 8, symbol: "BTC", logo: chain.logo, kind: "native", status: t.status?.confirmed ? "ok" : "pending", fee: BigInt(t.fee || 0) });
+      }
+    } else if (chain.kind === "sol") {
+      const sigs = await this.rpc(chainId, { jsonrpc: "2.0", id: 1, method: "getSignaturesForAddress", params: [address, { limit: 12 }] });
+      const list = sigs.result || [];
+      const txs = await Promise.all(list.map(sg => this.rpc(chainId, { jsonrpc: "2.0", id: 2, method: "getTransaction", params: [sg.signature, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 }] }).then(r => r.result).catch(() => null)));
+      txs.forEach((tx, i) => {
+        const sg = list[i];
+        if (!tx) {
+          return;
+        }
+        const keys = tx.transaction.message.accountKeys.map(k => k.pubkey || k);
+        const idx = keys.indexOf(address);
+        const failed = !!tx.meta?.err;
+        const at = (tx.blockTime || sg.blockTime || 0) * 1000;
+        if (idx !== -1) {
+          const delta = BigInt(tx.meta.postBalances[idx]) - BigInt(tx.meta.preBalances[idx]);
+          const fee = idx === 0 ? BigInt(tx.meta.fee || 0) : 0n;
+          const amount = delta < 0n ? -delta - fee : delta;
+          if (amount !== 0n || (delta < 0n && !tx.meta.postTokenBalances?.length)) {
+            const other = keys.find((k, j) => j !== idx && !/^(11111111111111111111111111111111|ComputeBudget|Tokenkeg|ATokenGP)/.test(k));
+            raw.push({ hash: sg.signature, at, dir: delta < 0n ? "out" : "in", from: delta < 0n ? address : other, to: delta < 0n ? other : address, rawAmount: amount, decimals: 9, symbol: "SOL", logo: chain.logo, kind: "native", status: failed ? "failed" : "ok" });
+          }
+        }
+        const pre = new Map((tx.meta.preTokenBalances || []).filter(b => b.owner === address).map(b => [b.mint, BigInt(b.uiTokenAmount.amount)]));
+        for (const b of tx.meta.postTokenBalances || []) {
+          if (b.owner !== address) {
+            continue;
+          }
+          const d = BigInt(b.uiTokenAmount.amount) - (pre.get(b.mint) || 0n);
+          pre.delete(b.mint);
+          if (d === 0n) {
+            continue;
+          }
+          const token = known.get(b.mint.toLowerCase());
+          raw.push({ hash: sg.signature, at, dir: d < 0n ? "out" : "in", rawAmount: d < 0n ? -d : d, decimals: b.uiTokenAmount.decimals, symbol: token?.symbol || "?", logo: token?.logo || null, kind: "token", known: !!token, status: failed ? "failed" : "ok", from: d < 0n ? address : null, to: d < 0n ? null : address });
+        }
+        for (const [mint, amount] of pre) {
+          const token = known.get(mint.toLowerCase());
+          raw.push({ hash: sg.signature, at, dir: "out", rawAmount: amount, decimals: token?.decimals ?? 0, symbol: token?.symbol || "?", logo: token?.logo || null, kind: "token", known: !!token, status: failed ? "failed" : "ok", from: address, to: null });
+        }
+      });
+    } else if (chain.kind === "tron") {
+      const base = this.nodesFor(chainId).list.find(u => !this.tronIsJsonRpc(u)) || "https://api.trongrid.io";
+      const get = async path => {
+        const res = await fetch(`${base}/v1/accounts/${address}${path}`, { signal: timeoutSignal(15000) });
+        if (!res.ok) {
+          throw new Error(`TRON: HTTP ${res.status}`);
+        }
+        return (await res.json()).data || [];
+      };
+      const [txs, trc20] = await Promise.all([get("/transactions?limit=30&only_confirmed=true").catch(() => []), get("/transactions/trc20?limit=40&only_confirmed=true").catch(() => [])]);
+      const b58 = hex => {
+        try {
+          return b58check.encode(hexToBytes(hex));
+        } catch (e) {
+          return hex;
+        }
+      };
+      for (const t of txs) {
+        const c = t.raw_data?.contract?.[0];
+        const v = c?.parameter?.value || {};
+        const ok = t.ret?.[0]?.contractRet === "SUCCESS";
+        if (c?.type === "TransferContract") {
+          const from = b58(v.owner_address);
+          const to = b58(v.to_address);
+          raw.push({ hash: t.txID, at: t.block_timestamp, dir: dirOf(from, to), from, to, rawAmount: BigInt(v.amount || 0), decimals: 6, symbol: "TRX", logo: chain.logo, kind: "native", status: ok ? "ok" : "failed" });
+        } else if (c && b58(v.owner_address) === address && c.type !== "TriggerSmartContract") {
+          raw.push({ hash: t.txID, at: t.block_timestamp, dir: "out", from: address, to: null, rawAmount: 0n, decimals: 6, symbol: "TRX", logo: chain.logo, kind: "native", status: ok ? "ok" : "failed", call: c.type.replace(/Contract$/, "") });
+        }
+      }
+      for (const t of trc20) {
+        if (t.type !== "Transfer") {
+          continue;
+        }
+        const token = known.get((t.token_info?.address || "").toLowerCase());
+        raw.push({ hash: t.transaction_id, at: t.block_timestamp, dir: dirOf(t.from, t.to), from: t.from, to: t.to, rawAmount: BigInt(t.value || 0), decimals: Number(t.token_info?.decimals ?? token?.decimals ?? 6), symbol: token?.symbol || t.token_info?.symbol || "?", logo: token?.logo || null, kind: "token", known: !!token, status: "ok" });
+      }
+    }
+    return this.filterHistory(chainId, raw, prices);
+  },
+
+  /** Фильтр спама и нормализация. Скрываем: входящие неизвестные токены, пыль (< $0.01),
+   * нулевые переводы, «отравление адреса», помеченных скамеров, неудачные входящие. */
+  filterHistory(chainId, raw, prices) {
+    const chain = CHAINS[chainId];
+    const items = [];
+    let hidden = 0;
+    const seen = new Set();
+    for (const r of raw) {
+      const amount = this.format(r.rawAmount, r.decimals, 8);
+      const price = prices[r.symbol] ?? (/^(USDT|USDC|DAI)$/.test(r.symbol) ? 1 : null);
+      const usd = price === null ? null : parseFloat(amount) * price;
+      const incoming = r.dir === "in";
+      let spam = false;
+      if (r.scam) {
+        spam = true;
+      } else if (incoming && r.kind === "token" && !r.known) {
+        spam = true; // неизвестный токен «подарком»
+      } else if (incoming && r.rawAmount === 0n) {
+        spam = true; // нулевой перевод (отравление адреса)
+      } else if (incoming && ((usd !== null && usd < 0.5) || (r.kind === "native" && chain.dust && parseFloat(amount) < chain.dust))) {
+        spam = true; // пыль (в т. ч. «отравление адреса» мелкими суммами), даже если курс не загрузился
+      } else if (incoming && r.status === "failed") {
+        spam = true;
+      } else if (incoming && r.kind === "token" && /^(USDT|USDC|DAI)$/.test(r.symbol) && usd !== null && usd < 0.5 && r.decimals >= 6) {
+        spam = true; // «1 USDT» от неизвестного — классическое отравление с мелкой суммой
+      }
+      if (spam) {
+        hidden++;
+        continue;
+      }
+      const id = `${chainId}:${r.hash}:${r.kind}:${r.symbol}:${r.dir}`;
+      if (seen.has(id)) {
+        continue;
+      }
+      seen.add(id);
+      items.push({ id, hash: r.hash, chain: chainId, chainName: chain.name, chainLogo: chain.logo, at: r.at || 0, dir: r.dir, amount, symbol: r.symbol, logo: r.logo || chain.logo, counterparty: incoming ? r.from : r.to, usd, status: r.status, kind: r.kind, call: r.call || null });
+    }
+    items.sort((a, b) => b.at - a.at);
+    return { items, hidden };
   },
 
   /** Самопроверка деривации на эталонной фразе BIP-39 (для тестов). */

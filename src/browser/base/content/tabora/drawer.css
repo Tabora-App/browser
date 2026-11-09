@@ -818,7 +818,7 @@
 #tabora-drawer .dcol-name {
   flex: 1;
   min-width: 0;
-  font: 700 13px/1 var(--tabora-font);
+  font: 700 13px/1.3 var(--tabora-font);
   color: var(--tabora-text-strong);
   white-space: nowrap;
   overflow: hidden;

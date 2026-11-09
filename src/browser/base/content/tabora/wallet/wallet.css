@@ -1433,3 +1433,16 @@
   white-space: normal;
   line-height: 1.4;
 }
+
+#tabora-drawer .w-activity.in .w-native {
+  color: var(--tabora-accent-ink);
+}
+
+#tabora-drawer .w-activity.muted {
+  opacity: 0.6;
+}
+
+#tabora-drawer .w-hint.w-center {
+  text-align: center;
+  padding: 6px 12px;
+}
