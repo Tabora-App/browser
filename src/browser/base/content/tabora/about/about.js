@@ -43,7 +43,7 @@ function fill() {
     const d = new Date(Number(id.slice(0, 4)), Number(id.slice(4, 6)) - 1, Number(id.slice(6, 8)));
     document.getElementById("build").textContent = `Сборка ${d.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}`;
   }
-  const { TaboraUpdate } = ChromeUtils.importESModule("chrome://browser/content/tabora/update/TaboraUpdate.sys.mjs");
+  const { TaboraUpdate } = ChromeUtils.importESModule("chrome://tabora/content/update/TaboraUpdate.sys.mjs");
   const upd = document.getElementById("updates");
   const restart = document.getElementById("restart-update");
   const renderUpdates = () => {

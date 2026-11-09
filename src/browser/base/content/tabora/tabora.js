@@ -32,17 +32,17 @@ var Tabora = {
       return;
     }
     this.moveToolboxIntoBrowser();
-    Services.scriptloader.loadSubScript("chrome://browser/content/tabora/drawer.js", window);
-    Services.scriptloader.loadSubScript("chrome://browser/content/tabora/agent.js", window);
-    Services.scriptloader.loadSubScript("chrome://browser/content/tabora/wallet/wallet.js", window);
-    Services.scriptloader.loadSubScript("chrome://browser/content/tabora/wallet/provider.js", window);
-    Services.scriptloader.loadSubScript("chrome://browser/content/tabora/wallet/send.js", window);
-    Services.scriptloader.loadSubScript("chrome://browser/content/tabora/vault/vault.js", window);
-    Services.scriptloader.loadSubScript("chrome://browser/content/tabora/account/account.js", window);
-    Services.scriptloader.loadSubScript("chrome://browser/content/tabora/update/update.js", window);
+    Services.scriptloader.loadSubScript("chrome://tabora/content/drawer.js", window);
+    Services.scriptloader.loadSubScript("chrome://tabora/content/agent.js", window);
+    Services.scriptloader.loadSubScript("chrome://tabora/content/wallet/wallet.js", window);
+    Services.scriptloader.loadSubScript("chrome://tabora/content/wallet/provider.js", window);
+    Services.scriptloader.loadSubScript("chrome://tabora/content/wallet/send.js", window);
+    Services.scriptloader.loadSubScript("chrome://tabora/content/vault/vault.js", window);
+    Services.scriptloader.loadSubScript("chrome://tabora/content/account/account.js", window);
+    Services.scriptloader.loadSubScript("chrome://tabora/content/update/update.js", window);
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
-      "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initWalletProvider", "initVaultActor", "initAccount", "initUpdates", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "startTimers", "updateTitle", "localizeUrlbar",
+      "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initWalletProvider", "initVaultActor", "initAccount", "initUpdates", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "initLegacyShellUrls", "startTimers", "updateTitle", "localizeUrlbar",
       "routeUrlbarToCommandBar",
     ]) {
       try {
@@ -57,13 +57,13 @@ var Tabora = {
 
   mail() {
     if (!this._mail) {
-      this._mail = ChromeUtils.importESModule("chrome://browser/content/tabora/mail/MailStore.sys.mjs");
+      this._mail = ChromeUtils.importESModule("chrome://tabora/content/mail/MailStore.sys.mjs");
     }
     return this._mail;
   },
 
   buildCompose() {
-    Services.scriptloader.loadSubScript("chrome://browser/content/tabora/select.js", window);
+    Services.scriptloader.loadSubScript("chrome://tabora/content/select.js", window);
     const h = (tag, attrs, text, children) => this.html(tag, attrs, text, children);
     const iconBtn = (id, title, paths, extra = "") => h("button", { class: `icon-btn ${extra}`.trim(), id, type: "button", title, "aria-label": title }, null, [this.svg(paths, 14, 2)]);
 
@@ -230,7 +230,20 @@ var Tabora = {
 
   async openCompose(opts = {}) {
     const { MailStore, ACCOUNT } = this.mail();
-    await MailStore.ready();
+    try {
+      await MailStore.ready();
+    } catch (e) {
+      // почта доступна только после входа и при открытом сейфе
+      if (e?.code === "signed-out") {
+        this.accountDialog("login", { after: () => this.openCompose(opts) });
+      } else if (e?.code === "vault-locked") {
+        this.notice("Сейф заблокирован: разблокируйте его, чтобы написать письмо");
+        this.openDrawer?.("codes");
+      } else {
+        this.notice(`Почта недоступна: ${e?.message || e}`);
+      }
+      return;
+    }
     const $ = id => document.getElementById(id);
     const box = this.compose.box;
     const from = $("tabora-compose-from");
@@ -853,16 +866,19 @@ var Tabora = {
     Services.prefs.setStringPref(PREF, `${base} ${tail}`);
   },
 
-  /** Баннеры cookie: актор страницы нажимает «Отклонить» за пользователя (см. actors/TaboraCookiesChild). */
+  /** Баннеры cookie: актор страницы нажимает «Отклонить» за пользователя (см. actors/TaboraCookiesChild).
+   * Только обычные сайты в веб-процессах: внутренние страницы, file: и дополнения актор не видит. */
   initCookieBanners() {
     try {
       ChromeUtils.registerWindowActor("TaboraCookies", {
-        parent: { esModuleURI: "chrome://browser/content/tabora/actors/TaboraCookiesParent.sys.mjs" },
+        parent: { esModuleURI: "chrome://tabora/content/actors/TaboraCookiesParent.sys.mjs" },
         child: {
-          esModuleURI: "chrome://browser/content/tabora/actors/TaboraCookiesChild.sys.mjs",
+          esModuleURI: "chrome://tabora/content/actors/TaboraCookiesChild.sys.mjs",
           events: { DOMContentLoaded: {}, pageshow: {} },
         },
         allFrames: true,
+        matches: ["http://*/*", "https://*/*"],
+        remoteTypes: ["web"],
         messageManagerGroups: ["browsers"],
         safeForUntrustedWebProcess: true,
       });
@@ -875,11 +891,14 @@ var Tabora = {
   initWalletProvider() {
     try {
       ChromeUtils.registerWindowActor("TaboraWallet", {
-        parent: { esModuleURI: "chrome://browser/content/tabora/actors/TaboraWalletParent.sys.mjs" },
+        parent: { esModuleURI: "chrome://tabora/content/actors/TaboraWalletParent.sys.mjs" },
         child: {
-          esModuleURI: "chrome://browser/content/tabora/actors/TaboraWalletChild.sys.mjs",
+          esModuleURI: "chrome://tabora/content/actors/TaboraWalletChild.sys.mjs",
           events: { DOMWindowCreated: {} },
         },
+        // только веб-страницы: http(s) (порт не важен, localhost тоже подходит) в веб-процессах
+        matches: ["https://*/*", "http://*/*"],
+        remoteTypes: ["web"],
         allFrames: true,
         messageManagerGroups: ["browsers"],
         safeForUntrustedWebProcess: true,
@@ -905,7 +924,11 @@ var Tabora = {
       return;
     }
     this._cookieNoticeAt = now;
-    this.notice(`Cookie-баннер закрыт: «${data.text}» · ${data.host}`);
+    // только сайт: текст кнопки задаёт страница, показывать его в оболочке нельзя
+    const host = String(data?.host || "").replace(/[^\p{L}\p{N}.:\[\]-]/gu, "").slice(0, 80);
+    if (host) {
+      this.notice(`Cookie-баннер закрыт · ${host}`);
+    }
   },
 
   /* ---- Свёрнутый сайдбар: только значки, подсказка при наведении ---------------- */
@@ -1281,17 +1304,45 @@ var Tabora = {
     }
   },
 
+  /** Ссылка, брошенная на карточку «Загрузки»: только http(s), имя файла очищается и не
+   * перезаписывает существующий файл, загрузка идёт в контейнере текущего пространства. */
   async downloadFromDrop(dt) {
-    const url = (dt.getData("text/uri-list") || dt.getData("text/plain") || "").split("\n")[0].trim();
-    if (!/^https?:\/\//i.test(url)) {
+    const raw = (dt.getData("text/uri-list") || dt.getData("text/plain") || "").split("\n")[0].trim();
+    let url;
+    try {
+      url = new URL(raw);
+    } catch (e) {
       return;
     }
-    const { Downloads } = ChromeUtils.importESModule("resource://gre/modules/Downloads.sys.mjs");
-    const dir = await Downloads.getPreferredDownloadsDirectory();
-    const name = decodeURIComponent(url.split("/").pop().split(/[?#]/)[0]) || "файл";
-    const download = await Downloads.createDownload({ source: url, target: PathUtils.join(dir, name) });
-    await this._dl.list.add(download);
-    download.start().catch(() => {});
+    if ((url.protocol !== "http:" && url.protocol !== "https:") || url.username || url.password) {
+      return;
+    }
+    try {
+      const { Downloads } = ChromeUtils.importESModule("resource://gre/modules/Downloads.sys.mjs");
+      const { DownloadPaths } = ChromeUtils.importESModule("resource://gre/modules/DownloadPaths.sys.mjs");
+      const { PrivateBrowsingUtils } = ChromeUtils.importESModule("resource://gre/modules/PrivateBrowsingUtils.sys.mjs");
+      const dir = await Downloads.getPreferredDownloadsDirectory();
+      let leaf = url.pathname.split("/").pop() || "";
+      try {
+        leaf = decodeURIComponent(leaf);
+      } catch (e) {}
+      const name = DownloadPaths.sanitize(leaf) || DownloadPaths.sanitize(url.hostname) || "файл";
+      const template = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+      template.initWithPath(PathUtils.join(dir, name));
+      const target = DownloadPaths.createNiceUniqueFile(template);
+      const download = await Downloads.createDownload({
+        source: { url: url.href, isPrivate: PrivateBrowsingUtils.isWindowPrivate(window), userContextId: this.activeSpace?.()?.userContextId || 0 },
+        target: target.path,
+      });
+      if (!this._dl) {
+        await this.initDownloads();
+      }
+      await this._dl.list.add(download);
+      download.start().catch(() => {});
+    } catch (e) {
+      console.error("Tabora downloadFromDrop", e);
+      this.notice("Не удалось начать загрузку");
+    }
   },
 
   fmtBytes(b) {
@@ -1352,11 +1403,47 @@ var Tabora = {
   /* ---- Стартовая страница поверх пустой вкладки ------------------------- */
 
   START_URLS: ["about:blank", "about:newtab", "about:home", "about:welcome", "about:privatebrowsing", "chrome://browser/content/blanktab.html"],
-  MAIL_URL: "chrome://browser/content/tabora/mail/mail.html",
-  DOWNLOADS_URL: "chrome://browser/content/tabora/downloads/downloads.html",
+  MAIL_URL: "chrome://tabora/content/mail/mail.html",
+  DOWNLOADS_URL: "chrome://tabora/content/downloads/downloads.html",
 
   isMailUrl(spec) {
     return (spec || "").startsWith(this.MAIL_URL);
+  },
+
+  /** Внутренние страницы переехали из chrome://browser/content/tabora/ в закрытый пакет
+   *  chrome://tabora/content/ (сайты не могут его загрузить). Вкладки, сохранённые в сессии
+   *  со старым адресом, перенаправляются на новый; другие старые адреса не трогаем. */
+  LEGACY_SHELL_PAGES: ["mail/mail.html", "downloads/downloads.html"],
+
+  legacyShellTarget(spec) {
+    const prefix = "chrome://browser/content/tabora/";
+    if (!spec || !spec.startsWith(prefix)) {
+      return null;
+    }
+    const rest = spec.slice(prefix.length);
+    const page = rest.split(/[?#]/)[0];
+    return this.LEGACY_SHELL_PAGES.includes(page) ? `chrome://tabora/content/${rest}` : null;
+  },
+
+  initLegacyShellUrls() {
+    const fix = browser => {
+      const target = this.legacyShellTarget(browser?.currentURI?.spec);
+      if (target) {
+        browser.loadURI(Services.io.newURI(target), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+      }
+    };
+    gBrowser.addTabsProgressListener({
+      onLocationChange: (browser, webProgress) => {
+        if (webProgress?.isTopLevel) {
+          fix(browser);
+        }
+      },
+    });
+    for (const tab of gBrowser.tabs) {
+      if (!tab.hasAttribute("pending")) {
+        fix(tab.linkedBrowser);
+      }
+    }
   },
 
   /** Как показывать адрес человеку: внутренние страницы получают короткие имена. */

@@ -7,12 +7,12 @@
  * Радиусы: окно 18, карточки 14, поля 12, вкладки 10, кнопки 8, глифы 6. */
 
 @import url("chrome://browser/content/tabora/fonts.css");
-@import url("chrome://browser/content/tabora/select.css");
-@import url("chrome://browser/content/tabora/drawer.css");
-@import url("chrome://browser/content/tabora/wallet/wallet.css");
-@import url("chrome://browser/content/tabora/vault/vault.css");
-@import url("chrome://browser/content/tabora/account/account.css");
-@import url("chrome://browser/content/tabora/update/update.css");
+@import url("chrome://tabora/content/select.css");
+@import url("chrome://tabora/content/drawer.css");
+@import url("chrome://tabora/content/wallet/wallet.css");
+@import url("chrome://tabora/content/vault/vault.css");
+@import url("chrome://tabora/content/account/account.css");
+@import url("chrome://tabora/content/update/update.css");
 
 :root {
   --tabora-bg: #0b0c0e;
@@ -616,8 +616,8 @@ sidebar-main {
 /* Вкладки наших страниц: контурные значки в цвете текста вместо лаймовых плашек
    (в свёрнутой колонке плашки выглядели тяжело) */
 #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[tabora-start] .tab-icon-image,
-#tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://browser/content/tabora/mail/icon.svg"],
-#tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://browser/content/tabora/downloads/icon.svg"] {
+#tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://tabora/content/mail/icon.svg"],
+#tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://tabora/content/downloads/icon.svg"] {
   border-radius: 0;
   opacity: 1;
 }
@@ -630,19 +630,19 @@ sidebar-main {
   content: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%233d4047'><rect x='4' y='5' width='14' height='3.6' rx='1.8'/><rect x='9.2' y='5' width='3.6' height='14' rx='1.8'/><circle cx='18.2' cy='7.2' r='1.6'/></svg>") !important;
 }
 
-#tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://browser/content/tabora/mail/icon.svg"] {
+#tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://tabora/content/mail/icon.svg"] {
   content: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c9ccd3' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><path d='M3.5 6.5h17v11h-17z'/><path d='M3.5 7l8.5 6 8.5-6'/></svg>");
 }
 
-:root[tabora-theme="light"] #tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://browser/content/tabora/mail/icon.svg"] {
+:root[tabora-theme="light"] #tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://tabora/content/mail/icon.svg"] {
   content: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233d4047' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><path d='M3.5 6.5h17v11h-17z'/><path d='M3.5 7l8.5 6 8.5-6'/></svg>");
 }
 
-#tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://browser/content/tabora/downloads/icon.svg"] {
+#tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://tabora/content/downloads/icon.svg"] {
   content: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c9ccd3' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><path d='M12 4v11'/><path d='M7.5 10.5 12 15l4.5-4.5'/><path d='M5 19h14'/></svg>");
 }
 
-:root[tabora-theme="light"] #tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://browser/content/tabora/downloads/icon.svg"] {
+:root[tabora-theme="light"] #tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://tabora/content/downloads/icon.svg"] {
   content: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233d4047' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><path d='M12 4v11'/><path d='M7.5 10.5 12 15l4.5-4.5'/><path d='M5 19h14'/></svg>");
 }
 

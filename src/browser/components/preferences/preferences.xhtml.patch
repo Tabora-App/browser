@@ -6,7 +6,7 @@ index e8da75f2c2..74985e952f 100644
    <link rel="stylesheet" href="chrome://browser/content/preferences/widgets/setting-group.css" />
    <link rel="stylesheet" href="chrome://browser/content/preferences/widgets/setting-pane.css" />
    <link rel="stylesheet" href="chrome://browser/content/preferences/widgets/setting-control.css" />
-+  <link rel="stylesheet" href="chrome://browser/content/tabora/preferences.css" />
++  <link rel="stylesheet" href="chrome://tabora/content/preferences.css" />
  
    <link rel="localization" href="branding/brand.ftl"/>
    <link rel="localization" href="browser/browser.ftl"/>
@@ -14,7 +14,7 @@ index e8da75f2c2..74985e952f 100644
    <script src="chrome://browser/content/preferences/preferences.js"/>
    <script src="chrome://browser/content/preferences/extensionControlled.js"/>
    <script src="chrome://browser/content/preferences/findInPage.js"/>
-+  <script src="chrome://browser/content/tabora/preferences.js"/>
++  <script src="chrome://tabora/content/preferences.js"/>
    <script src="chrome://browser/content/migration/migration-wizard.mjs" type="module"></script>
    <script type="module" src="chrome://browser/content/backup/backup-settings.mjs"></script>
    <script type="module" src="chrome://browser/content/preferences/widgets/dialog-button.mjs"></script>
