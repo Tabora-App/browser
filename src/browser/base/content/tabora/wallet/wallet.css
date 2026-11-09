@@ -1438,6 +1438,18 @@
   color: var(--tabora-accent-ink);
 }
 
+/* строка истории всегда одной высоты: подпись не переносится, лишнее уходит в многоточие */
+#tabora-drawer .w-activity .w-chain-text b,
+#tabora-drawer .w-activity .w-sub-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#tabora-drawer .w-activity .w-native.long {
+  font-size: 11px; /* мелкие суммы вроде 0.0000005: не отнимаем место у адреса */
+}
+
 #tabora-drawer .w-activity.muted {
   opacity: 0.6;
 }

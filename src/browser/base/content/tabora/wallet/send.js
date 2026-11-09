@@ -847,7 +847,12 @@ Object.assign(Tabora, {
     if (!items.length) {
       list.append(h("div", { class: "w-empty" }, w.historyLoading ? "Загружаем операции из сетей…" : "Пока операций нет. Поступления появятся здесь и в уведомлении."));
     }
-    const when = ms => new Date(ms).toLocaleString("ru-RU", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+    // компактная дата: в строке истории рядом с ней должен поместиться адрес контрагента
+    const when = ms => {
+      const d = new Date(ms);
+      const p = n => String(n).padStart(2, "0");
+      return `${p(d.getDate())}.${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    };
     for (const it of items) {
       let row;
       if (it.local) {
@@ -857,9 +862,9 @@ Object.assign(Tabora, {
           h("span", { class: "w-coin" }, null, [chain?.logo ? h("img", { src: chain.logo, alt: "" }) : h("b", {}, "?")]),
           h("div", { class: "w-chain-text" }, null, [
             h("b", {}, l.kind === "sign" ? `Подпись · ${l.origin || ""}` : l.kind === "dapp" ? `${l.origin}` : `Отправка ${l.symbol}`),
-            h("span", { class: "w-sub-line" }, `${when(it.at)} · ${l.hash ? this.shortAddr(l.hash) : l.note || ""}`),
+            h("span", { class: "w-sub-line" }, `${when(it.at)} · ${l.hash ? this.shortAddr(l.hash, 5, 4) : l.note || ""}`),
           ]),
-          h("div", { class: "w-chain-bal" }, null, [h("b", { class: "w-native" }, l.amount ? `−${l.amount}` : ""), h("span", { class: "w-usd" }, l.symbol && l.amount ? l.symbol : "")]),
+          h("div", { class: "w-chain-bal" }, null, [h("b", { class: "w-native", title: l.amount ? `−${l.amount} ${l.symbol || ""}` : "" }, l.amount ? `−${this.shortAmount(l.amount)}` : ""), h("span", { class: "w-usd" }, l.symbol && l.amount ? l.symbol : "")]),
         ]);
         if (l.hash) {
           this.wActivityMenu(row, l.chain, l.hash);
@@ -869,13 +874,14 @@ Object.assign(Tabora, {
         const title = it.call ? `${it.call} · ${it.chainName}` : it.dir === "in" ? `Получено ${it.symbol}` : it.dir === "self" ? `Перевод себе ${it.symbol}` : `Отправка ${it.symbol}`;
         const sign = it.dir === "in" ? "+" : it.dir === "self" ? "" : "−";
         row = h("div", { class: `w-asset w-activity ${it.dir === "in" ? "in" : ""} ${it.status !== "ok" ? "muted" : ""}`.trim(), style: `--c:${chain?.color || "#888"}` }, null, [
-          h("span", { class: "w-coin" }, null, [h("img", { src: it.logo, alt: "" }), h("i", { class: "w-coin-chain" }, null, [h("img", { src: it.chainLogo, alt: "" })])]),
+          // значок сети только для токенов: у родной монеты он повторял бы большой логотип
+          h("span", { class: "w-coin" }, null, [h("img", { src: it.logo, alt: "" }), it.chainLogo && it.chainLogo !== it.logo ? h("i", { class: "w-coin-chain" }, null, [h("img", { src: it.chainLogo, alt: "" })]) : null].filter(Boolean)),
           h("div", { class: "w-chain-text" }, null, [
             h("b", {}, title),
-            h("span", { class: "w-sub-line" }, `${when(it.at)} · ${it.status === "pending" ? "ожидает · " : it.status === "failed" ? "ошибка · " : ""}${it.counterparty ? WalletStore.contactFor(it.chain, it.counterparty)?.name || this.shortAddr(it.counterparty) : this.shortAddr(it.hash)}`),
+            h("span", { class: "w-sub-line" }, `${when(it.at)} · ${it.status === "pending" ? "ожидает · " : it.status === "failed" ? "ошибка · " : ""}${it.counterparty ? WalletStore.contactFor(it.chain, it.counterparty)?.name || this.shortAddr(it.counterparty, 5, 4) : this.shortAddr(it.hash, 5, 4)}`),
           ]),
           h("div", { class: "w-chain-bal" }, null, [
-            h("b", { class: "w-native" }, it.call && it.amount === "0" ? "" : `${sign}${it.amount}`),
+            h("b", { class: `w-native${this.shortAmount(it.amount).length > 6 ? " long" : ""}`, title: `${sign}${it.amount} ${it.symbol}` }, it.call && it.amount === "0" ? "" : `${sign}${this.shortAmount(it.amount)}`),
             h("span", { class: "w-usd" }, it.usd !== null && it.usd >= 0.01 ? this.wFmtUsd(it.usd) : it.symbol),
           ]),
         ]);

@@ -33,8 +33,24 @@ Object.assign(Tabora, {
     root.querySelectorAll(".w-sheet.w-reveal").forEach(el => el.remove());
   },
 
-  shortAddr(a) {
-    return a && a.length > 16 ? `${a.slice(0, 8)}…${a.slice(-6)}` : a || "";
+  /** Сумма для узкой колонки истории: лишние знаки после запятой отбрасываются, ведущие нули малых сумм сохраняются. */
+  shortAmount(s, max = 6) {
+    s = String(s ?? "");
+    if (s.length <= max || !s.includes(".")) {
+      return s;
+    }
+    const [int, frac] = s.split(".");
+    const room = Math.max(max - int.length - 1, 2);
+    let cut = frac.slice(0, room).replace(/0+$/, "");
+    if (!cut && /^-?0$/.test(int)) {
+      const m = /^(0*)([1-9])/.exec(frac); // 0.00000123 → 0.000001: порядок малой суммы важнее знаков
+      cut = m ? m[1] + m[2] : "";
+    }
+    return cut ? `${int}.${cut}` : int;
+  },
+
+  shortAddr(a, head = 8, tail = 6) {
+    return a && a.length > head + tail + 2 ? `${a.slice(0, head)}…${a.slice(-tail)}` : a || "";
   },
 
   wIcon(paths, size = 15, stroke = 2) {
