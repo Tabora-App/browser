@@ -21,8 +21,8 @@ const MAX_SIDE = 1600; // одна картинка из меню: QR крупн
 const PAGE_MAX_SIDE = 1024; // поиск по странице: много картинок, каждая меньше
 const PAGE_BUDGET = 16 * 1024 * 1024; // байт пикселей на весь ответ
 
-/* Поле одноразового кода: явный autocomplete, характерные имена, числовое поле на 6–8 знаков
- * или группа из 4–8 однознаковых полей. Родитель покажет подсказку, только если у сайта есть запись. */
+/* Поле одноразового кода: группа из 4–8 однознаковых полей, явный autocomplete, характерные имена
+ * или числовое поле на 6–8 знаков. Родитель покажет подсказку, только если у сайта есть запись. */
 const OTP_NAME = /(^|[^a-z])(otp|totp|2fa|mfa|one.?time|verif|auth(enticat(or|ion))?.?code|security.?code|passcode|token|код)([^a-z]|$)/i;
 const NOT_OTP = /zip|postal|phone|tel\b|cvv|cvc|card|ccn|expir|captcha|search|price|amount|qty|quantity|year|month|day|age/i;
 
@@ -30,6 +30,7 @@ export class TaboraVaultChild extends JSWindowActorChild {
   _otpTarget = null; // поле (или первое поле группы), для которого показана подсказка
   _otpGroup = null;
   _armed = false;
+  _filling = false; // идёт вставка: собственные переводы фокуса подсказку не вызывают
   _scrollHandler = null;
 
   handleEvent(event) {
@@ -77,16 +78,45 @@ export class TaboraVaultChild extends JSWindowActorChild {
     return win.HTMLInputElement.isInstance(el) && ["", "text", "tel", "number", "password"].includes(el.type) && !el.disabled && !el.readOnly;
   }
 
-  /** Группа однознаковых полей (4–8), в которую входит el. */
+  /** Группа однознаковых полей (4–8), в которую входит el. Ячейка — поле с maxlength=1 либо узкое
+   * (примерно квадрат) поле того же размера, что el: у многих виджетов maxlength нет или он равен
+   * длине кода, чтобы принять вставку. Поля шире (части номера карты, ключа продукта) не ячейки.
+   * Размер берётся из раскладки (offset*): увеличение ячейки в фокусе через transform не мешает. */
   digitGroup(el) {
-    let node = el.parentElement;
-    for (let depth = 0; node && depth < 4; depth++, node = node.parentElement) {
-      const inputs = [...node.querySelectorAll("input")].filter(i => this.isTextInput(i) && i.maxLength === 1);
-      if (inputs.length >= 4 && inputs.length <= 8 && inputs.includes(el)) {
-        return inputs;
+    if (!this.isTextInput(el) || !el.offsetWidth || !el.offsetHeight) {
+      return null;
+    }
+    let narrowOnly = false; // в группе есть ячейки, принятые только по размеру
+    const cell = i => {
+      if (!this.isTextInput(i) || !i.offsetWidth || !i.offsetHeight) {
+        return false;
       }
-      if (node.querySelectorAll("input").length > 12) {
+      if (i.maxLength === 1) {
+        return true;
+      }
+      const same = Math.abs(i.offsetWidth - el.offsetWidth) <= 4 && Math.abs(i.offsetHeight - el.offsetHeight) <= 4;
+      if (same && i.offsetWidth <= 80 && i.offsetWidth <= i.offsetHeight * 1.35) {
+        narrowOnly = true;
+        return true;
+      }
+      return false;
+    };
+    let node = el.parentElement;
+    for (let depth = 0; node && depth < 6; depth++, node = node.parentElement) {
+      const all = node.querySelectorAll("input");
+      if (all.length > 16) {
         break;
+      }
+      narrowOnly = false;
+      const cells = [...all].filter(cell);
+      if (cells.length >= 4 && cells.length <= 8 && cells.includes(el)) {
+        if (narrowOnly) {
+          const text = this.labelText(el);
+          if (NOT_OTP.test(text) && !/otp|one.?time|2fa|mfa/i.test(text)) {
+            return null;
+          }
+        }
+        return cells;
       }
     }
     return null;
@@ -96,13 +126,14 @@ export class TaboraVaultChild extends JSWindowActorChild {
     if (!this.isTextInput(el)) {
       return null;
     }
+    // группа проверяется первой: autocomplete="one-time-code" часто стоит и на каждой ячейке,
+    // и тогда весь код ушёл бы в одно поле
+    if (this.digitGroup(el)) {
+      return "group";
+    }
     const auto = (el.getAttribute("autocomplete") || "").toLowerCase();
     if (auto.includes("one-time-code")) {
       return "explicit";
-    }
-    const group = this.digitGroup(el);
-    if (group) {
-      return "group";
     }
     const text = this.labelText(el);
     if (NOT_OTP.test(text) && !/otp|one.?time|2fa|mfa/i.test(text)) {
@@ -134,7 +165,7 @@ export class TaboraVaultChild extends JSWindowActorChild {
 
   onFocusIn(event) {
     const el = event.composedTarget || event.target;
-    if (!event.isTrusted || !this.secure || !el || el === this._otpTarget) {
+    if (!event.isTrusted || this._filling || !this.secure || !el || el === this._otpTarget) {
       return;
     }
     const kind = this.otpKind(el);
@@ -196,10 +227,7 @@ export class TaboraVaultChild extends JSWindowActorChild {
 
   /** Подсказку взвели заново (например, после разблокировки сейфа): поле берём из фокуса. */
   reacquire() {
-    let el = this.document.activeElement;
-    while (el?.shadowRoot?.activeElement) {
-      el = el.shadowRoot.activeElement;
-    }
+    const el = this.deepActive();
     const kind = el && this.secure ? this.otpKind(el) : null;
     if (!kind) {
       return;
@@ -239,42 +267,137 @@ export class TaboraVaultChild extends JSWindowActorChild {
     }
   }
 
-  setValue(el, value) {
-    const win = this.contentWindow;
-    const setter = Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, "value")?.set;
+  nativeSet(el, value) {
+    const setter = Object.getOwnPropertyDescriptor(this.contentWindow.HTMLInputElement.prototype, "value")?.set;
     if (setter) {
       setter.call(el, value);
     } else {
       el.value = value;
     }
-    el.dispatchEvent(new win.InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
+  }
+
+  setValue(el, value) {
+    const win = this.contentWindow;
+    this.nativeSet(el, value);
+    el.dispatchEvent(new win.InputEvent("input", { bubbles: true, inputType: value ? "insertText" : "deleteContentBackward", data: value || null }));
     el.dispatchEvent(new win.Event("change", { bubbles: true }));
   }
 
-  /** Вставка кода: в одно поле или по символу в группу. Форму не отправляем. */
-  fillOtp(code) {
+  deepActive() {
+    let el = this.document.activeElement;
+    while (el?.shadowRoot?.activeElement) {
+      el = el.shadowRoot.activeElement;
+    }
+    return el;
+  }
+
+  /** В первых n ячейках по одной своей цифре. */
+  groupHolds(group, code) {
+    const n = Math.min(code.length, group.length);
+    for (let i = 0; i < n; i++) {
+      if (!group[i].isConnected || group[i].value.replace(/\D/g, "") !== code[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /** По цифре в каждую ячейку: обычные поля и поля с состоянием (React, Vue). */
+  fillCells(group, code) {
+    const n = Math.min(code.length, group.length);
+    for (let i = 0; i < n; i++) {
+      group[i].focus();
+      this.setValue(group[i], code[i]);
+    }
+  }
+
+  /** Как вставка из буфера в первую ячейку: виджеты с обработчиком paste раскладывают цифры сами. */
+  pasteCells(group, code) {
+    const win = this.contentWindow;
+    group[0].focus();
+    try {
+      group[0].dispatchEvent(new win.ClipboardEvent("paste", { bubbles: true, cancelable: true, dataType: "text/plain", data: code }));
+    } catch (e) {}
+  }
+
+  /** Как набор с клавиатуры: цифра уходит в ячейку, куда виджет сам перевёл фокус. Виджет, который
+   * берёт цифру из keydown и отменяет ввод, получает только событие клавиши (без второй записи). */
+  typeCells(group, code) {
+    const win = this.contentWindow;
+    const n = Math.min(code.length, group.length);
+    group[0].focus();
+    for (let i = 0; i < n; i++) {
+      let cur = this.deepActive();
+      if (!group.includes(cur)) {
+        cur = group[i];
+        cur.focus();
+      }
+      const key = { key: code[i], code: "Digit" + code[i], keyCode: 48 + Number(code[i]), which: 48 + Number(code[i]), bubbles: true, cancelable: true };
+      if (cur.dispatchEvent(new win.KeyboardEvent("keydown", key))) {
+        this.setValue(cur, code[i]);
+      }
+      cur.dispatchEvent(new win.KeyboardEvent("keyup", key));
+      if (this.deepActive() === cur) {
+        group[group.indexOf(cur) + 1]?.focus();
+      }
+    }
+  }
+
+  clearCells(group) {
+    for (const input of group) {
+      if (input.isConnected && input.value) {
+        this.setValue(input, "");
+      }
+    }
+  }
+
+  settle() {
+    // даём виджету перерисоваться, прежде чем сверять значения
+    return new Promise(resolve => this.contentWindow.setTimeout(resolve, 60));
+  }
+
+  /** Вставка кода: в одно поле или по символу в группу. Форму не отправляем. Если после вставки в
+   * ячейках не оказалось по цифре (виджет ведёт своё состояние), пробуем другие способы. */
+  async fillOtp(code) {
     const target = this._otpTarget;
     if (!target || !target.isConnected) {
       return false;
     }
     code = String(code || "").replace(/\D/g, "");
-    if (this._otpGroup) {
-      this._otpGroup.forEach((input, i) => {
-        if (i < code.length) {
-          input.focus();
-          this.setValue(input, code[i]);
-        }
-      });
-      const lastIndex = Math.min(code.length, this._otpGroup.length) - 1;
-      this._otpGroup[lastIndex]?.focus();
-    } else {
+    // группа могла не определиться при фокусе (поля появились позже): пробуем ещё раз
+    const group = this._otpGroup || (target.maxLength === 1 ? this.digitGroup(target) : null);
+    this.resetOtp();
+    if (!group) {
       target.focus();
       this.setValue(target, code);
       try {
         target.setSelectionRange(code.length, code.length);
       } catch (e) {}
+      return true;
     }
-    this.resetOtp();
+    this._filling = true;
+    try {
+      for (const way of [this.fillCells, this.pasteCells, this.typeCells, this.fillCells]) {
+        this.clearCells(group);
+        way.call(this, group, code);
+        await this.settle();
+        if (!this.document || !group[0].isConnected) {
+          return true; // форма ушла дальше (сайт принял код и сменил страницу)
+        }
+        // ячейки заблокированы: сайт уже проверяет код, повторная вставка отправила бы его дважды
+        if (this.groupHolds(group, code) || group.some(i => i.disabled || i.readOnly)) {
+          break;
+        }
+        // последний проход — снова по цифре в ячейку: если виджет не принял ни один способ,
+        // цифры хотя бы остаются в полях
+      }
+      const last = group[Math.min(code.length, group.length) - 1];
+      if (last?.isConnected && group.includes(this.deepActive())) {
+        last.focus();
+      }
+    } finally {
+      this._filling = false;
+    }
     return true;
   }
 
