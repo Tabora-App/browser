@@ -4054,6 +4054,19 @@ toolbarseparator {
   height: 3px;
 }
 
+/* узкое окно: фишки строки адреса сжимаются до значка (у защиты — с числом), иначе адрес
+   становится короче подписи «128 трекеров заблокировано»; полный текст остаётся в подсказке */
+@media (max-width: 1200px) {
+  :root[tabora-tabs="horizontal"] #tabora-blocked-text,
+  :root[tabora-tabs="horizontal"] #tabora-private-chip > span {
+    display: none;
+  }
+
+  :root[tabora-tabs="horizontal"] #tabora-blocked::after {
+    content: attr(data-count);
+  }
+}
+
 /* страница занимает всё место под строками: своей верхней панели у вкладки нет */
 :root[tabora-tabs="horizontal"] #tabora-start {
   inset: 0;
@@ -4062,6 +4075,11 @@ toolbarseparator {
 /* полный экран: поля окна убраны, строки остаются сверху */
 :root[inFullscreen][tabora-tabs="horizontal"] #browser {
   padding: 100px 0 0;
+}
+
+/* кнопок окна в полноэкранном режиме нет: строка начинается сразу с пространств */
+:root[inFullscreen][tabora-tabs="horizontal"] #TabsToolbar > .titlebar-buttonbox-container {
+  display: none !important;
 }
 
 :root[inFullscreen][tabora-tabs="horizontal"] #navigator-toolbox {

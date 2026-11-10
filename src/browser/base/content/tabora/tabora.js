@@ -3459,9 +3459,11 @@ var Tabora = {
       return;
     }
     chip.hidden = !count;
-    document.getElementById("tabora-blocked-text").textContent = count
-      ? `${count} ${this.plural(count, "трекер заблокирован", "трекера заблокировано", "трекеров заблокировано")}`
-      : "";
+    const text = count ? `${count} ${this.plural(count, "трекер заблокирован", "трекера заблокировано", "трекеров заблокировано")}` : "";
+    document.getElementById("tabora-blocked-text").textContent = text;
+    // в узком окне при вкладках сверху от фишки остаются значок и число (tabora.css)
+    chip.dataset.count = count || "";
+    chip.title = text;
     const readerBtn = document.getElementById("tabora-reader");
     if (readerBtn) {
       const native = document.getElementById("reader-mode-button");
