@@ -1,0 +1,9 @@
+{
+  "name": "tabora-mail-vendor",
+  "private": true,
+  "version": "0.1.0",
+  "description": "OpenPGP.js для почты Tabora: одна закреплённая версия, отдельный файл в сборке",
+  "dependencies": {
+    "openpgp": "6.3.2"
+  }
+}

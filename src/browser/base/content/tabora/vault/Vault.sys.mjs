@@ -40,7 +40,7 @@ const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 const REKEY_MODULES = ["chrome://tabora/content/vault/Otp.sys.mjs", "chrome://tabora/content/mail/MailStore.sys.mjs"];
 // Файлы, зашифрованные ключом сейфа: при осознанном создании нового сейфа после
 // повреждения они переносятся в сторону, а не перезаписываются.
-const DEPENDENT_FILES = ["logins.db", "logins.db-wal", "logins.db-shm", "tabora-otp.json", "tabora-otp.json.bak", "tabora-mail.json", "tabora-agent.json"];
+const DEPENDENT_FILES = ["logins.db", "logins.db-wal", "logins.db-shm", "tabora-otp.json", "tabora-otp.json.bak", "tabora-mail.json", "tabora-agent.json", "tabora-pgp.json"];
 const VAULT_CORRUPT_RE = /^tabora-vault\.json\.corrupt-[^.]+$/;
 const OTP_CORRUPT_RE = /^tabora-otp\.json\.corrupt-[^.]+$/;
 
