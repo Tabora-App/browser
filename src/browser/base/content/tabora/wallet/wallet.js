@@ -89,11 +89,19 @@ Object.assign(Tabora, {
   async drawer_wallet(seq) {
     const d = this.drawer;
     const { WalletStore } = this.walletStore();
-    await WalletStore.ready();
+    const { Account } = this.accountMod();
+    await Promise.all([WalletStore.ready(), Account.ready()]);
     if (seq !== d.seq) {
       return;
     }
     const w = this.wallet;
+    if (!Account.signedIn) {
+      // кошелёк принадлежит аккаунту: без входа раздел показывает приглашение войти
+      w.flow = null;
+      w.view = "main";
+      d.body.replaceChildren(this.accountGateView("wallet"));
+      return;
+    }
     let node;
     if (w.flow) {
       node = this.walletFlowView();

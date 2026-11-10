@@ -52,6 +52,14 @@ Object.assign(Tabora, {
       return;
     }
     const { Vault } = this.vaultMod();
+    if (!this.accountMod().Account.vaultAccess) {
+      // сейф откроет только вход в аккаунт: раздел не выдвигаем, у поля входа — напоминаем
+      if (Vault.waitingReason === "passwords" && Date.now() - (this._vaultAskedAt || 0) >= 180000) {
+        this._vaultAskedAt = Date.now();
+        this.notice("Войдите в аккаунт Tabora, чтобы подставлять пароли");
+      }
+      return;
+    }
     if (Vault.waitingReason === "passwords") {
       // хранилище паролей спрашивает при каждом поле входа: раздел открываем не чаще раза в 3 минуты
       if (Date.now() - (this._vaultAskedAt || 0) < 180000) {
@@ -131,19 +139,29 @@ Object.assign(Tabora, {
   async drawer_codes(seq) {
     const d = this.drawer;
     const { Vault } = this.vaultMod();
-    await Vault.ready();
-    if (Vault.exists && !Vault.unlocked) {
+    const { Account } = this.accountMod();
+    await Promise.all([Vault.ready(), Account.ready()]);
+    // коды принадлежат аккаунту: без входа раздел показывает приглашение войти
+    const gated = !Account.signedIn;
+    if (!gated && Vault.exists && !Vault.unlocked) {
       await Vault.unlock(); // тихо, через связку ключей; после явной блокировки не откроется
     }
-    if (Vault.unlocked) {
+    if (!gated && Vault.unlocked) {
       await this.otpMod().Otp.ready();
     }
     if (seq !== d.seq) {
       return;
     }
     let node;
+    if (gated) {
+      d.el.querySelector(".dhead").hidden = true; // у приглашения войти искать нечего
+    }
     if (Vault.state === "corrupt") {
-      node = this.vaultCorruptView();
+      node = this.vaultCorruptView(); // без исправного файла сейфа не войти и в аккаунт
+    } else if (gated) {
+      // в профиле без аккаунта сейф хранит пароли сайтов: если хранилище ждёт его пароль,
+      // остаётся экран разблокировки
+      node = !Account.email && Vault.exists && !Vault.unlocked && Vault.waiting ? this.vaultLockedView() : this.accountGateView("codes");
     } else if (!Vault.exists) {
       node = this.vaultWelcomeView();
     } else if (!Vault.unlocked) {

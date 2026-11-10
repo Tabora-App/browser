@@ -672,17 +672,26 @@ var Tabora = {
     );
   },
 
-  /** items: { label, hint, icon, danger, disabled, checked, children, run } | { separator: true } */
-  showMenu(items, x, y) {
+  /** items: { label, hint, note, icon, avatar, danger, disabled, caption, checked, children, run } |
+   * { separator: true } | { header }. hint — сочетание клавиш, note — пометка словами; avatar —
+   * кружок аккаунта вместо значка; caption — подпись без действия.
+   * end: x — правый край меню (меню под кнопкой у правого края окна);
+   * owner — кто открыл меню: его кнопка узнаёт, что щелчок по ней это меню только что закрыл. */
+  showMenu(items, x, y, { end = false, owner = "" } = {}) {
     const menu = this.menu.el;
     this.closeSubmenu();
     menu.replaceChildren();
     this.menu.items = items;
     this.menu.active = -1;
     this.menu.subActive = -1;
+    this.menu.owner = owner;
     items.forEach((item, i) => menu.append(this.menuNode(item, i, false)));
     menu.hidden = false;
-    this.placeMenu(menu, x, y);
+    this.placeMenu(menu, end ? x - menu.offsetWidth : x, y);
+  },
+
+  menuJustClosed(owner) {
+    return this.menu.closedOwner === owner && performance.now() - (this.menu.closedAt || 0) < 400;
   },
 
   menuNode(item, index, inSub) {
@@ -692,16 +701,18 @@ var Tabora = {
     if (item.header) {
       return this.html("div", { class: "header" }, item.header);
     }
-    const node = this.html("button", { class: `item${item.danger ? " danger" : ""}`, role: "menuitem", type: "button", "data-index": String(index) }, null, [
-      this.html("span", { class: "icon" }, null, item.icon
+    const node = this.html("button", { class: `item${item.danger ? " danger" : ""}${item.caption ? " caption" : ""}`, role: "menuitem", type: "button", "data-index": String(index) }, null, [
+      this.html("span", { class: `icon${item.avatar ? " avatar" : ""}` }, null, item.avatar
+        ? [this.accountAvatar(item.avatar.email, { size: "mini", color: item.avatar.color, empty: item.avatar.empty })]
+        : item.icon
         ? [this.svg(item.icon, 15, 1.9)]
         : item.swatch
           ? [this.html("span", { class: "swatch", style: `background:${item.swatch}` }), ...(item.checked ? [this.svg(["m5 12 5 5L20 7"], 11, 2.6)] : [])]
           : item.checked ? [this.svg(["m5 12 5 5L20 7"], 15, 2.4)] : []),
       this.html("span", { class: "label" }, item.label),
-      item.hint ? this.html("span", { class: "hint" }, item.hint) : item.children ? this.html("span", { class: "chevron" }, null, [this.svg(["m9 6 6 6-6 6"], 13, 2.2)]) : this.html("span", { class: "hint" }),
+      item.note ? this.html("span", { class: "hint note" }, item.note) : item.hint ? this.html("span", { class: "hint" }, item.hint) : item.children ? this.html("span", { class: "chevron" }, null, [this.svg(["m9 6 6 6-6 6"], 13, 2.2)]) : this.html("span", { class: "hint" }),
     ]);
-    if (item.disabled) {
+    if (item.disabled || item.caption) {
       node.setAttribute("disabled", "true");
     }
     node.addEventListener("mouseenter", () => {
@@ -718,7 +729,7 @@ var Tabora = {
     });
     node.addEventListener("click", e => {
       e.stopPropagation();
-      if (item.disabled) {
+      if (item.disabled || item.caption) {
         return;
       }
       if (item.children) {
@@ -764,7 +775,7 @@ var Tabora = {
     const inSub = this.menu.subActive >= 0 || (!this.menu.sub.hidden && this.menu.subActive === -1 && delta > 0 && false);
     const list = inSub ? this.menu.subItems : this.menu.items;
     const current = inSub ? this.menu.subActive : this.menu.active;
-    const selectable = list.map((it, i) => (!it.separator && !it.header && !it.disabled ? i : -1)).filter(i => i >= 0);
+    const selectable = list.map((it, i) => (!it.separator && !it.header && !it.disabled && !it.caption ? i : -1)).filter(i => i >= 0);
     if (!selectable.length) {
       return;
     }
@@ -818,6 +829,9 @@ var Tabora = {
     this.menu.el.hidden = true;
     this.menu.el.replaceChildren();
     this.menu.items = [];
+    this.menu.closedOwner = this.menu.owner || "";
+    this.menu.closedAt = performance.now();
+    this.menu.owner = "";
   },
 
   /* ---- Меню вкладки ---- */

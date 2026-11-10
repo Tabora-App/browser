@@ -282,7 +282,7 @@ const App = {
     $("add-box-btn").addEventListener("click", () => this.openBoxModal());
     $("refresh-btn").addEventListener("click", () => this.refresh());
     document.getElementById("account-change").addEventListener("click", () => shell()?.accountDialog("change"));
-    document.getElementById("account-switch").addEventListener("click", () => shell()?.accountLogout({ thenLogin: true, blankEmail: true }));
+    document.getElementById("account-switch").addEventListener("click", () => shell()?.accountShowAccounts());
     document.getElementById("account-logout").addEventListener("click", () => shell()?.accountLogout({ thenLogin: false }));
   },
 

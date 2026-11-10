@@ -90,6 +90,14 @@ Object.assign(Tabora, {
     if (this._walletPending.has(req.origin)) {
       return Promise.reject(this.wErr(-32002, "Предыдущий запрос этого сайта ещё ожидает ответа"));
     }
+    if (!this.accountMod().Account.signedIn) {
+      // кошелёк принадлежит аккаунту: без входа сайт не получает ни адресов, ни подписей
+      if (req.userInteracted && Date.now() - (this._walletGateNoticeAt || 0) > 30000) {
+        this._walletGateNoticeAt = Date.now();
+        this.notice("Сайт обращается к кошельку: войдите в аккаунт Tabora, чтобы им пользоваться");
+      }
+      return Promise.reject(this.wErr(4100, "Кошелёк недоступен: вход в аккаунт Tabora не выполнен"));
+    }
     if (!req.userInteracted) {
       return Promise.reject(this.wErr(4001, "Сначала взаимодействуйте со страницей: запрос без действия пользователя отклонён"));
     }

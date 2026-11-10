@@ -11,7 +11,8 @@
  * так же, как соседние. Чувствительные действия раздел сам не выполняет: смена пароля,
  * проверка владельца, ключ восстановления, импорт и экспорт паролей — окна и листы оболочки
  * (Tabora.accountDialog, vaultOwnerCheck, vaultRecoveryCreateSheet). То, чему нужен сервер
- * аккаунтов, так и подписано, пока он не запущен.
+ * аккаунтов, так и подписано, пока он не запущен. Вкладка «Аккаунты» — остальные аккаунты
+ * этого компьютера: у каждого свой профиль браузера (account/Profiles.sys.mjs).
  *
  * Подключается из preferences.js. Разметка строится через DOM, стили — preferences.css. */
 
@@ -20,6 +21,7 @@
 window.TaboraAccountPane = (function () {
   const { Account } = ChromeUtils.importESModule("chrome://tabora/content/account/Account.sys.mjs");
   const { Vault } = ChromeUtils.importESModule("chrome://tabora/content/vault/Vault.sys.mjs");
+  const { Profiles } = ChromeUtils.importESModule("chrome://tabora/content/account/Profiles.sys.mjs");
   const Shell = window.browsingContext?.topChromeWindow?.Tabora || null;
   const HTML = "http://www.w3.org/1999/xhtml";
   const LATER = "появится в одной из следующих версий";
@@ -29,10 +31,11 @@ window.TaboraAccountPane = (function () {
     ["security", "Безопасность"],
     ["sync", "Синхронизация"],
     ["data", "Данные"],
+    ["accounts", "Аккаунты"],
     ["exit", "Выход"],
   ];
 
-  const state = { tab: "profile", root: null, pane: null, devices: null, devicesFor: "", timer: null };
+  const state = { tab: "profile", root: null, pane: null, devices: null, devicesFor: "", profiles: null, timer: null };
 
   /* ---- Помощники разметки -------------------------------------------------- */
 
@@ -221,11 +224,27 @@ window.TaboraAccountPane = (function () {
       ];
     },
 
+    accounts() {
+      const others = (state.profiles || []).filter(p => !p.current);
+      const stateText = p => (p.email ? (p.signedIn ? "Вход выполнен." : "Выход выполнен.") : p.fresh ? "Аккаунт ещё не создан." : "Аккаунта в этом профиле нет.");
+      return [
+        group("Аккаунты на этом компьютере", "У каждого аккаунта свой профиль браузера: свои вкладки, история, сейф, кошелёк и почта. Между аккаунтами ничего не передаётся.", [
+          item(Account.email, "Этот профиль.", [value("открыт сейчас", true)]),
+          ...others.map(p =>
+            item(p.email || (p.fresh ? "Новый аккаунт" : "Профиль без аккаунта"), stateText(p), [
+              button("Открыть", shell(s => s.accountOpen(p))),
+              button("Удалить", shell(s => s.accountDialog("remove", { profile: p })), { type: "destructive" }),
+            ])
+          ),
+          item("Добавить аккаунт", "Откроется новое окно: в нём создают аккаунт или входят в существующий.", [button("Добавить", shell(s => s.accountAdd()))]),
+        ]),
+      ];
+    },
+
     exit() {
       return [
-        group("Выход", "После выхода сейф блокируется. Пароли, коды и кошелёк остаются на этом компьютере зашифрованными.", [
+        group("Выход", "После выхода кошелёк, коды, пароли и почта закрыты до следующего входа. Данные остаются на этом компьютере зашифрованными.", [
           item("Выйти из аккаунта", Account.email, [button("Выйти", shell(s => s.accountLogout({ thenLogin: false })))]),
-          item("Войти в другой аккаунт", "Текущий аккаунт останется на компьютере, к нему можно вернуться.", [button("Сменить аккаунт", shell(s => s.accountLogout({ thenLogin: true, blankEmail: true })))]),
         ]),
         group("Удаление", "", [item("Удалить аккаунт", `Удаление аккаунта вместе с почтой ${LATER}.`, [button("Удалить", () => {}, { type: "destructive", disabled: true })])]),
       ];
@@ -240,7 +259,7 @@ window.TaboraAccountPane = (function () {
       return el("div", { class: "tabora-acc-who out" }, [
         el("div", { class: "tabora-acc-id" }, [
           el("b", {}, email ? "Вы вышли из аккаунта" : "Аккаунт Tabora"),
-          el("span", {}, email ? `${email}. Войдите, чтобы открыть сейф и настройки аккаунта.` : "Адрес почты на tabora.app и один пароль для входа и сейфа. Аккаунт нужен, чтобы перенести пароли и коды на другой компьютер."),
+          el("span", {}, email ? `${email}. Кошелёк, коды, пароли и почта этого профиля закрыты, пока вы не войдёте снова.` : "Адрес почты на tabora.app и один пароль для входа и сейфа. Кошелёк, коды и почта открываются после входа в аккаунт."),
         ]),
         el("div", { class: "tabora-acc-actions" }, [
           (() => {
@@ -249,7 +268,7 @@ window.TaboraAccountPane = (function () {
             return b;
           })(),
           (() => {
-            const b = button(email ? "Другой аккаунт" : "Войти", shell(s => s.accountDialog(email ? "register" : "login", { blankEmail: true })));
+            const b = button(email ? "Другой аккаунт" : "Войти", shell(s => (email ? s.accountShowAccounts() : s.accountDialog("login"))));
             b.removeAttribute("slot");
             return b;
           })(),
@@ -314,14 +333,33 @@ window.TaboraAccountPane = (function () {
     }
   }
 
+  /** Список аккаунтов компьютера: его меняют и другие окна, поэтому перечитывается при
+   * открытии вкладки, по сигналу Profiles и когда окно снова становится активным. */
+  async function loadProfiles() {
+    let list;
+    try {
+      list = await Profiles.list();
+    } catch (e) {
+      list = state.profiles || [];
+    }
+    const changed = JSON.stringify(list) !== JSON.stringify(state.profiles);
+    state.profiles = list;
+    if (changed && state.tab === "accounts") {
+      render();
+    }
+  }
+
   function select(id, { focus = false, fromHash = false } = {}) {
     if (!PANELS[id]) {
       return;
     }
     state.tab = id;
+    if (id === "accounts") {
+      loadProfiles();
+    }
     if (!fromHash) {
       // адрес меняется без события hashchange: страница настроек не переключает раздел заново
-      history.replaceState(null, "", id === "profile" ? "#sync" : `#sync-${id}`);
+      history.replaceState(history.state, "", id === "profile" ? "#sync" : `#sync-${id}`);
     }
     render();
     if (focus) {
@@ -332,6 +370,13 @@ window.TaboraAccountPane = (function () {
   function tabFromHash() {
     const m = /^#sync-([a-z]+)$/.exec(location.hash);
     return m && PANELS[m[1]] ? m[1] : null;
+  }
+
+  /** Страница настроек сводит адрес вида #sync-accounts к #sync, а подраздел оставляет в
+   * gLastCategory и сообщает событием paneshown: вкладку, которую просили открыть, берём оттуда. */
+  function tabFromPage() {
+    const last = typeof gLastCategory === "object" && gLastCategory ? gLastCategory : null;
+    return last?.category === "paneSync" && PANELS[last.subcategory] ? last.subcategory : null;
   }
 
   async function loadDevices() {
@@ -367,9 +412,16 @@ window.TaboraAccountPane = (function () {
     } else {
       section.prepend(state.root);
     }
-    state.tab = tabFromHash() || state.tab;
-    Promise.all([Account.ready(), Vault.ready()]).then(render, render);
+    state.tab = tabFromHash() || tabFromPage() || state.tab;
+    Promise.all([Account.ready(), Vault.ready(), loadProfiles()]).then(render, render);
   }
+
+  document.addEventListener("paneshown", e => {
+    const { category, subcategory } = e.detail || {};
+    if (category === "paneSync" && PANELS[subcategory] && state.root?.isConnected) {
+      select(subcategory);
+    }
+  });
 
   window.addEventListener("hashchange", () => {
     if (location.hash === "#sync") {
@@ -392,9 +444,12 @@ window.TaboraAccountPane = (function () {
   };
   Services.obs.addObserver(refresh, Account.TOPIC);
   Services.obs.addObserver(refresh, Vault.TOPIC);
+  Services.obs.addObserver(loadProfiles, Profiles.TOPIC);
+  window.addEventListener("focus", loadProfiles);
   window.addEventListener("unload", () => {
     Services.obs.removeObserver(refresh, Account.TOPIC);
     Services.obs.removeObserver(refresh, Vault.TOPIC);
+    Services.obs.removeObserver(loadProfiles, Profiles.TOPIC);
   }, { once: true });
 
   return { mount, render };

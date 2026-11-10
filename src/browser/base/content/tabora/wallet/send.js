@@ -1207,8 +1207,8 @@ Object.assign(Tabora, {
     const { WalletStore, CHAINS, CHAIN_ORDER } = this.walletStore();
     await WalletStore.ready();
     const account = WalletStore.activeAccount;
-    if (!WalletStore.exists || !account) {
-      return;
+    if (!WalletStore.exists || !account || !this.accountMod().Account.signedIn) {
+      return; // без входа в аккаунт за кошельком не следим и о поступлениях не сообщаем
     }
     const w = this.wallet;
     w.seen ||= {};

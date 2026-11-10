@@ -918,10 +918,28 @@ export const Vault = {
       w.resolve(true);
     }
     this.notify("unlocked");
+    // Страховка: какой бы путь ни открыл сейф, без входа в аккаунт он закрывается обратно.
+    this._accountAllows().then(ok => !ok && this.unlocked && this.lock(), () => {});
     if (this.rekeyPending) {
       this._prev().catch(e => console.error("Tabora vault: прежний ключ не читается", e));
       // прошлая смена ключа не завершилась: доделываем, когда все модули успеют подписаться
       setTimeout(() => this.resumeRekey().catch(e => console.error("Tabora vault: перешифровка не завершена", e)), 2000);
+    }
+  },
+
+  /** Сейф принадлежит аккаунту профиля: пока в аккаунт не вошли, он не открывается ни связкой
+   * ключей, ни паролем, ни ключом восстановления (Account.vaultAccess). Вход в аккаунт, его
+   * подключение к серверу и сброс пароля открывают сейф сами. В профиле без аккаунта сейф
+   * открывается как обычно: он нужен хранилищу паролей сайтов. */
+  async _accountAllows() {
+    const { Account } = ChromeUtils.importESModule("chrome://tabora/content/account/Account.sys.mjs");
+    await Account.ready();
+    return Account.vaultAccess;
+  },
+
+  async _requireAccount() {
+    if (!(await this._accountAllows())) {
+      throw Object.assign(new Error("Сейф открывается после входа в аккаунт Tabora"), { code: "signed-out" });
     }
   },
 
@@ -988,10 +1006,11 @@ export const Vault = {
    * заменяется: хранилище ждёт, пока пользователь выберет восстановление. */
   async ensureForPasswords() {
     await this.ready();
-    if (this.state === "absent") {
+    const allowed = await this._accountAllows();
+    if (allowed && this.state === "absent") {
       await this._exclusive(() => (this.exists || this.state !== "absent" ? null : this._create({})));
     }
-    if (!this.unlocked && this.exists) {
+    if (allowed && !this.unlocked && this.exists) {
       // Запрос к связке ключей системы может висеть (macOS спрашивает доступ у пользователя).
       // Если сейф тем временем открыли мастер-паролем или ключом восстановления, не ждём ответа.
       let settled = false;
@@ -1233,6 +1252,9 @@ export const Vault = {
     if (this._explicitLock && !user) {
       return false;
     }
+    if (!(await this._accountAllows())) {
+      return false;
+    }
     if (!this._unlocking || user) {
       const attempt = (async () => {
         try {
@@ -1279,6 +1301,7 @@ export const Vault = {
     if (!this.data.pw) {
       throw new Error("Мастер-пароль не задан: сейф открывается только на этом компьютере");
     }
+    await this._requireAccount();
     const key = await this._checkedUnwrap(password, count);
     if (!(await this._verify(key))) {
       wipe(key);
@@ -1486,6 +1509,7 @@ export const Vault = {
     if (!this.data.rk) {
       throw new Error("Ключ восстановления для этого сейфа не создавался");
     }
+    await this._requireAccount();
     const rk = rkParse(text);
     const k = rkDerive(rk);
     let key;

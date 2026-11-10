@@ -3610,6 +3610,24 @@ toolbarseparator {
   color: var(--tabora-text-4);
 }
 
+/* Кружок аккаунта в пункте меню: шире места значка на 2px с каждой стороны, подписи пунктов
+   с кружком и со значком стоят на одной линии */
+#tabora-menu .item .icon.avatar .ta-avatar {
+  flex: none;
+  margin: -2px;
+}
+
+/* подпись без действия: чей это аккаунт */
+#tabora-menu .item.caption[disabled] {
+  color: var(--tabora-text-strong);
+  font-weight: 700;
+}
+
+/* пометка словами (не сочетание клавиш) набирается шрифтом интерфейса */
+#tabora-menu .item .hint.note {
+  font: 500 11.5px/1 var(--tabora-font);
+}
+
 
 /* Знак Tabora: точка прокатывается по перекладине туда и обратно и останавливается на своём месте */
 .tb-mark {

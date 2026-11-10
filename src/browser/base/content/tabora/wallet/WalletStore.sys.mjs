@@ -7,7 +7,10 @@
  * ключом из Argon2id(пароль). Без пароля ключ лежит в менеджере паролей Firefox
  * (режим помечен как небезопасный). Публичные адреса хранятся открыто, чтобы
  * показывать балансы в заблокированном состоянии. Приватные ключи выводятся
- * только на время подписи и обнуляются. */
+ * только на время подписи и обнуляются.
+ *
+ * Кошелёк принадлежит аккаунту Tabora этого профиля: без входа в аккаунт он не создаётся
+ * и не открывается (requireAccount), а выход из аккаунта его блокирует. */
 
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 const C = ChromeUtils.importESModule("chrome://tabora/content/wallet/vendor/crypto.sys.mjs");
@@ -15,6 +18,15 @@ const { argon2idAsync } = ChromeUtils.importESModule("chrome://tabora/content/va
 const { sha256, keccak_256, hmac, sha512, argon2id, randomBytes, bytesToHex, hexToBytes, utf8ToBytes, secp256k1, ed25519, bip39, wordlistEnglish, HDKey, base58, base58check, base64, btc } = C;
 
 const FILE = () => PathUtils.join(PathUtils.profileDir, "tabora-wallet.json");
+const ACCOUNT_TOPIC = "tabora-account-changed";
+
+async function requireAccount() {
+  const { Account } = ChromeUtils.importESModule("chrome://tabora/content/account/Account.sys.mjs");
+  await Account.ready();
+  if (!Account.signedIn) {
+    throw Object.assign(new Error("Кошелёк доступен после входа в аккаунт Tabora"), { code: "signed-out" });
+  }
+}
 const KDF = { t: 3, m: 65536, p: 1, dkLen: 32 }; // Argon2id: 64 МБ памяти, 3 прохода (старые файлы хранят свои параметры)
 const LOGIN_ORIGIN = "chrome://tabora-wallet";
 // Старые места хранения: автоблокировка и ноды теперь в подписанном файле, настройки профиля читаются только до переноса
@@ -740,6 +752,7 @@ export const WalletStore = {
 
   /** Первичная настройка: пароль (или без него) и первая фраза. */
   async create({ mnemonic, password, name = "Кошелёк 1" }) {
+    await requireAccount();
     const passwordless = !password;
     const salt = randomBytes(16);
     const raw = passwordless ? randomBytes(32) : await deriveKey(password, salt, KDF);
@@ -894,6 +907,7 @@ export const WalletStore = {
   /** Мастер-ключ и версия формата. Состояние не меняет. */
   async _masterKey(password) {
     await this.ready();
+    await requireAccount(); // ключ кошелька не выводится, пока в аккаунт не вошли
     if (!this.data) {
       throw new Error("Кошелька нет");
     }
@@ -2281,3 +2295,9 @@ export const WalletStore = {
     return a;
   },
 };
+
+Services.obs.addObserver((subject, topic, what) => {
+  if (what === "signed-out" && WalletStore._key) {
+    WalletStore.lock();
+  }
+}, ACCOUNT_TOPIC);

@@ -22,7 +22,13 @@
  *
  * Вместе с сессией сервер выдаёт доступ к ящику: пароль приложения этого устройства для
  * IMAP и SMTP. Он хранится в tabora-account.json зашифрованным подключом сейфа и отзывается
- * сервером при выходе. */
+ * сервером при выходе.
+ *
+ * Аккаунт и профиль браузера связаны один к одному: первый аккаунт, созданный или вошедший в
+ * профиле, остаётся его единственным владельцем, другой аккаунт живёт в своём профиле
+ * (account/Profiles.sys.mjs). Сейф, кошелёк, коды и почта принадлежат аккаунту: пока вход не
+ * выполнен, сейф не открывается ни связкой ключей, ни паролем (vaultAccess), остальное
+ * проверяет signedIn. */
 
 const C = ChromeUtils.importESModule("chrome://tabora/content/wallet/vendor/crypto.sys.mjs");
 const { randomBytes, base64, utf8ToBytes, bytesToHex, hexToBytes, hmac, sha256, ed25519 } = C;
@@ -46,6 +52,10 @@ const RESET_NONCE_TTL = 5 * 60000;
 const KDF_SEEN_PREF = "tabora.account.kdfSeen"; // версии хеша входа, уже использованные на этом устройстве
 const VERIFIER_RE = /^ed25519:[0-9a-f]{64}$/;
 const MAIL_INFO = "mail-access"; // подключ сейфа, которым зашифрован доступ к ящику
+
+function bound(text, extra = {}) {
+  return Object.assign(new Error(text), { code: "profile-bound", ...extra });
+}
 
 export { passwordStrength };
 
@@ -503,6 +513,29 @@ export const Account = {
     return !!this.data?.session;
   },
 
+  /** Можно ли открывать сейф. В профиле с аккаунтом — только после входа; вход, подключение к
+   * серверу и сброс пароля открывают его сами (_entering). В профиле без аккаунта сейф служит
+   * одному хранилищу паролей сайтов и открывается как раньше. */
+  get vaultAccess() {
+    return !this.data?.email || this.signedIn || this._enterDepth > 0;
+  },
+
+  _enterDepth: 0,
+
+  /** Операция, которая открывает сейф до того, как сессия сохранена. Если она не довела до
+   * входа, сейф закрывается обратно. */
+  async _entering(fn) {
+    this._enterDepth++;
+    try {
+      return await fn();
+    } finally {
+      this._enterDepth--;
+      if (!this._enterDepth && !this.vaultAccess) {
+        await Vault.lock();
+      }
+    }
+  },
+
   get email() {
     return this.data?.email || "";
   },
@@ -512,7 +545,10 @@ export const Account = {
   },
 
   markFirstRunDone() {
-    Services.prefs.setBoolPref(FIRSTRUN_PREF, true);
+    if (!this.firstRunDone) {
+      Services.prefs.setBoolPref(FIRSTRUN_PREF, true);
+      this.notify("first-run");
+    }
   },
 
   notify(what = "changed") {
@@ -672,7 +708,7 @@ export const Account = {
         if (e.code !== "bad-password") {
           throw e;
         }
-        throw Object.assign(new Error("Сейф этого компьютера защищён другим паролем. Введите его ниже, чтобы передать сейф этому аккаунту."), { code: "vault-mismatch" });
+        throw Object.assign(new Error("Сейф этого профиля защищён прежним паролем. Введите его ниже: сейф перейдёт на пароль аккаунта."), { code: "vault-mismatch" });
       };
       if (Vault.unlocked) {
         await Vault.verifyPassword(password).catch(mismatch);
@@ -695,10 +731,17 @@ export const Account = {
 
   /** Регистрация. Возвращает { email, recoveryKey }: ключ восстановления создаётся сразу и
    * регистрируется на сервере, интерфейс показывает его один раз. */
-  async register(nameInput, password) {
+  register(nameInput, password) {
+    return this._entering(() => this._register(nameInput, password));
+  },
+
+  async _register(nameInput, password) {
     await this.ready();
     if (this.signedIn) {
       throw new Error("Вы уже вошли в аккаунт");
+    }
+    if (this.data?.email) {
+      throw bound(`В этом профиле уже есть аккаунт ${this.data.email}. Другой аккаунт создаётся в отдельном профиле: «Добавить аккаунт»`);
     }
     const email = this.normalizeEmail(nameInput);
     checkPassword(password);
@@ -709,7 +752,7 @@ export const Account = {
     let ownerConfirmed = false;
     if (Vault.exists && Vault.hasPassword) {
       await Vault.verifyPassword(password).catch(e => {
-        throw e.code === "locked-out" ? e : new Error("Пароль аккаунта должен совпадать с мастер-паролем сейфа этого компьютера");
+        throw e.code === "locked-out" ? e : new Error("В этом профиле уже есть сейф с мастер-паролем. Введите его как пароль аккаунта");
       });
     } else if (Vault.exists) {
       // до обращения к серверу: отказ от проверки не должен оставлять занятый адрес без аккаунта здесь
@@ -778,9 +821,10 @@ export const Account = {
     }
   },
 
-  /** Вход в другой аккаунт на этом компьютере: сейф перепривязывается к новому паролю
-   * (нужен прежний мастер-пароль). K при этом меняется, а ключ восстановления выдаётся новый:
-   * прежний пароль и прежний ключ восстановления больше ничего не открывают. */
+  /** Сейф переходит на пароль аккаунта (нужен прежний мастер-пароль): пароль аккаунта сменили
+   * на другом компьютере либо первый аккаунт входит в профиль, где сейф уже был. K при этом
+   * меняется, а ключ восстановления выдаётся новый: прежний пароль и прежний ключ восстановления
+   * больше ничего не открывают. Другому аккаунту сейф не передаётся (см. login). */
   async _rebindVault(vaultPassword, password) {
     await Vault.verifyPassword(vaultPassword).catch(e => {
       throw e.code === "locked-out" ? e : new Error("Неверный мастер-пароль сейфа");
@@ -797,7 +841,11 @@ export const Account = {
    * пароль подходит (аккаунт подключили с другого компьютера), выполняется обычный вход.
    * Ключ восстановления сервер узнаёт только при создании нового: прежний по-прежнему
    * открывает сейф, но сбросить им пароль аккаунта нельзя (recoveryOffServer). */
-  async linkToServer(password) {
+  linkToServer(password) {
+    return this._entering(() => this._linkToServer(password));
+  },
+
+  async _linkToServer(password) {
     await this.ready();
     if (this.isLocalMode) {
       throw new Error("Сервер Tabora не задан");
@@ -835,7 +883,7 @@ export const Account = {
       created = false;
       r = await this.backend.login({ email, loginHash, ...device }).catch(e2 => {
         if (e2.code === "bad-credentials") {
-          throw Object.assign(new Error(`Адрес ${email} на сервере уже занят другим человеком. Выйдите из аккаунта и создайте новый с другим именем: сейф и его данные останутся на компьютере`), { code: "taken" });
+          throw Object.assign(new Error(`Адрес ${email} на сервере уже занят другим человеком. Этот аккаунт останется только на компьютере; аккаунт с другим именем добавляется отдельно: «Добавить аккаунт»`), { code: "taken" });
         }
         throw e2;
       });
@@ -910,7 +958,7 @@ export const Account = {
   },
 
   /** Сервер больше не признаёт сессию (выход с другого устройства, сброс или смена пароля там):
-   * здесь аккаунт тоже считается вышедшим. Сейф не блокируется: он заперт своим паролем. */
+   * здесь аккаунт тоже считается вышедшим, а сейф закрывается до следующего входа. */
   async _sessionExpired(token) {
     await this.ready();
     if (!this.data?.session || this.data.session.token !== token) {
@@ -919,18 +967,27 @@ export const Account = {
     this.data.session = null;
     delete this.data.mailAccess;
     await this.save("signed-out");
+    await Vault.lock();
   },
 
-  async login(emailInput, password, { vaultPassword = null } = {}) {
+  login(emailInput, password, opts = {}) {
+    return this._entering(() => this._login(emailInput, password, opts));
+  },
+
+  async _login(emailInput, password, { vaultPassword = null } = {}) {
     await this.ready();
     await Vault.guard.check();
     const email = this.normalizeEmail(emailInput);
+    if (this.data?.email && this.data.email !== email) {
+      // сейф и данные этого профиля принадлежат его аккаунту и другому не передаются
+      throw bound(`Этот профиль принадлежит аккаунту ${this.data.email}. Аккаунт ${email} открывается в своём профиле: «Добавить аккаунт»`, { email });
+    }
     if (!password) {
       throw new Error("Введите пароль");
     }
     if (this.needsServerLink && this.data.email === email && !vaultPassword) {
       // аккаунт этого компьютера ещё не на сервере: вход его и подключает
-      const linked = await this.linkToServer(password);
+      const linked = await this._linkToServer(password);
       return { email, rebound: false, recoveryKey: null, rekeyComplete: true, recoveryNeedsUpgrade: this.recoveryNeedsUpgrade, linked: linked.created };
     }
     const deviceId = this.deviceId();
@@ -1067,7 +1124,11 @@ export const Account = {
    * одноразовым nonce, подписанный ключом Ed25519 из ключа восстановления (у сервера только
    * открытый ключ); затем новый пароль задаётся и аккаунту, и сейфу. Аккаунт с ключом
    * проверки прежней схемы этим же запросом переводится на открытый ключ. */
-  async resetPasswordWithRecovery(recoveryKey, newPassword) {
+  resetPasswordWithRecovery(recoveryKey, newPassword) {
+    return this._entering(() => this._resetPasswordWithRecovery(recoveryKey, newPassword));
+  },
+
+  async _resetPasswordWithRecovery(recoveryKey, newPassword) {
     await this.ready();
     this._step("Проверяем ключ восстановления");
     if (!this.email) {
@@ -1107,19 +1168,20 @@ export const Account = {
     this.data.kdf = KDF_CURRENT;
     this.data.passwordChangedAt = new Date().toISOString();
     if (!this.isLocalMode) {
-      // сервер после сброса завершил все сессии и отозвал доступ к почте: входим заново
+      // сервер после сброса завершил все сессии и отозвал доступ к почте
       this.data.session = null;
       delete this.data.mailAccess;
-      await this.save();
-      await this.login(this.email, newPassword);
-      return true;
     }
     await this.save();
+    if (!this.signedIn) {
+      // сброс заканчивается входом: без него сейф закрылся бы обратно
+      await this._login(this.email, newPassword);
+    }
     return true;
   },
 
-  /** Выход: сессия удаляется, сейф блокируется (пароли сайтов и коды закрываются до
-   * разблокировки пользователем), почта перестаёт открываться. */
+  /** Выход: сессия удаляется, сейф блокируется. Пароли сайтов, коды, кошелёк и почта закрыты
+   * до следующего входа в этот же аккаунт: профиль остаётся за ним. */
   async logout() {
     await this.ready();
     if (!this.data) {

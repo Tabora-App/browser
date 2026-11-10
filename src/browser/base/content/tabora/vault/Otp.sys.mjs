@@ -8,11 +8,19 @@
  * вместе с зашифрованным секретом подписаны HMAC подключом сейфа ("otp-meta"): подменить
  * сайт или издателя в файле, не зная ключа, нельзя. Расшифрованные секреты живут в памяти,
  * пока сейф разблокирован, и обнуляются при блокировке. Код считается в родительском
- * процессе; страница получает только сам код после действия пользователя. */
+ * процессе; страница получает только сам код после действия пользователя.
+ *
+ * Коды принадлежат аккаунту Tabora этого профиля: без входа в аккаунт записи не выдаются
+ * и не меняются (allowed), даже если сейф открыт для хранилища паролей. */
 
 const { Vault, writeJsonVerified } = ChromeUtils.importESModule("chrome://tabora/content/vault/Vault.sys.mjs");
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 const C = ChromeUtils.importESModule("chrome://tabora/content/wallet/vendor/crypto.sys.mjs");
+
+const lazy = {};
+ChromeUtils.defineESModuleGetters(lazy, {
+  Account: "chrome://tabora/content/account/Account.sys.mjs",
+});
 
 const FILE = () => PathUtils.join(PathUtils.profileDir, "tabora-otp.json");
 const BACKUP = () => PathUtils.join(PathUtils.profileDir, "tabora-otp.json.bak");
@@ -374,7 +382,19 @@ export const Otp = {
   _secrets: new Map(), // id → Uint8Array, пока сейф разблокирован
   _observing: false,
 
+  get allowed() {
+    return lazy.Account.signedIn;
+  },
+
+  _require() {
+    if (!this.allowed) {
+      throw Object.assign(new Error("Коды доступны после входа в аккаунт Tabora"), { code: "signed-out" });
+    }
+    Vault.requireUnlocked();
+  },
+
   async ready() {
+    await lazy.Account.ready();
     if (this._loaded) {
       return this.data;
     }
@@ -710,7 +730,7 @@ export const Otp = {
 
   async add(fields) {
     await this.ready();
-    Vault.requireUnlocked();
+    this._require();
     if (this.loadError) {
       throw new Error("Файл кодов повреждён: сначала восстановите его из копии или начните список заново");
     }
@@ -753,7 +773,7 @@ export const Otp = {
   /** Несколько записей разом; повторы (тот же издатель, аккаунт и секрет) пропускаются. */
   async addMany(list, { sitesFor = null } = {}) {
     await this.ready();
-    Vault.requireUnlocked();
+    this._require();
     const seen = new Set();
     for (const e of this.entries) {
       const s = await this.secretOf(e.id).catch(() => null);
@@ -783,7 +803,7 @@ export const Otp = {
    * Запись с неверной подписью не правится: её нужно удалить и добавить заново. */
   async update(id, fields) {
     await this.ready();
-    Vault.requireUnlocked();
+    this._require();
     const entry = this.entries.find(e => e.id === id);
     if (!entry) {
       throw new Error("Запись не найдена");
@@ -812,6 +832,7 @@ export const Otp = {
 
   async remove(id) {
     await this.ready();
+    this._require();
     const i = this.entries.findIndex(e => e.id === id);
     if (i < 0) {
       return;
@@ -824,7 +845,7 @@ export const Otp = {
 
   async touch(id) {
     const entry = this.entries.find(e => e.id === id);
-    if (entry) {
+    if (entry && this.allowed) {
       entry.usedAt = Date.now();
       entry.uses = (entry.uses || 0) + 1;
       await this.save();
@@ -839,7 +860,7 @@ export const Otp = {
   },
 
   list() {
-    return this.entries.map(e => this.meta(e));
+    return this.allowed ? this.entries.map(e => this.meta(e)) : [];
   },
 
   /** Записи для хоста страницы (https проверяет вызывающий: актор берёт хост из принципала
@@ -847,7 +868,7 @@ export const Otp = {
    * подписью; при заблокированном — кандидаты без проверки, только чтобы предложить разблокировку. */
   forHost(host) {
     const out = [];
-    for (const e of this.entries) {
+    for (const e of this.allowed ? this.entries : []) {
       const match = this.matchHost(e, host);
       if (!match) {
         continue;
@@ -863,7 +884,7 @@ export const Otp = {
   },
 
   async secretOf(id) {
-    Vault.requireUnlocked();
+    this._require();
     let s = this._secrets.get(id);
     if (!s) {
       const entry = this.entries.find(e => e.id === id);
