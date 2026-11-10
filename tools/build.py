@@ -861,6 +861,13 @@ def cmd_bootstrap(args: argparse.Namespace) -> None:
     mach(["--no-interactive", "bootstrap", "--application-choice", "browser"], config, brand)
 
 
+def dev_resource_roots() -> list[Path]:
+    """Каталоги ресурсов сборки разработчика: dist/bin и, на macOS, его копия в пакете приложения."""
+    dist = objdir() / "dist"
+    bundles = sorted(app / "Contents" / "Resources" for app in dist.glob("*.app"))
+    return [dist / "bin", *[res for res in bundles if (res / "chrome.manifest").is_file()]]
+
+
 def register_dev_locales(config: dict) -> None:
     """Возвращает встроенные переводы в сборку разработчика (dist/bin).
 
@@ -869,11 +876,16 @@ def register_dev_locales(config: dict) -> None:
     chrome.manifest и список языков только с en-US, и приложение из dist/ про перевод не знает.
     Раньше русский в такой сборке давал языковой пакет-дополнение с нашим брендом; с обязательной
     подписью дополнений он отключается, а менеджер дополнений сам заменяет его официальным
-    пакетом Mozilla, где бренд — Firefox. Поэтому перевод включается здесь, без дополнений."""
-    dist_bin = objdir() / "dist" / "bin"
+    пакетом Mozilla, где бренд — Firefox. Поэтому перевод включается здесь, без дополнений.
+
+    На macOS запущенное приложение читает не dist/bin, а его копию внутри пакета
+    (dist/<имя>.app/Contents/Resources): сборка переносит туда файлы раньше, чем эта функция
+    допишет манифест. Без строки в манифесте пакета строки из .properties (меню инструментов
+    разработчика, диалоги, загрузки) остаются английскими, хотя Fluent уже русский."""
+    roots = dev_resource_roots()
     ready = []
     for loc in [loc for loc in config.get("locales", []) if loc != "en-US"]:
-        bases = (dist_bin, dist_bin / "browser")
+        bases = [base for root in roots for base in (root, root / "browser")]
         if not all((base / "chrome" / f"{loc}.manifest").is_file() for base in bases):
             log(f"перевод {loc} в dist/bin не собран (появится после tools/build.py package)")
             continue
@@ -883,7 +895,8 @@ def register_dev_locales(config: dict) -> None:
             text = top.read_text() if top.is_file() else ""
             if line not in text.splitlines():
                 top.write_text(text.rstrip("\n") + "\n" + line + "\n")
-        rebrand_terms(dist_bin / "localization" / loc / "toolkit" / "branding" / "brandings.ftl")
+        for root in roots:
+            rebrand_terms(root / "localization" / loc / "toolkit" / "branding" / "brandings.ftl")
         ready.append(loc)
     # dist/bin/res/multilocale.txt — ссылка на этот файл; формат как у gen_multilocale.py
     listing = objdir() / "toolkit" / "locales" / "multilocale.txt"
