@@ -295,8 +295,41 @@
   cursor: default;
 }
 
-#tabora-account-dialog .ta-btn.loading {
-  opacity: 0.7;
+#tabora-account-dialog .ta-btn.loading,
+#tabora-account-dialog .ta-btn.loading:disabled {
+  opacity: 1;
+  cursor: progress;
+}
+
+#tabora-account-dialog .ta-spinner {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: ta-spin 0.7s linear infinite;
+}
+
+@keyframes ta-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #tabora-account-dialog .ta-spinner {
+    animation-duration: 2s;
+  }
+}
+
+#tabora-account-dialog .ta-progress {
+  margin: 0;
+  font: 400 12px/1.4 var(--tabora-font);
+  color: var(--tabora-text-3);
+  text-align: center;
+}
+
+#tabora-account-dialog .ta-step input:disabled {
+  opacity: 0.6;
 }
 
 #tabora-account-dialog .ta-actions {
@@ -402,14 +435,7 @@
   accent-color: var(--tabora-accent);
 }
 
-#tabora-account-dialog .ta-form-mark {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  box-shadow: 0 8px 22px color-mix(in srgb, var(--tabora-accent) 28%, transparent);
-}
-
-#tabora-account-dialog .ta-form-mark .tb-mark {
-  width: 100%;
-  height: 100%;
+/* Формы: та же строка бренда, что в приветствии, заголовок с отступом */
+#tabora-account-dialog .ta-step > .ta-brand + h2 {
+  margin-top: 10px;
 }

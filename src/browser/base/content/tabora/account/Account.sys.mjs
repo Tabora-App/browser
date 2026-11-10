@@ -493,6 +493,15 @@ export const Account = {
 
   /** Хеш входа: Argon2id(пароль, соль из адреса) → HMAC. Независим от ключа сейфа.
    * Считается в рабочем потоке: 64 МБ в главном потоке заморозили бы окно. */
+  /** Этап долгой операции для интерфейса (кнопка показывает, что сейчас происходит). */
+  onStep: null,
+
+  _step(text) {
+    try {
+      this.onStep?.(text);
+    } catch (e) {}
+  },
+
   async loginHash(email, password, kdf = KDF_CURRENT) {
     const params = AUTH_KDF[kdf];
     if (!params) {
@@ -633,8 +642,11 @@ export const Account = {
       await this._confirmVaultOwner();
       ownerConfirmed = true;
     }
+    this._step("Защищаем пароль");
     const loginHash = await this.loginHash(email, password, KDF_CURRENT);
+    this._step("Создаём аккаунт");
     const r = await this.backend.register({ email, loginHash, kdf: KDF_CURRENT, deviceId: this.deviceId(), deviceName: this.deviceName() });
+    this._step("Готовим сейф");
     this._noteKdf(email, KDF_CURRENT);
     await this._syncVaultPassword(password, { ownerConfirmed });
     this.data = { version: 1, email, userId: r.userId, session: r.session, server: this.serverUrl || null, kdf: KDF_CURRENT, createdAt: new Date().toISOString(), lastLoginAt: new Date().toISOString() };
@@ -642,6 +654,7 @@ export const Account = {
     this.markFirstRunDone();
     let recoveryKey = null;
     try {
+      this._step("Создаём ключ восстановления");
       recoveryKey = await this.createRecoveryKey({ password });
     } catch (e) {
       console.error("Tabora account: ключ восстановления не создан", e);
@@ -711,8 +724,10 @@ export const Account = {
     }
     const deviceId = this.deviceId();
     const deviceName = this.deviceName();
+    this._step("Проверяем пароль");
     const kdf = await this._kdfFor(email);
     const loginHash = await this.loginHash(email, password, kdf);
+    this._step("Входим в аккаунт");
     let r;
     try {
       r = await this.backend.login({ email, loginHash, deviceId, deviceName });
@@ -736,6 +751,7 @@ export const Account = {
       }
     }
     this._noteKdf(email, usedKdf);
+    this._step("Открываем сейф");
     let rebound = null;
     await Vault.ready();
     if (vaultPassword && Vault.exists && Vault.hasPassword) {
@@ -778,6 +794,7 @@ export const Account = {
    * он возвращается в { recoveryKey }. */
   async changePassword(oldPassword, newPassword, { rotate = false } = {}) {
     await this.ready();
+    this._step(rotate ? "Меняем пароль и ключ сейфа" : "Меняем пароль");
     if (!this.signedIn) {
       throw new Error("Вы не вошли в аккаунт");
     }
@@ -837,6 +854,7 @@ export const Account = {
    * проверки прежней схемы этим же запросом переводится на открытый ключ. */
   async resetPasswordWithRecovery(recoveryKey, newPassword) {
     await this.ready();
+    this._step("Проверяем ключ восстановления");
     if (!this.email) {
       throw new Error("На этом компьютере нет аккаунта");
     }

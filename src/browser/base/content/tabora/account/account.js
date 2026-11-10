@@ -133,30 +133,58 @@ Object.assign(Tabora, {
     return { pass, again, read, nodes: [pass.wrap, again?.wrap].filter(Boolean) };
   },
 
-  taForm({ title, text, fields, okLabel, onOk, links = [], back = null }) {
+  taForm({ title, text, fields, okLabel, busyLabel = "Подождите", onOk, links = [], back = null }) {
     const h = (t, a, x, c) => this.html(t, a, x, c);
+    const { Account } = this.accountMod();
     const err = h("div", { class: "ta-error", hidden: "true" });
+    const status = h("p", { class: "ta-progress", role: "status", "aria-live": "polite", hidden: "true" });
     const ok = this.taButton(okLabel, "primary", async () => {
-      ok.disabled = true;
+      if (ok.disabled) {
+        return;
+      }
+      const form = ok.closest(".ta-step");
+      const controls = Array.from(form.querySelectorAll("input, button, select")).filter(el => !el.disabled);
+      const label = h("span", { class: "ta-btn-label" }, `${busyLabel}…`);
+      ok.replaceChildren(h("span", { class: "ta-spinner", "aria-hidden": "true" }), label);
       ok.classList.add("loading");
+      ok.setAttribute("aria-busy", "true");
+      controls.forEach(el => (el.disabled = true));
       err.hidden = true;
+      status.hidden = true;
+      // этапы операции: текст на кнопке; если тянется дольше, поясняем под кнопкой
+      Account.onStep = step => (label.textContent = `${step}…`);
+      const slow = setTimeout(() => {
+        status.textContent = "Это занимает несколько секунд: пароль проверяется с защитой от подбора.";
+        status.hidden = false;
+      }, 3000);
+      const restore = () => {
+        clearTimeout(slow);
+        Account.onStep = null;
+        status.hidden = true;
+        ok.replaceChildren(okLabel);
+        ok.classList.remove("loading");
+        ok.removeAttribute("aria-busy");
+        controls.forEach(el => (el.disabled = false));
+      };
       try {
         await onOk();
+        clearTimeout(slow);
+        Account.onStep = null;
       } catch (e) {
+        restore();
         err.textContent = e.message || String(e);
         err.hidden = false;
-        ok.disabled = false;
-        ok.classList.remove("loading");
       }
     });
     const form = h("div", { class: "ta-step" }, null, [
       back ? this.taLink("← Назад", back) : null,
-      h("div", { class: "ta-form-mark" }, null, [this.markSvg("ta-mark")]),
+      h("div", { class: "ta-brand" }, null, [this.markSvg("ta-mark"), h("span", {}, "Tabora"), h("i", {}, "аккаунт")]),
       h("h2", {}, title),
       text ? h("p", { class: "ta-text" }, text) : null,
       ...fields,
       err,
       ok,
+      status,
       links.length ? h("div", { class: "ta-links" }, null, links) : null,
     ].filter(Boolean));
     form.addEventListener("keydown", e => {
@@ -208,6 +236,7 @@ Object.assign(Tabora, {
       title: "Создать аккаунт",
       fields,
       okLabel: "Создать аккаунт",
+      busyLabel: "Создаём аккаунт",
       back: () => this.accountRender("welcome"),
       onOk: async () => {
         const password = pw.read();
@@ -295,6 +324,7 @@ Object.assign(Tabora, {
       title: "Вход",
       fields: [email.wrap, pass.wrap, vaultPass.wrap],
       okLabel: "Войти",
+      busyLabel: "Входим",
       back: Account.firstRunDone ? null : () => this.accountRender("welcome"),
       onOk: async () => {
         let r;
@@ -336,6 +366,7 @@ Object.assign(Tabora, {
       text: "Пароль аккаунта и мастер-пароль сейфа меняются вместе. На других компьютерах потребуется войти заново.",
       fields: [old.wrap, ...pw.nodes, h("label", { class: "ta-check" }, null, [rotate, h("span", {}, "Сменить и ключ шифрования сейфа: если пароль мог узнать кто-то ещё. Ключ восстановления тоже заменится")])],
       okLabel: "Сменить пароль",
+      busyLabel: "Меняем пароль",
       onOk: async () => {
         const r = await Account.changePassword(old.input.value, pw.read(), { rotate: rotate.checked });
         this.notice(r.complete === false ? "Пароль изменён; часть данных перешифруется при следующей разблокировке" : "Пароль изменён");
@@ -358,6 +389,7 @@ Object.assign(Tabora, {
       text: Vault.hasRecoveryKey ? "Введите ключ восстановления, записанный при настройке, и задайте новый пароль." : "Для этого сейфа ключ восстановления не создавался: без пароля данные не восстановить.",
       fields: [key.wrap, ...pw.nodes],
       okLabel: "Задать новый пароль",
+      busyLabel: "Задаём новый пароль",
       back: () => this.accountRender("login"),
       onOk: async () => {
         const password = pw.read();
