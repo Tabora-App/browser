@@ -472,4 +472,188 @@ Object.assign(Tabora, {
     card.addEventListener("toggle", () => Services.prefs.setBoolPref("tabora.account.cardOpen", card.open));
     return card;
   },
+
+  /* ---- Кнопка аккаунта в правом верхнем углу ------------------------------------------
+   * Без входа — «Войти». После входа — кружок с первой буквой и имя до @; точка на кружке:
+   * зелёная — всё в порядке, жёлтая — нужно действие (нет ключа восстановления или его пора
+   * обновить), серая — сейф заблокирован. Щелчок открывает страницу аккаунта. */
+
+  AVATAR_PREF: "tabora.account.avatarColor",
+  AVATAR_COLORS: ["#c8f25a", "#7cc4ff", "#b9a6ff", "#ff9f5a", "#5ee0d0", "#ff8fb3"],
+
+  accountAvatarColor() {
+    const c = Services.prefs.getStringPref(this.AVATAR_PREF, "");
+    return this.AVATAR_COLORS.includes(c) ? c : this.AVATAR_COLORS[0];
+  },
+
+  /** { level: "ok" | "warn" | "locked", text } — что показать точкой и подсказкой. */
+  accountStatus() {
+    const { Account } = this.accountMod();
+    const { Vault } = this.vaultMod();
+    if (!Vault.unlocked) {
+      return { level: "locked", text: "сейф заблокирован" };
+    }
+    if (!Vault.recoveryKeyCreatedAt) {
+      return { level: "warn", text: "нет ключа восстановления" };
+    }
+    if (Account.recoveryNeedsUpgrade) {
+      return { level: "warn", text: "ключ восстановления пора обновить" };
+    }
+    return { level: "ok", text: "всё в порядке" };
+  },
+
+  accountAvatar(email, { size = "" } = {}) {
+    const letter = (email || "?").trim().charAt(0).toUpperCase() || "?";
+    const el = this.html("span", { class: `ta-avatar ${size}`.trim(), "aria-hidden": "true" }, letter);
+    el.style.setProperty("--avatar", this.accountAvatarColor());
+    return el;
+  },
+
+  buildAccountButton() {
+    const btn = this.html("button", { id: "tabora-account-btn", type: "button" });
+    btn.addEventListener("click", () => this.accountButtonClick());
+    btn.addEventListener("contextmenu", e => {
+      e.preventDefault();
+      this.showMenu(this.accountQuickItems(), e.clientX, e.clientY);
+    });
+    this.account.button = btn;
+    const refresh = () => this.renderAccountButton();
+    Services.obs.addObserver(refresh, this.accountMod().Account.TOPIC);
+    Services.obs.addObserver(refresh, this.vaultMod().Vault.TOPIC);
+    window.addEventListener("unload", () => {
+      Services.obs.removeObserver(refresh, this.accountMod().Account.TOPIC);
+      Services.obs.removeObserver(refresh, this.vaultMod().Vault.TOPIC);
+    }, { once: true });
+    this.accountMod().Account.ready().then(refresh, refresh);
+    this.renderAccountButton();
+    return btn;
+  },
+
+  renderAccountButton() {
+    const btn = this.account.button;
+    if (!btn) {
+      return;
+    }
+    const { Account } = this.accountMod();
+    if (Account.signedIn) {
+      const status = this.accountStatus();
+      const avatar = this.accountAvatar(Account.email);
+      avatar.append(this.html("i", { class: `dot ${status.level}` }));
+      btn.replaceChildren(avatar, this.html("span", { class: "name" }, Account.email.split("@")[0]));
+      btn.title = `${Account.email} · ${status.text}`;
+      btn.setAttribute("aria-label", `Аккаунт ${Account.email}, ${status.text}`);
+      btn.dataset.state = "in";
+    } else {
+      btn.replaceChildren(this.svg(["M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z", "M4.5 20c1.4-3.3 4.2-5 7.5-5s6.1 1.7 7.5 5"], 15, 1.9), this.html("span", { class: "name" }, "Войти"));
+      btn.title = Account.email ? `Войти в аккаунт ${Account.email}` : "Войти или создать аккаунт Tabora";
+      btn.setAttribute("aria-label", btn.title);
+      btn.dataset.state = "out";
+    }
+  },
+
+  accountButtonClick() {
+    const { Account } = this.accountMod();
+    if (Account.signedIn) {
+      this.openAccountPage();
+    } else {
+      this.accountDialog(Account.email ? "login" : "welcome");
+    }
+  },
+
+  /** Быстрые действия по правому клику на кнопке аккаунта. */
+  accountQuickItems() {
+    const { Account } = this.accountMod();
+    const { Vault } = this.vaultMod();
+    if (!Account.signedIn) {
+      return [
+        { label: "Войти", icon: ["M14 7l5 5-5 5", "M19 12H9", "M3 4v16"], run: () => this.accountDialog("login") },
+        { label: "Создать аккаунт", icon: ["M12 5v14", "M5 12h14"], run: () => this.accountDialog("register") },
+      ];
+    }
+    return [
+      { label: Account.email, disabled: true, run: () => {} },
+      { label: "Открыть профиль", icon: ["M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z", "M4.5 20c1.4-3.3 4.2-5 7.5-5s6.1 1.7 7.5 5"], run: () => this.openAccountPage() },
+      { separator: true },
+      Vault.unlocked
+        ? { label: "Заблокировать сейф", icon: ["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], run: () => this.accountLockVault() }
+        : { label: "Разблокировать сейф", icon: ["M7 11V8a5 5 0 0 1 9.6-2", "M5 11h14v10H5z"], run: () => this.vaultUnlockByUser() },
+      { label: "Выйти из аккаунта", icon: ["M10 17l5-5-5-5", "M15 12H3", "M21 4v16"], run: () => this.accountLogout() },
+      { label: "Сменить аккаунт", icon: ["M12 5v14", "M5 12h14"], run: () => this.accountLogout({ thenLogin: true, blankEmail: true }) },
+    ];
+  },
+
+  accountLockVault() {
+    const { Vault } = this.vaultMod();
+    Vault.lock();
+    this.notice(Vault.lockPending ? "Сейф заблокируется, как только закончится текущая операция с ключом" : "Сейф заблокирован: пароли сайтов и коды закрыты до проверки");
+  },
+
+  /* ---- Страница аккаунта ----------------------------------------------------------------
+   * Профиль с настройками по разделам — отдельная страница (account/profile.html), как почта.
+   * Чувствительные действия она не дублирует: зовёт те же окна и листы оболочки. */
+
+  ACCOUNT_URL: "chrome://tabora/content/account/profile.html",
+
+  /** tab — раздел страницы: profile, security, devices, sync, mail, data, exit. */
+  openAccountPage(tab = "") {
+    const url = this.ACCOUNT_URL + (tab ? `#${tab}` : "");
+    const existing = gBrowser.tabs.find(t => (t.linkedBrowser?.currentURI?.spec || "").startsWith(this.ACCOUNT_URL) && !t.hidden);
+    if (existing && tab) {
+      existing.linkedBrowser.loadURI(Services.io.newURI(url), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+    }
+    this.openInternal(existing ? this.ACCOUNT_URL : url);
+  },
+
+  /** Пароли из файла CSV: разбор и запись делает штатный модуль Firefox, хранилище — сейф. */
+  accountImportPasswords() {
+    const { Vault } = this.vaultMod();
+    if (!Vault.unlocked) {
+      this.notice("Сначала разблокируйте сейф");
+      return;
+    }
+    const fp = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
+    fp.init(window.browsingContext, "Импорт паролей", Ci.nsIFilePicker.modeOpen);
+    fp.appendFilter("Таблица паролей", "*.csv; *.tsv");
+    fp.appendFilters(Ci.nsIFilePicker.filterAll);
+    fp.open(async rv => {
+      if (rv !== Ci.nsIFilePicker.returnOK || !fp.file) {
+        return;
+      }
+      try {
+        const { LoginCSVImport } = ChromeUtils.importESModule("resource://gre/modules/LoginCSVImport.sys.mjs");
+        const summary = await LoginCSVImport.importFromCSV(fp.file.path);
+        const count = what => summary.filter(r => r.result === what).length;
+        const added = count("added");
+        const changed = count("modified");
+        const skipped = summary.length - added - changed;
+        this.notice(`Пароли: добавлено ${added}, обновлено ${changed}${skipped ? `, без изменений или с ошибкой ${skipped}` : ""}`);
+      } catch (e) {
+        this.notice(`Не удалось прочитать файл: ${e.message}`);
+      }
+    });
+  },
+
+  /** Пароли в файл CSV: только после проверки владельца, файл не зашифрован. */
+  accountExportPasswords() {
+    this.vaultOwnerCheck("Сохранить пароли в файл", async () => {
+      const fp = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
+      fp.init(window.browsingContext, "Сохранить пароли", Ci.nsIFilePicker.modeSave);
+      fp.appendFilter("Таблица паролей", "*.csv");
+      fp.defaultString = "tabora-passwords.csv";
+      fp.defaultExtension = "csv";
+      fp.open(async rv => {
+        if ((rv !== Ci.nsIFilePicker.returnOK && rv !== Ci.nsIFilePicker.returnReplace) || !fp.file) {
+          return;
+        }
+        try {
+          const { LoginExport } = ChromeUtils.importESModule("resource://gre/modules/LoginExport.sys.mjs");
+          await LoginExport.exportAsCSV(fp.file.path);
+          this.notice("Пароли сохранены. Файл не зашифрован: удалите его после переноса.");
+        } catch (e) {
+          this.notice(`Не удалось сохранить файл: ${e.message}`);
+        }
+      });
+    });
+  },
 });
+

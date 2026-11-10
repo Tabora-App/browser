@@ -302,7 +302,14 @@ Object.assign(Tabora, {
     if (!this._otpMod) {
       this._otpMod = ChromeUtils.importESModule("chrome://tabora/content/vault/Otp.sys.mjs");
       const topic = this._otpMod.Otp.TOPIC;
-      const observer = () => this.drawerDirty("codes");
+      // Отметка «код использован» список не перерисовывает: иначе после копирования все коды
+      // на секунду сменялись точками, а строка уезжала из-под курсора наверх. Новый порядок
+      // (последние использованные сверху) применится при следующем открытии раздела.
+      const observer = () => {
+        if (!this.codes.touching) {
+          this.drawerDirty("codes");
+        }
+      };
       Services.obs.addObserver(observer, topic);
       window.addEventListener("unload", () => Services.obs.removeObserver(observer, topic), { once: true });
     }
@@ -402,8 +409,10 @@ Object.assign(Tabora, {
     const sitesText = this.otpSitesText(e);
     const invalid = e.valid === false;
     const sub = invalid ? "запись изменена вне браузера: код не выдаётся" : e.issuer ? e.account || sitesText : sitesText;
-    const code = h("span", { class: "otp-code" }, invalid ? "—" : "··· ···");
-    const ring = h("span", { class: "otp-ring", style: "--p:100" });
+    // при перерисовке списка строка сразу показывает последний известный код, а не заглушку
+    const known = this.codes.shown?.get(e.id);
+    const code = h("span", { class: "otp-code" }, invalid ? "—" : known?.text || "··· ···");
+    const ring = h("span", { class: "otp-ring", style: `--p:${known?.p ?? 100}` });
     const row = h("div", { class: `otp-row${invalid ? " invalid" : ""}`, tabindex: "0", "data-id": e.id, title: invalid ? "Подпись записи не сходится: её изменили вне браузера. Удалите запись и добавьте код заново" : "Нажмите, чтобы скопировать код" }, null, [
       icon, h("div", { class: "otp-text" }, null, [h("b", {}, title), h("span", {}, sub)]), code, ring,
     ]);
@@ -449,8 +458,11 @@ Object.assign(Tabora, {
       for (const row of d.body.querySelectorAll(".otp-row[data-id]")) {
         try {
           const c = await Otp.code(row.dataset.id);
-          row.querySelector(".otp-code").textContent = this.otpFmt(c.code);
-          row.querySelector(".otp-ring").style.setProperty("--p", String(Math.round((c.remaining / c.period) * 100)));
+          const text = this.otpFmt(c.code);
+          const p = Math.round((c.remaining / c.period) * 100);
+          (this.codes.shown ||= new Map()).set(row.dataset.id, { text, p });
+          row.querySelector(".otp-code").textContent = text;
+          row.querySelector(".otp-ring").style.setProperty("--p", String(p));
           row.classList.toggle("ending", c.remaining <= 5);
           row.title = `Действует ещё ${c.remaining} с · следующий ${this.otpFmt(c.next)} · нажмите, чтобы скопировать`;
         } catch (err) {
@@ -458,7 +470,8 @@ Object.assign(Tabora, {
         }
       }
     };
-    tick();
+    // первый проход — после того как новые строки встанут в ящик (список строится до вставки)
+    queueMicrotask(tick);
     this.codes.timer = setInterval(tick, 1000);
   },
 
@@ -471,7 +484,8 @@ Object.assign(Tabora, {
       row?.classList.add("copied");
       setTimeout(() => row?.classList.remove("copied"), 1200);
       this.notice(useNext ? "Скопирован следующий код: текущий истекает" : "Код скопирован · буфер очистится через 30 с");
-      Otp.touch(id).catch(() => {});
+      this.codes.touching = true;
+      Otp.touch(id).catch(() => {}).finally(() => setTimeout(() => (this.codes.touching = false), 0));
     } catch (e) {
       this.notice(e.message);
     }

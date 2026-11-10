@@ -15,8 +15,8 @@
 }
 
 /* Кнопки-значки внутри кошелька: без системного вида и без рамки фокуса */
-#tabora-drawer .w-head-row .icon-btn,
-#tabora-drawer .w-node .icon-btn {
+:is(#tabora-drawer, #tabora-modal) .w-head-row .icon-btn,
+:is(#tabora-drawer, #tabora-modal) .w-node .icon-btn {
   -moz-appearance: none;
   appearance: none;
   width: 30px;
@@ -34,20 +34,20 @@
   transition: background-color var(--tabora-ease), color var(--tabora-ease);
 }
 
-#tabora-drawer .w-head-row .icon-btn:hover,
-#tabora-drawer .w-node .icon-btn:hover {
+:is(#tabora-drawer, #tabora-modal) .w-head-row .icon-btn:hover,
+:is(#tabora-drawer, #tabora-modal) .w-node .icon-btn:hover {
   background: var(--tabora-raised);
   color: var(--tabora-text-strong);
 }
 
-#tabora-drawer .w-head-row .icon-btn:focus-visible,
-#tabora-drawer .w-node .icon-btn:focus-visible,
-#tabora-drawer .w-btn:focus-visible {
+:is(#tabora-drawer, #tabora-modal) .w-head-row .icon-btn:focus-visible,
+:is(#tabora-drawer, #tabora-modal) .w-node .icon-btn:focus-visible,
+:is(#tabora-drawer, #tabora-modal) .w-btn:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--tabora-accent) 60%, transparent);
 }
 
-#tabora-drawer .w-node .icon-btn {
+:is(#tabora-drawer, #tabora-modal) .w-node .icon-btn {
   width: 26px;
   height: 26px;
   border-radius: 8px;
@@ -67,8 +67,8 @@
   animation: tabora-spin 0.8s linear infinite;
 }
 
-#tabora-drawer .w-welcome,
-#tabora-drawer .w-locked {
+:is(#tabora-drawer, #tabora-modal) .w-welcome,
+:is(#tabora-drawer, #tabora-modal) .w-locked {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -77,26 +77,26 @@
   padding: 36px 18px 20px;
 }
 
-#tabora-drawer .w-welcome b,
-#tabora-drawer .w-locked b {
+:is(#tabora-drawer, #tabora-modal) .w-welcome b,
+:is(#tabora-drawer, #tabora-modal) .w-locked b {
   font: 700 16px/1.3 var(--tabora-font);
   color: var(--tabora-text-strong);
 }
 
-#tabora-drawer .w-welcome p,
-#tabora-drawer .w-sub {
+:is(#tabora-drawer, #tabora-modal) .w-welcome p,
+:is(#tabora-drawer, #tabora-modal) .w-sub {
   margin: 0;
   font: 400 12.5px/1.5 var(--tabora-font);
   color: var(--tabora-text-3);
 }
 
-#tabora-drawer .w-hint {
+:is(#tabora-drawer, #tabora-modal) .w-hint {
   margin: 0;
   font: 400 11.5px/1.45 var(--tabora-font);
   color: var(--tabora-text-4);
 }
 
-#tabora-drawer .w-orb {
+:is(#tabora-drawer, #tabora-modal) .w-orb {
   width: 56px;
   height: 56px;
   border-radius: 13px;
@@ -104,12 +104,12 @@
   box-shadow: 0 10px 30px color-mix(in srgb, var(--tabora-accent) 35%, transparent);
 }
 
-#tabora-drawer .w-orb .tb-mark {
+:is(#tabora-drawer, #tabora-modal) .w-orb .tb-mark {
   width: 100%;
   height: 100%;
 }
 
-#tabora-drawer .w-points {
+:is(#tabora-drawer, #tabora-modal) .w-points {
   margin: 4px 0 0;
   padding: 0;
   list-style: none;
@@ -120,14 +120,14 @@
   width: 100%;
 }
 
-#tabora-drawer .w-points li {
+:is(#tabora-drawer, #tabora-modal) .w-points li {
   font: 400 12px/1.45 var(--tabora-font);
   color: var(--tabora-text-3);
   padding-inline-start: 18px;
   position: relative;
 }
 
-#tabora-drawer .w-points li::before {
+:is(#tabora-drawer, #tabora-modal) .w-points li::before {
   content: "";
   position: absolute;
   left: 4px;
@@ -138,7 +138,7 @@
   background: var(--tabora-accent);
 }
 
-#tabora-drawer .w-actions {
+:is(#tabora-drawer, #tabora-modal) .w-actions {
   display: flex;
   gap: 8px;
   width: 100%;
@@ -147,7 +147,7 @@
 }
 
 /* Кнопки */
-#tabora-drawer .w-btn {
+:is(#tabora-drawer, #tabora-modal) .w-btn {
   height: 36px;
   padding: 0 14px;
   display: inline-flex;
@@ -163,44 +163,44 @@
   transition: background-color var(--tabora-ease), border-color var(--tabora-ease), color var(--tabora-ease), opacity var(--tabora-ease);
 }
 
-#tabora-drawer .w-btn:hover {
+:is(#tabora-drawer, #tabora-modal) .w-btn:hover {
   border-color: var(--tabora-line);
   background: var(--tabora-raised);
 }
 
-#tabora-drawer .w-btn.primary {
+:is(#tabora-drawer, #tabora-modal) .w-btn.primary {
   background: var(--tabora-accent);
   border-color: var(--tabora-accent);
   color: var(--tabora-on-accent);
   font-weight: 700;
 }
 
-#tabora-drawer .w-btn.primary:hover {
+:is(#tabora-drawer, #tabora-modal) .w-btn.primary:hover {
   background: var(--tabora-accent-hover, #d6ff6e);
 }
 
-#tabora-drawer .w-btn.ghost {
+:is(#tabora-drawer, #tabora-modal) .w-btn.ghost {
   background: transparent;
 }
 
-#tabora-drawer .w-btn.small {
+:is(#tabora-drawer, #tabora-modal) .w-btn.small {
   height: 28px;
   padding: 0 10px;
   font-size: 12px;
   border-radius: 8px;
 }
 
-#tabora-drawer .w-btn.danger {
+:is(#tabora-drawer, #tabora-modal) .w-btn.danger {
   color: var(--w-danger);
   border-color: color-mix(in srgb, var(--w-danger-soft) 40%, var(--tabora-field-border));
 }
 
-#tabora-drawer .w-btn[disabled] {
+:is(#tabora-drawer, #tabora-modal) .w-btn[disabled] {
   opacity: 0.45;
   pointer-events: none;
 }
 
-#tabora-drawer .w-link {
+:is(#tabora-drawer, #tabora-modal) .w-link {
   border: 0;
   background: transparent;
   color: var(--tabora-text-4);
@@ -211,26 +211,26 @@
   align-self: center;
 }
 
-#tabora-drawer .w-link:hover {
+:is(#tabora-drawer, #tabora-modal) .w-link:hover {
   color: var(--tabora-text);
 }
 
 /* Поля */
-#tabora-drawer .w-field {
+:is(#tabora-drawer, #tabora-modal) .w-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-#tabora-drawer .w-field > span {
+:is(#tabora-drawer, #tabora-modal) .w-field > span {
   font: 700 11px/1 var(--tabora-font);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--tabora-text-4);
 }
 
-#tabora-drawer .w-input,
-#tabora-drawer .w-textarea {
+:is(#tabora-drawer, #tabora-modal) .w-input,
+:is(#tabora-drawer, #tabora-modal) .w-textarea {
   width: 100%;
   box-sizing: border-box;
   padding: 0 12px;
@@ -244,36 +244,36 @@
   transition: border-color var(--tabora-ease);
 }
 
-#tabora-drawer .w-textarea {
+:is(#tabora-drawer, #tabora-modal) .w-textarea {
   height: auto;
   padding: 10px 12px;
   font: 500 13px/1.6 var(--tabora-mono);
   resize: vertical;
 }
 
-#tabora-drawer .w-input:focus,
-#tabora-drawer .w-textarea:focus {
+:is(#tabora-drawer, #tabora-modal) .w-input:focus,
+:is(#tabora-drawer, #tabora-modal) .w-textarea:focus {
   border-color: var(--tabora-accent);
 }
 
-#tabora-drawer .w-meter {
+:is(#tabora-drawer, #tabora-modal) .w-meter {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
 }
 
-#tabora-drawer .w-meter span {
+:is(#tabora-drawer, #tabora-modal) .w-meter span {
   height: 4px;
   border-radius: 2px;
   background: var(--tabora-panel-border);
 }
 
-#tabora-drawer .w-meter[level="1"] span:nth-child(-n + 1) { background: var(--w-danger-soft); }
-#tabora-drawer .w-meter[level="2"] span:nth-child(-n + 2) { background: #ff9f5a; }
-#tabora-drawer .w-meter[level="3"] span:nth-child(-n + 3) { background: #c8f25a; }
-#tabora-drawer .w-meter[level="4"] span:nth-child(-n + 4) { background: var(--tabora-accent); }
+:is(#tabora-drawer, #tabora-modal) .w-meter[level="1"] span:nth-child(-n + 1) { background: var(--w-danger-soft); }
+:is(#tabora-drawer, #tabora-modal) .w-meter[level="2"] span:nth-child(-n + 2) { background: #ff9f5a; }
+:is(#tabora-drawer, #tabora-modal) .w-meter[level="3"] span:nth-child(-n + 3) { background: #c8f25a; }
+:is(#tabora-drawer, #tabora-modal) .w-meter[level="4"] span:nth-child(-n + 4) { background: var(--tabora-accent); }
 
-#tabora-drawer .w-error {
+:is(#tabora-drawer, #tabora-modal) .w-error {
   padding: 8px 12px;
   border-radius: 9px;
   background: color-mix(in srgb, var(--w-danger-soft) 14%, var(--tabora-field));
@@ -281,7 +281,7 @@
   font: 600 12px/1.3 var(--tabora-font);
 }
 
-#tabora-drawer .w-warn {
+:is(#tabora-drawer, #tabora-modal) .w-warn {
   padding: 14px;
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--w-danger-soft) 55%, transparent);
@@ -291,18 +291,18 @@
   gap: 6px;
 }
 
-#tabora-drawer .w-warn b {
+:is(#tabora-drawer, #tabora-modal) .w-warn b {
   font: 700 13px/1.3 var(--tabora-font);
   color: var(--w-danger);
 }
 
-#tabora-drawer .w-warn p {
+:is(#tabora-drawer, #tabora-modal) .w-warn p {
   margin: 0;
   font: 400 12px/1.5 var(--tabora-font);
   color: var(--tabora-text-2);
 }
 
-#tabora-drawer .w-check {
+:is(#tabora-drawer, #tabora-modal) .w-check {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -311,7 +311,7 @@
   padding: 4px 2px;
 }
 
-#tabora-drawer .w-check input {
+:is(#tabora-drawer, #tabora-modal) .w-check input {
   -moz-appearance: none;
   appearance: none;
   width: 18px;
@@ -326,12 +326,12 @@
   flex: none;
 }
 
-#tabora-drawer .w-check input:checked {
+:is(#tabora-drawer, #tabora-modal) .w-check input:checked {
   background: var(--tabora-accent);
   border-color: var(--tabora-accent);
 }
 
-#tabora-drawer .w-check input:checked::after {
+:is(#tabora-drawer, #tabora-modal) .w-check input:checked::after {
   content: "";
   width: 10px;
   height: 10px;
@@ -341,50 +341,50 @@
 }
 
 /* Поток онбординга */
-#tabora-drawer .w-flow,
-#tabora-drawer .w-receive,
-#tabora-drawer .w-settings {
+:is(#tabora-drawer, #tabora-modal) .w-flow,
+:is(#tabora-drawer, #tabora-modal) .w-receive,
+:is(#tabora-drawer, #tabora-modal) .w-settings {
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 10px 8px 16px;
 }
 
-#tabora-drawer .w-flow-head {
+:is(#tabora-drawer, #tabora-modal) .w-flow-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
 
-#tabora-drawer .w-flow-head b {
+:is(#tabora-drawer, #tabora-modal) .w-flow-head b {
   font: 700 15px/1.3 var(--tabora-font);
   color: var(--tabora-text-strong);
 }
 
-#tabora-drawer .w-steps {
+:is(#tabora-drawer, #tabora-modal) .w-steps {
   display: flex;
   gap: 4px;
 }
 
-#tabora-drawer .w-steps span {
+:is(#tabora-drawer, #tabora-modal) .w-steps span {
   flex: 1;
   height: 3px;
   border-radius: 2px;
   background: var(--tabora-panel-border);
 }
 
-#tabora-drawer .w-steps span.on {
+:is(#tabora-drawer, #tabora-modal) .w-steps span.on {
   background: var(--tabora-accent);
 }
 
-#tabora-drawer .w-flow-body {
+:is(#tabora-drawer, #tabora-modal) .w-flow-body {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-#tabora-drawer .w-seg {
+:is(#tabora-drawer, #tabora-modal) .w-seg {
   display: flex;
   gap: 4px;
   padding: 3px;
@@ -394,7 +394,7 @@
   align-self: flex-start;
 }
 
-#tabora-drawer .w-seg button {
+:is(#tabora-drawer, #tabora-modal) .w-seg button {
   height: 26px;
   padding: 0 10px;
   border: 0;
@@ -405,12 +405,12 @@
   cursor: default;
 }
 
-#tabora-drawer .w-seg button[aria-pressed="true"] {
+:is(#tabora-drawer, #tabora-modal) .w-seg button[aria-pressed="true"] {
   background: var(--tabora-raised);
   color: var(--tabora-text-strong);
 }
 
-#tabora-drawer .w-phrase {
+:is(#tabora-drawer, #tabora-modal) .w-phrase {
   margin: 0;
   padding: 10px;
   list-style: none;
@@ -424,7 +424,7 @@
   -moz-user-select: none;
 }
 
-#tabora-drawer .w-phrase li {
+:is(#tabora-drawer, #tabora-modal) .w-phrase li {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -437,35 +437,35 @@
   overflow: hidden;
 }
 
-#tabora-drawer .w-phrase li i {
+:is(#tabora-drawer, #tabora-modal) .w-phrase li i {
   font: 500 10px/1 var(--tabora-mono);
   color: var(--tabora-text-5);
   font-style: normal;
   min-width: 14px;
 }
 
-#tabora-drawer .w-phrase[masked] li span {
+:is(#tabora-drawer, #tabora-modal) .w-phrase[masked] li span {
   filter: blur(6px);
 }
 
-#tabora-drawer .w-quiz {
+:is(#tabora-drawer, #tabora-modal) .w-quiz {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-#tabora-drawer .w-quiz b {
+:is(#tabora-drawer, #tabora-modal) .w-quiz b {
   font: 700 12px/1 var(--tabora-font);
   color: var(--tabora-text-3);
 }
 
-#tabora-drawer .w-quiz-opts {
+:is(#tabora-drawer, #tabora-modal) .w-quiz-opts {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 6px;
 }
 
-#tabora-drawer .w-quiz-opts button {
+:is(#tabora-drawer, #tabora-modal) .w-quiz-opts button {
   height: 32px;
   border: 1px solid var(--tabora-field-border);
   border-radius: 9px;
@@ -475,23 +475,23 @@
   cursor: default;
 }
 
-#tabora-drawer .w-quiz-opts button[aria-pressed="true"] {
+:is(#tabora-drawer, #tabora-modal) .w-quiz-opts button[aria-pressed="true"] {
   border-color: var(--tabora-accent);
   background: color-mix(in srgb, var(--tabora-accent) 14%, var(--tabora-field));
   color: var(--tabora-text-strong);
 }
 
-#tabora-drawer .w-status {
+:is(#tabora-drawer, #tabora-modal) .w-status {
   font: 500 11px/1 var(--tabora-mono);
   color: var(--tabora-text-4);
 }
 
-#tabora-drawer .w-status[ok] {
+:is(#tabora-drawer, #tabora-modal) .w-status[ok] {
   color: var(--tabora-accent-ink);
 }
 
 /* Заблокирован */
-#tabora-drawer .w-lock-mark {
+:is(#tabora-drawer, #tabora-modal) .w-lock-mark {
   width: 52px;
   height: 52px;
   border-radius: 16px;
@@ -503,23 +503,23 @@
   color: var(--tabora-text-3);
 }
 
-#tabora-drawer .w-locked .w-field,
-#tabora-drawer .w-locked .w-btn,
-#tabora-drawer .w-locked .w-error {
+:is(#tabora-drawer, #tabora-modal) .w-locked .w-field,
+:is(#tabora-drawer, #tabora-modal) .w-locked .w-btn,
+:is(#tabora-drawer, #tabora-modal) .w-locked .w-error {
   width: 100%;
   box-sizing: border-box;
   text-align: left;
 }
 
 /* Главный экран */
-#tabora-drawer .w-main {
+:is(#tabora-drawer, #tabora-modal) .w-main {
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 6px 4px 10px;
 }
 
-#tabora-drawer .w-head {
+:is(#tabora-drawer, #tabora-modal) .w-head {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -529,17 +529,17 @@
   border: 1px solid var(--tabora-field-border);
 }
 
-#tabora-drawer .w-head-row {
+:is(#tabora-drawer, #tabora-modal) .w-head-row {
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
-#tabora-drawer .w-head-row .spacer {
+:is(#tabora-drawer, #tabora-modal) .w-head-row .spacer {
   flex: 1;
 }
 
-#tabora-drawer .w-pick {
+:is(#tabora-drawer, #tabora-modal) .w-pick {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -553,40 +553,40 @@
   cursor: default;
 }
 
-#tabora-drawer .w-pick:hover {
+:is(#tabora-drawer, #tabora-modal) .w-pick:hover {
   background: var(--tabora-raised);
 }
 
-#tabora-drawer .w-pick.small {
+:is(#tabora-drawer, #tabora-modal) .w-pick.small {
   height: 24px;
   font: 600 12px/1 var(--tabora-font);
   color: var(--tabora-text-3);
   align-self: flex-start;
 }
 
-#tabora-drawer .w-pick svg {
+:is(#tabora-drawer, #tabora-modal) .w-pick svg {
   color: var(--tabora-text-4);
 }
 
-#tabora-drawer .w-total {
+:is(#tabora-drawer, #tabora-modal) .w-total {
   display: flex;
   flex-direction: column;
   gap: 4px;
   padding: 6px 10px 0;
 }
 
-#tabora-drawer .w-total-sum {
+:is(#tabora-drawer, #tabora-modal) .w-total-sum {
   font: 600 28px/1.1 var(--tabora-mono);
   color: var(--tabora-text-strong);
   letter-spacing: -0.02em;
 }
 
-#tabora-drawer .w-total-note {
+:is(#tabora-drawer, #tabora-modal) .w-total-note {
   font: 500 11px/1 var(--tabora-mono);
   color: var(--tabora-text-4);
 }
 
-#tabora-drawer .w-badge-danger {
+:is(#tabora-drawer, #tabora-modal) .w-badge-danger {
   align-self: flex-start;
   margin: 2px 10px 0;
   padding: 4px 8px;
@@ -596,13 +596,13 @@
   font: 700 10.5px/1 var(--tabora-font);
 }
 
-#tabora-drawer .w-chains {
+:is(#tabora-drawer, #tabora-modal) .w-chains {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-#tabora-drawer .w-chain {
+:is(#tabora-drawer, #tabora-modal) .w-chain {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -613,11 +613,11 @@
   transition: background-color var(--tabora-ease);
 }
 
-#tabora-drawer .w-chain:hover {
+:is(#tabora-drawer, #tabora-modal) .w-chain:hover {
   background: var(--tabora-raised);
 }
 
-#tabora-drawer .w-dot {
+:is(#tabora-drawer, #tabora-modal) .w-dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
@@ -626,7 +626,7 @@
   flex: none;
 }
 
-#tabora-drawer .w-chain-text {
+:is(#tabora-drawer, #tabora-modal) .w-chain-text {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -634,22 +634,22 @@
   gap: 4px;
 }
 
-#tabora-drawer .w-chain-text b {
+:is(#tabora-drawer, #tabora-modal) .w-chain-text b {
   font: 600 13px/1.2 var(--tabora-font);
   color: var(--tabora-text);
 }
 
-#tabora-drawer .w-addr {
+:is(#tabora-drawer, #tabora-modal) .w-addr {
   font: 500 11px/1.2 var(--tabora-mono);
   color: var(--tabora-text-4);
   white-space: nowrap;
 }
 
-#tabora-drawer .w-chain-text {
+:is(#tabora-drawer, #tabora-modal) .w-chain-text {
   flex: 1 1 120px;
 }
 
-#tabora-drawer .w-chain-bal {
+:is(#tabora-drawer, #tabora-modal) .w-chain-bal {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -657,18 +657,18 @@
   min-width: 0;
 }
 
-#tabora-drawer .w-native {
+:is(#tabora-drawer, #tabora-modal) .w-native {
   font: 600 13px/1.2 var(--tabora-mono);
   color: var(--tabora-text-strong);
   white-space: nowrap;
 }
 
-#tabora-drawer .w-native.err {
+:is(#tabora-drawer, #tabora-modal) .w-native.err {
   color: var(--w-danger);
   font-weight: 500;
 }
 
-#tabora-drawer .w-usd {
+:is(#tabora-drawer, #tabora-modal) .w-usd {
   font: 500 11px/1.2 var(--tabora-mono);
   color: var(--tabora-text-4);
   white-space: nowrap;
@@ -678,16 +678,16 @@
 }
 
 /* Получить */
-#tabora-drawer .w-receive {
+:is(#tabora-drawer, #tabora-modal) .w-receive {
   align-items: center;
   text-align: center;
 }
 
-#tabora-drawer .w-receive .w-flow-head {
+:is(#tabora-drawer, #tabora-modal) .w-receive .w-flow-head {
   width: 100%;
 }
 
-#tabora-drawer .w-qr {
+:is(#tabora-drawer, #tabora-modal) .w-qr {
   width: 220px;
   height: 220px;
   border-radius: 16px;
@@ -696,7 +696,7 @@
   box-sizing: content-box;
 }
 
-#tabora-drawer .w-address {
+:is(#tabora-drawer, #tabora-modal) .w-address {
   font: 500 12px/1.5 var(--tabora-mono);
   color: var(--tabora-text-strong);
   word-break: break-all;
@@ -709,7 +709,7 @@
 }
 
 /* Настройки */
-#tabora-drawer .w-group {
+:is(#tabora-drawer, #tabora-modal) .w-group {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -719,7 +719,7 @@
   border: 1px solid var(--tabora-field-border);
 }
 
-#tabora-drawer .w-group-title {
+:is(#tabora-drawer, #tabora-modal) .w-group-title {
   font: 700 11px/1 var(--tabora-font);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -728,45 +728,45 @@
 }
 
 /* строка «название → значение» в карточках настроек: значение под названием, без переносов названия */
-#tabora-drawer .w-kv {
+:is(#tabora-drawer, #tabora-modal) .w-kv {
   display: flex;
   flex-direction: column;
   gap: 3px;
   padding: 6px 0;
 }
 
-#tabora-drawer .w-kv span {
+:is(#tabora-drawer, #tabora-modal) .w-kv span {
   font: 500 11px/1.2 var(--tabora-font);
   color: var(--tabora-text-4);
 }
 
-#tabora-drawer .w-kv b {
+:is(#tabora-drawer, #tabora-modal) .w-kv b {
   font: 600 13px/1.3 var(--tabora-font);
   color: var(--tabora-text);
 }
 
-#tabora-drawer .w-kv.muted b {
+:is(#tabora-drawer, #tabora-modal) .w-kv.muted b {
   color: var(--tabora-text-3, var(--tabora-text-4));
 }
 
-#tabora-drawer .w-node {
+:is(#tabora-drawer, #tabora-modal) .w-node {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-#tabora-drawer .w-node-name {
+:is(#tabora-drawer, #tabora-modal) .w-node-name {
   flex: 1;
   font: 600 12.5px/1 var(--tabora-font);
   color: var(--tabora-text);
 }
 
-#tabora-drawer .w-node .tsel {
+:is(#tabora-drawer, #tabora-modal) .w-node .tsel {
   width: 170px;
 }
 
 /* Лист подтверждения поверх панели */
-#tabora-drawer .w-sheet {
+:is(#tabora-drawer, #tabora-modal) .w-sheet {
   position: absolute;
   inset: 0;
   z-index: 5;
@@ -781,7 +781,7 @@
   position: relative;
 }
 
-#tabora-drawer .w-sheet-card {
+:is(#tabora-drawer, #tabora-modal) .w-sheet-card {
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -794,37 +794,37 @@
   animation: tsel-in 160ms cubic-bezier(0.2, 0, 0, 1);
 }
 
-#tabora-drawer .w-sheet-card b {
+:is(#tabora-drawer, #tabora-modal) .w-sheet-card b {
   font: 700 14px/1.3 var(--tabora-font);
   color: var(--tabora-text-strong);
 }
 
-#tabora-drawer .w-sheet-card .w-actions {
+:is(#tabora-drawer, #tabora-modal) .w-sheet-card .w-actions {
   justify-content: flex-end;
 }
 
 /* Активы */
-#tabora-drawer .w-head-actions {
+:is(#tabora-drawer, #tabora-modal) .w-head-actions {
   display: flex;
   gap: 8px;
   padding: 8px 10px 0;
 }
 
-#tabora-drawer .w-head-actions .w-btn {
+:is(#tabora-drawer, #tabora-modal) .w-head-actions .w-btn {
   flex: 1;
 }
 
-#tabora-drawer .w-seg.wide {
+:is(#tabora-drawer, #tabora-modal) .w-seg.wide {
   align-self: stretch;
   margin: 0 4px;
 }
 
-#tabora-drawer .w-seg.wide button {
+:is(#tabora-drawer, #tabora-modal) .w-seg.wide button {
   flex: 1;
   height: 30px;
 }
 
-#tabora-drawer .w-asset {
+:is(#tabora-drawer, #tabora-modal) .w-asset {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -835,11 +835,11 @@
   transition: background-color var(--tabora-ease);
 }
 
-#tabora-drawer .w-asset:hover {
+:is(#tabora-drawer, #tabora-modal) .w-asset:hover {
   background: var(--tabora-raised);
 }
 
-#tabora-drawer .w-coin {
+:is(#tabora-drawer, #tabora-modal) .w-coin {
   position: relative;
   width: 36px;
   height: 36px;
@@ -853,7 +853,7 @@
   flex: none;
 }
 
-#tabora-drawer .w-coin-chain {
+:is(#tabora-drawer, #tabora-modal) .w-coin-chain {
   position: absolute;
   right: -3px;
   bottom: -3px;
@@ -864,25 +864,25 @@
   border: 2px solid var(--tabora-panel);
 }
 
-#tabora-drawer .w-sub-line {
+:is(#tabora-drawer, #tabora-modal) .w-sub-line {
   font: 500 11px/1.2 var(--tabora-font);
   color: var(--tabora-text-4);
 }
 
-#tabora-drawer .w-empty {
+:is(#tabora-drawer, #tabora-modal) .w-empty {
   padding: 18px 14px;
   text-align: center;
   font: 400 12.5px/1.5 var(--tabora-font);
   color: var(--tabora-text-4);
 }
 
-#tabora-drawer .w-zero-toggle {
+:is(#tabora-drawer, #tabora-modal) .w-zero-toggle {
   display: flex;
   justify-content: center;
   padding: 6px 0;
 }
 
-#tabora-drawer .w-add {
+:is(#tabora-drawer, #tabora-modal) .w-add {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -898,24 +898,24 @@
   transition: border-color var(--tabora-ease), color var(--tabora-ease), background-color var(--tabora-ease);
 }
 
-#tabora-drawer .w-add:hover {
+:is(#tabora-drawer, #tabora-modal) .w-add:hover {
   border-color: var(--tabora-accent);
   color: var(--tabora-accent-ink);
   background: var(--tabora-field);
 }
 
-#tabora-drawer .w-row2 {
+:is(#tabora-drawer, #tabora-modal) .w-row2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
-#tabora-drawer .w-field .tsel {
+:is(#tabora-drawer, #tabora-modal) .w-field .tsel {
   width: 100%;
 }
 
 /* Логотипы сетей и токенов */
-#tabora-drawer .w-coin img {
+:is(#tabora-drawer, #tabora-modal) .w-coin img {
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -923,11 +923,11 @@
   display: block;
 }
 
-#tabora-drawer .w-coin:has(img) {
+:is(#tabora-drawer, #tabora-modal) .w-coin:has(img) {
   background: transparent;
 }
 
-#tabora-drawer .w-coin-chain {
+:is(#tabora-drawer, #tabora-modal) .w-coin-chain {
   overflow: hidden;
   width: 16px;
   height: 16px;
@@ -938,14 +938,14 @@
   box-sizing: border-box;
 }
 
-#tabora-drawer .w-coin-chain img {
+:is(#tabora-drawer, #tabora-modal) .w-coin-chain img {
   width: 100%;
   height: 100%;
   display: block;
   object-fit: cover;
 }
 
-#tabora-drawer .w-logo {
+:is(#tabora-drawer, #tabora-modal) .w-logo {
   width: 26px;
   height: 26px;
   border-radius: 50%;
@@ -953,19 +953,19 @@
   flex: none;
 }
 
-#tabora-drawer .w-logo.small {
+:is(#tabora-drawer, #tabora-modal) .w-logo.small {
   width: 18px;
   height: 18px;
 }
 
-#tabora-drawer .w-title-logo {
+:is(#tabora-drawer, #tabora-modal) .w-title-logo {
   display: inline-flex;
   align-items: center;
   gap: 8px;
 }
 
 /* ---- Отправка ---- */
-#tabora-drawer .w-send {
+:is(#tabora-drawer, #tabora-modal) .w-send {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -973,16 +973,16 @@
   min-height: 100%;
 }
 
-#tabora-drawer .w-send .spacer {
+:is(#tabora-drawer, #tabora-modal) .w-send .spacer {
   flex: 1;
 }
 
-#tabora-drawer .w-title {
+:is(#tabora-drawer, #tabora-modal) .w-title {
   font: 700 15px/1.3 var(--tabora-font);
   color: var(--tabora-text-strong);
 }
 
-#tabora-drawer .w-asset-pick {
+:is(#tabora-drawer, #tabora-modal) .w-asset-pick {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -999,21 +999,21 @@
   appearance: none;
 }
 
-#tabora-drawer .w-asset-pick:hover {
+:is(#tabora-drawer, #tabora-modal) .w-asset-pick:hover {
   border-color: var(--tabora-line-strong, var(--tabora-text-dim));
 }
 
-#tabora-drawer .w-asset-pick .w-coin {
+:is(#tabora-drawer, #tabora-modal) .w-asset-pick .w-coin {
   width: 32px;
   height: 32px;
 }
 
-#tabora-drawer .w-asset-pick .w-coin img {
+:is(#tabora-drawer, #tabora-modal) .w-asset-pick .w-coin img {
   width: 32px;
   height: 32px;
 }
 
-#tabora-drawer .w-asset-pick-text {
+:is(#tabora-drawer, #tabora-modal) .w-asset-pick-text {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -1021,27 +1021,27 @@
   min-width: 0;
 }
 
-#tabora-drawer .w-asset-pick-text b {
+:is(#tabora-drawer, #tabora-modal) .w-asset-pick-text b {
   font: 700 13px/1.2 var(--tabora-font);
 }
 
-#tabora-drawer .w-asset-pick-text span {
+:is(#tabora-drawer, #tabora-modal) .w-asset-pick-text span {
   font: 500 11.5px/1.2 var(--tabora-font);
   color: var(--tabora-text-dim);
 }
 
-#tabora-drawer .w-input-row {
+:is(#tabora-drawer, #tabora-modal) .w-input-row {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-#tabora-drawer .w-input-row .w-input {
+:is(#tabora-drawer, #tabora-modal) .w-input-row .w-input {
   flex: 1;
   min-width: 0;
 }
 
-#tabora-drawer .w-input-row .icon-btn {
+:is(#tabora-drawer, #tabora-modal) .w-input-row .icon-btn {
   width: 36px;
   height: 36px;
   border-radius: 10px;
@@ -1052,7 +1052,7 @@
   flex: none;
 }
 
-#tabora-drawer .w-input-suffix {
+:is(#tabora-drawer, #tabora-modal) .w-input-suffix {
   position: absolute;
   right: 12px;
   font: 700 12px/1 var(--tabora-font);
@@ -1060,47 +1060,47 @@
   pointer-events: none;
 }
 
-#tabora-drawer .w-field:has(.w-input-suffix) .w-input-row {
+:is(#tabora-drawer, #tabora-modal) .w-field:has(.w-input-suffix) .w-input-row {
   position: relative;
 }
 
-#tabora-drawer .w-field:has(.w-input-suffix) .w-input {
+:is(#tabora-drawer, #tabora-modal) .w-field:has(.w-input-suffix) .w-input {
   padding-right: 56px;
 }
 
-#tabora-drawer .w-field-head {
+:is(#tabora-drawer, #tabora-modal) .w-field-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-#tabora-drawer .w-link.small {
+:is(#tabora-drawer, #tabora-modal) .w-link.small {
   font-size: 11.5px;
   text-transform: none;
   letter-spacing: 0;
   padding: 0;
 }
 
-#tabora-drawer .w-note {
+:is(#tabora-drawer, #tabora-modal) .w-note {
   min-height: 14px;
   font: 500 11.5px/1.35 var(--tabora-font);
   color: var(--tabora-text-dim);
 }
 
-#tabora-drawer .w-note.ok {
+:is(#tabora-drawer, #tabora-modal) .w-note.ok {
   color: var(--tabora-accent-ink);
 }
 
-#tabora-drawer .w-note.bad {
+:is(#tabora-drawer, #tabora-modal) .w-note.bad {
   color: var(--w-danger);
 }
 
-#tabora-drawer .w-note.danger {
+:is(#tabora-drawer, #tabora-modal) .w-note.danger {
   color: var(--w-danger);
   font-weight: 600;
 }
 
-#tabora-drawer .w-fee {
+:is(#tabora-drawer, #tabora-modal) .w-fee {
   display: flex;
   flex-direction: column;
   padding: 4px 12px;
@@ -1109,7 +1109,7 @@
   border: 1px solid var(--tabora-line);
 }
 
-#tabora-drawer .w-fee-row {
+:is(#tabora-drawer, #tabora-modal) .w-fee-row {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -1119,40 +1119,40 @@
   color: var(--tabora-text);
 }
 
-#tabora-drawer .w-fee-row + .w-fee-row {
+:is(#tabora-drawer, #tabora-modal) .w-fee-row + .w-fee-row {
   border-top: 1px solid var(--tabora-line);
 }
 
-#tabora-drawer .w-fee-row > span:first-child {
+:is(#tabora-drawer, #tabora-modal) .w-fee-row > span:first-child {
   color: var(--tabora-text-dim);
   flex: none;
 }
 
-#tabora-drawer .w-fee-row > span:last-child {
+:is(#tabora-drawer, #tabora-modal) .w-fee-row > span:last-child {
   text-align: right;
   color: var(--tabora-text-strong);
   overflow-wrap: anywhere;
 }
 
-#tabora-drawer .w-fee-row.muted > span:last-child {
+:is(#tabora-drawer, #tabora-modal) .w-fee-row.muted > span:last-child {
   color: var(--tabora-text-dim);
 }
 
-#tabora-drawer .w-fee-row.ok > span:last-child {
+:is(#tabora-drawer, #tabora-modal) .w-fee-row.ok > span:last-child {
   color: var(--tabora-accent-ink);
 }
 
-#tabora-drawer .w-fee-row.bad > span:last-child {
+:is(#tabora-drawer, #tabora-modal) .w-fee-row.bad > span:last-child {
   color: var(--w-danger);
   font-weight: 600;
 }
 
-#tabora-drawer .w-fee-row .mono {
+:is(#tabora-drawer, #tabora-modal) .w-fee-row .mono {
   font-family: var(--tabora-mono);
   font-size: 11.5px;
 }
 
-#tabora-drawer .w-warn {
+:is(#tabora-drawer, #tabora-modal) .w-warn {
   padding: 10px 12px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--tabora-accent) 14%, var(--tabora-panel));
@@ -1161,28 +1161,28 @@
   color: var(--tabora-text-strong);
 }
 
-#tabora-drawer .w-warn.danger {
+:is(#tabora-drawer, #tabora-modal) .w-warn.danger {
   background: var(--w-danger-soft);
   border-color: color-mix(in srgb, var(--w-danger) 45%, transparent);
 }
 
 /* ---- Лист подтверждения ---- */
-#tabora-drawer .w-sheet-card.w-confirm {
+:is(#tabora-drawer, #tabora-modal) .w-sheet-card.w-confirm {
   gap: 10px;
   max-height: calc(100% - 4px);
   overflow: auto;
 }
 
-#tabora-drawer .w-confirm .w-flow-head b {
+:is(#tabora-drawer, #tabora-modal) .w-confirm .w-flow-head b {
   font: 700 15px/1.3 var(--tabora-font);
   white-space: nowrap;
 }
 
-#tabora-drawer .w-confirm .w-flow-head .w-chip {
+:is(#tabora-drawer, #tabora-modal) .w-confirm .w-flow-head .w-chip {
   flex: none;
 }
 
-#tabora-drawer .w-chip {
+:is(#tabora-drawer, #tabora-modal) .w-chip {
   height: 22px;
   padding: 0 8px;
   border-radius: 7px;
@@ -1192,7 +1192,7 @@
   letter-spacing: 0.02em;
 }
 
-#tabora-drawer .w-origin {
+:is(#tabora-drawer, #tabora-modal) .w-origin {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1202,7 +1202,7 @@
   border: 1px solid var(--tabora-line);
 }
 
-#tabora-drawer .w-origin-icon {
+:is(#tabora-drawer, #tabora-modal) .w-origin-icon {
   width: 36px;
   height: 36px;
   border-radius: 10px;
@@ -1214,35 +1214,35 @@
   overflow: hidden;
 }
 
-#tabora-drawer .w-origin-icon img {
+:is(#tabora-drawer, #tabora-modal) .w-origin-icon img {
   width: 20px;
   height: 20px;
 }
 
-#tabora-drawer .w-origin-icon b {
+:is(#tabora-drawer, #tabora-modal) .w-origin-icon b {
   font: 700 14px/1 var(--tabora-font);
   color: var(--tabora-text-strong);
 }
 
-#tabora-drawer .w-origin-icon.small {
+:is(#tabora-drawer, #tabora-modal) .w-origin-icon.small {
   width: 28px;
   height: 28px;
   border-radius: 8px;
 }
 
-#tabora-drawer .w-origin-icon.small img {
+:is(#tabora-drawer, #tabora-modal) .w-origin-icon.small img {
   width: 16px;
   height: 16px;
 }
 
-#tabora-drawer .w-origin-text {
+:is(#tabora-drawer, #tabora-modal) .w-origin-text {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
 }
 
-#tabora-drawer .w-origin-text b {
+:is(#tabora-drawer, #tabora-modal) .w-origin-text b {
   font: 700 13px/1.2 var(--tabora-font);
   color: var(--tabora-text-strong);
   overflow: hidden;
@@ -1250,12 +1250,12 @@
   white-space: nowrap;
 }
 
-#tabora-drawer .w-origin-text span {
+:is(#tabora-drawer, #tabora-modal) .w-origin-text span {
   font: 500 11.5px/1.2 var(--tabora-font);
   color: var(--tabora-text-dim);
 }
 
-#tabora-drawer .w-confirm-amount {
+:is(#tabora-drawer, #tabora-modal) .w-confirm-amount {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1264,33 +1264,33 @@
   text-align: center;
 }
 
-#tabora-drawer .w-confirm-amount > span {
+:is(#tabora-drawer, #tabora-modal) .w-confirm-amount > span {
   font: 600 11px/1 var(--tabora-font);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--tabora-text-dim);
 }
 
-#tabora-drawer .w-confirm-amount > b {
+:is(#tabora-drawer, #tabora-modal) .w-confirm-amount > b {
   font: 600 26px/1.1 var(--tabora-mono);
   color: var(--tabora-text-strong);
   letter-spacing: -0.02em;
 }
 
-#tabora-drawer .w-confirm-summary {
+:is(#tabora-drawer, #tabora-modal) .w-confirm-summary {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-#tabora-drawer .w-label {
+:is(#tabora-drawer, #tabora-modal) .w-label {
   font: 700 11px/1 var(--tabora-font);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--tabora-text-dim);
 }
 
-#tabora-drawer .w-summary-line {
+:is(#tabora-drawer, #tabora-modal) .w-summary-line {
   padding: 8px 10px;
   border-radius: 10px;
   background: var(--tabora-bg);
@@ -1300,18 +1300,18 @@
   overflow-wrap: anywhere;
 }
 
-#tabora-drawer .w-summary-line + .w-summary-line {
+:is(#tabora-drawer, #tabora-modal) .w-summary-line + .w-summary-line {
   font-weight: 500;
   color: var(--tabora-text);
 }
 
-#tabora-drawer .w-details {
+:is(#tabora-drawer, #tabora-modal) .w-details {
   border-radius: 10px;
   border: 1px solid var(--tabora-line);
   background: var(--tabora-bg);
 }
 
-#tabora-drawer .w-details summary {
+:is(#tabora-drawer, #tabora-modal) .w-details summary {
   padding: 8px 10px;
   font: 600 12px/1 var(--tabora-font);
   color: var(--tabora-text-dim);
@@ -1319,18 +1319,18 @@
   list-style: none;
 }
 
-#tabora-drawer .w-details summary::before {
+:is(#tabora-drawer, #tabora-modal) .w-details summary::before {
   content: "›";
   display: inline-block;
   width: 12px;
   transition: transform 150ms;
 }
 
-#tabora-drawer .w-details[open] summary::before {
+:is(#tabora-drawer, #tabora-modal) .w-details[open] summary::before {
   transform: rotate(90deg);
 }
 
-#tabora-drawer .w-details pre {
+:is(#tabora-drawer, #tabora-modal) .w-details pre {
   margin: 0;
   padding: 0 10px 10px;
   max-height: 160px;
@@ -1341,13 +1341,13 @@
   overflow-wrap: anywhere;
 }
 
-#tabora-drawer .w-limit {
+:is(#tabora-drawer, #tabora-modal) .w-limit {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-#tabora-drawer .w-chip-btn {
+:is(#tabora-drawer, #tabora-modal) .w-chip-btn {
   height: 28px;
   padding: 0 10px;
   border-radius: 8px;
@@ -1359,18 +1359,18 @@
   appearance: none;
 }
 
-#tabora-drawer .w-chip-btn[aria-pressed="true"] {
+:is(#tabora-drawer, #tabora-modal) .w-chip-btn[aria-pressed="true"] {
   background: var(--tabora-accent);
   border-color: var(--tabora-accent);
   color: #0b0c0e;
 }
 
-#tabora-drawer .w-btn.loading {
+:is(#tabora-drawer, #tabora-modal) .w-btn.loading {
   position: relative;
   color: transparent;
 }
 
-#tabora-drawer .w-btn.loading::after {
+:is(#tabora-drawer, #tabora-modal) .w-btn.loading::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -1390,14 +1390,14 @@
 }
 
 /* ---- Сайты и история ---- */
-#tabora-drawer .w-site {
+:is(#tabora-drawer, #tabora-modal) .w-site {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 6px 0;
 }
 
-#tabora-drawer .w-site .icon-btn {
+:is(#tabora-drawer, #tabora-modal) .w-site .icon-btn {
   width: 28px;
   height: 28px;
   border-radius: 8px;
@@ -1407,43 +1407,43 @@
   appearance: none;
 }
 
-#tabora-drawer .w-site .icon-btn:hover {
+:is(#tabora-drawer, #tabora-modal) .w-site .icon-btn:hover {
   color: var(--w-danger);
   border-color: var(--w-danger);
 }
 
-#tabora-drawer .w-activity .w-coin img {
+:is(#tabora-drawer, #tabora-modal) .w-activity .w-coin img {
   width: 36px;
   height: 36px;
 }
 
-#tabora-drawer .w-confirm .w-actions {
+:is(#tabora-drawer, #tabora-modal) .w-confirm .w-actions {
   flex-wrap: nowrap;
 }
 
-#tabora-drawer .w-confirm .w-actions .w-btn {
+:is(#tabora-drawer, #tabora-modal) .w-confirm .w-actions .w-btn {
   flex: 1 1 auto;
   min-width: 0;
   white-space: nowrap;
 }
 
-#tabora-drawer .w-confirm .w-actions .w-btn.ghost {
+:is(#tabora-drawer, #tabora-modal) .w-confirm .w-actions .w-btn.ghost {
   flex: 0 0 auto;
 }
 
 /* Кнопка подтверждения «вооружается» с задержкой: защита от кликджекинга */
-#tabora-drawer .w-btn.primary.arming {
+:is(#tabora-drawer, #tabora-modal) .w-btn.primary.arming {
   opacity: 0.45;
   cursor: wait;
 }
 
-#tabora-drawer .w-details pre,
-#tabora-drawer .w-summary-line,
-#tabora-drawer .w-origin-text b {
+:is(#tabora-drawer, #tabora-modal) .w-details pre,
+:is(#tabora-drawer, #tabora-modal) .w-summary-line,
+:is(#tabora-drawer, #tabora-modal) .w-origin-text b {
   unicode-bidi: plaintext;
 }
 
-#tabora-drawer .w-badge-danger.w-tamper {
+:is(#tabora-drawer, #tabora-modal) .w-badge-danger.w-tamper {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1453,40 +1453,40 @@
   line-height: 1.4;
 }
 
-#tabora-drawer .w-activity.in .w-native {
+:is(#tabora-drawer, #tabora-modal) .w-activity.in .w-native {
   color: var(--tabora-accent-ink);
 }
 
 /* строка истории всегда одной высоты: подпись не переносится, лишнее уходит в многоточие */
-#tabora-drawer .w-activity .w-chain-text b,
-#tabora-drawer .w-activity .w-sub-line {
+:is(#tabora-drawer, #tabora-modal) .w-activity .w-chain-text b,
+:is(#tabora-drawer, #tabora-modal) .w-activity .w-sub-line {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-#tabora-drawer .w-activity .w-native.long {
+:is(#tabora-drawer, #tabora-modal) .w-activity .w-native.long {
   font-size: 11px; /* мелкие суммы вроде 0.0000005: не отнимаем место у адреса */
 }
 
-#tabora-drawer .w-activity.muted {
+:is(#tabora-drawer, #tabora-modal) .w-activity.muted {
   opacity: 0.6;
 }
 
-#tabora-drawer .w-hint.w-center {
+:is(#tabora-drawer, #tabora-modal) .w-hint.w-center {
   text-align: center;
   padding: 6px 12px;
 }
 
 /* Контакты */
-#tabora-drawer .w-group-head {
+:is(#tabora-drawer, #tabora-modal) .w-group-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
 
-#tabora-drawer .w-group-head .icon-btn {
+:is(#tabora-drawer, #tabora-modal) .w-group-head .icon-btn {
   width: 26px;
   height: 26px;
   border-radius: 7px;
@@ -1512,17 +1512,17 @@
   background: var(--tabora-hover, rgba(127, 127, 127, 0.1));
 }
 
-#tabora-drawer .w-contact > svg {
+:is(#tabora-drawer, #tabora-modal) .w-contact > svg {
   color: var(--tabora-text-dim);
   flex: none;
 }
 
-#tabora-drawer .w-confirm .w-actions .spacer {
+:is(#tabora-drawer, #tabora-modal) .w-confirm .w-actions .spacer {
   flex: 1;
 }
 
 /* Знак подлинности */
-#tabora-drawer .w-mark {
+:is(#tabora-drawer, #tabora-modal) .w-mark {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1532,49 +1532,49 @@
   border: 1px dashed color-mix(in srgb, var(--tabora-accent) 50%, transparent);
 }
 
-#tabora-drawer .w-mark span {
+:is(#tabora-drawer, #tabora-modal) .w-mark span {
   font-size: 18px;
   letter-spacing: 4px;
   line-height: 1.2;
 }
 
-#tabora-drawer .w-mark i {
+:is(#tabora-drawer, #tabora-modal) .w-mark i {
   font: 600 11px/1.2 var(--tabora-font);
   font-style: normal;
   color: var(--tabora-text-dim);
 }
 
-#tabora-drawer .w-mark.big {
+:is(#tabora-drawer, #tabora-modal) .w-mark.big {
   justify-content: center;
 }
 
-#tabora-drawer .w-mark.big span {
+:is(#tabora-drawer, #tabora-modal) .w-mark.big span {
   font-size: 28px;
   letter-spacing: 8px;
 }
 
 /* Направление текста изолировано во всех ячейках со значениями от сайтов и сетей */
-#tabora-drawer .w-fee-row > span,
-#tabora-drawer .w-chain-text b,
-#tabora-drawer .w-sub-line,
-#tabora-drawer .w-warn,
-#tabora-drawer .w-note,
-#tabora-drawer .w-asset-pick-text b,
-#tabora-drawer .w-confirm-amount b {
+:is(#tabora-drawer, #tabora-modal) .w-fee-row > span,
+:is(#tabora-drawer, #tabora-modal) .w-chain-text b,
+:is(#tabora-drawer, #tabora-modal) .w-sub-line,
+:is(#tabora-drawer, #tabora-modal) .w-warn,
+:is(#tabora-drawer, #tabora-modal) .w-note,
+:is(#tabora-drawer, #tabora-modal) .w-asset-pick-text b,
+:is(#tabora-drawer, #tabora-modal) .w-confirm-amount b {
   unicode-bidi: isolate;
 }
 
-#tabora-drawer .w-link.w-right {
+:is(#tabora-drawer, #tabora-modal) .w-link.w-right {
   align-self: flex-end;
   color: var(--w-danger);
 }
 
 /* Маленькие кнопки в карточках кошелька (плюс у контактов и нод, крестик у сайтов):
    один вид везде, без рамки и серого квадрата, подсветка только при наведении */
-#tabora-drawer .w-group-head .icon-btn,
-#tabora-drawer .w-head-row .icon-btn,
-#tabora-drawer .w-node .icon-btn,
-#tabora-drawer .w-site .icon-btn {
+:is(#tabora-drawer, #tabora-modal) .w-group-head .icon-btn,
+:is(#tabora-drawer, #tabora-modal) .w-head-row .icon-btn,
+:is(#tabora-drawer, #tabora-modal) .w-node .icon-btn,
+:is(#tabora-drawer, #tabora-modal) .w-site .icon-btn {
   -moz-appearance: none;
   appearance: none;
   width: 26px;
@@ -1593,25 +1593,25 @@
   transition: background-color var(--tabora-ease), color var(--tabora-ease);
 }
 
-#tabora-drawer .w-group-head .icon-btn:hover,
-#tabora-drawer .w-head-row .icon-btn:hover,
-#tabora-drawer .w-node .icon-btn:hover {
+:is(#tabora-drawer, #tabora-modal) .w-group-head .icon-btn:hover,
+:is(#tabora-drawer, #tabora-modal) .w-head-row .icon-btn:hover,
+:is(#tabora-drawer, #tabora-modal) .w-node .icon-btn:hover {
   background: var(--tabora-raised);
   color: var(--tabora-text-strong);
 }
 
-#tabora-drawer .w-site .icon-btn:hover {
+:is(#tabora-drawer, #tabora-modal) .w-site .icon-btn:hover {
   background: var(--w-danger-soft);
   color: var(--w-danger);
   border: 0;
 }
 
 /* Строки «подпись — поле выбора»: подпись получает всё свободное место, поле по содержимому */
-#tabora-drawer .w-node {
+:is(#tabora-drawer, #tabora-modal) .w-node {
   gap: 8px;
 }
 
-#tabora-drawer .w-node-name {
+:is(#tabora-drawer, #tabora-modal) .w-node-name {
   flex: 1;
   min-width: 0;
   white-space: nowrap;
@@ -1619,24 +1619,24 @@
   text-overflow: ellipsis;
 }
 
-#tabora-drawer .w-node .tsel {
+:is(#tabora-drawer, #tabora-modal) .w-node .tsel {
   flex: none;
   width: auto;
   max-width: 58%;
 }
 
 /* В настройках подпись может переноситься на две строки, чтобы не обрезаться */
-#tabora-drawer .w-node:not(.rpc) .w-node-name {
+:is(#tabora-drawer, #tabora-modal) .w-node:not(.rpc) .w-node-name {
   white-space: normal;
   line-height: 1.25;
 }
 
 /* Строки нод: короткое имя сети фиксированной ширины, поле адреса одной ширины во всех строках */
-#tabora-drawer .w-node.rpc .w-node-name {
+:is(#tabora-drawer, #tabora-modal) .w-node.rpc .w-node-name {
   flex: 0 0 76px;
 }
 
-#tabora-drawer .w-node.rpc .tsel {
+:is(#tabora-drawer, #tabora-modal) .w-node.rpc .tsel {
   flex: 1;
   min-width: 0;
   max-width: none;

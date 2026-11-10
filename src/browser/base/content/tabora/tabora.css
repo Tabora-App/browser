@@ -37,6 +37,7 @@
   --tabora-text-strong: #fff;
   --tabora-page-bg: #f4f2ed;
   --tabora-start-bg: #0f1013;
+  --tabora-card-edge: rgba(255, 255, 255, 0.06); /* волосяная рамка области страницы */
   --tabora-scrim: rgba(7, 8, 10, 0.42);
   --tabora-shadow-lg: 0 30px 90px rgba(0, 0, 0, 0.65);
   --tabora-shadow-md: 0 18px 50px rgba(0, 0, 0, 0.55);
@@ -45,6 +46,15 @@
   --tabora-sidebar-width: 236px;
   --tabora-agent-width: 368px;
   --tabora-ease: 140ms cubic-bezier(0.2, 0, 0, 1);
+  /* Движение: одна система на весь интерфейс (те же числа — MOTION в tabora.js).
+     Вход и перестроение идут по --tabora-curve (быстрое начало, мягкая остановка),
+     выход короче и по --tabora-curve-out (с ускорением). */
+  --tabora-curve: cubic-bezier(0.2, 0, 0, 1);
+  --tabora-curve-out: cubic-bezier(0.4, 0, 1, 1);
+  --tabora-t-fast: 140ms; /* отклик на наведение и нажатие */
+  --tabora-t: 200ms; /* небольшие поверхности: меню, подсказки, строки списков */
+  --tabora-t-slow: 300ms; /* крупные: окна, листы, панели, колонка */
+  --tabora-t-out: 150ms; /* исчезновение */
 
   /* Переменные Firefox */
   --toolbox-background-color: var(--tabora-shell) !important;
@@ -116,17 +126,12 @@
   --tabora-accent-dim: rgba(200, 242, 90, 0.4);
   --tabora-page-bg: #ffffff;
   --tabora-start-bg: #f6f4ef;
+  --tabora-card-edge: var(--tabora-panel-border);
   --tabora-scrim: rgba(60, 56, 48, 0.3);
   --tabora-shadow-lg: 0 24px 70px rgba(40, 36, 30, 0.22);
   --tabora-shadow-md: 0 14px 40px rgba(40, 36, 30, 0.18);
   --tab-selected-textcolor: var(--tabora-text) !important;
   color-scheme: light;
-}
-
-:root[tabora-theme="light"] #tabbrowser-tabpanels,
-:root[tabora-theme="light"] #tabora-start {
-  outline: 1px solid var(--tabora-panel-border);
-  outline-offset: -1px;
 }
 
 :root[tabora-theme="light"] #tabora-start .greeting {
@@ -158,6 +163,7 @@
   --tabora-text-strong: #fff;
   --tabora-page-bg: #f4f2ed;
   --tabora-start-bg: #0f1013;
+  --tabora-card-edge: rgba(255, 255, 255, 0.06); /* волосяная рамка области страницы */
   --tabora-scrim: rgba(7, 8, 10, 0.42);
   --tabora-shadow-lg: 0 30px 90px rgba(0, 0, 0, 0.65);
   --tabora-shadow-md: 0 18px 50px rgba(0, 0, 0, 0.55);
@@ -207,8 +213,11 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 6px 4px 4px 6px;
+  /* 8px сверху: центр первой строки (кнопки окна, назад, вперёд) совпадает с центром
+     верхней панели вкладки (44px), всё стоит на одной оси */
+  padding: 8px 4px 4px 6px;
   box-sizing: border-box;
+  position: relative; /* опора для кнопок окна */
   background: transparent !important;
   border: 0 !important;
   box-shadow: none !important;
@@ -252,10 +261,27 @@
   display: contents;
 }
 
+/* Кнопки окна стоят в одной и той же точке и в развёрнутой, и в свёрнутой колонке: они вынуты
+   из потока и привязаны к углу колонки, а место в строке держит ::before. Раньше контейнер был
+   обычным элементом строки и в узкой колонке переносился, из-за чего кнопки съезжали. */
 #nav-bar > .titlebar-buttonbox-container {
-  order: 0;
+  position: absolute;
+  inset-inline-start: 2px;
+  top: 0;
   height: 28px;
-  margin-inline-end: 10px;
+  margin: 0;
+}
+
+#nav-bar::before {
+  content: "";
+  order: 0;
+  flex: none;
+  width: 82px; /* 72px кнопки окна + 10px до «назад» */
+  height: 28px;
+}
+
+:root[inFullscreen] #nav-bar::before {
+  display: none; /* в полноэкранном режиме кнопок окна нет */
 }
 
 #navigator-toolbox[tabs-hidden] > #nav-bar > .titlebar-spacer,
@@ -559,8 +585,20 @@ sidebar-main {
   border: 0 !important;
   outline: none !important;
   box-shadow: none !important;
+  /* У выбранной вкладки Firefox рисует градиентную рамку фоном в два слоя; без рамки от неё
+     остаётся цветная кайма в один пиксель по краю. Слои убраны, а обрезка возвращена к обычной:
+     от его правила остаётся background-clip: border-area, и заливка вкладки не рисуется вовсе. */
+  background-image: none !important;
+  background-clip: padding-box !important;
+  background-origin: padding-box !important;
   margin: 0 !important;
   transition: background-color var(--tabora-ease);
+}
+
+/* Невыбранная вкладка без заливки: в оформлении Firefox 159 у всех вкладок появился общий фон,
+   и выбранную стало видно только по жирному шрифту (а в свёрнутой колонке не видно вовсе). */
+#tabbrowser-tabs[orient="vertical"] .tab-background:not([selected], [multiselected]) {
+  background-color: transparent !important;
 }
 
 #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab:hover > .tab-stack > .tab-background:not([selected]) {
@@ -992,12 +1030,82 @@ sidebar-main {
 
 #navigator-toolbox > #tabora-sidebar-foot { order: 8; }
 
-/* Переход между режимами колонки в два такта: сначала ширина плавно меняется, а содержимое
-   остаётся в развёрнутой раскладке и подрезается (ничего не прыгает), подписи гаснут или
-   проявляются; компактная раскладка включается уже на узкой колонке. */
+/* Переход между режимами колонки: ширина плавно меняется, раскладка всё это время развёрнутая
+   и подрезается краем колонки, подписи гаснут или проявляются. Плитки, вкладки и кнопки в это
+   же время переезжают на места свёрнутой раскладки (applySidebarCompact в tabora.js), так что
+   в конце она включается без скачка. Длительность и кривая — как у MOTION.slow. */
 :root[tabora-sidebar-anim] #navigator-toolbox {
-  transition: width 320ms cubic-bezier(0.2, 0, 0, 1), min-width 320ms cubic-bezier(0.2, 0, 0, 1);
+  transition: width var(--tabora-t-slow) var(--tabora-curve), min-width var(--tabora-t-slow) var(--tabora-curve);
   overflow: hidden;
+}
+
+/* Вкладки на время перехода держат развёрнутую ширину и подрезаются краем колонки. Без этого
+   контейнер вкладок сужался вместе с колонкой (у него width: 100% !important), и закреплённые
+   плитки сплющивались. */
+:root[tabora-sidebar-anim] #sidebar-container {
+  width: calc(236px - 10px) !important;
+  min-width: calc(236px - 10px) !important;
+  flex-shrink: 0;
+}
+
+/* Плитки и вкладки переезжают за пределы своих контейнеров (закреплённые встают выше и ниже
+   своего ряда): на время перехода контейнеры не обрезают, обрезает только край колонки.
+   Список вкладок перестаёт обрезать, только если он целиком помещается (tabora-tabs-fit). */
+:root[tabora-sidebar-anim] #sidebar-container,
+:root[tabora-sidebar-anim] #vertical-tabs {
+  overflow: visible !important;
+}
+
+:root[tabora-sidebar-anim][tabora-tabs-fit] #tabbrowser-arrowscrollbox::part(scrollbox) {
+  overflow: visible !important;
+}
+
+/* Кнопка поиска свёрнутой колонки проявляется на своём будущем месте, пока идёт переход, и
+   гаснет там же при разворачивании: в потоке развёрнутой раскладки она места не занимает. */
+:root[tabora-sidebar-anim] #tabora-compact-search {
+  display: inline-flex;
+  position: absolute;
+  inset-inline-start: 2px;
+  top: 36px;
+  margin: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+
+:root[tabora-sidebar-anim="collapse"] #tabora-compact-search {
+  opacity: 1;
+  transition: opacity var(--tabora-t) ease var(--tabora-t-fast);
+}
+
+:root[tabora-sidebar-anim="expand"] #tabora-compact-search {
+  opacity: 0;
+  transition: opacity var(--tabora-t-fast) ease;
+}
+
+@starting-style {
+  :root[tabora-sidebar-anim="collapse"] #tabora-compact-search {
+    opacity: 0;
+  }
+}
+
+/* подложка переключателя пространств гаснет вместе с подписями и проявляется с ними */
+:root[tabora-sidebar-anim] #tabora-spaces {
+  transition: background-color var(--tabora-t-fast) ease;
+}
+
+:root[tabora-sidebar-anim="collapse"] #tabora-spaces {
+  background-color: transparent;
+}
+
+/* При разворачивании переключатель пространств проявляется вместе с подписями: его кнопки есть
+   и в свёрнутой раскладке (точки), поэтому @starting-style для них не срабатывает. */
+:root[tabora-sidebar-anim="expand"] #tabora-spaces {
+  animation: tabora-fade-in var(--tabora-t) ease var(--tabora-t-fast) backwards;
+}
+
+@keyframes tabora-fade-in {
+  from { opacity: 0; }
 }
 
 :root[tabora-sidebar-anim] #navigator-toolbox > * {
@@ -1023,7 +1131,7 @@ sidebar-main {
 :root[tabora-sidebar-anim="collapse"] #nav-bar > #nav-bar-customization-target > #stop-reload-button,
 :root[tabora-sidebar-anim="collapse"] #nav-bar #PanelUI-button {
   opacity: 0;
-  transition: opacity 140ms ease;
+  transition: opacity var(--tabora-t-fast) ease;
 }
 
 :root[tabora-sidebar-anim="expand"] #tabbrowser-tabs[orient="vertical"] .tab-label-container,
@@ -1040,7 +1148,7 @@ sidebar-main {
 :root[tabora-sidebar-anim="expand"] #nav-bar > #nav-bar-customization-target > #stop-reload-button,
 :root[tabora-sidebar-anim="expand"] #nav-bar #PanelUI-button {
   opacity: 1;
-  transition: opacity 200ms ease 140ms;
+  transition: opacity var(--tabora-t) ease var(--tabora-t-fast);
 }
 
 @starting-style {
@@ -1149,40 +1257,49 @@ sidebar-main {
   display: inline-flex;
 }
 
-/* Пространства — точки */
+/* Кнопки окна шире свёрнутой колонки и выступают над областью страницы: строка под них
+   занимает всю ширину, поиск уходит на следующую */
+:root[tabora-sidebar="compact"] #nav-bar::before {
+  width: 100%;
+}
+
+/* В свёрнутой колонке поля симметричные (4px вместо 6px слева): смещение держит кнопки окна
+   в той же точке окна, что и в развёрнутой. Промежуток строки убран, чтобы поиск стоял по оси. */
+:root[tabora-sidebar="compact"] #nav-bar > .titlebar-buttonbox-container {
+  inset-inline-start: 4px;
+}
+
+:root[tabora-sidebar="compact"] #nav-bar {
+  column-gap: 0;
+}
+
+/* Пространства в свёрнутой колонке — тот же переключатель, что в развёрнутой, только столбцом
+   и с первой буквой названия (data-initial ставит renderSpacesBar). Раньше здесь были цветные
+   точки: на светлой теме они почти не читались, и по ним нельзя было понять, где какое
+   пространство. Название целиком остаётся в кнопке для чтения с экрана и в подсказке. */
 :root[tabora-sidebar="compact"] #tabora-spaces {
-  justify-content: center;
-  gap: 8px;
-  padding: 8px 4px;
+  flex-direction: column;
+  gap: 2px;
+  width: 36px;
+  margin-inline: auto;
+  padding: 3px;
+  box-sizing: border-box;
+  border-radius: 10px;
 }
 
 :root[tabora-sidebar="compact"] .tabora-space {
   flex: none;
-  width: 12px;
-  height: 12px;
+  width: 100%;
+  height: 26px;
   padding: 0;
-  border-radius: 50%;
+  border-radius: 7px;
   font-size: 0;
-  background: var(--space, var(--tabora-accent));
-  opacity: 0.35;
-  box-shadow: none;
-  transition: opacity var(--tabora-ease), transform var(--tabora-ease);
 }
 
-:root[tabora-sidebar="compact"] .tabora-space:hover {
-  opacity: 0.7;
-}
-
-:root[tabora-sidebar="compact"] .tabora-space[aria-selected="true"] {
-  opacity: 1;
-  transform: scale(1.15);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--space, var(--tabora-accent)) 25%, transparent);
-}
-
-/* Закреплённые — две колонки */
-:root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] #pinned-tabs-container::part(items-wrapper) {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+:root[tabora-sidebar="compact"] .tabora-space::before {
+  content: attr(data-initial);
+  font: 700 12px/1 var(--tabora-font);
+  letter-spacing: 0;
 }
 
 /* Заголовок списка: только «+» по центру */
@@ -1283,33 +1400,28 @@ sidebar-main {
 :root[tabora-sidebar="compact"] #tabora-compact-search {
   width: 36px;
   height: 36px;
-  border-radius: 12px;
-  margin-top: 4px;
+  border-radius: 10px;
+  margin-top: 6px;
 }
 
-:root[tabora-sidebar="compact"] #tabora-spaces {
-  background: transparent;
-  padding: 2px 0;
-  gap: 6px;
+/* Закреплённые: те же плитки 36×36 в один столбец, на одной оси с остальными значками.
+   Две колонки по 22px в колонке шириной 52px выглядели мелко и обрезались. */
+:root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] #pinned-tabs-container {
+  padding-bottom: 6px !important;
 }
 
 :root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] #pinned-tabs-container::part(items-wrapper) {
-  grid-template-columns: repeat(2, 22px);
+  grid-template-columns: 36px;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 :root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] #pinned-tabs-container .tabbrowser-tab {
-  height: 22px !important;
+  height: 36px !important;
 }
 
 :root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] #pinned-tabs-container .tab-background {
-  border-radius: 9px !important;
-}
-
-:root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] #pinned-tabs-container .tab-icon-image {
-  width: 16px !important;
-  height: 16px !important;
+  border-radius: 10px !important;
 }
 
 :root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab:not(#pinned-tabs-container .tabbrowser-tab) {
@@ -1318,12 +1430,21 @@ sidebar-main {
   max-width: 36px !important;
   height: 36px !important;
   margin-inline: auto !important;
-  margin-block: 2px !important; /* плитки не слипаются */
+  margin-block: 3px !important; /* шаг между плитками 6px */
   padding-block: 0 !important;
 }
 
-:root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab:not(#pinned-tabs-container .tabbrowser-tab) .tab-background {
-  border-radius: 12px;
+/* Фон плитки ровно по плитке: минимальная высота строки вкладки (40px) делала фон выше
+   самой плитки, и нижние углы обрезались */
+:root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] .tab-background {
+  min-height: 0 !important;
+  height: 36px;
+  border-radius: 10px;
+}
+
+:root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] .tab-content {
+  min-height: 0 !important;
+  height: 36px;
 }
 
 :root[tabora-sidebar="compact"] #tabora-memory {
@@ -1340,15 +1461,16 @@ sidebar-main {
 :root[tabora-sidebar="compact"] #tabora-wallet-card,
 :root[tabora-sidebar="compact"] #tabora-mail,
 :root[tabora-sidebar="compact"] #tabora-downloads {
-  width: 44px;
-  height: 44px;
+  box-sizing: border-box;
+  width: 36px;
+  height: 36px;
   margin: 0 auto;
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 :root[tabora-sidebar="compact"] #tabora-downloads .head {
-  height: 44px;
-  width: 44px;
+  height: 100%;
+  width: 100%;
 }
 
 :root[tabora-sidebar="compact"] #tabora-downloads .live {
@@ -1432,7 +1554,8 @@ sidebar-main {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 4px 0 8px;
+  /* --tabora-lights-inset: место под кнопки окна, когда колонка свёрнута (syncTopbarInset) */
+  padding: 0 4px 0 calc(8px + var(--tabora-lights-inset, 0px));
   flex-shrink: 0;
   -moz-window-dragging: drag;
 }
@@ -1544,8 +1667,21 @@ sidebar-main {
   border-radius: 14px;
   overflow: clip;
   background: var(--tabora-page-bg) !important;
-  outline: 1px solid rgba(255, 255, 255, 0.04) !important;
+  outline: 1px solid var(--tabora-card-edge) !important;
   outline-offset: -1px;
+}
+
+/* Под нашими страницами (почта, загрузки) подложка — цвет оболочки: светлый фон для сайтов
+   мелькал при загрузке и при выезде страницы (syncOwnPage в tabora.js). */
+:root[tabora-own-page] #tabbrowser-tabpanels {
+  background: var(--tabora-start-bg) !important;
+}
+
+/* Рамку рисует один слой. Стартовая страница лежит точно поверх области вкладки, и две
+   одинаковые рамки на скруглении складывались в светлые точки: под ней рамку и фон убираем. */
+#tabbrowser-tabbox:has(> #tabora-start:not([hidden])) > #tabbrowser-tabpanels {
+  outline-color: transparent !important;
+  background: transparent !important;
 }
 
 #sidebar-splitter,
@@ -1560,7 +1696,7 @@ sidebar-main {
   inset: 52px 0 0 0;
   border-radius: 14px;
   background: var(--tabora-start-bg);
-  outline: 1px solid rgba(255, 255, 255, 0.04);
+  outline: 1px solid var(--tabora-card-edge);
   outline-offset: -1px;
   display: block;
   overflow: auto;
@@ -2127,7 +2263,7 @@ sidebar-main {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  animation: tabora-cmd-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: tabora-cmd-in var(--tabora-t) var(--tabora-curve);
 }
 
 @keyframes tabora-cmd-in {
@@ -2870,7 +3006,7 @@ toolbarseparator {
   color: var(--tabora-text);
   font: 500 13px/1.4 var(--tabora-font);
   overflow: hidden;
-  animation: tabora-cmd-in 160ms cubic-bezier(0.2, 0, 0, 1);
+  animation: tabora-cmd-in var(--tabora-t) var(--tabora-curve);
   -moz-window-dragging: no-drag;
 }
 
@@ -3212,7 +3348,7 @@ toolbarseparator {
   box-shadow: var(--tabora-shadow-md);
   color: var(--tabora-text);
   font: 600 13px/1.2 var(--tabora-font);
-  animation: tabora-cmd-in 160ms cubic-bezier(0.2, 0, 0, 1);
+  animation: tabora-cmd-in var(--tabora-t) var(--tabora-curve);
 }
 
 /* ---- Закреплённые вкладки: плитки 4 в ряд на месте карточек ------------- */
@@ -3222,6 +3358,8 @@ toolbarseparator {
   padding: 0 0 12px !important;
   margin: 0 !important;
   width: 100%;
+  height: auto !important;
+  min-height: 0 !important;
   max-height: none !important;
   overflow: visible !important;
 }
@@ -3236,6 +3374,10 @@ toolbarseparator {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
+  /* строки по высоте плитки: Firefox задаёт строкам сетки свою высоту (49px), из-за чего шаг
+     плиток не совпадал с их размером */
+  grid-auto-rows: auto;
+  align-content: start;
 }
 
 #tabbrowser-tabs[orient="vertical"] #pinned-tabs-container::part(scrollbutton-up),
@@ -3322,7 +3464,7 @@ toolbarseparator {
   box-shadow: var(--tabora-shadow-md);
   font: 500 13px/1 var(--tabora-font);
   color: var(--tabora-text);
-  animation: tabora-cmd-in 120ms cubic-bezier(0.2, 0, 0, 1);
+  animation: tabora-cmd-in var(--tabora-t) var(--tabora-curve);
   -moz-window-dragging: no-drag;
   user-select: none;
 }
@@ -3441,3 +3583,122 @@ toolbarseparator {
   }
 }
 
+
+/* ---- Появление и исчезновение поверхностей ---------------------------------------------
+   Одни и те же движения для всего, что возникает поверх окна. Появление — анимация ниже;
+   она идёт каждый раз, когда элемент показывают или вставляют. Исчезновение: элемент скрывают
+   или удаляют сразу (логика закрытия не ждёт), а на его месте гаснет его копия с атрибутом
+   tb-ghost (motionGhost в tabora.js). Длительности — общие переменные --tabora-t-*. */
+
+@media (prefers-reduced-motion: no-preference) {
+  /* у курсора или поля: меню, подсказка кода */
+  #tabora-menu,
+  #tabora-submenu,
+  #tabora-otp-pop {
+    animation: tb-in-pop var(--tabora-t) var(--tabora-curve);
+  }
+
+  /* окна и листы: подложка проявляется, карточка поднимается на место */
+  #tabora-account-dialog > .ta-scrim,
+  #tabora-update-wall,
+  :is(#tabora-drawer, #tabora-modal) .w-sheet {
+    animation: tb-in-fade var(--tabora-t) var(--tabora-curve);
+  }
+
+  #tabora-account-dialog > .ta-card,
+  #tabora-update-wall > .card,
+  :is(#tabora-drawer, #tabora-modal) .w-sheet > .w-sheet-card {
+    animation: tb-in-rise var(--tabora-t-slow) var(--tabora-curve);
+  }
+
+  /* плашка обновления центрируется свойством translate, поэтому у неё свои ключевые кадры */
+  #tabora-update-banner {
+    animation: tb-in-banner var(--tabora-t-slow) var(--tabora-curve);
+  }
+
+  [tb-ghost] {
+    animation: tb-out-fade var(--tabora-t-out) var(--tabora-curve-out) forwards !important;
+    pointer-events: none !important;
+  }
+
+  [tb-ghost="pop"] {
+    animation-name: tb-out-pop !important;
+  }
+
+  [tb-ghost="rise"] {
+    animation-name: tb-out-rise !important;
+  }
+
+  /* внутри копии ничего не появляется заново */
+  [tb-ghost] * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [tb-ghost] {
+    display: none !important;
+  }
+}
+
+@keyframes tb-in-pop {
+  from { opacity: 0; scale: 0.97; translate: 0 -4px; }
+}
+
+@keyframes tb-in-fade {
+  from { opacity: 0; }
+}
+
+@keyframes tb-in-rise {
+  from { opacity: 0; scale: 0.985; translate: 0 10px; }
+}
+
+@keyframes tb-in-banner {
+  from { opacity: 0; translate: -50% 10px; }
+}
+
+@keyframes tb-out-fade {
+  to { opacity: 0; }
+}
+
+@keyframes tb-out-pop {
+  to { opacity: 0; scale: 0.98; }
+}
+
+@keyframes tb-out-rise {
+  to { opacity: 0; scale: 0.99; }
+}
+
+/* ---- Лист подтверждения окном по центру -------------------------------------------------
+   Тот же лист, что в ящике (проверка владельца, ключ восстановления), когда ящик закрыт:
+   действие вызвано со страницы аккаунта или из меню. Стили листа общие (wallet.css). */
+
+#tabora-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 85;
+  display: none;
+  font-family: var(--tabora-font);
+  color: var(--tabora-text);
+  -moz-window-dragging: no-drag;
+}
+
+#tabora-modal:has(> .w-sheet) {
+  display: block;
+}
+
+#tabora-modal > .w-sheet {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--tabora-scrim);
+}
+
+#tabora-modal > .w-sheet > .w-sheet-card {
+  width: 420px;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: auto;
+  padding: 20px;
+}

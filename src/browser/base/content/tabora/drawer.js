@@ -1418,8 +1418,17 @@ Object.assign(Tabora, {
       return;
     }
     bar.replaceChildren();
+    // В свёрнутой колонке пространство подписано первой буквой названия (tabora.css); если
+    // буквы совпадают, берутся две.
+    const letter = name => (name || "?").trim().charAt(0).toUpperCase();
+    const taken = {};
+    for (const space of this.spaces) {
+      taken[letter(space.name)] = (taken[letter(space.name)] || 0) + 1;
+    }
     for (const space of this.spaces) {
       const b = this.html("button", { class: "tabora-space", role: "tab", "data-space": space.id, style: `--space:${this.spaceHex(space)}` }, space.name);
+      const name = (space.name || "?").trim();
+      b.dataset.initial = taken[letter(name)] > 1 ? letter(name) + name.charAt(1).toLowerCase() : letter(name);
       b.setAttribute("aria-selected", String(space.id === this.activeSpaceId));
       b.addEventListener("click", () => this.switchSpace(space.id));
       bar.append(b);

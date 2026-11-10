@@ -2,7 +2,7 @@ diff --git a/browser/base/jar.mn b/browser/base/jar.mn
 index b2b5db6040..e387d47992 100644
 --- a/browser/base/jar.mn
 +++ b/browser/base/jar.mn
-@@ -33,6 +33,77 @@ browser.jar:
+@@ -33,6 +33,81 @@ browser.jar:
          content/browser/aboutTabCrashed.xhtml         (content/aboutTabCrashed.xhtml)
          content/browser/blanktab.html                 (content/blanktab.html)
          content/browser/browser.js                    (content/browser.js)
@@ -42,6 +42,10 @@ index b2b5db6040..e387d47992 100644
 +        content/tabora/account/Account.sys.mjs  (content/tabora/account/Account.sys.mjs)
 +        content/tabora/account/account.js  (content/tabora/account/account.js)
 +        content/tabora/account/account.css  (content/tabora/account/account.css)
++        content/tabora/account/profile.html  (content/tabora/account/profile.html)
++        content/tabora/account/profile.css  (content/tabora/account/profile.css)
++        content/tabora/account/profile.js  (content/tabora/account/profile.js)
++        content/tabora/account/icon.svg  (content/tabora/account/icon.svg)
 +        content/tabora/logo.svg  (content/tabora/logo.svg)
 +        content/tabora/about/about.xhtml  (content/tabora/about/about.xhtml)
 +        content/tabora/about/about.css  (content/tabora/about/about.css)

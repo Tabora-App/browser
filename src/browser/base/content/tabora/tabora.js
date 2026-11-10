@@ -50,7 +50,7 @@ var Tabora = {
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
       "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initWalletProvider", "initVaultActor", "initAccount", "initUpdates", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "initLegacyShellUrls", "initMailToggle", "startTimers", "updateTitle", "localizeUrlbar",
-      "routeUrlbarToCommandBar",
+      "routeUrlbarToCommandBar", "initTabMotion", "initMotion", "initBookmarkDefaults",
     ]) {
       try {
         this[step]();
@@ -58,6 +58,54 @@ var Tabora = {
         console.error(`Tabora: ${step}`, e);
       }
     }
+  },
+
+  /* ---- Закладки по умолчанию: папка Tabora вместо «Mozilla Firefox» --------------------
+   * Новый профиль получает их из default-bookmarks.html. В профилях, созданных раньше, осталась
+   * папка Firefox со ссылками на справку Mozilla: если её не трогали (в ней только эти ссылки),
+   * она один раз заменяется папкой Tabora. Изменённую пользователем папку не трогаем. */
+
+  BOOKMARK_DEFAULTS_PREF: "tabora.bookmarks.defaultsMigrated",
+  BOOKMARK_DEFAULTS: [
+    ["Сайт Tabora", "https://tabora.app/"],
+    ["Исходный код", "https://github.com/Tabora-App/browser"],
+    ["Сообщить о проблеме", "https://github.com/Tabora-App/browser/issues"],
+  ],
+
+  initBookmarkDefaults() {
+    if (Services.prefs.getBoolPref(this.BOOKMARK_DEFAULTS_PREF, false)) {
+      return;
+    }
+    setTimeout(async () => {
+      try {
+        const stock = url => {
+          try {
+            return ["support.mozilla.org", "www.mozilla.org"].includes(new URL(url).host);
+          } catch (e) {
+            return false;
+          }
+        };
+        let replaced = false;
+        const tree = await PlacesUtils.promiseBookmarksTree(PlacesUtils.bookmarks.menuGuid);
+        for (const node of tree?.children || []) {
+          const kids = node.children || [];
+          if (node.type === PlacesUtils.TYPE_X_MOZ_PLACE_CONTAINER && kids.length && kids.length <= 4 && kids.every(k => k.uri && stock(k.uri))) {
+            await PlacesUtils.bookmarks.remove(node.guid);
+            replaced = true;
+          }
+        }
+        if (replaced) {
+          const folder = await PlacesUtils.bookmarks.insert({ parentGuid: PlacesUtils.bookmarks.menuGuid, type: PlacesUtils.bookmarks.TYPE_FOLDER, title: "Tabora", index: 0 });
+          for (const [title, url] of this.BOOKMARK_DEFAULTS) {
+            await PlacesUtils.bookmarks.insert({ parentGuid: folder.guid, title, url });
+          }
+          this.drawerDirty?.("bookmarks");
+        }
+        Services.prefs.setBoolPref(this.BOOKMARK_DEFAULTS_PREF, true);
+      } catch (e) {
+        console.error("Tabora: закладки по умолчанию", e);
+      }
+    }, 4000);
   },
 
   /* ---- Окно нового письма: живёт в оболочке, видно на любой вкладке ------ */
@@ -996,32 +1044,220 @@ var Tabora = {
     this.applySidebarCompact(Services.prefs.getBoolPref(this.SIDEBAR_PREF, false), false);
   },
 
+  /* ---- Движение: одна система на весь интерфейс ---------------------------------------
+   * Длительности и кривые повторяют переменные --tabora-t-* и --tabora-curve* из tabora.css.
+   * Вход и перестроение: быстрое начало, мягкая остановка. Выход короче входа и с ускорением.
+   * При «уменьшить движение» в системе ничего не анимируется, состояние меняется сразу. */
+  MOTION: { fast: 140, base: 200, slow: 300, out: 150, curve: "cubic-bezier(0.2, 0, 0, 1)", curveOut: "cubic-bezier(0.4, 0, 1, 1)" },
+
+  get reducedMotion() {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  },
+
+  /** Свойства ставятся с !important: у вкладок Firefox и у нас размеры заданы важными правилами. */
+  motionSet(el, props) {
+    for (const [name, value] of Object.entries(props)) {
+      el.style.setProperty(name, value, "important");
+    }
+  },
+
+  motionClear(el, names) {
+    for (const name of names) {
+      el.style.removeProperty(name);
+    }
+  },
+
+  /* ---- Сворачивание и разворачивание колонки -------------------------------------------
+   * Всё, что есть в обеих раскладках (закреплённые плитки, вкладки, кошелёк, почта, загрузки,
+   * «+», кнопка сворачивания), переезжает на новое место одним движением вместе с шириной
+   * колонки. Пока идёт движение, раскладка развёрнутая, а каждый элемент сдвигом, обрезкой или
+   * настоящим размером приводится к тому, как он выглядит в свёрнутой колонке; в конце
+   * включается свёрнутая раскладка, и она совпадает с тем, что уже на экране. Элементы не
+   * масштабируются, поэтому значки не сплющиваются. Подписи гаснут и проявляются стилями
+   * (tabora-sidebar-anim в tabora.css). */
+
+  SIDEBAR_MORPH_PROPS: ["translate", "clip-path", "width", "height", "min-width", "min-height", "padding-inline-start", "border-radius", "overflow", "z-index", "position", "transition", "justify-self", "align-self"],
+
+  sidebarMorphItems() {
+    const items = [];
+    const shown = el => el && el.getClientRects().length;
+    for (const tab of gBrowser.tabs) {
+      const anchor = tab.querySelector(".tab-icon-stack");
+      if (tab.hidden || tab.closing || !anchor || !shown(tab)) {
+        continue;
+      }
+      items.push(tab.pinned ? { el: tab, kind: "size", anchor, round: tab.querySelector(".tab-background") } : { el: tab, kind: "clip", anchor });
+    }
+    for (const id of ["tabora-wallet-card", "tabora-mail", "tabora-downloads"]) {
+      const el = document.getElementById(id);
+      if (shown(el)) {
+        items.push({ el, kind: "size", anchor: el.querySelector("svg"), pad: id === "tabora-downloads" ? el.querySelector(".head") : el, round: el });
+      }
+    }
+    for (const id of ["vertical-tabs-newtab-button", "tabora-sidebar-toggle"]) {
+      const el = document.getElementById(id);
+      if (shown(el)) {
+        items.push({ el, kind: "move" });
+      }
+    }
+    return items;
+  },
+
+  sidebarMorphSnap(items) {
+    const rect = el => {
+      const r = el.getBoundingClientRect();
+      return { x: r.left, y: r.top, w: r.width, h: r.height };
+    };
+    return items.map(it => ({
+      box: rect(it.el),
+      anchor: it.anchor ? rect(it.anchor) : null,
+      radius: it.round ? getComputedStyle(it.round).borderTopLeftRadius : "",
+      pad: it.pad ? parseFloat(getComputedStyle(it.pad).paddingInlineStart) || 0 : 0,
+    }));
+  },
+
+  /**
+   * Раскладка сейчас развёрнутая. Для каждого элемента считает два состояния: «как есть»
+   * (явными значениями, чтобы переход было из чего интерполировать) и «как в свёрнутой колонке»
+   * (compact — снимок свёрнутой раскладки). Возвращает [{ parts: [[элемент, как есть, свёрнуто]] }].
+   */
+  sidebarMorphStates(items, compact) {
+    const px = n => `${Math.round(n * 100) / 100}px`;
+    const here = this.sidebarMorphSnap(items);
+    // размеры свёрнутого вида ставятся разом, чтобы узнать, куда при них встанут соседи:
+    // пока размеры меняются, раскладка сама сдвигает соседей, и сдвиг считается от этого места
+    items.forEach((it, i) => {
+      if (it.kind === "size") {
+        this.motionSet(it.el, { width: px(compact[i].box.w), height: px(compact[i].box.h), "min-width": "0px", "min-height": "0px", "justify-self": "start", "align-self": "start" });
+      }
+    });
+    const sized = this.sidebarMorphSnap(items);
+    const states = items.map((it, i) => {
+      const c = compact[i];
+      const m = sized[i];
+      const e = here[i];
+      if (it.kind === "move") {
+        const dx = c.box.x + c.box.w / 2 - (m.box.x + m.box.w / 2);
+        const dy = c.box.y + c.box.h / 2 - (m.box.y + m.box.h / 2);
+        return { parts: [[it.el, { translate: "0px 0px" }, { translate: `${px(dx)} ${px(dy)}` }]] };
+      }
+      if (it.kind === "clip") {
+        // окно размером с плитку вокруг значка: строка вкладки обрезается до плитки
+        const left = m.anchor.x + m.anchor.w / 2 - m.box.x - c.box.w / 2;
+        const top = m.anchor.y + m.anchor.h / 2 - m.box.y - c.box.h / 2;
+        const right = m.box.w - left - c.box.w;
+        const bottom = m.box.h - top - c.box.h;
+        return {
+          parts: [[
+            it.el,
+            { translate: "0px 0px", "clip-path": "inset(0px 0px 0px 0px round 10px)" },
+            { translate: `${px(c.box.x - m.box.x - left)} ${px(c.box.y - m.box.y - top)}`, "clip-path": `inset(${px(top)} ${px(right)} ${px(bottom)} ${px(left)} round 10px)` },
+          ]],
+        };
+      }
+      const from = { translate: "0px 0px", width: px(e.box.w), height: px(e.box.h), "min-width": "0px", "min-height": "0px", "justify-self": "start", "align-self": "start", overflow: "clip", position: "relative", "z-index": "2" };
+      const to = { ...from, translate: `${px(c.box.x - m.box.x)} ${px(c.box.y - m.box.y)}`, width: px(c.box.w), height: px(c.box.h) };
+      const parts = [[it.el, from, to]];
+      if (it.pad && it.anchor) {
+        // значок в свёрнутой плитке стоит по центру: внутренний отступ подводит его туда же
+        const shift = c.anchor.x - c.box.x - (m.anchor.x - m.box.x);
+        const padFrom = { "padding-inline-start": px(m.pad) };
+        const padTo = { "padding-inline-start": px(Math.max(0, m.pad + shift)) };
+        if (it.pad === it.el) {
+          Object.assign(from, padFrom);
+          Object.assign(to, padTo);
+        } else {
+          parts.push([it.pad, padFrom, padTo]);
+        }
+      }
+      if (it.round && c.radius && e.radius && c.radius !== e.radius) {
+        if (it.round === it.el) {
+          from["border-radius"] = e.radius;
+          to["border-radius"] = c.radius;
+        } else {
+          parts.push([it.round, { "border-radius": e.radius }, { "border-radius": c.radius }]);
+        }
+      }
+      return { parts };
+    });
+    items.forEach(it => {
+      if (it.kind === "size") {
+        this.motionClear(it.el, ["width", "height", "min-width", "min-height", "justify-self", "align-self"]);
+      }
+    });
+    return states;
+  },
+
+  sidebarMorphEnd() {
+    const run = this._sidebarMorph;
+    if (!run) {
+      return;
+    }
+    this._sidebarMorph = null;
+    clearTimeout(run.timer);
+    const root = document.documentElement;
+    run.on ? root.setAttribute("tabora-sidebar", "compact") : root.removeAttribute("tabora-sidebar");
+    root.removeAttribute("tabora-sidebar-anim");
+    root.removeAttribute("tabora-tabs-fit");
+    for (const st of run.states) {
+      for (const [el] of st.parts) {
+        this.motionClear(el, this.SIDEBAR_MORPH_PROPS);
+      }
+    }
+    if (this.drawer?.open) {
+      this.sizeDrawer();
+    }
+  },
+
   applySidebarCompact(on, animate = true) {
     const root = document.documentElement;
-    clearTimeout(this._sidebarAnimTimer);
-    const finish = () => {
-      root.removeAttribute("tabora-sidebar-anim");
-      this._sidebarAnimTimer = null;
-      if (this.drawer?.open) {
-        this.sizeDrawer();
-      }
-    };
-    if (!animate) {
+    this.sidebarMorphEnd(); // прерванное движение доводится до конца сразу
+    const now = root.getAttribute("tabora-sidebar") === "compact";
+    if (!animate || this.reducedMotion || now === on) {
       root.removeAttribute("tabora-sidebar-anim");
       on ? root.setAttribute("tabora-sidebar", "compact") : root.removeAttribute("tabora-sidebar");
-    } else if (on) {
-      // сворачивание: ширина уезжает при развёрнутой раскладке, компактная включается в конце
-      root.removeAttribute("tabora-sidebar");
-      root.setAttribute("tabora-sidebar-anim", "collapse");
-      this._sidebarAnimTimer = setTimeout(() => {
-        root.setAttribute("tabora-sidebar", "compact");
-        finish();
-      }, 330);
     } else {
-      // разворачивание: раскладка сразу развёрнутая, ширина растёт, подписи проявляются
-      root.removeAttribute("tabora-sidebar");
-      root.setAttribute("tabora-sidebar-anim", "expand");
-      this._sidebarAnimTimer = setTimeout(finish, 360);
+      const toolbox = document.getElementById("navigator-toolbox");
+      const scroller = gBrowser.tabContainer.arrowScrollbox?.scrollbox;
+      const scrollTop = scroller?.scrollTop ?? 0;
+      const items = this.sidebarMorphItems();
+      // Короткий список вкладок на время перехода не обрезается своей прокруткой (tabora.css).
+      // Считается здесь, до смены раскладки: чтение размеров пересчитывает вёрстку, а между
+      // снятием свёрнутой раскладки и включением перехода пересчёта быть не должно, иначе
+      // ширина колонки сменится без движения.
+      const tabsFit = !scroller || scroller.scrollHeight <= scroller.clientHeight + 1;
+      let compact;
+      if (on) {
+        // свёрнутая раскладка включается на мгновение только для замера, до отрисовки
+        root.setAttribute("tabora-sidebar", "compact");
+        compact = this.sidebarMorphSnap(items);
+        root.removeAttribute("tabora-sidebar");
+        toolbox.getBoundingClientRect(); // ширина снова развёрнутая: от неё пойдёт переход
+        if (scroller) {
+          scroller.scrollTop = scrollTop;
+        }
+      } else {
+        compact = this.sidebarMorphSnap(items);
+        root.removeAttribute("tabora-sidebar");
+      }
+      root.toggleAttribute("tabora-tabs-fit", tabsFit);
+      root.setAttribute("tabora-sidebar-anim", on ? "collapse" : "expand");
+      const states = this.sidebarMorphStates(items, compact);
+      const ms = this.MOTION.slow;
+      const transition = ["translate", "clip-path", "width", "height", "padding-inline-start", "border-radius"].map(prop => `${prop} ${ms}ms ${this.MOTION.curve}`).join(", ");
+      // начальное состояние без перехода
+      for (const st of states) {
+        for (const [el, expanded, collapsed] of st.parts) {
+          this.motionSet(el, { transition: "none", ...(on ? expanded : collapsed) });
+        }
+      }
+      toolbox.getBoundingClientRect();
+      for (const st of states) {
+        for (const [el, expanded, collapsed] of st.parts) {
+          this.motionSet(el, { transition, ...(on ? collapsed : expanded) });
+        }
+      }
+      this._sidebarMorph = { on, states, timer: this._motionHold ? null : setTimeout(() => this.sidebarMorphEnd(), ms + 40) };
     }
     const tabs = document.getElementById("tabbrowser-tabs");
     if (tabs) {
@@ -1041,6 +1277,236 @@ var Tabora = {
     this.tipHide();
     if (!animate && this.drawer?.open) {
       this.sizeDrawer();
+    }
+  },
+
+  /* ---- Исчезновение поверхностей -------------------------------------------------------
+   * Меню, окна, листы и уведомления скрываются и удаляются кодом мгновенно: это правильно для
+   * логики (отменённый лист подписи не должен ещё 150 мс числиться открытым). Чтобы на экране
+   * они при этом не пропадали рывком, на месте скрытого элемента гаснет его копия. Копия
+   * неактивна, в дереве доступности её нет, пароли и идентификаторы в неё не переносятся.
+   * Появление задаётся стилями (tabora.css, «Появление и исчезновение поверхностей»). */
+
+  // [селектор самого элемента, вид исчезновения, селектор родителя для удаляемых узлов]
+  MOTION_EXIT: [
+    ["#tabora-menu, #tabora-submenu, #tabora-otp-pop", "pop", null],
+    ["#tabora-account-dialog, #tabora-update-wall, #tabora-cmd", "fade", null],
+    ["#tabora-update-banner, #tabora-compose", "rise", null],
+    [".w-sheet", "fade", "#tabora-drawer, #tabora-modal"],
+    [".notice", "rise", "#tabora-notices"],
+  ],
+
+  /** Под нашими страницами (почта, загрузки) фон области вкладки — цвет оболочки, а не светлый
+   *  фон для сайтов: иначе при выезде страницы и при её загрузке мелькает светлая подложка. */
+  syncOwnPage() {
+    const spec = gBrowser.selectedBrowser?.currentURI?.spec || "";
+    document.documentElement.toggleAttribute("tabora-own-page", spec.startsWith("chrome://tabora/content/"));
+  },
+
+  initMotion() {
+    const host = document.getElementById("browser");
+    if (!host) {
+      return;
+    }
+    gBrowser.tabContainer.addEventListener("TabSelect", () => this.syncOwnPage());
+    gBrowser.addTabsProgressListener({
+      onLocationChange: browser => {
+        if (browser === gBrowser.selectedBrowser) {
+          this.syncOwnPage();
+        }
+      },
+    });
+    this.syncOwnPage();
+    const kindOf = (el, parent) => {
+      for (const [sel, kind, within] of this.MOTION_EXIT) {
+        if (el.matches(sel) && (!within || parent?.closest?.(within))) {
+          return kind;
+        }
+      }
+      return null;
+    };
+    new MutationObserver(records => {
+      if (this.reducedMotion) {
+        return;
+      }
+      for (const r of records) {
+        if (r.type === "attributes") {
+          const el = r.target;
+          // атрибут только что появился, и элемент сейчас действительно скрыт
+          if (r.oldValue === null && el.hasAttribute("hidden") && el.isConnected && !el.hasAttribute("tb-ghost")) {
+            const kind = kindOf(el, el.parentNode);
+            if (kind) {
+              this.motionGhost(el, kind, el.parentNode, el.nextSibling, false);
+            }
+          }
+          continue;
+        }
+        for (const node of r.removedNodes) {
+          if (node.nodeType === 1 && !node.isConnected && !node.hasAttribute("tb-ghost") && !node.hasAttribute("hidden")) {
+            const kind = kindOf(node, r.target);
+            if (kind) {
+              this.motionGhost(node, kind, r.target, r.nextSibling, true);
+            }
+          }
+        }
+      }
+    }).observe(host, { subtree: true, childList: true, attributes: true, attributeFilter: ["hidden"], attributeOldValue: true });
+  },
+
+  /** stripIds: копия удалённого узла теряет все id, чтобы новый экземпляр того же листа,
+   *  созданный следом, не перепутали с ней при поиске по id. Копия скрытого узла стоит сразу
+   *  после оригинала, поиск по id находит оригинал первым. */
+  motionGhost(el, kind, parent, before, stripIds) {
+    if (!parent?.isConnected) {
+      return;
+    }
+    const ghost = el.cloneNode(true);
+    ghost.removeAttribute("hidden");
+    ghost.setAttribute("tb-ghost", kind);
+    ghost.setAttribute("aria-hidden", "true");
+    ghost.setAttribute("inert", "");
+    for (const input of ghost.querySelectorAll("input")) {
+      if (input.type === "password") {
+        input.value = "";
+        input.removeAttribute("value");
+      }
+    }
+    if (stripIds) {
+      ghost.removeAttribute("id");
+      for (const n of ghost.querySelectorAll("[id]")) {
+        n.removeAttribute("id");
+      }
+    }
+    // содержимое canvas (QR-коды) клонированием не переносится
+    const from = el.querySelectorAll("canvas");
+    const to = ghost.querySelectorAll("canvas");
+    for (let i = 0; i < from.length && i < to.length; i++) {
+      try {
+        to[i].getContext("2d").drawImage(from[i], 0, 0);
+      } catch (e) {}
+    }
+    parent.insertBefore(ghost, before && before.parentNode === parent ? before : null);
+    const done = () => ghost.remove();
+    ghost.addEventListener("animationend", e => e.target === ghost && done());
+    setTimeout(done, this.MOTION.out + 120);
+  },
+
+  /* ---- Появление и закрытие вкладок ----------------------------------------------------
+   * В вертикальной колонке Firefox вкладки не анимирует вовсе (его анимация рассчитана на
+   * ширину горизонтальной вкладки). Здесь строка новой вкладки раскрывается по высоте и
+   * проявляется, строка закрытой сворачивается и гаснет, соседи при этом плавно сдвигаются. */
+
+  TAB_MOTION_PROPS: ["height", "min-height", "margin-block", "padding-block", "opacity", "overflow", "transition", "pointer-events"],
+
+  initTabMotion() {
+    this._tabMotionReady = false; // восстановление сеанса вкладки не анимирует
+    this._tabsLeaving = 0;
+    const arm = () => setTimeout(() => (this._tabMotionReady = true), 600);
+    const restored = window.SessionStore?.promiseAllWindowsRestored;
+    restored ? restored.then(arm, arm) : arm();
+    gBrowser.tabContainer.addEventListener("TabOpen", e => this.tabEnter(e.target));
+
+    // Закрытие. Firefox в вертикальной колонке сразу зовёт _endRemoveTab; для горизонтальных
+    // вкладок он сам откладывает этот вызов до конца анимации, так что отложенное завершение —
+    // штатный для него порядок. Анимируются только закрытия, для которых он сам её просит.
+    const self = this;
+    const removeTab = gBrowser.removeTab;
+    const endRemoveTab = gBrowser._endRemoveTab;
+    gBrowser.removeTab = function (tab, params) {
+      const before = self._tabCloseAnimated;
+      self._tabCloseAnimated = !!params?.animate;
+      try {
+        return removeTab.call(this, tab, params);
+      } finally {
+        self._tabCloseAnimated = before;
+      }
+    };
+    gBrowser._endRemoveTab = function (tab) {
+      if (self._tabCloseAnimated && !tab._taboraLeaving && self.tabCanLeave(tab)) {
+        tab._taboraLeaving = true;
+        // выбор переходит на соседнюю вкладку сразу, страница не ждёт конца анимации
+        if (tab.selected) {
+          const next = this._findTabToBlurTo(tab);
+          if (next) {
+            this.selectedTab = next;
+          }
+        }
+        self.tabLeave(tab, () => endRemoveTab.call(this, tab));
+        return undefined;
+      }
+      return endRemoveTab.call(this, tab);
+    };
+  },
+
+  tabCanLeave(tab) {
+    return (
+      this._tabMotionReady &&
+      !this.reducedMotion &&
+      !this._sidebarMorph &&
+      tab.isConnected &&
+      !tab.pinned &&
+      !tab.hidden &&
+      this._tabsLeaving < 4 &&
+      tab.getBoundingClientRect().height > 0 &&
+      gBrowser.tabs.some(t => t !== tab && !t.closing) // последняя вкладка окна закрывается без анимации
+    );
+  },
+
+  /** Размеры строки вкладки как явные значения: переход идёт от них к нулю и обратно. */
+  tabRowMetrics(tab) {
+    const cs = getComputedStyle(tab);
+    return { height: `${tab.getBoundingClientRect().height}px`, "margin-block": `${cs.marginTop} ${cs.marginBottom}`, "padding-block": `${cs.paddingTop} ${cs.paddingBottom}` };
+  },
+
+  tabEnter(tab) {
+    if (!this._tabMotionReady || this.reducedMotion || this._sidebarMorph || tab.pinned || tab.hidden || !tab.isConnected) {
+      return;
+    }
+    const full = this.tabRowMetrics(tab);
+    if (!parseFloat(full.height)) {
+      return;
+    }
+    const ms = this.MOTION.base;
+    this.motionSet(tab, { transition: "none", overflow: "clip", "min-height": "0px", height: "0px", "margin-block": "0px", "padding-block": "0px", opacity: "0" });
+    tab.getBoundingClientRect();
+    this.motionSet(tab, {
+      transition: `height ${ms}ms ${this.MOTION.curve}, margin ${ms}ms ${this.MOTION.curve}, padding ${ms}ms ${this.MOTION.curve}, opacity ${ms}ms ${this.MOTION.curve}`,
+      ...full,
+      opacity: "1",
+    });
+    const done = () => {
+      if (!tab._taboraLeaving) {
+        this.motionClear(tab, this.TAB_MOTION_PROPS);
+      }
+    };
+    tab._taboraEnterTimer = this._motionHold ? null : setTimeout(done, ms + 40);
+  },
+
+  tabLeave(tab, finish) {
+    clearTimeout(tab._taboraEnterTimer);
+    this._tabsLeaving++;
+    const ms = this.MOTION.out;
+    this.motionSet(tab, { transition: "none", overflow: "clip", "min-height": "0px", "pointer-events": "none", ...this.tabRowMetrics(tab), opacity: getComputedStyle(tab).opacity });
+    tab.getBoundingClientRect();
+    this.motionSet(tab, {
+      transition: `height ${ms}ms ${this.MOTION.curve}, margin ${ms}ms ${this.MOTION.curve}, padding ${ms}ms ${this.MOTION.curve}, opacity ${Math.round(ms * 0.7)}ms ${this.MOTION.curveOut}`,
+      height: "0px",
+      "margin-block": "0px",
+      "padding-block": "0px",
+      opacity: "0",
+    });
+    const done = () => {
+      this._tabsLeaving = Math.max(0, this._tabsLeaving - 1);
+      try {
+        finish();
+      } catch (e) {
+        console.error("Tabora: завершение закрытия вкладки", e);
+      }
+    };
+    if (!this._motionHold) {
+      setTimeout(done, ms + 30);
+    } else {
+      tab._taboraLeaveDone = done;
     }
   },
 
@@ -1403,6 +1869,32 @@ var Tabora = {
     return `ещё ${Math.floor(sec / 3600)} ч ${Math.ceil((sec % 3600) / 60)} мин`;
   },
 
+  /** Зазор между кнопками окна и заголовком вкладки, px. */
+  TOPBAR_LIGHTS_GAP: 14,
+
+  /**
+   * Кнопки окна macOS (60px и отступ) шире свёрнутой колонки (52px) и выступают над верхней
+   * панелью вкладки. Заголовок начинается после них: отступ считается по фактическому положению
+   * кнопок и панели, а не подбирается числом, поэтому верен при любой ширине колонки и ящика.
+   * В развёрнутой колонке и в полноэкранном режиме (кнопок нет) отступ нулевой.
+   */
+  syncTopbarInset() {
+    const bar = document.getElementById("tabora-topbar");
+    if (!bar) {
+      return;
+    }
+    const lights = document.querySelector("#nav-bar .titlebar-buttonbox")?.getBoundingClientRect();
+    let inset = 0;
+    if (lights && lights.width > 0 && !window.fullScreen) {
+      const basePad = 8; // собственный отступ панели слева (tabora.css)
+      inset = Math.max(0, Math.round(lights.right + this.TOPBAR_LIGHTS_GAP - (bar.getBoundingClientRect().left + basePad)));
+    }
+    if (this._topbarInset !== inset) {
+      this._topbarInset = inset;
+      bar.style.setProperty("--tabora-lights-inset", `${inset}px`);
+    }
+  },
+
   buildTopbar() {
     const tabbox = document.getElementById("tabbrowser-tabbox");
     const reader = this.html("button", { class: "icon-btn", id: "tabora-reader", title: "Режим чтения", "aria-label": "Режим чтения", disabled: "true" }, null, [
@@ -1421,8 +1913,13 @@ var Tabora = {
       ]),
       reader,
       toggle,
+      this.buildAccountButton(),
     ]);
     tabbox.prepend(bar);
+    // Заголовок не должен попадать под кнопки окна (см. syncTopbarInset). Ширина области вкладки
+    // меняется всякий раз, когда сдвигается её левый край: сворачивание колонки, ящик, полный экран.
+    this.syncTopbarInset();
+    new ResizeObserver(() => this.syncTopbarInset()).observe(tabbox);
     reader.addEventListener("click", () => {
       const btn = document.getElementById("reader-mode-button");
       if (btn && !btn.hidden) {
@@ -1498,6 +1995,10 @@ var Tabora = {
     if (spec.startsWith(this.DOWNLOADS_URL)) {
       return "tabora://downloads";
     }
+    if (this.ACCOUNT_URL && spec.startsWith(this.ACCOUNT_URL)) {
+      const tab = spec.split("#")[1] || "";
+      return tab && tab !== "profile" ? `tabora://account/${tab}` : "tabora://account";
+    }
     return spec;
   },
 
@@ -1513,10 +2014,70 @@ var Tabora = {
   openInternal(url) {
     const existing = gBrowser.tabs.find(t => (t.linkedBrowser?.currentURI?.spec || "").startsWith(url) && !t.hidden);
     if (existing) {
+      const shown = existing.selected;
       gBrowser.selectedTab = existing;
+      if (!shown) {
+        this.pageEnter(existing);
+      }
       return;
     }
-    gBrowser.selectedTab = gBrowser.addTab(url, { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+    const tab = gBrowser.addTab(url, { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+    gBrowser.selectedTab = tab;
+    this.pageEnter(tab, { afterLoad: true });
+  },
+
+  /* ---- Наши страницы (почта, загрузки) выезжают слева и проявляются, как ящик кошелька -----
+   * Движется панель вкладки целиком, так что сама страница об анимации не знает. Край
+   * карточки страницы обрезает её по скруглению. */
+
+  /** afterLoad: вкладка только что создана — панель скрыта, пока страница не нарисуется,
+   *  иначе сначала мелькнёт пустой фон, а содержимое появится рывком. */
+  pageEnter(tab, { afterLoad = false } = {}) {
+    const panel = gBrowser.getPanel(tab.linkedBrowser);
+    if (!panel || this.reducedMotion) {
+      return;
+    }
+    for (const a of panel.getAnimations()) {
+      a.cancel();
+    }
+    const play = () => {
+      panel.style.removeProperty("opacity");
+      if (!tab.isConnected || !tab.selected) {
+        return;
+      }
+      panel.animate([{ opacity: 0, translate: "-24px 0" }, { opacity: 1, translate: "0 0" }], { duration: this.MOTION.slow, easing: this.MOTION.curve });
+    };
+    if (!afterLoad) {
+      play();
+      return;
+    }
+    panel.style.setProperty("opacity", "0");
+    // адрес вкладки ещё пустой, а фон под страницей уже должен быть «нашим» (см. syncOwnPage)
+    document.documentElement.setAttribute("tabora-own-page", "true");
+    let done = false;
+    const once = () => {
+      if (!done) {
+        done = true;
+        requestAnimationFrame(() => requestAnimationFrame(play));
+      }
+    };
+    tab.linkedBrowser.addEventListener("DOMContentLoaded", once, { capture: true, once: true });
+    setTimeout(once, 600); // страница не загрузилась: показываем как есть
+  },
+
+  /** Панель уезжает влево и гаснет, затем выполняется переход (смена вкладки). */
+  pageLeave(tab, then) {
+    const panel = gBrowser.getPanel(tab.linkedBrowser);
+    if (!panel || this.reducedMotion) {
+      then();
+      return;
+    }
+    const anim = panel.animate([{ opacity: 1, translate: "0 0" }, { opacity: 0, translate: "-16px 0" }], { duration: this.MOTION.out, easing: this.MOTION.curveOut, fill: "forwards" });
+    const finish = () => {
+      then();
+      anim.cancel();
+    };
+    anim.finished.then(finish, finish);
   },
 
   /** Контекстное меню для наших страниц: координаты страницы переводятся в координаты окна. */
@@ -1548,7 +2109,7 @@ var Tabora = {
     if (this.isMailUrl(gBrowser.selectedBrowser?.currentURI?.spec)) {
       const back = this.tabBeforeMail();
       if (back) {
-        gBrowser.selectedTab = back;
+        this.pageLeave(gBrowser.selectedTab, () => (gBrowser.selectedTab = back));
         return;
       }
     }
@@ -1585,13 +2146,19 @@ var Tabora = {
     const url = this.MAIL_URL + (hash ? `#${hash}` : "");
     const existing = gBrowser.tabs.find(t => this.isMailUrl(t.linkedBrowser?.currentURI?.spec) && !t.hidden);
     if (existing) {
+      const shown = existing.selected;
       gBrowser.selectedTab = existing;
       if (hash) {
         existing.linkedBrowser.loadURI(Services.io.newURI(url), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
       }
+      if (!shown) {
+        this.pageEnter(existing);
+      }
       return;
     }
-    gBrowser.selectedTab = gBrowser.addTab(url, { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+    const tab = gBrowser.addTab(url, { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+    gBrowser.selectedTab = tab;
+    this.pageEnter(tab, { afterLoad: true });
   },
 
   /** Внутренние страницы показывают в адресной строке своё имя вместо chrome:// и about:. */

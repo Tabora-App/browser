@@ -4,7 +4,7 @@
 
 /* Раздел «Коды»: список одноразовых кодов, кольцо остатка периода, подсказки. */
 
-#tabora-drawer .otp-head {
+:is(#tabora-drawer, #tabora-modal) .otp-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -12,19 +12,19 @@
   padding: 10px 12px 4px;
 }
 
-#tabora-drawer .otp-head b {
+:is(#tabora-drawer, #tabora-modal) .otp-head b {
   font: 700 15px/1.2 var(--tabora-font);
   color: var(--tabora-text-strong);
 }
 
-#tabora-drawer .otp-list {
+:is(#tabora-drawer, #tabora-modal) .otp-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: 4px 4px 8px;
 }
 
-#tabora-drawer .otp-row {
+:is(#tabora-drawer, #tabora-modal) .otp-row {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -35,13 +35,13 @@
   transition: background-color var(--tabora-ease);
 }
 
-#tabora-drawer .otp-row:hover,
-#tabora-drawer .otp-row:focus-visible {
+:is(#tabora-drawer, #tabora-modal) .otp-row:hover,
+:is(#tabora-drawer, #tabora-modal) .otp-row:focus-visible {
   background: var(--tabora-raised);
   outline: none;
 }
 
-#tabora-drawer .otp-icon {
+:is(#tabora-drawer, #tabora-modal) .otp-icon {
   flex: none;
   width: 36px;
   height: 36px;
@@ -54,13 +54,13 @@
   overflow: hidden;
 }
 
-#tabora-drawer .otp-icon img {
+:is(#tabora-drawer, #tabora-modal) .otp-icon img {
   width: 20px;
   height: 20px;
   display: block;
 }
 
-#tabora-drawer .otp-text {
+:is(#tabora-drawer, #tabora-modal) .otp-text {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -68,7 +68,7 @@
   gap: 3px;
 }
 
-#tabora-drawer .otp-text b {
+:is(#tabora-drawer, #tabora-modal) .otp-text b {
   font: 600 13px/1.2 var(--tabora-font);
   color: var(--tabora-text);
   white-space: nowrap;
@@ -76,7 +76,7 @@
   text-overflow: ellipsis;
 }
 
-#tabora-drawer .otp-text span {
+:is(#tabora-drawer, #tabora-modal) .otp-text span {
   font: 500 11px/1.2 var(--tabora-font);
   color: var(--tabora-text-4);
   white-space: nowrap;
@@ -84,7 +84,7 @@
   text-overflow: ellipsis;
 }
 
-#tabora-drawer .otp-code {
+:is(#tabora-drawer, #tabora-modal) .otp-code {
   font: 600 19px/1 var(--tabora-mono);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.5px;
@@ -93,16 +93,25 @@
   transition: color var(--tabora-ease);
 }
 
-#tabora-drawer .otp-row.ending .otp-code {
+:is(#tabora-drawer, #tabora-modal) .otp-row.ending .otp-code {
   color: var(--tabora-text-4);
 }
 
-#tabora-drawer .otp-row.copied .otp-code {
+:is(#tabora-drawer, #tabora-modal) .otp-row.copied .otp-code {
   color: var(--tabora-accent-ink, var(--tabora-accent));
 }
 
+/* строка скопированного кода коротко подсвечивается */
+:is(#tabora-drawer, #tabora-modal) .otp-row.copied {
+  animation: otp-copied 700ms var(--tabora-curve);
+}
+
+@keyframes otp-copied {
+  from { background-color: var(--tabora-accent-dim); }
+}
+
 /* кольцо остатка периода: --p от 0 до 100 */
-#tabora-drawer .otp-ring {
+:is(#tabora-drawer, #tabora-modal) .otp-ring {
   flex: none;
   width: 20px;
   height: 20px;
@@ -111,7 +120,7 @@
   position: relative;
 }
 
-#tabora-drawer .otp-ring::after {
+:is(#tabora-drawer, #tabora-modal) .otp-ring::after {
   content: "";
   position: absolute;
   inset: 4px;
@@ -119,21 +128,21 @@
   background: var(--tabora-panel);
 }
 
-#tabora-drawer .otp-row.ending .otp-ring {
+:is(#tabora-drawer, #tabora-modal) .otp-row.ending .otp-ring {
   background: conic-gradient(var(--tabora-text-4) calc(var(--p, 100) * 1%), var(--tabora-line) 0);
 }
 
-#tabora-drawer .otp-row .otp-mismatch {
+:is(#tabora-drawer, #tabora-modal) .otp-row .otp-mismatch {
   color: #e5484d;
 }
 
-#tabora-drawer .otp-advanced {
+:is(#tabora-drawer, #tabora-modal) .otp-advanced {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 8px;
 }
 
-#tabora-drawer .otp-next {
+:is(#tabora-drawer, #tabora-modal) .otp-next {
   font: 500 11px/1.2 var(--tabora-mono);
   color: var(--tabora-text-4);
 }
@@ -244,7 +253,7 @@
 }
 
 /* Секрет в листе: ключ восстановления, ссылка для переноса. Размыт, пока не нажато «Показать». */
-#tabora-drawer .v-secret {
+:is(#tabora-drawer, #tabora-modal) .v-secret {
   margin: 0;
   padding: 10px 12px;
   border-radius: 10px;
@@ -257,13 +266,13 @@
   user-select: text;
 }
 
-#tabora-drawer .v-secret[masked] {
+:is(#tabora-drawer, #tabora-modal) .v-secret[masked] {
   filter: blur(6px);
   user-select: none;
 }
 
 /* Сворачиваемая карточка сейфа */
-#tabora-drawer .v-card > summary.v-card-head {
+:is(#tabora-drawer, #tabora-modal) .v-card > summary.v-card-head {
   list-style: none;
   display: flex;
   align-items: center;
@@ -275,20 +284,20 @@
   user-select: none;
 }
 
-#tabora-drawer .v-card > summary.v-card-head::-webkit-details-marker {
+:is(#tabora-drawer, #tabora-modal) .v-card > summary.v-card-head::-webkit-details-marker {
   display: none;
 }
 
-#tabora-drawer .v-card > summary.v-card-head:hover {
+:is(#tabora-drawer, #tabora-modal) .v-card > summary.v-card-head:hover {
   background: var(--tabora-raised);
 }
 
-#tabora-drawer .v-card > summary .w-group-title {
+:is(#tabora-drawer, #tabora-modal) .v-card > summary .w-group-title {
   margin: 0;
   flex: none;
 }
 
-#tabora-drawer .v-card-sub {
+:is(#tabora-drawer, #tabora-modal) .v-card-sub {
   flex: 1;
   min-width: 0;
   font: 500 11px/1.2 var(--tabora-font);
@@ -299,17 +308,17 @@
   text-align: right;
 }
 
-#tabora-drawer .v-card > summary svg {
+:is(#tabora-drawer, #tabora-modal) .v-card > summary svg {
   flex: none;
   color: var(--tabora-text-4);
   transition: transform var(--tabora-ease);
 }
 
-#tabora-drawer .v-card[open] > summary svg {
+:is(#tabora-drawer, #tabora-modal) .v-card[open] > summary svg {
   transform: rotate(180deg);
 }
 
-#tabora-drawer .v-card-body {
+:is(#tabora-drawer, #tabora-modal) .v-card-body {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -317,7 +326,7 @@
 }
 
 /* Оценка стойкости пароля под полем */
-#tabora-drawer .v-strength {
+:is(#tabora-drawer, #tabora-modal) .v-strength {
   display: block;
   min-height: 14px;
   margin-top: 4px;
@@ -325,17 +334,17 @@
   color: var(--tabora-text-4);
 }
 
-#tabora-drawer .v-strength[data-score="0"],
-#tabora-drawer .v-strength[data-score="1"] {
+:is(#tabora-drawer, #tabora-modal) .v-strength[data-score="0"],
+:is(#tabora-drawer, #tabora-modal) .v-strength[data-score="1"] {
   color: var(--tabora-danger, #ff8a7a);
 }
 
 /* Запись кодов с неверной подписью: код не выдаётся */
-#tabora-drawer .otp-row.invalid {
+:is(#tabora-drawer, #tabora-modal) .otp-row.invalid {
   opacity: 0.6;
 }
 
-#tabora-drawer .otp-row.invalid .otp-text span {
+:is(#tabora-drawer, #tabora-modal) .otp-row.invalid .otp-text span {
   color: var(--tabora-danger, #ff8a7a);
 }
 

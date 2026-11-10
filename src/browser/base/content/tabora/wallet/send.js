@@ -19,10 +19,27 @@ Object.assign(Tabora, {
 
   /* ---- Листы поверх панели (переживают перерисовку) ---------------------- */
 
+  /** Лист подтверждения показывается в ящике, а если ящик закрыт (действие вызвано со страницы
+   *  аккаунта или из меню) — окном по центру поверх всего (#tabora-modal). */
   wSheetShow(box) {
+    if (!this.drawer.open) {
+      this.sheetModal().append(box);
+      return box;
+    }
     const panel = this.drawer.body.closest(".dpanel") || this.drawer.body.parentNode;
     panel.append(box);
     return box;
+  },
+
+  sheetModal() {
+    let host = document.getElementById("tabora-modal");
+    if (!host) {
+      host = this.html("div", { id: "tabora-modal" });
+      // клавиши не уходят в страницу и сочетания браузера, пока лист открыт
+      host.addEventListener("keydown", e => e.stopPropagation());
+      document.getElementById("browser").append(host);
+    }
+    return host;
   },
 
   /* ---- Форматы ------------------------------------------------------------ */
