@@ -9,11 +9,23 @@
 //! отдаётся: им сервер входит в ящик с 127.0.0.1, чтобы выдать или отозвать пароль приложения.
 //! Каждое устройство получает свой пароль приложения: он подходит к IMAP и SMTP, отзывается
 //! при выходе с устройства и ничего не говорит о пароле аккаунта.
+//!
+//! Письма от сервера (код подтверждения резервного адреса, код сброса пароля, уведомления о
+//! смене настроек входа) уходят от служебного ящика `no-reply@домен` обычными вызовами JMAP
+//! по локальному адресу: почтовому серверу не нужны ни открытая пересылка, ни особые правила.
 
-use crate::util::hmac256;
+use crate::util::{hmac256, now_ms, random};
 use serde_json::{json, Value};
+use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::OnceCell;
+
+const ADMIN_USING: [&str; 2] = ["urn:ietf:params:jmap:core", "urn:stalwart:jmap"];
+const MAIL_USING: [&str; 3] = ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail", "urn:ietf:params:jmap:submission"];
+/// Имя служебного ящика (в списке запрещённых для регистрации) и метка, из которой выводится его пароль.
+const SYSTEM_LOCAL: &str = "no-reply";
+const SYSTEM_ID: &str = "system/no-reply";
+const SYSTEM_QUOTA: u64 = 64 * 1024 * 1024;
 
 #[derive(Debug)]
 pub enum MailError {
@@ -43,6 +55,13 @@ enum Auth<'a> {
     User { login: &'a str, password: &'a str },
 }
 
+/// Служебный ящик глазами JMAP: номер учётки, личность отправителя и папка черновиков.
+struct Sender {
+    account: String,
+    identity: String,
+    drafts: String,
+}
+
 pub struct Stalwart {
     base: String,
     api_key: String,
@@ -51,6 +70,9 @@ pub struct Stalwart {
     quota_bytes: u64,
     http: reqwest::Client,
     domain_id: OnceCell<String>,
+    sender: OnceCell<Sender>,
+    /// Только для проверок: письма не отправляются, а складываются файлами в этот каталог.
+    outbox: Option<PathBuf>,
 }
 
 pub struct AppPassword {
@@ -59,13 +81,13 @@ pub struct AppPassword {
 }
 
 impl Stalwart {
-    pub fn new(base: &str, api_key: &str, domain: &str, mail_key: [u8; 32], quota_bytes: u64) -> Self {
+    pub fn new(base: &str, api_key: &str, domain: &str, mail_key: [u8; 32], quota_bytes: u64, outbox: Option<PathBuf>) -> Self {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(15))
             .connect_timeout(Duration::from_secs(5))
             .build()
             .expect("клиент HTTP");
-        Self { base: base.trim_end_matches('/').to_string(), api_key: api_key.to_string(), domain: domain.to_string(), mail_key, quota_bytes, http, domain_id: OnceCell::new() }
+        Self { base: base.trim_end_matches('/').to_string(), api_key: api_key.to_string(), domain: domain.to_string(), mail_key, quota_bytes, http, domain_id: OnceCell::new(), sender: OnceCell::new(), outbox }
     }
 
     /// Без адреса или ключа почтовая часть выключена: аккаунты работают, ящики не создаются.
@@ -81,11 +103,11 @@ impl Stalwart {
         json!({ "127.0.0.1": true, "::1": true })
     }
 
-    async fn jmap(&self, auth: Auth<'_>, method: &str, args: Value) -> Result<Value, MailError> {
-        let body = json!({
-            "using": ["urn:ietf:params:jmap:core", "urn:stalwart:jmap"],
-            "methodCalls": [[method, args, "c0"]],
-        });
+    /// Несколько вызовов одним запросом; ответы — по порядку вызовов. Отказ любого вызова
+    /// (ошибка метода, notCreated, notUpdated, notDestroyed) — ошибка всего запроса.
+    async fn calls(&self, auth: Auth<'_>, using: &[&str], calls: Value) -> Result<Vec<Value>, MailError> {
+        let expected = calls.as_array().map(Vec::len).unwrap_or(0);
+        let body = json!({ "using": using, "methodCalls": calls });
         let req = self.http.post(format!("{}/jmap", self.base)).json(&body);
         let req = match auth {
             Auth::Service => req.bearer_auth(&self.api_key),
@@ -100,23 +122,34 @@ impl Stalwart {
             return Err(MailError::Unavailable(format!("HTTP {}", status.as_u16())));
         }
         let v: Value = res.json().await.map_err(|e| MailError::Unavailable(e.to_string()))?;
-        let first = v.get("methodResponses").and_then(|r| r.get(0)).and_then(Value::as_array).ok_or_else(|| MailError::Rejected("пустой ответ".into()))?;
-        let name = first.first().and_then(Value::as_str).unwrap_or("");
-        let resp = first.get(1).cloned().unwrap_or(Value::Null);
-        if name == "error" {
-            return Err(MailError::Rejected(resp.to_string()));
-        }
-        for key in ["notCreated", "notUpdated", "notDestroyed"] {
-            if let Some(obj) = resp.get(key).and_then(Value::as_object) {
-                if let Some(err) = obj.values().next() {
-                    if err.get("type").and_then(Value::as_str) == Some("primaryKeyViolation") {
-                        return Err(MailError::Taken);
+        let list = v.get("methodResponses").and_then(Value::as_array).ok_or_else(|| MailError::Rejected("пустой ответ".into()))?;
+        let mut out = Vec::with_capacity(expected);
+        for item in list {
+            let name = item.get(0).and_then(Value::as_str).unwrap_or("");
+            let resp = item.get(1).cloned().unwrap_or(Value::Null);
+            if name == "error" {
+                return Err(MailError::Rejected(resp.to_string()));
+            }
+            for key in ["notCreated", "notUpdated", "notDestroyed"] {
+                if let Some(obj) = resp.get(key).and_then(Value::as_object) {
+                    if let Some(err) = obj.values().next() {
+                        if err.get("type").and_then(Value::as_str) == Some("primaryKeyViolation") {
+                            return Err(MailError::Taken);
+                        }
+                        return Err(MailError::Rejected(err.to_string()));
                     }
-                    return Err(MailError::Rejected(err.to_string()));
                 }
             }
+            out.push(resp);
         }
-        Ok(resp)
+        if out.len() < expected {
+            return Err(MailError::Rejected("почтовый сервер ответил не на все вызовы".into()));
+        }
+        Ok(out)
+    }
+
+    async fn jmap(&self, auth: Auth<'_>, method: &str, args: Value) -> Result<Value, MailError> {
+        Ok(self.calls(auth, &ADMIN_USING, json!([[method, args, "c0"]])).await?.remove(0))
     }
 
     async fn domain_id(&self) -> Result<&str, MailError> {
@@ -216,5 +249,128 @@ impl Stalwart {
             map.insert(i.to_string(), json!({ "name": local, "domainId": domain_id, "enable": enabled }));
         }
         self.jmap(Auth::Service, "x:Account/set", json!({ "update": { mail_id: { "aliases": Value::Object(map) } } })).await.map(|_| ())
+    }
+}
+
+/* ---- письма от сервера ---- */
+
+impl Stalwart {
+    /// Может ли сервер отправлять письма сам.
+    pub fn can_send(&self) -> bool {
+        self.outbox.is_some() || self.enabled()
+    }
+
+    /// Служебный ящик ещё не подготовлен (ensure_sender не вызывался или не удался).
+    pub fn needs_sender(&self) -> bool {
+        self.outbox.is_none() && self.sender.get().is_none()
+    }
+
+    fn system_login(&self) -> String {
+        format!("{}@{}", SYSTEM_LOCAL, self.domain)
+    }
+
+    /// Номер учётки JMAP, под которой вошли: по нему идут вызовы почты.
+    async fn session_account(&self, login: &str, password: &str) -> Result<String, MailError> {
+        let res = self.http.get(format!("{}/jmap/session", self.base)).basic_auth(login, Some(password)).send().await.map_err(|e| MailError::Unavailable(e.to_string()))?;
+        let status = res.status();
+        if status.as_u16() == 401 || status.as_u16() == 403 {
+            return Err(MailError::Unauthorized);
+        }
+        if !status.is_success() {
+            return Err(MailError::Unavailable(format!("HTTP {}", status.as_u16())));
+        }
+        let v: Value = res.json().await.map_err(|e| MailError::Unavailable(e.to_string()))?;
+        v.pointer("/primaryAccounts/urn:ietf:params:jmap:mail").and_then(Value::as_str).map(str::to_string).ok_or_else(|| MailError::Rejected("почтовый сервер не назвал учётку".into()))
+    }
+
+    async fn create_system_account(&self) -> Result<String, MailError> {
+        let domain_id = self.domain_id().await?;
+        let args = json!({ "create": { "u": {
+            "@type": "User",
+            "name": SYSTEM_LOCAL,
+            "domainId": domain_id,
+            "roles": { "@type": "User" },
+            "description": "Tabora",
+            "credentials": { "0": { "@type": "Password", "secret": self.primary_password(SYSTEM_ID), "allowedIps": Self::loopback() } },
+            "quotas": { "maxDiskQuota": SYSTEM_QUOTA },
+        } } });
+        match self.jmap(Auth::Service, "x:Account/set", args).await {
+            Ok(r) => r.pointer("/created/u/id").and_then(Value::as_str).map(str::to_string).ok_or_else(|| MailError::Rejected("нет номера служебного ящика".into())),
+            Err(MailError::Taken) => Err(MailError::Rejected(format!("ящик {} уже есть на почтовом сервере, но его номер неизвестен: запишите его в settings.system_mail_id", self.system_login()))),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Подготовить служебный ящик: войти в него, при необходимости создать его или заново
+    /// выставить ему пароль (known — его номер, записанный при создании). Возвращает номер,
+    /// который надо запомнить, если ящик создан этим вызовом.
+    pub async fn ensure_sender(&self, known: Option<&str>) -> Result<Option<String>, MailError> {
+        if !self.needs_sender() {
+            return Ok(None);
+        }
+        if !self.enabled() {
+            return Err(MailError::Unavailable("почта выключена".into()));
+        }
+        let login = self.system_login();
+        let password = self.primary_password(SYSTEM_ID);
+        let mut created = None;
+        let account = match self.session_account(&login, &password).await {
+            Ok(a) => a,
+            Err(MailError::Unauthorized) => {
+                match known {
+                    Some(id) => self.reset_primary(id, SYSTEM_ID).await?,
+                    None => created = Some(self.create_system_account().await?),
+                }
+                self.session_account(&login, &password).await?
+            }
+            Err(e) => return Err(e),
+        };
+        let auth = || Auth::User { login: &login, password: &password };
+        let r = self
+            .calls(auth(), &MAIL_USING, json!([["Identity/get", { "accountId": account }, "0"], ["Mailbox/get", { "accountId": account, "properties": ["role"] }, "1"]]))
+            .await?;
+        let find = |resp: &Value, key: &str, want: &str| -> Option<String> {
+            resp.get("list")?.as_array()?.iter().find(|x| x.get(key).and_then(Value::as_str) == Some(want))?.get("id")?.as_str().map(str::to_string)
+        };
+        let identity = match find(&r[0], "email", &login) {
+            Some(id) => id,
+            None => {
+                let made = self.calls(auth(), &MAIL_USING, json!([["Identity/set", { "accountId": account, "create": { "i": { "name": "Tabora", "email": login } } }, "0"]])).await?;
+                made[0].pointer("/created/i/id").and_then(Value::as_str).map(str::to_string).ok_or_else(|| MailError::Rejected("личность отправителя не создана".into()))?
+            }
+        };
+        let drafts = find(&r[1], "role", "drafts").or_else(|| find(&r[1], "role", "inbox")).ok_or_else(|| MailError::Rejected("в служебном ящике нет папок".into()))?;
+        let _ = self.sender.set(Sender { account, identity, drafts });
+        Ok(created)
+    }
+
+    /// Письмо от служебного ящика: черновик создаётся, отправляется и сразу удаляется.
+    pub async fn send_system(&self, to: &str, subject: &str, text: &str) -> Result<(), MailError> {
+        if let Some(dir) = &self.outbox {
+            let name = format!("{}-{}.json", now_ms(), hex::encode(random::<4>()));
+            let body = json!({ "to": to, "subject": subject, "text": text }).to_string();
+            return std::fs::write(dir.join(name), body).map_err(|e| MailError::Unavailable(format!("каталог писем для проверок: {e}")));
+        }
+        let s = self.sender.get().ok_or_else(|| MailError::Unavailable("служебный ящик не подготовлен".into()))?;
+        let login = self.system_login();
+        let password = self.primary_password(SYSTEM_ID);
+        let calls = json!([
+            ["Email/set", { "accountId": s.account, "create": { "m": {
+                "mailboxIds": { s.drafts.as_str(): true },
+                "keywords": { "$draft": true, "$seen": true },
+                "from": [{ "name": "Tabora", "email": login }],
+                "to": [{ "email": to }],
+                "subject": subject,
+                "header:Auto-Submitted:asText": "auto-generated",
+                "bodyValues": { "t": { "value": text } },
+                "textBody": [{ "partId": "t", "type": "text/plain" }],
+            } } }, "0"],
+            ["EmailSubmission/set", { "accountId": s.account, "create": { "s": { "identityId": s.identity, "emailId": "#m" } }, "onSuccessDestroyEmail": ["#s"] }, "1"],
+        ]);
+        let r = self.calls(Auth::User { login: &login, password: &password }, &MAIL_USING, calls).await?;
+        if r[0].pointer("/created/m").is_none() || r[1].pointer("/created/s").is_none() {
+            return Err(MailError::Rejected("письмо не принято к отправке".into()));
+        }
+        Ok(())
     }
 }

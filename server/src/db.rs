@@ -66,6 +66,43 @@ CREATE TABLE IF NOT EXISTS retired_names (
   local  TEXT PRIMARY KEY,
   at     BIGINT NOT NULL
 );
+-- Двухфакторная защита входа. Секрет TOTP зашифрован ключом сервера (util::seal), totp_at —
+-- когда защита включена (NULL — выключена), totp_step — последний принятый шаг времени (код
+-- нельзя использовать дважды). Счётчик неудач живёт в базе, а не в памяти: шесть цифр
+-- перебираются дёшево, и перезапуск сервера не должен обнулять паузу.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret BYTEA;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_at BIGINT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_step BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_pending BYTEA;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_pending_at BIGINT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_fails INT NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_locked_until BIGINT NOT NULL DEFAULT 0;
+-- Резервный адрес: сюда приходит код сброса пароля. Записывается только после подтверждения.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS backup_email TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS backup_email_at BIGINT;
+-- Одноразовые резервные коды входа: в базе только HMAC от кода.
+CREATE TABLE IF NOT EXISTS backup_codes (
+  user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash  BYTEA NOT NULL,
+  used_at    BIGINT,
+  PRIMARY KEY (user_id, code_hash)
+);
+-- Коды из писем: подтверждение резервного адреса (backup-email) и сброс пароля (reset).
+-- На назначение — один действующий код; в базе только HMAC от него.
+CREATE TABLE IF NOT EXISTS mail_codes (
+  user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  purpose     TEXT NOT NULL,
+  address     TEXT NOT NULL,
+  code_hash   BYTEA NOT NULL,
+  expires_at  BIGINT NOT NULL,
+  attempts    INT NOT NULL DEFAULT 0,
+  created_at  BIGINT NOT NULL,
+  PRIMARY KEY (user_id, purpose)
+);
+CREATE TABLE IF NOT EXISTS settings (
+  key    TEXT PRIMARY KEY,
+  value  TEXT NOT NULL
+);
 "#;
 
 #[derive(Debug)]
@@ -272,6 +309,8 @@ pub async fn has_session<C: GenericClient>(c: &C, user_id: i64, device_id: &str)
 pub async fn purge_expired<C: GenericClient>(c: &C, now: i64) -> Result<u64, DbError> {
     let n = c.execute("DELETE FROM sessions WHERE expires_at <= $1", &[&now]).await?;
     c.execute("DELETE FROM reset_nonces WHERE expires_at <= $1", &[&now]).await?;
+    c.execute("DELETE FROM mail_codes WHERE expires_at <= $1", &[&now]).await?;
+    c.execute("UPDATE users SET totp_pending = NULL, totp_pending_at = NULL WHERE totp_pending_at IS NOT NULL AND totp_pending_at <= $1", &[&(now - 3_600_000)]).await?;
     Ok(n)
 }
 
@@ -337,4 +376,158 @@ pub async fn update_alias<C: GenericClient>(c: &C, user_id: i64, id: i64, enable
 
 pub async fn delete_alias<C: GenericClient>(c: &C, user_id: i64, id: i64, now: i64) -> Result<bool, DbError> {
     Ok(c.execute("UPDATE aliases SET deleted_at = $3, enabled = FALSE WHERE id = $2 AND user_id = $1 AND deleted_at IS NULL", &[&user_id, &id, &now]).await? > 0)
+}
+
+/* ---- двухфакторная защита, резервный адрес, коды из писем ---- */
+
+#[derive(Clone, Debug, Default)]
+pub struct Security {
+    pub totp_secret: Option<Vec<u8>>,
+    pub totp_at: Option<i64>,
+    pub totp_pending: Option<Vec<u8>>,
+    pub totp_pending_at: Option<i64>,
+    pub totp_locked_until: i64,
+    pub backup_email: Option<String>,
+    pub backup_email_at: Option<i64>,
+}
+
+impl Security {
+    pub fn two_factor(&self) -> bool {
+        self.totp_at.is_some() && self.totp_secret.is_some()
+    }
+}
+
+pub async fn security<C: GenericClient>(c: &C, user_id: i64) -> Result<Security, DbError> {
+    let r = c
+        .query_one(
+            "SELECT totp_secret, totp_at, totp_pending, totp_pending_at, totp_locked_until, backup_email, backup_email_at FROM users WHERE id = $1",
+            &[&user_id],
+        )
+        .await?;
+    Ok(Security {
+        totp_secret: r.get(0),
+        totp_at: r.get(1),
+        totp_pending: r.get(2),
+        totp_pending_at: r.get(3),
+        totp_locked_until: r.get(4),
+        backup_email: r.get(5),
+        backup_email_at: r.get(6),
+    })
+}
+
+pub async fn set_totp_pending<C: GenericClient>(c: &C, user_id: i64, blob: &[u8], now: i64) -> Result<(), DbError> {
+    c.execute("UPDATE users SET totp_pending = $2, totp_pending_at = $3 WHERE id = $1", &[&user_id, &blob, &now]).await?;
+    Ok(())
+}
+
+/// Секрет, ждавший подтверждения, становится действующим; step — шаг времени принятого кода.
+pub async fn enable_totp<C: GenericClient>(c: &C, user_id: i64, now: i64, step: i64) -> Result<bool, DbError> {
+    let n = c
+        .execute(
+            "UPDATE users SET totp_secret = totp_pending, totp_at = $2, totp_step = $3, totp_pending = NULL, totp_pending_at = NULL, totp_fails = 0, totp_locked_until = 0
+             WHERE id = $1 AND totp_pending IS NOT NULL AND totp_at IS NULL",
+            &[&user_id, &now, &step],
+        )
+        .await?;
+    Ok(n > 0)
+}
+
+pub async fn disable_totp<C: GenericClient>(c: &C, user_id: i64) -> Result<bool, DbError> {
+    let n = c
+        .execute(
+            "UPDATE users SET totp_secret = NULL, totp_at = NULL, totp_step = 0, totp_pending = NULL, totp_pending_at = NULL, totp_fails = 0, totp_locked_until = 0 WHERE id = $1 AND totp_at IS NOT NULL",
+            &[&user_id],
+        )
+        .await?;
+    c.execute("DELETE FROM backup_codes WHERE user_id = $1", &[&user_id]).await?;
+    Ok(n > 0)
+}
+
+/// Код принят, если его шаг времени новее последнего принятого: второй раз тот же код не пройдёт.
+pub async fn totp_accept<C: GenericClient>(c: &C, user_id: i64, step: i64) -> Result<bool, DbError> {
+    Ok(c.execute("UPDATE users SET totp_step = $2, totp_fails = 0, totp_locked_until = 0 WHERE id = $1 AND totp_step < $2", &[&user_id, &step]).await? > 0)
+}
+
+/// Неудачная проверка второго фактора: счётчик растёт, пауза считается от него.
+pub async fn totp_fail<C: GenericClient>(c: &C, user_id: i64, now: i64, pause: fn(i32) -> i64) -> Result<i64, DbError> {
+    let fails: i32 = c.query_one("UPDATE users SET totp_fails = totp_fails + 1 WHERE id = $1 RETURNING totp_fails", &[&user_id]).await?.get(0);
+    let until = now + pause(fails);
+    c.execute("UPDATE users SET totp_locked_until = $2 WHERE id = $1", &[&user_id, &until]).await?;
+    Ok(until - now)
+}
+
+pub async fn totp_clear_fails<C: GenericClient>(c: &C, user_id: i64) -> Result<(), DbError> {
+    c.execute("UPDATE users SET totp_fails = 0, totp_locked_until = 0 WHERE id = $1", &[&user_id]).await?;
+    Ok(())
+}
+
+pub async fn replace_backup_codes<C: GenericClient>(c: &C, user_id: i64, hashes: &[[u8; 32]]) -> Result<(), DbError> {
+    c.execute("DELETE FROM backup_codes WHERE user_id = $1", &[&user_id]).await?;
+    for h in hashes {
+        c.execute("INSERT INTO backup_codes (user_id, code_hash) VALUES ($1, $2)", &[&user_id, &&h[..]]).await?;
+    }
+    Ok(())
+}
+
+/// Резервный код одноразовый: отметка «использован» ставится тем же запросом, что и проверка.
+pub async fn use_backup_code<C: GenericClient>(c: &C, user_id: i64, hash: &[u8], now: i64) -> Result<bool, DbError> {
+    Ok(c.execute("UPDATE backup_codes SET used_at = $3 WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL", &[&user_id, &hash, &now]).await? > 0)
+}
+
+pub async fn backup_codes_left<C: GenericClient>(c: &C, user_id: i64) -> Result<i64, DbError> {
+    Ok(c.query_one("SELECT count(*) FROM backup_codes WHERE user_id = $1 AND used_at IS NULL", &[&user_id]).await?.get(0))
+}
+
+pub async fn set_backup_email<C: GenericClient>(c: &C, user_id: i64, address: Option<&str>, now: i64) -> Result<(), DbError> {
+    let at = address.map(|_| now);
+    c.execute("UPDATE users SET backup_email = $2, backup_email_at = $3 WHERE id = $1", &[&user_id, &address, &at]).await?;
+    Ok(())
+}
+
+/// Имя принадлежит действующему алиасу этого пользователя.
+pub async fn alias_owned<C: GenericClient>(c: &C, user_id: i64, local: &str) -> Result<bool, DbError> {
+    Ok(c.query_one("SELECT EXISTS(SELECT 1 FROM aliases WHERE user_id = $1 AND local = $2 AND deleted_at IS NULL)", &[&user_id, &local]).await?.get(0))
+}
+
+pub struct MailCode {
+    pub address: String,
+    pub code_hash: Vec<u8>,
+    pub expires_at: i64,
+    pub attempts: i32,
+}
+
+/// Новый код заменяет прежний того же назначения.
+pub async fn put_mail_code<C: GenericClient>(c: &C, user_id: i64, purpose: &str, address: &str, hash: &[u8], expires: i64, now: i64) -> Result<(), DbError> {
+    c.execute(
+        "INSERT INTO mail_codes (user_id, purpose, address, code_hash, expires_at, created_at) VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (user_id, purpose) DO UPDATE SET address = EXCLUDED.address, code_hash = EXCLUDED.code_hash, expires_at = EXCLUDED.expires_at, attempts = 0, created_at = EXCLUDED.created_at",
+        &[&user_id, &purpose, &address, &hash, &expires, &now],
+    )
+    .await?;
+    Ok(())
+}
+
+pub async fn mail_code<C: GenericClient>(c: &C, user_id: i64, purpose: &str) -> Result<Option<MailCode>, DbError> {
+    Ok(c
+        .query_opt("SELECT address, code_hash, expires_at, attempts FROM mail_codes WHERE user_id = $1 AND purpose = $2", &[&user_id, &purpose])
+        .await?
+        .map(|r| MailCode { address: r.get(0), code_hash: r.get(1), expires_at: r.get(2), attempts: r.get(3) }))
+}
+
+pub async fn mail_code_attempt<C: GenericClient>(c: &C, user_id: i64, purpose: &str) -> Result<i32, DbError> {
+    Ok(c.query_opt("UPDATE mail_codes SET attempts = attempts + 1 WHERE user_id = $1 AND purpose = $2 RETURNING attempts", &[&user_id, &purpose]).await?.map(|r| r.get(0)).unwrap_or(i32::MAX))
+}
+
+pub async fn delete_mail_code<C: GenericClient>(c: &C, user_id: i64, purpose: &str) -> Result<(), DbError> {
+    c.execute("DELETE FROM mail_codes WHERE user_id = $1 AND purpose = $2", &[&user_id, &purpose]).await?;
+    Ok(())
+}
+
+pub async fn setting<C: GenericClient>(c: &C, key: &str) -> Result<Option<String>, DbError> {
+    Ok(c.query_opt("SELECT value FROM settings WHERE key = $1", &[&key]).await?.map(|r| r.get(0)))
+}
+
+pub async fn set_setting<C: GenericClient>(c: &C, key: &str, value: &str) -> Result<(), DbError> {
+    c.execute("INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", &[&key, &value]).await?;
+    Ok(())
 }

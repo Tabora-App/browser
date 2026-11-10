@@ -7,10 +7,11 @@
 //! хранит от него только HMAC со своей солью и секретом сервера. Ответы об ошибках —
 //! `{ code, message }`, сообщение показывается пользователю как есть.
 
-use crate::db::{self, Alias, DbError, User};
+use crate::db::{self, Alias, DbError, Security, User};
 use crate::limit::Limiter;
 use crate::mail::{MailError, Stalwart};
-use crate::util::{clean_name, hmac256, is_hex, iso, now_ms, random, reserved_local, same, sha256, valid_local};
+use crate::security;
+use crate::util::{clean_backup_code, clean_digits, clean_name, hmac256, is_hex, iso, now_ms, open, random, reserved_local, same, sha256, totp, totp_step, valid_local};
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::header::{AUTHORIZATION, CACHE_CONTROL};
@@ -34,6 +35,9 @@ pub struct App {
     pub mail: Stalwart,
     pub limiter: Limiter,
     pub pepper: [u8; 32],
+    pub totp_key: [u8; 32],
+    pub code_key: [u8; 32],
+    pub mail_daily_cap: u32,
     pub signup_open: bool,
     pub signup_daily_cap: i64,
     pub signup_per_ip_day: u32,
@@ -42,17 +46,17 @@ pub struct App {
 
 pub struct ApiError {
     status: StatusCode,
-    code: &'static str,
+    pub(crate) code: &'static str,
     message: String,
 }
 
-type ApiResult = Result<Json<Value>, ApiError>;
+pub(crate) type ApiResult = Result<Json<Value>, ApiError>;
 
-fn err(status: StatusCode, code: &'static str, message: impl Into<String>) -> ApiError {
+pub(crate) fn err(status: StatusCode, code: &'static str, message: impl Into<String>) -> ApiError {
     ApiError { status, code, message: message.into() }
 }
 
-fn bad(code: &'static str, message: impl Into<String>) -> ApiError {
+pub(crate) fn bad(code: &'static str, message: impl Into<String>) -> ApiError {
     err(StatusCode::BAD_REQUEST, code, message)
 }
 
@@ -86,7 +90,7 @@ impl From<tokio_postgres::Error> for ApiError {
     }
 }
 
-fn mail_err(e: MailError) -> ApiError {
+pub(crate) fn mail_err(e: MailError) -> ApiError {
     match e {
         MailError::Taken => err(StatusCode::CONFLICT, "taken", "Такой адрес уже занят"),
         other => {
@@ -96,26 +100,32 @@ fn mail_err(e: MailError) -> ApiError {
     }
 }
 
-fn wait_text(ms: i64) -> String {
+pub(crate) fn wait_text(ms: i64) -> String {
     let minutes = (ms + 59_999) / 60_000;
-    if minutes <= 1 { "минуту".to_string() } else { format!("{minutes} мин") }
+    if minutes <= 1 {
+        "минуту".to_string()
+    } else if minutes < 120 {
+        format!("{minutes} мин")
+    } else {
+        format!("{} ч", (minutes + 59) / 60)
+    }
 }
 
-fn too_many(message: impl Into<String>) -> ApiError {
+pub(crate) fn too_many(message: impl Into<String>) -> ApiError {
     err(StatusCode::TOO_MANY_REQUESTS, "rate-limited", message)
 }
 
 /// Адрес клиента: nginx кладёт в X-Forwarded-For только адрес соединения (за Cloudflare — из
 /// CF-Connecting-IP), присланное клиентом значение отбрасывает. Сервер слушает только 127.0.0.1.
-fn client_ip(headers: &HeaderMap) -> String {
+pub(crate) fn client_ip(headers: &HeaderMap) -> String {
     headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()).map(|v| v.split(',').next().unwrap_or("").trim().to_string()).filter(|v| !v.is_empty()).unwrap_or_else(|| "local".to_string())
 }
 
-fn parse<'a, T: Deserialize<'a>>(body: &'a Bytes) -> Result<T, ApiError> {
+pub(crate) fn parse<'a, T: Deserialize<'a>>(body: &'a Bytes) -> Result<T, ApiError> {
     serde_json::from_slice(body).map_err(|_| bad("bad-request", "Некорректный запрос"))
 }
 
-fn local_of(email: &str) -> &str {
+pub(crate) fn local_of(email: &str) -> &str {
     email.split('@').next().unwrap_or("")
 }
 
@@ -125,7 +135,7 @@ fn text_field(v: Option<&str>, max: usize) -> String {
 
 impl App {
     /// `имя@домен` или просто `имя` → (имя, полный адрес); None, если адрес не наш или имя неверное.
-    fn parse_email(&self, input: &str) -> Option<(String, String)> {
+    pub(crate) fn parse_email(&self, input: &str) -> Option<(String, String)> {
         let s = input.trim().to_lowercase();
         let local = match s.split_once('@') {
             Some((l, d)) if d == self.domain => l.to_string(),
@@ -135,11 +145,11 @@ impl App {
         valid_local(&local).then(|| (local.clone(), format!("{}@{}", local, self.domain)))
     }
 
-    fn verifier(&self, salt: &[u8], login_hash: &str) -> [u8; 32] {
+    pub(crate) fn verifier(&self, salt: &[u8], login_hash: &str) -> [u8; 32] {
         hmac256(&self.pepper, &[salt, login_hash.as_bytes()])
     }
 
-    fn window(&self, key: &str, max: u32, window_ms: i64) -> Result<(), ApiError> {
+    pub(crate) fn window(&self, key: &str, max: u32, window_ms: i64) -> Result<(), ApiError> {
         self.limiter.hit(key, max, window_ms, now_ms()).map_err(|ms| too_many(format!("Слишком много запросов. Повторите через {}", wait_text(ms))))
     }
 
@@ -154,7 +164,7 @@ impl App {
     }
 
     /// Пароль приложения для устройства: прежний отзывается, новый отдаётся клиенту один раз.
-    async fn issue_mail(&self, user: &User, device_id: &str, device_name: &str, old: Option<String>) -> Option<Value> {
+    pub(crate) async fn issue_mail(&self, user: &User, device_id: &str, device_name: &str, old: Option<String>) -> Option<Value> {
         if !self.mail.enabled() {
             return None;
         }
@@ -200,20 +210,140 @@ impl App {
         }
     }
 
-    async fn new_session(&self, c: &impl deadpool_postgres::GenericClient, user_id: i64, device_id: &str, now: i64) -> Result<Value, ApiError> {
+    pub(crate) async fn new_session(&self, c: &impl deadpool_postgres::GenericClient, user_id: i64, device_id: &str, now: i64) -> Result<Value, ApiError> {
         let token = format!("tbs_{}", base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(random::<32>()));
         let expires = now + SESSION_TTL_MS;
         db::create_session(c, &sha256(token.as_bytes()), user_id, device_id, now, expires).await?;
         Ok(json!({ "token": token, "expiresAt": iso(expires) }))
     }
 
-    async fn auth(&self, headers: &HeaderMap) -> Result<(User, String, [u8; 32]), ApiError> {
+    pub(crate) async fn auth(&self, headers: &HeaderMap) -> Result<(User, String, [u8; 32]), ApiError> {
         let expired = || err(StatusCode::UNAUTHORIZED, "session-expired", "Сессия истекла: войдите в аккаунт заново");
         let token = headers.get(AUTHORIZATION).and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer ")).map(str::trim).filter(|t| !t.is_empty() && t.len() <= 128).ok_or_else(expired)?;
         let hash = sha256(token.as_bytes());
         let c = self.pool.get().await?;
         let (user, device_id) = db::session(&c, &hash, now_ms()).await?.ok_or_else(expired)?;
         Ok((user, device_id, hash))
+    }
+}
+
+/// Пауза после очередного неверного кода второго фактора: первые четыре без паузы, дальше
+/// 15, 30, 60 минут и так до суток. Шесть цифр перебираются дёшево, поэтому паузы длинные.
+fn second_pause(fails: i32) -> i64 {
+    if fails < 5 {
+        return 0;
+    }
+    (15 * 60_000i64 << (fails - 5).min(7)).min(86_400_000)
+}
+
+impl App {
+    /// Повторная проверка пароля перед чувствительной настройкой: хеш входа должен подойти.
+    pub(crate) fn reauth(&self, user: &User, login_hash: &str, ip: &str) -> Result<(), ApiError> {
+        let now = now_ms();
+        let key = format!("pw:{}:{}", user.id, ip);
+        let locked = self.limiter.locked(&key, now);
+        if locked > 0 {
+            return Err(too_many(format!("Слишком много неудачных попыток. Повторите через {}", wait_text(locked))));
+        }
+        if !is_hex(login_hash, 64) || !same(&self.verifier(&user.salt, login_hash), &user.verifier) {
+            self.limiter.fail(&key, now);
+            return Err(err(StatusCode::UNAUTHORIZED, "bad-credentials", "Неверный пароль"));
+        }
+        self.limiter.clear(&key);
+        Ok(())
+    }
+
+    /// HMAC короткого кода (резервного или из письма): в базе лежит только он.
+    pub(crate) fn code_hash(&self, user_id: i64, purpose: &str, code: &str) -> [u8; 32] {
+        hmac256(&self.code_key, &[&user_id.to_be_bytes(), purpose.as_bytes(), b"|", code.as_bytes()])
+    }
+
+    /// Шаг времени, для которого код приложения верен (текущий или соседний), иначе None.
+    pub(crate) fn totp_match(&self, secret: &[u8], code: &str, now: i64) -> Option<i64> {
+        let step = totp_step(now);
+        [step, step - 1, step + 1].into_iter().find(|s| same(format!("{:06}", totp(secret, *s)).as_bytes(), code.as_bytes()))
+    }
+
+    /// Второй фактор для аккаунта с включённой защитой: код приложения (6 цифр) или одноразовый
+    /// резервный код. Если защита выключена, проверять нечего. Неверный код считается попыткой
+    /// подбора; уже использованный код приложения не принимается, но и попыткой не считается.
+    pub(crate) async fn second_factor(&self, c: &impl deadpool_postgres::GenericClient, user: &User, sec: &Security, code: Option<&str>) -> Result<(), ApiError> {
+        if !sec.two_factor() {
+            return Ok(());
+        }
+        let Some(code) = code.map(str::trim).filter(|s| !s.is_empty()) else {
+            return Err(err(StatusCode::UNAUTHORIZED, "2fa-required", "Введите код двухфакторной защиты"));
+        };
+        let now = now_ms();
+        if sec.totp_locked_until > now {
+            return Err(too_many(format!("Слишком много неверных кодов. Повторите через {}", wait_text(sec.totp_locked_until - now))));
+        }
+        if let Some(digits) = clean_digits(code, 6) {
+            let secret = sec.totp_secret.as_deref().and_then(|b| open(&self.totp_key, user.public_id.as_bytes(), b)).ok_or_else(|| {
+                eprintln!("двухфакторная защита: секрет {} не расшифрован", user.public_id);
+                err(StatusCode::INTERNAL_SERVER_ERROR, "server", "Сервер временно недоступен: повторите позже")
+            })?;
+            if let Some(step) = self.totp_match(&secret, &digits, now) {
+                if db::totp_accept(c, user.id, step).await? {
+                    return Ok(());
+                }
+                return Err(err(StatusCode::UNAUTHORIZED, "bad-2fa", "Этот код уже использован. Дождитесь следующего кода в приложении"));
+            }
+        } else if let Some(backup) = clean_backup_code(code) {
+            if db::use_backup_code(c, user.id, &self.code_hash(user.id, "backup", &backup), now).await? {
+                db::totp_clear_fails(c, user.id).await?;
+                return Ok(());
+            }
+        }
+        let pause = db::totp_fail(c, user.id, now, second_pause).await?;
+        let text = if pause > 0 { format!("Неверный код. Следующая попытка через {}", wait_text(pause)) } else { "Неверный код двухфакторной защиты".to_string() };
+        Err(err(StatusCode::UNAUTHORIZED, "bad-2fa", text))
+    }
+
+    /// Письмо от сервера: служебный ящик готовится при первом письме, в сутки не больше предела.
+    pub(crate) async fn send_mail(&self, to: &str, subject: &str, text: &str) -> Result<(), ApiError> {
+        if !self.mail.can_send() {
+            return Err(mail_err(MailError::Unavailable("почта выключена".into())));
+        }
+        self.limiter
+            .hit("sysmail", self.mail_daily_cap, 86_400_000, now_ms())
+            .map_err(|_| err(StatusCode::SERVICE_UNAVAILABLE, "mail-unavailable", "Сервер сегодня отправил слишком много писем. Повторите завтра"))?;
+        if self.mail.needs_sender() {
+            let c = self.pool.get().await?;
+            let known = db::setting(&c, "system_mail_id").await?;
+            if let Some(id) = self.mail.ensure_sender(known.as_deref()).await.map_err(mail_err)? {
+                db::set_setting(&c, "system_mail_id", &id).await?;
+            }
+        }
+        self.mail.send_system(to, subject, text).await.map_err(mail_err)
+    }
+
+    /// Уведомление на резервный адрес, не задерживая ответ. Нет адреса — нет письма.
+    pub(crate) fn notify(self: &Arc<Self>, to: Option<String>, subject: &'static str, text: String) {
+        let Some(to) = to else { return };
+        let app = self.clone();
+        tokio::spawn(async move {
+            if let Err(e) = app.send_mail(&to, subject, &text).await {
+                eprintln!("уведомление «{subject}» не отправлено: {}", e.code);
+            }
+        });
+    }
+
+    /// Новый пароль после сброса: все устройства выходят из аккаунта и теряют доступ к почте.
+    pub(crate) async fn finish_reset(&self, c: &impl deadpool_postgres::GenericClient, user: &User, new_login_hash: &str, now: i64) -> Result<(), ApiError> {
+        let salt = random::<16>();
+        db::set_password(c, user.id, &salt, &self.verifier(&salt, new_login_hash), 2, now).await?;
+        db::delete_sessions(c, user.id, None).await?;
+        db::clear_device_creds(c, user.id).await?;
+        // отзываются все пароли приложений ящика, включая те, о которых база могла не знать
+        if self.mail.enabled() {
+            if let Some(mail_id) = user.mail_id.as_deref() {
+                if let Err(e) = self.mail.destroy_all_app_passwords(local_of(&user.email), &user.public_id, mail_id).await {
+                    eprintln!("почта: пароли приложений после сброса не отозваны: {e}");
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -264,7 +394,7 @@ struct RegisterBody {
     device_name: String,
 }
 
-fn check_device(id: &str) -> Result<(), ApiError> {
+pub(crate) fn check_device(id: &str) -> Result<(), ApiError> {
     if id.len() < 8 || id.len() > 64 || !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
         return Err(bad("bad-request", "Некорректный запрос: устройство"));
     }
@@ -333,6 +463,9 @@ struct LoginBody {
     device_id: String,
     #[serde(default)]
     device_name: String,
+    /// код приложения или резервный код, если у аккаунта включена двухфакторная защита
+    #[serde(default)]
+    totp: Option<String>,
 }
 
 async fn login(State(app): State<Arc<App>>, headers: HeaderMap, body: Bytes) -> ApiResult {
@@ -364,6 +497,9 @@ async fn login(State(app): State<Arc<App>>, headers: HeaderMap, body: Bytes) -> 
         return Err(wrong());
     };
     app.limiter.clear(&key);
+    // пароль верен; при включённой защите сессия выдаётся только со вторым фактором
+    let sec = db::security(&c, user.id).await?;
+    app.second_factor(&c, &user, &sec, b.totp.as_deref()).await?;
     let device_name = clean_name(&b.device_name, "Устройство");
     let old_cred = db::upsert_device(&c, user.id, &b.device_id, &device_name, now).await?;
     let session = app.new_session(&c, user.id, &b.device_id, now).await?;
@@ -416,8 +552,10 @@ async fn password(State(app): State<Arc<App>>, headers: HeaderMap, body: Bytes) 
     let (user, token_hash) = replace_login_hash(&app, &headers, &body, "Неверный текущий пароль").await?;
     let c = app.pool.get().await?;
     let orphaned = db::delete_sessions(&c, user.id, Some(&token_hash)).await?;
+    let backup = db::security(&c, user.id).await?.backup_email;
     drop(c);
     app.revoke_mail(&user, &orphaned).await;
+    app.notify(backup, "Tabora: пароль аккаунта изменён", security::notice_text(&user.email, "Пароль аккаунта изменён в браузере, где был выполнен вход. Остальные устройства вышли из аккаунта."));
     Ok(Json(json!({})))
 }
 
@@ -512,21 +650,16 @@ async fn reset(State(app): State<Arc<App>>, headers: HeaderMap, body: Bytes) -> 
     if !verify_reset(verifier, &email, &b.new_login_hash, &b.nonce, &b.recovery_proof) {
         return Err(bad_proof());
     }
-    let salt = random::<16>();
-    db::set_password(&c, user.id, &salt, &app.verifier(&salt, &b.new_login_hash), 2, now).await?;
-    db::delete_sessions(&c, user.id, None).await?;
-    db::clear_device_creds(&c, user.id).await?;
+    app.finish_reset(&c, &user, &b.new_login_hash, now).await?;
+    // Ключ восстановления — главный запасной вход: он же снимает двухфакторную защиту, иначе
+    // потеря телефона вместе с резервными кодами закрывала бы аккаунт навсегда.
+    let backup = db::security(&c, user.id).await?.backup_email;
+    let two_factor_off = db::disable_totp(&c, user.id).await?;
     drop(c);
-    // отзываются все пароли приложений ящика, включая те, о которых база могла не знать
-    if app.mail.enabled() {
-        if let Some(mail_id) = user.mail_id.as_deref() {
-            if let Err(e) = app.mail.destroy_all_app_passwords(local_of(&user.email), &user.public_id, mail_id).await {
-                eprintln!("почта: пароли приложений после сброса не отозваны: {e}");
-            }
-        }
-    }
     eprintln!("пароль сброшен ключом восстановления: {}", user.public_id);
-    Ok(Json(json!({})))
+    let what = if two_factor_off { "Пароль аккаунта сброшен ключом восстановления, двухфакторная защита выключена. Все устройства вышли из аккаунта." } else { "Пароль аккаунта сброшен ключом восстановления. Все устройства вышли из аккаунта." };
+    app.notify(backup, "Tabora: пароль аккаунта сброшен", security::notice_text(&user.email, what));
+    Ok(Json(json!({ "twoFactorDisabled": two_factor_off })))
 }
 
 async fn logout(State(app): State<Arc<App>>, headers: HeaderMap) -> ApiResult {
@@ -724,6 +857,16 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/v1/account/recovery", post(recovery))
         .route("/v1/account/reset/challenge", post(reset_challenge))
         .route("/v1/account/reset", post(reset))
+        .route("/v1/account/reset/email", post(security::reset_email_start))
+        .route("/v1/account/reset/email/confirm", post(security::reset_email_confirm))
+        .route("/v1/account/security", get(security::overview))
+        .route("/v1/account/2fa/setup", post(security::two_factor_setup))
+        .route("/v1/account/2fa/enable", post(security::two_factor_enable))
+        .route("/v1/account/2fa/disable", post(security::two_factor_disable))
+        .route("/v1/account/2fa/codes", post(security::two_factor_codes))
+        .route("/v1/account/backup-email", post(security::backup_email_set))
+        .route("/v1/account/backup-email/verify", post(security::backup_email_verify))
+        .route("/v1/account/backup-email/remove", post(security::backup_email_remove))
         .route("/v1/account/logout", post(logout))
         .route("/v1/account/devices", get(devices))
         .route("/v1/mail/password", post(mail_password))
@@ -750,6 +893,18 @@ mod tests {
         let s = alias_suffix();
         assert_eq!(s.len(), 4);
         assert!(valid_local(&format!("{}-{}", alias_base("x.com"), s)));
+    }
+
+    #[test]
+    fn second_factor_pauses() {
+        assert_eq!(second_pause(4), 0);
+        assert_eq!(second_pause(5), 15 * 60_000);
+        assert_eq!(second_pause(6), 30 * 60_000);
+        assert_eq!(second_pause(11), 16 * 3_600_000);
+        assert_eq!(second_pause(12), 86_400_000);
+        assert_eq!(second_pause(1000), 86_400_000);
+        assert_eq!(wait_text(15 * 60_000), "15 мин");
+        assert_eq!(wait_text(86_400_000), "24 ч");
     }
 
     #[test]

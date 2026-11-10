@@ -15,6 +15,15 @@
   отзывается при выходе с устройства.
 - Адрес удалённого алиаса никому не выдаётся повторно: иначе новый владелец получал бы письма
   прежнего.
+- Двухфакторная защита входа: коды приложения (TOTP, RFC 6238) и десять одноразовых резервных
+  кодов. Секрет в базе зашифрован ключом сервера (AES-256-GCM, привязан к пользователю), от
+  резервных кодов там только HMAC. Код приложения принимается один раз.
+- Резервный адрес нужен для сброса забытого пароля кодом из письма. Такой сброс доказывает только
+  доступ к резервному ящику, поэтому второй фактор при нём остаётся обязательным. Сервер меняет лишь
+  пароль аккаунта: ключа сейфа у него нет, сейф на компьютере пользователь открывает сам. Сброс
+  ключом восстановления, наоборот, снимает двухфакторную защиту: это главный запасной вход.
+- Письма сервера (коды, уведомления о переменах во входе) уходят от ящика `no-reply@домен`
+  обычными вызовами JMAP по локальному адресу. Ящик создаётся при первом письме.
 
 ## Интерфейс
 
@@ -30,10 +39,27 @@
 | `PATCH /v1/mail/aliases/:id { on?, site?, space? }` | выключенный алиас отвечает отправителю «ящика нет» |
 | `DELETE /v1/mail/aliases/:id` | алиас перестаёт принимать почту навсегда |
 | `GET /v1/health` | `{ ok, mail }` |
+| `POST /v1/account/login { …, totp? }` | при включённой защите без кода — `401 2fa-required`, с неверным — `401 bad-2fa`; `totp` — код приложения или резервный код |
+| `GET /v1/account/security` (Bearer) | `{ mail, twoFactor: { enabled, since, backupCodes }, backupEmail: { address, since }?, backupEmailPending: { address, expiresAt }?, recoveryKey }` |
+| `POST /v1/account/2fa/setup { loginHash }` | `{ secret, uri }` — секрет ждёт первого кода 15 минут, защита ещё выключена |
+| `POST /v1/account/2fa/enable { code }` | `{ backupCodes: [10] }` — показываются один раз |
+| `POST /v1/account/2fa/disable { loginHash, code }` | защита выключена, резервные коды удалены |
+| `POST /v1/account/2fa/codes { loginHash, code }` | `{ backupCodes }` — прежние перестают действовать |
+| `POST /v1/account/backup-email { loginHash, code?, address }` | на адрес уходит код из шести цифр; `{ pending: { address, expiresAt } }` |
+| `POST /v1/account/backup-email/verify { code }` | `{ address }` — адрес стал резервным |
+| `POST /v1/account/backup-email/remove { loginHash, code? }` | адрес удалён |
+| `POST /v1/account/reset/email { email }` | всегда `{}`; если у аккаунта есть резервный адрес, на него уходит код из восьми цифр |
+| `POST /v1/account/reset/email/confirm { email, code, newLoginHash, kdf, totp?, deviceId?, deviceName? }` | пароль сменён, все сессии завершены; устройству, назвавшему себя, сразу выдаётся сессия (`{ userId, session, kdf, mail }`) |
+| `POST /v1/account/reset` (ключ восстановления) | в ответе `twoFactorDisabled` |
+
+`loginHash` в настройках входа — повторная проверка пароля; `code` — второй фактор, обязателен,
+если защита включена.
 
 Ошибки — `{ code, message }`; `message` на русском и показывается пользователю как есть.
 Коды: `bad-credentials`, `session-expired`, `rate-limited`, `taken`, `bad-nonce`, `bad-proof`,
-`no-recovery`, `mail-unavailable`, `signup-closed`, `signup-paused`, `alias-limit`, `old-client`.
+`no-recovery`, `mail-unavailable`, `signup-closed`, `signup-paused`, `alias-limit`, `old-client`,
+`2fa-required`, `bad-2fa`, `2fa-on`, `2fa-off`, `2fa-setup-expired`, `bad-address`, `same-address`,
+`bad-code`, `no-code`.
 
 ## Ограничения
 
@@ -43,14 +69,21 @@
 (`TABORA_SIGNUP_DAILY_CAP`, по умолчанию 50); `TABORA_SIGNUP=closed` закрывает её совсем.
 Счётчики живут в памяти процесса.
 
+Второй фактор: пять неверных кодов подряд — пауза 15 минут, дальше удвоение до суток; счёт идёт
+по аккаунту, а не по адресу клиента, и хранится в базе (шесть цифр перебираются дёшево, и
+перезапуск сервера не должен обнулять паузу). Коды из писем: пять попыток на код, срок 30 минут,
+новый код заменяет прежний. Письма: код сброса — не больше трёх в сутки на аккаунт и пяти
+запросов в час с адреса, подтверждение резервного адреса — три в час и восемь в сутки на
+аккаунт, всего писем от сервера — `TABORA_MAIL_DAILY_CAP` в сутки (по умолчанию 500).
+
 ## Сборка, проверка, выкладка
 
 ```sh
 cargo test                                   # модульные тесты
 # контракт на запущенном экземпляре без почты и с пустой базой:
 TABORA_DOMAIN=tabora.app TABORA_LISTEN=127.0.0.1:7711 TABORA_DB=postgres://… \
-  APP_SIGNING_KEY=$(openssl rand -hex 32) TABORA_SIGNUP_PER_IP=6 cargo run &
-node tests/contract.mjs http://127.0.0.1:7711
+  APP_SIGNING_KEY=$(openssl rand -hex 32) TABORA_SIGNUP_PER_IP=6 TABORA_MAIL_OUTBOX=/tmp/tabora-outbox cargo run &
+node tests/contract.mjs http://127.0.0.1:7711 tabora.app /tmp/tabora-outbox
 infra/deploy.sh server                       # сборка под Linux (musl) с этой машины и установка
 ```
 

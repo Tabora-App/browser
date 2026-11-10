@@ -1,10 +1,14 @@
-// Проверка HTTP-контракта tabora-server на запущенном экземпляре без почты:
-//   node tests/contract.mjs http://127.0.0.1:7711
-// Сервер должен быть запущен с пустой базой и TABORA_SIGNUP_PER_IP=6 (тест проверяет и этот предел).
+// Проверка HTTP-контракта tabora-server на запущенном экземпляре без почтового сервера:
+//   node tests/contract.mjs http://127.0.0.1:7711 tabora.app /путь/к/каталогу-писем
+// Сервер должен быть запущен с пустой базой, TABORA_SIGNUP_PER_IP=6 (тест проверяет и этот
+// предел) и TABORA_MAIL_OUTBOX=<тот же каталог>: письма сервера складываются туда файлами.
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 
 const BASE = (process.argv[2] || "http://127.0.0.1:7711").replace(/\/+$/, "");
 const DOMAIN = process.argv[3] || "tabora.app";
+const OUTBOX = process.argv[4] || "";
 let passed = 0;
 let failed = 0;
 
@@ -37,6 +41,56 @@ const device = n => crypto.createHash("sha256").update("device" + n).digest("hex
 const tag = crypto.randomBytes(3).toString("hex");
 const name = n => `t${tag}${n}`;
 const mail = n => `${name(n)}@${DOMAIN}`;
+
+function b32decode(text) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const out = [];
+  let acc = 0;
+  let bits = 0;
+  for (const ch of text) {
+    acc = (acc << 5) | alphabet.indexOf(ch);
+    bits += 5;
+    if (bits >= 8) {
+      bits -= 8;
+      out.push((acc >> bits) & 255);
+      acc &= (1 << bits) - 1;
+    }
+  }
+  return Buffer.from(out);
+}
+
+/** Код приложения (RFC 6238) для секрета в Base32; shift — сдвиг в шагах по 30 секунд. */
+function totp(secret, shift = 0) {
+  const buf = Buffer.alloc(8);
+  buf.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000) + shift));
+  const h = crypto.createHmac("sha1", b32decode(secret)).update(buf).digest();
+  const o = h[19] & 15;
+  const n = ((h[o] & 127) << 24) | (h[o + 1] << 16) | (h[o + 2] << 8) | h[o + 3];
+  return String(n % 1e6).padStart(6, "0");
+}
+
+const otherCode = code => String((Number(code) + 1) % 1e6).padStart(6, "0");
+
+/** Последнее письмо сервера на адрес: { subject, text, code }. Письма уходят в фоне, поэтому ждём. */
+async function lastMail(to, { wait = 2500, after = 0 } = {}) {
+  const until = Date.now() + wait;
+  for (;;) {
+    const found = fs
+      .readdirSync(OUTBOX)
+      .filter(f => f.endsWith(".json") && Number(f.split("-")[0]) >= after)
+      .sort()
+      .map(f => JSON.parse(fs.readFileSync(path.join(OUTBOX, f), "utf8")))
+      .filter(m => m.to === to)
+      .pop();
+    if (found || Date.now() > until) {
+      const m = found && /(\d{3,4}) (\d{3,4})/.exec(found.text);
+      return found ? { ...found, code: m ? m[1] + m[2] : null } : null;
+    }
+    await new Promise(r => setTimeout(r, 100));
+  }
+}
+
+const mailsTo = to => fs.readdirSync(OUTBOX).filter(f => f.endsWith(".json")).map(f => JSON.parse(fs.readFileSync(path.join(OUTBOX, f), "utf8"))).filter(m => m.to === to);
 
 function recoveryKey() {
   const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
@@ -177,6 +231,164 @@ r = await call("POST", "/v1/mail/aliases", { token: A.s1, body: { site: "booking
 check("без почтового сервера алиас не создаётся", r.status === 503 && r.json.code === "mail-unavailable", r.text);
 r = await call("POST", "/v1/account/logout", { token: A.s1 });
 check("выход", r.status === 200 && (await call("GET", "/v1/account/devices", { token: A.s1 })).status === 401, r.text);
+
+// ---- двухфакторная защита входа ----
+const C = { email: mail("c"), pw: hash("c-pass"), pw2: hash("c-pass-2"), pw3: hash("c-pass-3"), ip: "198.51.100.50" };
+r = await call("POST", "/v1/account/register", { body: { email: C.email, loginHash: C.pw, kdf: 2, deviceId: device(40), deviceName: "C" }, ip: C.ip });
+C.s = r.json?.session?.token;
+r = await call("GET", "/v1/account/security", { token: C.s });
+check("настройки входа нового аккаунта: всё выключено", r.status === 200 && r.json.twoFactor.enabled === false && r.json.twoFactor.backupCodes === 0 && r.json.backupEmail === null && r.json.backupEmailPending === null && r.json.recoveryKey === false && r.json.mail === true, r.text);
+check("настройки входа без сессии → 401", (await call("GET", "/v1/account/security")).status === 401);
+r = await call("POST", "/v1/account/2fa/setup", { token: C.s, body: { loginHash: C.pw2 }, ip: C.ip });
+check("настройка 2FA требует верный пароль", r.status === 401 && r.json.code === "bad-credentials", r.text);
+r = await call("POST", "/v1/account/2fa/enable", { token: C.s, body: { code: "123456" }, ip: C.ip });
+check("включить 2FA без начатой настройки нельзя", r.status === 400 && r.json.code === "2fa-setup-expired", r.text);
+r = await call("POST", "/v1/account/2fa/setup", { token: C.s, body: { loginHash: C.pw }, ip: C.ip });
+check("настройка 2FA выдаёт секрет и ссылку для приложения", r.status === 200 && /^[A-Z2-7]{32}$/.test(r.json.secret) && r.json.uri === `otpauth://totp/Tabora:${C.email.replace("@", "%40")}?secret=${r.json.secret}&issuer=Tabora&algorithm=SHA1&digits=6&period=30`, r.text);
+C.secret = r.json?.secret;
+check("до подтверждения кодом защита выключена", (await call("GET", "/v1/account/security", { token: C.s })).json.twoFactor.enabled === false && (await call("POST", "/v1/account/login", { body: { email: C.email, loginHash: C.pw, deviceId: device(40) }, ip: C.ip })).status === 200);
+r = await call("POST", "/v1/account/2fa/enable", { token: C.s, body: { code: otherCode(totp(C.secret)) }, ip: C.ip });
+check("неверный первый код не включает защиту", r.status === 401 && r.json.code === "bad-2fa", r.text);
+const firstCode = totp(C.secret);
+r = await call("POST", "/v1/account/2fa/enable", { token: C.s, body: { code: ` ${firstCode.slice(0, 3)} ${firstCode.slice(3)} ` }, ip: C.ip });
+check("верный код включает защиту и выдаёт десять резервных кодов", r.status === 200 && r.json.backupCodes.length === 10 && new Set(r.json.backupCodes).size === 10 && r.json.backupCodes.every(c => /^[a-z2-9]{4}-[a-z2-9]{4}$/.test(c)), r.text);
+C.codes = r.json?.backupCodes || [];
+r = await call("GET", "/v1/account/security", { token: C.s });
+check("защита включена, резервных кодов десять", r.json.twoFactor.enabled === true && r.json.twoFactor.backupCodes === 10 && /^\d{4}-/.test(r.json.twoFactor.since), r.text);
+r = await call("POST", "/v1/account/2fa/setup", { token: C.s, body: { loginHash: C.pw }, ip: C.ip });
+check("повторная настройка при включённой защите → 409", r.status === 409 && r.json.code === "2fa-on", r.text);
+r = await call("POST", "/v1/account/login", { body: { email: C.email, loginHash: C.pw, deviceId: device(41), deviceName: "C2" }, ip: C.ip });
+check("вход без кода → 401 «нужен код»", r.status === 401 && r.json.code === "2fa-required", r.text);
+r = await call("POST", "/v1/account/login", { body: { email: C.email, loginHash: C.pw2, deviceId: device(41), totp: totp(C.secret, 1) }, ip: C.ip });
+check("неверный пароль с верным кодом → обычный отказ, код не тратится", r.status === 401 && r.json.code === "bad-credentials", r.text);
+r = await call("POST", "/v1/account/login", { body: { email: C.email, loginHash: C.pw, deviceId: device(41), totp: firstCode }, ip: C.ip });
+check("код, которым включали защиту, второй раз не принимается", r.status === 401 && r.json.code === "bad-2fa" && /уже использован/.test(r.json.message), r.text);
+r = await call("POST", "/v1/account/login", { body: { email: C.email, loginHash: C.pw, deviceId: device(41), totp: otherCode(totp(C.secret, 1)) }, ip: C.ip });
+check("неверный код → 401", r.status === 401 && r.json.code === "bad-2fa", r.text);
+r = await call("POST", "/v1/account/login", { body: { email: C.email, loginHash: C.pw, deviceId: device(41), deviceName: "C2", totp: totp(C.secret, 1) }, ip: C.ip });
+check("вход с паролем и свежим кодом", r.status === 200 && !!r.json.session.token, r.text);
+r = await call("POST", "/v1/account/login", { body: { email: C.email, loginHash: C.pw, deviceId: device(41), totp: C.codes[0].toUpperCase().replace("-", " ") }, ip: C.ip });
+check("вход с резервным кодом (в любом написании)", r.status === 200, r.text);
+r = await call("POST", "/v1/account/login", { body: { email: C.email, loginHash: C.pw, deviceId: device(41), totp: C.codes[0] }, ip: C.ip });
+check("резервный код одноразовый", r.status === 401 && r.json.code === "bad-2fa", r.text);
+check("резервных кодов осталось девять", (await call("GET", "/v1/account/security", { token: C.s })).json.twoFactor.backupCodes === 9);
+r = await call("POST", "/v1/account/2fa/codes", { token: C.s, body: { loginHash: C.pw }, ip: C.ip });
+check("новые резервные коды без второго фактора не выдаются", r.status === 401 && r.json.code === "2fa-required", r.text);
+r = await call("POST", "/v1/account/2fa/codes", { token: C.s, body: { loginHash: C.pw, code: C.codes[1] }, ip: C.ip });
+check("новые резервные коды", r.status === 200 && r.json.backupCodes.length === 10 && !r.json.backupCodes.includes(C.codes[2]), r.text);
+const oldCode = C.codes[2];
+C.codes = r.json?.backupCodes || [];
+r = await call("POST", "/v1/account/login", { body: { email: C.email, loginHash: C.pw, deviceId: device(41), totp: oldCode }, ip: C.ip });
+check("прежние резервные коды перестали действовать", r.status === 401 && r.json.code === "bad-2fa", r.text);
+
+// ---- резервный адрес ----
+const BOX = "anna.backup@example.org";
+r = await call("POST", "/v1/account/backup-email", { token: C.s, body: { loginHash: C.pw, address: BOX }, ip: C.ip });
+check("резервный адрес при включённой защите требует код", r.status === 401 && r.json.code === "2fa-required", r.text);
+for (const [what, address] of [["не адрес", "anna"], ["свой адрес", C.email], ["перевод строки", "a@example.org\r\nBcc: x@example.org"], ["кириллица", "анна@example.org"]]) {
+  r = await call("POST", "/v1/account/backup-email", { token: C.s, body: { loginHash: C.pw, code: C.codes[0], address }, ip: C.ip });
+  check(`резервный адрес: ${what} → 400`, r.status === 400 && r.json.code === "bad-address", r.text);
+}
+check("отказы по адресу второй фактор не тратят: резервных кодов по-прежнему десять", (await call("GET", "/v1/account/security", { token: C.s })).json.twoFactor.backupCodes === 10);
+let t0 = Date.now();
+r = await call("POST", "/v1/account/backup-email", { token: C.s, body: { loginHash: C.pw, code: C.codes[0], address: " Anna.Backup@Example.ORG " }, ip: C.ip });
+check("резервный адрес принят и ждёт подтверждения", r.status === 200 && r.json.pending.address === BOX && /^\d{4}-/.test(r.json.pending.expiresAt), r.text);
+let letter = await lastMail(BOX, { after: t0 - 5 });
+check("на адрес ушло письмо с кодом из шести цифр", !!letter && /^\d{6}$/.test(letter.code || "") && letter.subject === "Tabora: подтверждение резервного адреса" && letter.text.includes(C.email), JSON.stringify(letter));
+r = await call("GET", "/v1/account/security", { token: C.s });
+check("до подтверждения адрес не резервный", r.json.backupEmail === null && r.json.backupEmailPending.address === BOX, r.text);
+r = await call("POST", "/v1/account/backup-email/verify", { token: C.s, body: { code: otherCode(letter.code) }, ip: C.ip });
+check("неверный код подтверждения → 400", r.status === 400 && r.json.code === "bad-code", r.text);
+r = await call("POST", "/v1/account/backup-email/verify", { token: C.s, body: { code: `${letter.code.slice(0, 3)} ${letter.code.slice(3)}` }, ip: C.ip });
+check("код из письма подтверждает адрес", r.status === 200 && r.json.address === BOX, r.text);
+r = await call("POST", "/v1/account/backup-email/verify", { token: C.s, body: { code: letter.code }, ip: C.ip });
+check("код подтверждения одноразовый", r.status === 400 && r.json.code === "no-code", r.text);
+r = await call("GET", "/v1/account/security", { token: C.s });
+check("адрес записан как резервный", r.json.backupEmail.address === BOX && r.json.backupEmailPending === null, r.text);
+r = await call("POST", "/v1/account/backup-email", { token: C.s, body: { loginHash: C.pw, code: C.codes[1], address: BOX }, ip: C.ip });
+check("тот же адрес повторно → 409", r.status === 409 && r.json.code === "same-address", r.text);
+
+// ---- сброс пароля по коду из письма ----
+t0 = Date.now();
+r = await call("POST", "/v1/account/reset/email", { body: { email: mail("ghost") }, ip: "198.51.100.60" });
+const ghostReset = r.text;
+r = await call("POST", "/v1/account/reset/email", { body: { email: B.email }, ip: "198.51.100.60" });
+check("запрос сброса для неизвестного адреса и для аккаунта без резервной почты отвечает одинаково", r.status === 200 && r.text === ghostReset && r.text === "{}", r.text);
+r = await call("POST", "/v1/account/reset/email", { body: { email: C.email }, ip: "198.51.100.60" });
+check("запрос сброса для аккаунта с резервной почтой отвечает так же", r.status === 200 && r.text === ghostReset, r.text);
+letter = await lastMail(BOX, { after: t0 - 5 });
+check("на резервный адрес ушёл код сброса из восьми цифр", !!letter && /^\d{8}$/.test(letter.code || "") && letter.subject === "Tabora: сброс пароля", JSON.stringify(letter));
+check("другим адресам писем о сбросе нет", mailsTo(B.email).length === 0 && mailsTo(mail("ghost")).length === 0);
+r = await call("POST", "/v1/account/reset/email/confirm", { body: { email: C.email, code: letter.code.replace(/.$/, d => (Number(d) + 1) % 10), newLoginHash: C.pw2, kdf: 2 }, ip: "198.51.100.60" });
+check("неверный код сброса → 400", r.status === 400 && r.json.code === "bad-code", r.text);
+r = await call("POST", "/v1/account/reset/email/confirm", { body: { email: C.email, code: letter.code, newLoginHash: C.pw2, kdf: 2 }, ip: "198.51.100.60" });
+check("сброс по письму не обходит двухфакторную защиту", r.status === 401 && r.json.code === "2fa-required", r.text);
+check("пароль без второго фактора не сменился", (await call("POST", "/v1/account/login", { body: { email: C.email, loginHash: C.pw2, deviceId: device(41), totp: C.codes[2] }, ip: C.ip })).status === 401);
+r = await call("POST", "/v1/account/reset/email/confirm", { body: { email: C.email, code: letter.code, newLoginHash: C.pw2, kdf: 2, totp: C.codes[3], deviceId: "x" }, ip: "198.51.100.60" });
+check("сброс: плохое устройство → 400, код из письма не тратится", r.status === 400 && r.json.code === "bad-request", r.text);
+r = await call("POST", "/v1/account/reset/email/confirm", { body: { email: C.email, code: letter.code, newLoginHash: C.pw2, kdf: 2, totp: C.codes[3], deviceId: device(42), deviceName: "После сброса" }, ip: "198.51.100.60" });
+check("сброс по коду из письма и второму фактору сразу выдаёт сессию устройству", r.status === 200 && /^tbs_/.test(r.json.session?.token || "") && r.json.userId && r.json.kdf === 2 && r.json.mail === null, r.text);
+check("выданная при сбросе сессия действует, прежние завершены", (await call("GET", "/v1/account/security", { token: r.json.session.token })).status === 200 && (await call("GET", "/v1/account/security", { token: C.s })).status === 401);
+r = await call("POST", "/v1/account/reset/email/confirm", { body: { email: C.email, code: letter.code, newLoginHash: C.pw3, kdf: 2, totp: C.codes[4] }, ip: "198.51.100.60" });
+check("код сброса одноразовый", r.status === 400 && r.json.code === "bad-code", r.text);
+r = await call("POST", "/v1/account/login", { body: { email: C.email, loginHash: C.pw2, deviceId: device(40), deviceName: "C", totp: C.codes[4] }, ip: C.ip });
+check("вход новым паролем (код по-прежнему нужен)", r.status === 200, r.text);
+C.s = r.json?.session?.token;
+const notice = mailsTo(BOX).filter(m => m.subject === "Tabora: пароль аккаунта сброшен").pop();
+check("о сбросе пришло уведомление", !!notice && notice.text.includes(C.email), JSON.stringify(notice));
+// пять неверных кодов гасят код сброса
+t0 = Date.now();
+await call("POST", "/v1/account/reset/email", { body: { email: C.email }, ip: "198.51.100.61" });
+letter = await lastMail(BOX, { after: t0 - 5 });
+codes = [];
+for (let i = 0; i < 5; i++) {
+  codes.push((await call("POST", "/v1/account/reset/email/confirm", { body: { email: C.email, code: "0000000" + i, newLoginHash: C.pw3, kdf: 2, totp: C.codes[5] }, ip: "198.51.100.61" })).json.code);
+}
+r = await call("POST", "/v1/account/reset/email/confirm", { body: { email: C.email, code: letter.code, newLoginHash: C.pw3, kdf: 2, totp: C.codes[5] }, ip: "198.51.100.61" });
+check("после пяти неверных попыток верный код сброса уже не действует", codes.every(c => c === "bad-code") && r.status === 400 && r.json.code === "bad-code", r.text);
+t0 = Date.now();
+await call("POST", "/v1/account/reset/email", { body: { email: C.email }, ip: "198.51.100.62" });
+const third = await lastMail(BOX, { after: t0 - 5 });
+const resetMails = () => mailsTo(BOX).filter(m => m.subject === "Tabora: сброс пароля").length;
+const before = resetMails();
+r = await call("POST", "/v1/account/reset/email", { body: { email: C.email }, ip: "198.51.100.63" });
+await new Promise(done => setTimeout(done, 700));
+check("на аккаунт не больше трёх писем сброса в сутки (четвёртый запрос отвечает так же, письма нет)", !!third && before === 3 && resetMails() === 3 && r.status === 200 && r.text === "{}", `${before} → ${resetMails()}`);
+
+// ---- ключ восстановления снимает двухфакторную защиту; выключение и удаление адреса ----
+const ckey = recoveryKey();
+await call("POST", "/v1/account/recovery", { token: C.s, body: { recoveryVerifier: ckey.verifier } });
+ch = await call("POST", "/v1/account/reset/challenge", { body: { email: C.email }, ip: "198.51.100.70" });
+r = await call("POST", "/v1/account/reset", { body: { email: C.email, nonce: ch.json.nonce, recoveryProof: ckey.sign(`tabora-reset-v2|${C.email}|${C.pw3}|${ch.json.nonce}`), newLoginHash: C.pw3, kdf: 2 }, ip: "198.51.100.70" });
+check("сброс ключом восстановления выключает двухфакторную защиту", r.status === 200 && r.json.twoFactorDisabled === true, r.text);
+r = await call("POST", "/v1/account/login", { body: { email: C.email, loginHash: C.pw3, deviceId: device(40), deviceName: "C" }, ip: C.ip });
+check("после него вход только по паролю", r.status === 200, r.text);
+C.s = r.json?.session?.token;
+r = await call("GET", "/v1/account/security", { token: C.s });
+check("защита выключена, резервный адрес остался, ключ восстановления отмечен", r.json.twoFactor.enabled === false && r.json.twoFactor.backupCodes === 0 && r.json.backupEmail.address === BOX && r.json.recoveryKey === true, r.text);
+r = await call("POST", "/v1/account/backup-email/remove", { token: C.s, body: { loginHash: C.pw }, ip: C.ip });
+check("удаление резервного адреса требует верный пароль", r.status === 401 && r.json.code === "bad-credentials", r.text);
+r = await call("POST", "/v1/account/backup-email/remove", { token: C.s, body: { loginHash: C.pw3 }, ip: C.ip });
+check("резервный адрес удалён", r.status === 200 && (await call("GET", "/v1/account/security", { token: C.s })).json.backupEmail === null, r.text);
+check("об удалении пришло уведомление на прежний адрес", mailsTo(BOX).some(m => m.subject === "Tabora: резервный адрес удалён"));
+
+// пауза после неверных кодов (отдельный аккаунт: она длится четверть часа)
+const D = { email: mail("d"), pw: hash("d-pass"), ip: "198.51.100.51" };
+r = await call("POST", "/v1/account/register", { body: { email: D.email, loginHash: D.pw, kdf: 2, deviceId: device(50), deviceName: "D" }, ip: D.ip });
+D.s = r.json?.session?.token;
+r = await call("POST", "/v1/account/2fa/setup", { token: D.s, body: { loginHash: D.pw }, ip: D.ip });
+D.secret = r.json?.secret;
+r = await call("POST", "/v1/account/2fa/enable", { token: D.s, body: { code: totp(D.secret) }, ip: D.ip });
+D.codes = r.json?.backupCodes || [];
+codes = [];
+for (let i = 0; i < 6; i++) {
+  codes.push((await call("POST", "/v1/account/login", { body: { email: D.email, loginHash: D.pw, deviceId: device(50), totp: "aaaa-aaa" + "23456789"[i] }, ip: `203.0.113.${40 + i}` })).status);
+}
+check("пять неверных кодов подряд (с разных адресов), шестая попытка заблокирована", codes.join() === "401,401,401,401,401,429", codes.join());
+r = await call("POST", "/v1/account/login", { body: { email: D.email, loginHash: D.pw, deviceId: device(50), totp: D.codes[0] }, ip: "203.0.113.90" });
+check("во время паузы не проходит и верный резервный код", r.status === 429 && r.json.code === "rate-limited" && /неверных кодов/.test(r.json.message), r.text);
+r = await call("POST", "/v1/account/2fa/disable", { token: D.s, body: { loginHash: D.pw, code: D.codes[0] }, ip: D.ip });
+check("выключить защиту во время паузы тоже нельзя", r.status === 429, r.text);
 
 // пределы регистрации с одного адреса и прочее
 codes = [];

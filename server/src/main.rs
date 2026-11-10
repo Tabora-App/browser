@@ -18,11 +18,14 @@
 //!   TABORA_SIGNUP_DAILY_CAP  новых аккаунтов в сутки на весь сервер, по умолчанию 50
 //!   TABORA_SIGNUP_PER_IP     новых аккаунтов в сутки с одного адреса, по умолчанию 3
 //!   TABORA_ALIAS_MAX         алиасов на аккаунт, по умолчанию 100
+//!   TABORA_MAIL_DAILY_CAP    писем от сервера в сутки (коды, уведомления), по умолчанию 500
+//!   TABORA_MAIL_OUTBOX       только для проверок: каталог, куда письма складываются файлами
 
 mod api;
 mod db;
 mod limit;
 mod mail;
+mod security;
 mod util;
 
 use std::sync::Arc;
@@ -61,6 +64,9 @@ async fn main() {
     // независимые ключи из секрета сервера: «перец» для хешей входа и основа основных паролей ящиков
     let pepper = util::hmac256(&master, &[b"tabora/login-pepper/v1"]);
     let mail_key = util::hmac256(&master, &[b"tabora/mail-primary/v1"]);
+    // секрет TOTP в базе зашифрован; от резервных кодов и кодов из писем там только HMAC
+    let totp_key = util::hmac256(&master, &[b"tabora/totp-secret/v1"]);
+    let code_key = util::hmac256(&master, &[b"tabora/short-codes/v1"]);
 
     let pool = db::pool(&env("TABORA_DB")).unwrap_or_else(|e| fail(&e));
     // база может подняться позже сервера (загрузка системы): ждём до минуты
@@ -88,7 +94,11 @@ async fn main() {
 
     let mail_host = Some(env("TABORA_MAIL_HOST")).filter(|s| !s.is_empty()).unwrap_or_else(|| format!("mx.{domain}"));
     let quota = env_num::<u64>("TABORA_MAIL_QUOTA_MB", 2048) * 1024 * 1024;
-    let stalwart = mail::Stalwart::new(&env("STALWART_URL"), &env("STALWART_API_KEY"), &domain, mail_key, quota);
+    let outbox = Some(env("TABORA_MAIL_OUTBOX")).filter(|s| !s.is_empty()).map(std::path::PathBuf::from);
+    if let Some(dir) = &outbox {
+        eprintln!("tabora-server: письма не отправляются, а пишутся в {} (режим проверок)", dir.display());
+    }
+    let stalwart = mail::Stalwart::new(&env("STALWART_URL"), &env("STALWART_API_KEY"), &domain, mail_key, quota, outbox);
     let app = Arc::new(api::App {
         domain: domain.clone(),
         mail_host,
@@ -96,6 +106,9 @@ async fn main() {
         mail: stalwart,
         limiter: limit::Limiter::default(),
         pepper,
+        totp_key,
+        code_key,
+        mail_daily_cap: env_num("TABORA_MAIL_DAILY_CAP", 500),
         signup_open: env("TABORA_SIGNUP") != "closed",
         signup_daily_cap: env_num("TABORA_SIGNUP_DAILY_CAP", 50),
         signup_per_ip_day: env_num("TABORA_SIGNUP_PER_IP", 3),
