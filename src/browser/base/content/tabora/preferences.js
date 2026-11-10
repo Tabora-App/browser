@@ -146,17 +146,76 @@
     }
   }
 
-  function watch() {
-    mount();
-    // Панели настроек создаются лениво и асинхронно: следим за деревом, пока карточка не встанет
-    const mo = new MutationObserver(() => {
-      if (document.getElementById("tabora-cookie-banners") && document.getElementById("tabora-sleeping-tabs")) {
+  /* Ссылки поддержки ведут в репозиторий Tabora, а не на сайты Mozilla. Щелчок перехватывается
+   * на подъёме: адрес этим элементам задаёт сама страница настроек (support-page), и при
+   * перерисовке она вернула бы его обратно. */
+  const REPO = "https://github.com/Tabora-App/browser";
+  const SUPPORT_LINKS = {
+    supportGetHelp: `${REPO}/issues`,
+    supportShareIdeas: `${REPO}/issues/new`,
+    helpButton: `${REPO}/issues`,
+  };
+
+  function supportLinks() {
+    const open = e => {
+      if (e.type === "auxclick" && e.button !== 1) {
         return;
       }
-      mount();
+      for (const el of e.composedPath()) {
+        const url = el.id && SUPPORT_LINKS[el.id];
+        if (url) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          window.browsingContext.topChromeWindow.openTrustedLinkIn(url, "tab");
+          return;
+        }
+      }
+    };
+    document.addEventListener("click", open, true);
+    document.addEventListener("auxclick", open, true);
+  }
+
+  /** Мелкие правки готовых блоков страницы; вызывается при каждом изменении дерева. */
+  function tidy() {
+    for (const [id, url] of Object.entries(SUPPORT_LINKS)) {
+      const el = document.getElementById(id);
+      if (el && el.localName === "moz-box-link" && el.getAttribute("href") !== url) {
+        el.setAttribute("href", url); // чтобы при наведении был виден настоящий адрес
+      }
+    }
+    // Иллюстрация-щит Mozilla в карточке состояния защиты: она внутри теневого дерева, поэтому
+    // скрывается своим листом стилей (CSSOM, без встроенных стилей)
+    for (const card of document.querySelectorAll("security-privacy-card")) {
+      const root = card.shadowRoot;
+      if (root && !root.taboraStyled) {
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync(".status-image { display: none !important; }");
+        root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
+        root.taboraStyled = true;
+      }
+    }
+  }
+
+  function watch() {
+    mount();
+    tidy();
+    // Панели настроек создаются лениво и асинхронно: следим за деревом
+    let queued = false;
+    const mo = new MutationObserver(() => {
+      if (!document.getElementById("tabora-cookie-banners") || !document.getElementById("tabora-sleeping-tabs")) {
+        mount();
+      }
+      if (!queued) {
+        queued = true;
+        requestAnimationFrame(() => {
+          queued = false;
+          tidy();
+        });
+      }
     });
     mo.observe(document.documentElement, { childList: true, subtree: true });
   }
 
+  supportLinks();
   watch();
 })();

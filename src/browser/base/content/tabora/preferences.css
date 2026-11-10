@@ -63,6 +63,17 @@
   --button-text-color-primary-hover: var(--tabora-on-accent);
   --button-text-color-primary-active: var(--tabora-on-accent);
 
+  /* Строки-кнопки в карточках («Дополнительные настройки», ссылки поддержки), пункты выпадающих
+     списков и заголовки раскрывающихся карточек в покое без заливки, как строки на странице
+     аккаунта: фон появляется при наведении. Без этих значений они наследуют общий фон кнопок
+     и карточка превращается в стопку серых плашек. */
+  --button-background-color-menu: transparent;
+  --button-background-color-ghost: transparent;
+  --button-background-color-menu-active: var(--tabora-raised-2);
+  --card-header-background-color: transparent;
+  --card-header-background-color-hover: var(--tabora-raised);
+  --card-header-background-color-active: var(--tabora-raised-2);
+
   /* Обычные кнопки и поля */
   --button-background-color: var(--tabora-raised);
   --button-background-color-hover: var(--tabora-raised-2);
@@ -144,6 +155,17 @@ input[type="search"] {
 input[type="search"]:focus-visible {
   border-color: var(--tabora-accent) !important;
   outline: none !important;
+}
+
+/* Содержимое уходит под закреплённую строку поиска плавно: без этого заголовок раздела при
+   прокрутке обрезался по невидимой линии. */
+#search-container::after {
+  content: "";
+  position: absolute;
+  inset: 100% 0 auto;
+  height: 20px;
+  pointer-events: none;
+  background: linear-gradient(var(--tabora-bg), transparent);
 }
 
 /* Разделы Mozilla, которых в Tabora нет: аккаунт Firefox, Labs, управление ИИ,

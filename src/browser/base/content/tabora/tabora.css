@@ -2810,6 +2810,10 @@ sidebar-main {
   --panel-subview-body-padding-block: 8px;
   --toolbarseparator-color: var(--tabora-line);
 
+  /* пункты меню и «прозрачные» кнопки в покое без заливки: иначе они наследуют общий фон кнопок
+     (--button-background-color), и каждый пункт меню браузера выглядит нажатым */
+  --button-background-color-menu: transparent;
+  --button-background-color-ghost: transparent;
   --button-background-color-menu-hover: var(--tabora-raised);
   --button-background-color-menu-active: var(--tabora-raised-2);
   --button-text-color-menu-hover: var(--tabora-text);
