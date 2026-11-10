@@ -50,7 +50,7 @@ var Tabora = {
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
       "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initWalletProvider", "initVaultActor", "initAccount", "initUpdates", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "initLegacyShellUrls", "initMailToggle", "startTimers", "updateTitle", "localizeUrlbar",
-      "routeUrlbarToCommandBar", "initTabMotion", "initMotion", "initBookmarkDefaults", "initTabsLayout", "initAddonsPage",
+      "routeUrlbarToCommandBar", "initTabMotion", "initMotion", "initBookmarkDefaults", "initTabsLayout", "initAddonsPage", "initAppMenu",
     ]) {
       try {
         this[step]();
@@ -116,6 +116,40 @@ var Tabora = {
     if (Services.prefs.getStringPref(PREF, "") === "addons://discover/") {
       Services.prefs.clearUserPref(PREF);
     }
+  },
+
+  /* ---- Главное меню и помощь ---------------------------------------------------------
+   * Сочетания ⌘J и ⇧⌘J оболочка забрала себе (агент и ящик загрузок), а меню продолжало
+   * показывать подсказки Firefox: «Загрузки ⌘J», «Консоль браузера ⇧⌘J». Темы оформления
+   * Firefox на окно Tabora не действуют, поэтому пункт называется просто «Расширения». */
+  REPO_URL: "https://github.com/Tabora-App/browser",
+
+  initAppMenu() {
+    // подсказку у «Загрузок» меню вычисляет по этой клавише; само сочетание обрабатывает оболочка
+    document.getElementById("key_openDownloads")?.setAttribute("modifiers", "accel,shift");
+
+    // «Получить помощь» (меню, F1) ведёт в репозиторий Tabora, как ссылки поддержки в настройках.
+    // Справочные ссылки «Подробнее» по темам остаются как есть.
+    const helpLink = window.openHelpLink;
+    window.openHelpLink = (topic, ...rest) =>
+      topic === "firefox-help" ? openTrustedLinkIn(`${this.REPO_URL}/issues`, "tab") : helpLink(topic, ...rest);
+
+    const tidy = e => {
+      const view = e.target;
+      if (view.id === "appMenu-mainView") {
+        const ext = view.querySelector("#appMenu-extensions-themes-button");
+        if (ext && (ext.hasAttribute("data-l10n-id") || ext.getAttribute("label") !== "Расширения")) {
+          ext.removeAttribute("data-l10n-id"); // иначе перевод вернёт «Расширения и темы»
+          ext.setAttribute("label", "Расширения");
+        }
+      } else if (view.id === "appmenu-moreTools") {
+        for (const item of view.querySelectorAll('toolbarbutton[key="key_browserConsole"][shortcut]')) {
+          item.removeAttribute("shortcut");
+        }
+      }
+    };
+    document.addEventListener("ViewShowing", tidy);
+    document.addEventListener("ViewShown", tidy);
   },
 
   /* ---- Окно нового письма: живёт в оболочке, видно на любой вкладке ------ */

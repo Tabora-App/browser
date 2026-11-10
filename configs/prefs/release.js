@@ -44,6 +44,8 @@ pref("extensions.htmlaboutaddons.recommendations.enabled", false);
 // Страница расширений открывается сразу на списке расширений: вводный экран «Рекомендации»
 // без самих рекомендаций — это только реклама каталога Mozilla (и упоминание Firefox)
 pref("extensions.getAddons.showPane", false);
+// «Поделиться идеей или оставить отзыв» в меню помощи: в репозиторий Tabora, а не на сайт Mozilla
+pref("app.feedback.baseURL", "https://github.com/Tabora-App/browser/issues/new");
 // Сборка идёт без MOZ_DATA_REPORTING (src/browser/moz.configure.patch), поэтому all.js не задаёт
 // значения политики отправки данных. Задаём их сами, чтобы код, читающий их без запасного
 // значения, не падал; отправка при этом выключена и сборкой, и настройками выше.
