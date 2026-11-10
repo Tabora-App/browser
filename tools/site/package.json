@@ -1,0 +1,12 @@
+{
+  "name": "tabora-site",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Сборка скриптов сайта tabora.app: сцена three.js на первом экране и мелкие взаимодействия",
+  "dependencies": {
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.5"
+  }
+}

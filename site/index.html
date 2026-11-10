@@ -2,21 +2,411 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tabora</title>
-<meta name="description" content="Tabora: браузер с почтой, кошельком, сейфом и кодами входа. Скоро.">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tabora: браузер с почтой, кошельком и сейфом</title>
+<meta name="description" content="Tabora — открытый браузер на движке Firefox. Криптокошелёк для семи сетей, пароли, коды двухфакторного входа и почта с алиасами встроены в сам браузер.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#e7e6e0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141517" media="(prefers-color-scheme: dark)">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Tabora">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:url" content="https://tabora.app/">
+<meta property="og:title" content="Tabora: браузер, в котором уже есть почта, кошелёк и сейф">
+<meta property="og:description" content="Открытый браузер на движке Firefox. Кошелёк для семи сетей, пароли, коды входа и почта с алиасами встроены в сам браузер.">
+<meta property="og:image" content="https://tabora.app/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://tabora.app/">
 <link rel="icon" href="/assets/mark.svg" type="image/svg+xml">
+<link rel="preload" href="/assets/fonts/Manrope-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/Manrope-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/site.css">
+<script type="module" src="/site.js"></script>
 </head>
 <body>
+
+<header class="top">
+  <a class="brand" href="/" aria-label="Tabora, на главную">
+    <svg class="brand-mark" viewBox="0 0 256 256" aria-hidden="true">
+      <rect class="m-tile" width="256" height="256" rx="58"/>
+      <rect class="m-ink" x="56" y="66" width="144" height="38" rx="19"/>
+      <rect class="m-ink" x="109" y="66" width="38" height="134" rx="19"/>
+      <circle class="m-tile" cx="181" cy="85" r="11"/>
+    </svg>
+    <span>Tabora</span>
+  </a>
+  <nav class="top-links" aria-label="Основное">
+    <a href="https://github.com/Tabora-App/browser">GitHub</a>
+    <a class="pill" href="#download">Скачать</a>
+  </nav>
+</header>
+
 <main>
-  <div class="mark" aria-hidden="true">
-    <svg viewBox="0 0 256 256"><rect x="56" y="66" width="144" height="38" rx="19" fill="#0b0c0e"/><rect x="109" y="66" width="38" height="134" rx="19" fill="#0b0c0e"/><circle class="dot" cx="181" cy="85" r="11" fill="#c8f25a" stroke="#0b0c0e" stroke-width="0"/></svg>
+
+<section class="hero">
+  <div class="hero-copy">
+    <h1>Браузер, в&nbsp;котором уже есть почта, кошелёк и&nbsp;сейф</h1>
+    <p class="lead">Tabora построен на&nbsp;Firefox. Криптокошелёк, пароли, коды двухфакторного входа и&nbsp;почта с&nbsp;алиасами встроены в&nbsp;сам браузер, а&nbsp;не&nbsp;поставлены расширениями. Мастер-пароль не&nbsp;покидает ваш компьютер.</p>
+    <div class="hero-actions">
+      <a class="capsule" href="/downloads/Tabora-0.1.0-mac-aarch64.dmg">
+        <span>Скачать для macOS</span>
+        <span class="capsule-dot" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v13"/><path d="m6.5 12.5 5.5 5.5 5.5-5.5"/></svg></span>
+      </a>
+      <a class="quiet-link" href="https://github.com/Tabora-App/browser">Исходный код на&nbsp;GitHub</a>
+    </div>
+    <p class="hero-note">Версия 0.1.0 для Mac с&nbsp;Apple Silicon. Windows и&nbsp;Linux появятся позже.</p>
   </div>
-  <h1>Браузер, в котором уже есть почта, кошелёк и сейф</h1>
-  <p>Tabora строится на движке Firefox. Почта на своём домене, криптокошелёк, менеджер паролей и коды входа живут внутри браузера и защищены одним мастер-паролем, который не покидает ваш компьютер.</p>
-  <span class="soon">Скоро откроем</span>
-  <footer>Вопросы: <a href="mailto:hello@tabora.app">hello@tabora.app</a></footer>
+  <div class="stage" data-hero-stage role="img" aria-label="Знак Tabora: буква T, по перекладине которой катится лаймовый шар">
+    <svg class="stage-fallback" viewBox="46 56 164 154" aria-hidden="true">
+      <rect class="m-ink" x="56" y="66" width="144" height="38" rx="19"/>
+      <rect class="m-ink" x="109" y="66" width="38" height="134" rx="19"/>
+      <circle class="m-lime" cx="181" cy="85" r="11"/>
+    </svg>
+  </div>
+</section>
+
+<div class="guide">
+
+  <nav class="rail" aria-label="Разделы страницы">
+    <a href="#wallet">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5h17v11h-17z"/><path d="M3.5 11h17"/></svg>
+      <span>Кошелёк</span><kbd>⌘⇧W</kbd>
+    </a>
+    <a href="#mail">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 6.5h17v11h-17z"/><path d="m3.5 7 8.5 6 8.5-6"/></svg>
+      <span>Почта и&nbsp;алиасы</span><kbd>⌘⇧M</kbd>
+    </a>
+    <a href="#vault">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3"/><path d="M5 11h14v10H5z"/></svg>
+      <span>Сейф и&nbsp;коды</span>
+    </a>
+    <a href="#agent">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle class="fill" cx="12" cy="12" r="4.5"/></svg>
+      <span>Агент</span><kbd>⌘J</kbd>
+    </a>
+    <a href="#daily">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 5.5h7v6h-7z"/><path d="M13.5 5.5h7v6h-7z"/><path d="M3.5 14.5h17v4h-17z"/></svg>
+      <span>Каждый день</span>
+    </a>
+    <a href="#source">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8.5 7-5 5 5 5"/><path d="m15.5 7 5 5-5 5"/></svg>
+      <span>Открытый код</span>
+    </a>
+    <a href="#download">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
+      <span>Скачать</span>
+    </a>
+  </nav>
+
+  <div class="parts">
+
+    <section class="part" id="wallet">
+      <div class="part-grid">
+        <div class="part-text">
+          <h2>Кошелёк для семи сетей на&nbsp;одной фразе</h2>
+          <p class="part-lead">Адреса Ethereum, Base, Arbitrum, Polygon, Bitcoin, Solana и&nbsp;TRON выводятся из&nbsp;одной фразы восстановления. Фраза зашифрована паролем кошелька и&nbsp;лежит на&nbsp;вашем компьютере.</p>
+          <dl class="points">
+            <div>
+              <dt>Сайты видят кошелёк сами</dt>
+              <dd>Tabora поддерживает EIP-6963 и&nbsp;EIP-1193 для Ethereum, Wallet Standard для Solana и&nbsp;совместим с&nbsp;TronLink. На&nbsp;сайтах вроде Uniswap достаточно нажать «Подключить».</dd>
+            </div>
+            <div>
+              <dt>Перед подписью видно, что произойдёт</dt>
+              <dd>Кошелёк сам разбирает транзакцию: сколько уйдёт, кому придут токены, какой лимит просит контракт. Опасные подписи EIP-712 и&nbsp;бесконечные разрешения помечаются.</dd>
+            </div>
+            <div>
+              <dt>Адреса-двойники не&nbsp;попадают в&nbsp;историю</dt>
+              <dd>Входящая «пыль» с&nbsp;адресов, похожих на&nbsp;ваши, скрывается, чтобы вы&nbsp;не&nbsp;скопировали чужой адрес по&nbsp;ошибке.</dd>
+            </div>
+            <div>
+              <dt>Имена .eth и&nbsp;ссылки ipfs://</dt>
+              <dd>Открываются прямо из&nbsp;строки адреса через публичные шлюзы. Шлюзы можно сменить в&nbsp;настройках.</dd>
+            </div>
+          </dl>
+        </div>
+        <div class="part-mock">
+          <div class="mock sign" role="img" aria-label="Пример листа подтверждения: сайт app.uniswap.org просит подписать обмен 0,5 ETH на 1 702,40 USDC, получатель — ваш адрес">
+            <p class="sign-from"><b>app.uniswap.org</b> просит подписать</p>
+            <p class="sign-title">Обмен</p>
+            <dl class="kv">
+              <div><dt>Отдаёте</dt><dd><span class="num">0,5</span> ETH</dd></div>
+              <div><dt>Получаете</dt><dd>≈ <span class="num">1&#8239;702,40</span> USDC</dd></div>
+              <div><dt>Получатель</dt><dd><span class="check"><svg viewBox="0 0 24 24"><path d="m6.5 12.5 3.5 3.5 7.5-8"/></svg></span>ваш адрес <code>0x7a3…91c2</code></dd></div>
+              <div><dt>Сеть</dt><dd><i class="net base"></i>Base</dd></div>
+              <div><dt>Комиссия</dt><dd>≈ <span class="num">$0,04</span></dd></div>
+            </dl>
+            <div class="mock-actions"><span class="mbtn">Отклонить</span><span class="mbtn primary">Подписать</span></div>
+          </div>
+          <ul class="nets" aria-label="Сети кошелька">
+            <li><i class="net ethereum"></i>Ethereum</li>
+            <li><i class="net base"></i>Base</li>
+            <li><i class="net arbitrum"></i>Arbitrum</li>
+            <li><i class="net polygon"></i>Polygon</li>
+            <li><i class="net bitcoin"></i>Bitcoin</li>
+            <li><i class="net solana"></i>Solana</li>
+            <li><i class="net tron"></i>TRON</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="part" id="mail">
+      <div class="part-grid">
+        <div class="part-text">
+          <h2>Почта на&nbsp;tabora.app и&nbsp;отдельный адрес для каждого сайта</h2>
+          <p class="part-lead">У&nbsp;вас будет адрес вида имя@tabora.app. При регистрации на&nbsp;сайте браузер предложит алиас, например booking-k3f9@tabora.app. Письма приходят в&nbsp;один ящик, и&nbsp;по&nbsp;алиасу видно, какой сайт их&nbsp;прислал.</p>
+          <dl class="points">
+            <div>
+              <dt>Отписка одним переключателем</dt>
+              <dd>Сайт начал слать рекламу или адрес утёк&nbsp;— выключите алиас, и&nbsp;письма на&nbsp;него перестанут приходить. Основной адрес сайт не&nbsp;знает.</dd>
+            </div>
+            <div>
+              <dt>Коды из&nbsp;писем без похода в&nbsp;почту</dt>
+              <dd>Агент находит код подтверждения в&nbsp;свежем письме и&nbsp;вставляет его в&nbsp;форму.</dd>
+            </div>
+            <div>
+              <dt>Письма на&nbsp;диске зашифрованы</dt>
+              <dd>Сохранённая почта шифруется ключом сейфа и&nbsp;закрывается вместе с&nbsp;ним.</dd>
+            </div>
+          </dl>
+          <p class="status-note">Адреса на&nbsp;tabora.app начнём выдавать, когда откроем регистрацию. В&nbsp;версии 0.1 раздел почты показывает пример ящика.</p>
+        </div>
+        <div class="part-mock">
+          <div class="mock aliases">
+            <div class="mock-head"><b>Алиасы</b><span>попробуйте выключить</span></div>
+            <ul>
+              <li class="alias">
+                <div class="alias-main">
+                  <code>booking-k3f9@tabora.app</code>
+                  <span class="alias-meta" data-status data-on="booking.com, 1 письмо" data-off="выключен">booking.com, 1 письмо</span>
+                </div>
+                <input type="checkbox" role="switch" class="switch" data-alias checked aria-label="Алиас booking-k3f9@tabora.app">
+              </li>
+              <li class="alias">
+                <div class="alias-main">
+                  <code>bahn-x4k1@tabora.app</code>
+                  <span class="alias-meta" data-status data-on="bahn.de, 3 письма" data-off="выключен">bahn.de, 3 письма</span>
+                </div>
+                <input type="checkbox" role="switch" class="switch" data-alias checked aria-label="Алиас bahn-x4k1@tabora.app">
+              </li>
+              <li class="alias">
+                <div class="alias-main">
+                  <code>notion-p1z7@tabora.app</code>
+                  <span class="alias-meta" data-status data-on="notion.so, 27 писем" data-off="выключен">notion.so, 27 писем</span>
+                  <span class="alias-warn">14 рассылок за неделю</span>
+                </div>
+                <input type="checkbox" role="switch" class="switch" data-alias checked aria-label="Алиас notion-p1z7@tabora.app">
+              </li>
+              <li class="alias">
+                <div class="alias-main">
+                  <code>zalando-t7r2@tabora.app</code>
+                  <span class="alias-meta" data-status data-on="zalando.cz, 41 письмо" data-off="выключен">выключен: спам</span>
+                </div>
+                <input type="checkbox" role="switch" class="switch" data-alias aria-label="Алиас zalando-t7r2@tabora.app">
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="part" id="vault">
+      <div class="part-grid">
+        <div class="part-text">
+          <h2>Пароли и&nbsp;коды входа под одним мастер-паролем</h2>
+          <p class="part-lead">Сейф хранит пароли сайтов и&nbsp;коды двухфакторного входа. Они зашифрованы ключом, который открывается мастер-паролем или связкой ключей macOS. Мастер-пароль никуда не&nbsp;отправляется.</p>
+          <dl class="points">
+            <div>
+              <dt>Коды без телефона</dt>
+              <dd>Добавьте код по&nbsp;QR со&nbsp;страницы или с&nbsp;экрана, перенесите из&nbsp;Google Authenticator, Aegis или 2FAS. Браузер подскажет код в&nbsp;поле входа только на&nbsp;том сайте, к&nbsp;которому код привязан.</dd>
+            </div>
+            <div>
+              <dt>Буфер обмена чистится сам</dt>
+              <dd>Скопированный код исчезает из&nbsp;буфера через 30&nbsp;секунд и&nbsp;не&nbsp;остаётся в&nbsp;его истории.</dd>
+            </div>
+            <div>
+              <dt>Подбор пароля стоит дорого</dt>
+              <dd>Мастер-пароль превращается в&nbsp;ключ через Argon2id с&nbsp;64&nbsp;МБ памяти на&nbsp;каждую попытку.</dd>
+            </div>
+            <div>
+              <dt>Ключ восстановления</dt>
+              <dd>Если забудете мастер-пароль, сейф откроется ключом, который вы&nbsp;сохраните при создании.</dd>
+            </div>
+          </dl>
+        </div>
+        <div class="part-mock">
+          <div class="mock vault" role="img" aria-label="Пример сейфа: одноразовый код для GitHub с отсчётом времени и сохранённый пароль для bahn.de">
+            <div class="otp">
+              <div class="otp-who"><b>GitHub</b><span>anna</span></div>
+              <div class="otp-code" data-demo-code>482 913</div>
+              <div class="otp-ring" data-demo-ring data-seconds="30"></div>
+            </div>
+            <div class="pw">
+              <div class="pw-who"><b>bahn.de</b><code>bahn-x4k1@tabora.app</code></div>
+              <span class="pw-dots">•••••••••</span>
+            </div>
+            <p class="vault-foot"><svg viewBox="0 0 24 24"><path d="M8.5 8.5h11v11h-11z"/><path d="M15.5 8.5v-4h-11v11h4"/></svg>Код скопирован, буфер очистится через 30&nbsp;секунд</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="part" id="agent">
+      <div class="part-grid">
+        <div class="part-text">
+          <h2>Агент, который спрашивает, прежде чем отправить</h2>
+          <p class="part-lead">Поручите агенту рутину: зарегистрироваться на&nbsp;сайте, найти письмо, заполнить форму. Он&nbsp;работает во&nbsp;вкладках браузера на&nbsp;вашем ключе OpenAI, а&nbsp;ключ хранится в&nbsp;сейфе.</p>
+          <dl class="points">
+            <div>
+              <dt>Подтверждение перед важным</dt>
+              <dd>Отправку форм и&nbsp;переходы по&nbsp;ссылкам из&nbsp;текста страницы агент показывает карточкой с&nbsp;настоящим доменом сайта. Без вашего согласия ничего не&nbsp;уйдёт.</dd>
+            </div>
+            <div>
+              <dt>Текст страницы не&nbsp;командует агентом</dt>
+              <dd>После чтения страницы или письма каждое следующее действие требует подтверждения. Так чужой текст не&nbsp;сможет увести ваши данные.</dd>
+            </div>
+          </dl>
+        </div>
+        <div class="part-mock">
+          <div class="mock agent" role="img" aria-label="Пример панели агента: по просьбе зарегистрироваться на bahn.de агент создал алиас, заполнил форму и просит разрешения её отправить">
+            <div class="mock-head"><b><i class="live"></i>Агент</b><kbd>⌘J</kbd></div>
+            <p class="say">Зарегистрируй меня на&nbsp;bahn.de</p>
+            <ul class="steps">
+              <li><span class="check"><svg viewBox="0 0 24 24"><path d="m6.5 12.5 3.5 3.5 7.5-8"/></svg></span>Создал алиас <code>bahn-x4k1@tabora.app</code></li>
+              <li><span class="check"><svg viewBox="0 0 24 24"><path d="m6.5 12.5 3.5 3.5 7.5-8"/></svg></span>Заполнил форму регистрации</li>
+            </ul>
+            <div class="ask">
+              <p class="ask-title">Отправить форму?</p>
+              <p class="ask-site">bahn.de</p>
+              <p class="ask-note">Сайт получит имя и&nbsp;адрес алиаса.</p>
+              <div class="mock-actions"><span class="mbtn">Отклонить</span><span class="mbtn primary">Отправить</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="part" id="daily">
+      <h2>И&nbsp;всё, что нужно от&nbsp;браузера каждый день</h2>
+      <dl class="points wide">
+        <div>
+          <dt>Пространства</dt>
+          <dd>Личное, Работа и&nbsp;Проекты со&nbsp;своими вкладками и&nbsp;своими входами на&nbsp;сайты.</dd>
+        </div>
+        <div>
+          <dt>Спящие вкладки</dt>
+          <dd>Можно включить усыпление вкладок после простоя, чтобы освободить память. По&nbsp;умолчанию выключено; вкладки со&nbsp;звуком и&nbsp;звонками не&nbsp;засыпают.</dd>
+        </div>
+        <div>
+          <dt>Защита от&nbsp;трекеров</dt>
+          <dd>Встроенная защита Firefox и&nbsp;расширения из&nbsp;каталога Firefox, включая uBlock Origin.</dd>
+        </div>
+        <div>
+          <dt>Одна строка для всего <kbd>⌘K</kbd></dt>
+          <dd>Ищет по&nbsp;вкладкам и&nbsp;истории, открывает разделы и&nbsp;принимает поручения агенту.</dd>
+        </div>
+      </dl>
+    </section>
+
+    <section class="part" id="source">
+      <div class="part-grid">
+        <div class="part-text">
+          <h2>Код открыт, проверки опубликованы</h2>
+          <p class="part-lead">Исходный код Tabora лежит на&nbsp;GitHub под лицензией MPL&nbsp;2.0, как и&nbsp;код Firefox. Отчёты об&nbsp;аудитах безопасности и&nbsp;описание устройства сейфа и&nbsp;кошелька лежат там&nbsp;же.</p>
+          <dl class="points">
+            <div>
+              <dt>Подписанные обновления</dt>
+              <dd>Пакет обновления подписан ключом Tabora. Сведения о&nbsp;версиях подписаны отдельным ключом Ed25519 и&nbsp;имеют срок годности. Установщик для Mac заверен Apple.</dd>
+            </div>
+            <div>
+              <dt>Проверяемые библиотеки</dt>
+              <dd>Криптографические библиотеки кошелька и&nbsp;сейфа собираются из&nbsp;закреплённых версий. Совпадение файла в&nbsp;репозитории со&nbsp;сборкой проверяет один скрипт.</dd>
+            </div>
+            <div>
+              <dt>Движок следует за&nbsp;Firefox</dt>
+              <dd>Tabora обновляет движок вслед за&nbsp;выпусками Firefox, вместе с&nbsp;исправлениями безопасности.</dd>
+            </div>
+          </dl>
+        </div>
+        <div class="part-mock">
+          <div class="mock docs">
+            <div class="mock-head"><b>Tabora-App/browser</b><span>MPL&nbsp;2.0</span></div>
+            <ul>
+              <li><a href="https://github.com/Tabora-App/browser"><code>README.md</code><span>Структура репозитория и&nbsp;сборка</span></a></li>
+              <li><a href="https://github.com/Tabora-App/browser/blob/main/src/browser/base/content/tabora/vault/SECURITY.md"><code>vault/SECURITY.md</code><span>Как устроен сейф</span></a></li>
+              <li><a href="https://github.com/Tabora-App/browser/blob/main/src/browser/base/content/tabora/wallet/SECURITY.md"><code>wallet/SECURITY.md</code><span>Модель угроз кошелька</span></a></li>
+              <li><a href="https://github.com/Tabora-App/browser/blob/main/docs/security-audit-2026-11-09.md"><code>docs/security-audit-2026-11-09.md</code><span>Аудит безопасности, ноябрь 2026</span></a></li>
+              <li><a href="https://github.com/Tabora-App/browser/blob/main/docs/UPDATES.md"><code>docs/UPDATES.md</code><span>Как проверяются обновления</span></a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="mock term">
+        <div class="mock-head"><b>Собрать самому</b><span>macOS и&nbsp;Linux</span></div>
+        <pre tabindex="0"><code>git clone https://github.com/Tabora-App/browser
+cd browser
+python3 tools/build.py download   <span class="rem"># исходники Firefox</span>
+python3 tools/build.py import     <span class="rem"># брендинг и код Tabora</span>
+python3 tools/build.py bootstrap  <span class="rem"># инструменты сборки, один раз</span>
+python3 tools/build.py build      <span class="rem"># полная сборка, 1,5–2 часа</span>
+python3 tools/build.py run</code></pre>
+      </div>
+    </section>
+
+    <section class="part" id="download">
+      <h2>Скачать Tabora</h2>
+      <div class="dl">
+        <div class="dl-main">
+          <h3>Mac с&nbsp;Apple Silicon</h3>
+          <p>macOS&nbsp;11 или новее, процессоры M1 и&nbsp;новее. Версия 0.1.0.</p>
+          <a class="capsule" href="/downloads/Tabora-0.1.0-mac-aarch64.dmg">
+            <span>Скачать .dmg, 127&nbsp;МБ</span>
+            <span class="capsule-dot" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v13"/><path d="m6.5 12.5 5.5 5.5 5.5-5.5"/></svg></span>
+          </a>
+        </div>
+        <div class="dl-check">
+          <h3>Контрольная сумма SHA-256</h3>
+          <code class="hash" id="dmg-sha">c85141c112abb23ee6663dfc1900ee356594da11579fb63ce0d41015b593c186</code>
+          <div class="dl-buttons">
+            <button type="button" class="btn" data-copy="dmg-sha">Скопировать</button>
+            <button type="button" class="btn" popovertarget="verify-help">Как проверить файл</button>
+          </div>
+        </div>
+      </div>
+      <p class="dl-other">Сборки для Windows и&nbsp;Linux готовим. Следите за&nbsp;<a href="https://github.com/Tabora-App/browser">репозиторием на&nbsp;GitHub</a>.</p>
+
+      <div class="pop" id="verify-help" popover>
+        <h3>Как проверить файл</h3>
+        <ol>
+          <li>
+            <p>Посчитайте контрольную сумму и&nbsp;сравните с&nbsp;той, что на&nbsp;этой странице.</p>
+            <pre tabindex="0"><code>shasum -a 256 ~/Downloads/Tabora-0.1.0-mac-aarch64.dmg</code></pre>
+          </li>
+          <li>
+            <p>Проверьте, что установщик заверен Apple.</p>
+            <pre tabindex="0"><code>spctl -a -vv -t install ~/Downloads/Tabora-0.1.0-mac-aarch64.dmg</code></pre>
+            <p>В&nbsp;ответе должно быть <code>Notarized Developer ID</code> и&nbsp;идентификатор команды <code>7YQU9YBJQ8</code>.</p>
+          </li>
+        </ol>
+        <button type="button" class="btn" popovertarget="verify-help" popovertargetaction="hide">Закрыть</button>
+      </div>
+    </section>
+
+  </div>
+</div>
+
 </main>
+
+<footer class="foot">
+  <p>Tabora&nbsp;— открытый браузер на&nbsp;движке Firefox. Firefox&nbsp;— товарный знак Mozilla Foundation; Tabora не&nbsp;связан с&nbsp;Mozilla и&nbsp;не&nbsp;одобрен&nbsp;ею.</p>
+  <ul>
+    <li><a href="mailto:hello@tabora.app">hello@tabora.app</a></li>
+    <li><a href="https://github.com/Tabora-App/browser">GitHub</a></li>
+    <li><a href="https://github.com/Tabora-App/browser/blob/main/LICENSE">Лицензия MPL&nbsp;2.0</a></li>
+  </ul>
+</footer>
+
 </body>
 </html>
