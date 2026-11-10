@@ -198,9 +198,10 @@ pref("tabora.wallet.autolockMinutes", 15);
 pref("tabora.vault.passwords", true);
 pref("signon.storage.rust.enabled", true);
 
-// Аккаунт Tabora: домен почты и сервер (пусто — локальный режим без сервера)
+// Аккаунт Tabora: домен почты и сервер аккаунтов (пусто — локальный режим без сервера).
+// Аккаунт, созданный до появления сервера, подключается к нему из настроек (Account.linkToServer).
 pref("tabora.account.domain", "tabora.app");
-pref("tabora.account.server", "");
+pref("tabora.account.server", "https://api.tabora.app");
 
 // Обновления: подписанный манифест цели и update.xml лежат в репозитории GitHub, пакеты —
 // в GitHub Releases. Адреса читаются только из настроек по умолчанию (значение пользователя

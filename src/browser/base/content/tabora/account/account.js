@@ -83,7 +83,7 @@ Object.assign(Tabora, {
   accountRender(step, opts = {}) {
     const card = this.account.el.querySelector(".ta-card");
     this.account.step = step;
-    const builders = { welcome: this.accountWelcome, register: this.accountRegister, recovery: this.accountRecovery, done: this.accountDone, login: this.accountLogin, change: this.accountChange, forgot: this.accountForgot };
+    const builders = { welcome: this.accountWelcome, register: this.accountRegister, recovery: this.accountRecovery, done: this.accountDone, login: this.accountLogin, change: this.accountChange, forgot: this.accountForgot, link: this.accountLink };
     card.replaceChildren(builders[step].call(this, opts));
     setTimeout(() => card.querySelector("input:not([type=checkbox])")?.focus(), 60);
   },
@@ -298,12 +298,12 @@ Object.assign(Tabora, {
     return h("div", { class: "ta-step" }, null, [
       h("div", { class: "ta-orb" }, null, [this.markSvg("ta-mark")]),
       h("h2", {}, "Готово"),
-      h("p", { class: "ta-text" }, `Аккаунт ${email || Account.email} создан на этом компьютере.`),
+      h("p", { class: "ta-text" }, Account.isLocalMode ? `Аккаунт ${email || Account.email} создан на этом компьютере.` : `Аккаунт ${email || Account.email} создан. Почта на этом адресе уже принимает письма.`),
       h("ul", { class: "ta-points" }, null, [
         h("li", {}, "Сейф открыт, пароли сайтов шифруются его ключом"),
         h("li", {}, "Раздел «Коды» для двухфакторной защиты: ⌘⇧K"),
         h("li", {}, "Кошелёк: ⌘⇧W, почта и алиасы: ⌘⇧M"),
-        h("li", {}, Account.isLocalMode ? "Синхронизация между компьютерами включится, когда появится сервер" : "Синхронизация с сервером включена"),
+        h("li", {}, Account.isLocalMode ? "Вход с других компьютеров появится, когда аккаунт подключат к серверу" : "С другого компьютера входите тем же адресом и паролем"),
       ]),
       this.taButton("Начать", "primary", () => {
         const after = this.account.after;
@@ -352,6 +352,32 @@ Object.assign(Tabora, {
         this.taLink("Забыли пароль? Ключ восстановления", () => this.accountRender("forgot")),
         this.taLink("Создать аккаунт", () => this.accountRender("register")),
       ],
+    });
+  },
+
+  /** Аккаунт создан на этом компьютере без сервера: подключаем его под тем же адресом. */
+  accountLink() {
+    const { Account } = this.accountMod();
+    const pass = this.taField("Пароль аккаунта", { type: "password", autocomplete: "current-password" });
+    return this.taForm({
+      title: "Подключить аккаунт к серверу",
+      text: `Аккаунт ${Account.email} пока есть только на этом компьютере. После подключения на этот адрес начнут приходить письма, а войти можно будет и с другого компьютера. Сервер получит только хеш пароля для входа: сам пароль и ключ сейфа остаются здесь.`,
+      fields: [pass.wrap],
+      okLabel: "Подключить",
+      busyLabel: "Подключаем",
+      onOk: async () => {
+        const r = await Account.linkToServer(pass.input.value);
+        this.notice(r.created ? `Аккаунт подключён: ящик ${r.email} работает` : `Вы вошли как ${r.email}`);
+        const after = this.account.after;
+        this.accountClose();
+        if (r.recoveryOffServer) {
+          // прежний ключ восстановления сервер не знает: сразу предлагаем создать новый
+          this.vaultRecoveryCreateSheet();
+          return;
+        }
+        this.account.after = after;
+        this.accountAfter();
+      },
     });
   },
 
@@ -453,7 +479,8 @@ Object.assign(Tabora, {
     const kids = [];
     if (Account.signedIn) {
       kids.push(row("Аккаунт", Account.email));
-      kids.push(row("Синхронизация", Account.isLocalMode ? "появится, когда будет сервер · данные пока только на этом компьютере" : `сервер ${new URL(Account.serverUrl).host}`, Account.isLocalMode ? "muted" : ""));
+      const offline = Account.isLocalMode || Account.needsServerLink;
+      kids.push(row("Сервер", offline ? "аккаунт есть только на этом компьютере" : `вход и почта через ${new URL(Account.serverUrl).host}; пароли и коды остаются на этом компьютере`, offline ? "muted" : ""));
       kids.push(this.wButton("Сменить пароль", "ghost", () => this.accountDialog("change")));
       kids.push(this.wButton("Выйти из аккаунта", "ghost", () => this.accountLogout({ thenLogin: false })));
       kids.push(this.wButton("Войти в другой аккаунт", "ghost", () => this.accountLogout({ thenLogin: true, blankEmail: true })));
@@ -493,8 +520,14 @@ Object.assign(Tabora, {
     if (!Vault.unlocked) {
       return { level: "locked", text: "сейф заблокирован" };
     }
+    if (Account.needsServerLink) {
+      return { level: "warn", text: "не подключён к серверу" };
+    }
     if (!Vault.recoveryKeyCreatedAt) {
       return { level: "warn", text: "нет ключа восстановления" };
+    }
+    if (Account.data?.recoveryOffServer) {
+      return { level: "warn", text: "нужен новый ключ восстановления" };
     }
     if (Account.recoveryNeedsUpgrade) {
       return { level: "warn", text: "ключ восстановления пора обновить" };

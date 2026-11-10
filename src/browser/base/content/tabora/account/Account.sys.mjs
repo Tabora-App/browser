@@ -17,7 +17,12 @@
  *
  * Бэкенд подменяемый: пока сервер не задан (pref tabora.account.server пуст), работает
  * локальный режим — аккаунт хранится на этом компьютере в tabora-account-local.json,
- * все окна и проверки настоящие. Контракт HTTP-бэкенда описан в HttpBackend. */
+ * все окна и проверки настоящие. Контракт HTTP-бэкенда описан в HttpBackend. Аккаунт,
+ * созданный в локальном режиме, подключается к серверу под тем же адресом (linkToServer).
+ *
+ * Вместе с сессией сервер выдаёт доступ к ящику: пароль приложения этого устройства для
+ * IMAP и SMTP. Он хранится в tabora-account.json зашифрованным подключом сейфа и отзывается
+ * сервером при выходе. */
 
 const C = ChromeUtils.importESModule("chrome://tabora/content/wallet/vendor/crypto.sys.mjs");
 const { randomBytes, base64, utf8ToBytes, bytesToHex, hexToBytes, hmac, sha256, ed25519 } = C;
@@ -40,6 +45,7 @@ const KDF_CURRENT = 2;
 const RESET_NONCE_TTL = 5 * 60000;
 const KDF_SEEN_PREF = "tabora.account.kdfSeen"; // версии хеша входа, уже использованные на этом устройстве
 const VERIFIER_RE = /^ed25519:[0-9a-f]{64}$/;
+const MAIL_INFO = "mail-access"; // подключ сейфа, которым зашифрован доступ к ящику
 
 export { passwordStrength };
 
@@ -272,6 +278,27 @@ class LocalBackend {
     const d = await this._load();
     return Object.entries(d.users[email]?.devices || {}).map(([id, v]) => ({ id, ...v }));
   }
+
+  // ящик и алиасы выдаёт только сервер
+  async mailPassword() {
+    throw Object.assign(new Error("Почта работает после подключения аккаунта к серверу"), { code: "local-mode" });
+  }
+
+  async aliases() {
+    return [];
+  }
+
+  async aliasCreate() {
+    throw Object.assign(new Error("Алиасы работают после подключения аккаунта к серверу"), { code: "local-mode" });
+  }
+
+  async aliasUpdate() {
+    throw Object.assign(new Error("Алиасы работают после подключения аккаунта к серверу"), { code: "local-mode" });
+  }
+
+  async aliasDelete() {
+    throw Object.assign(new Error("Алиасы работают после подключения аккаунта к серверу"), { code: "local-mode" });
+  }
 }
 
 /** Сервер Tabora: JSON по HTTPS. Контракт:
@@ -294,7 +321,15 @@ class LocalBackend {
  *  POST /v1/account/logout    (Bearer)                                         → {}
  *  GET  /v1/account/devices   (Bearer)                                         → [{ id, name, at }]
  * Сервер хранит только хеш от loginHash со своей солью и ключ проверки ключа восстановления;
- * пароль и ключ сейфа он никогда не видит. Счётчик неудачных входов сервер ведёт сам. */
+ * пароль и ключ сейфа он никогда не видит. Счётчик неудачных входов сервер ведёт сам.
+ * Почта (server/README.md): register и login возвращают ещё mail = { address, login, password,
+ * imap: { host, port, security }, smtp: {…} } — пароль приложения этого устройства;
+ *  POST   /v1/mail/password     (Bearer)                    → { mail }   новый взамен прежнего
+ *  GET    /v1/mail/aliases      (Bearer)                    → [{ id, address, site, space, by, on, created }]
+ *  POST   /v1/mail/aliases      { site?, space?, by? }      → алиас
+ *  PATCH  /v1/mail/aliases/:id  { on?, site?, space? }      → алиас
+ *  DELETE /v1/mail/aliases/:id                              → {}
+ * Ответ 401 с кодом session-expired означает, что сервер сессию больше не признаёт. */
 class HttpBackend {
   constructor(base) {
     this.base = base.replace(/\/+$/, "");
@@ -319,9 +354,22 @@ class HttpBackend {
       const text = await res.text();
       const json = text ? JSON.parse(text) : {};
       if (!res.ok) {
-        throw Object.assign(new Error(json.message || `Сервер: HTTP ${res.status}`), { code: json.code || (res.status === 401 ? "bad-credentials" : `http-${res.status}`), status: res.status });
+        const error = Object.assign(new Error(json.message || `Сервер: HTTP ${res.status}`), { code: json.code || (res.status === 401 ? "bad-credentials" : `http-${res.status}`), status: res.status });
+        if (error.code === "session-expired" && token) {
+          Account._sessionExpired(token).catch(() => {});
+        }
+        throw error;
       }
       return json;
+    } catch (e) {
+      if (e.name === "AbortError" || e.name === "TypeError") {
+        // нет сети, сервер не отвечает, истекло ожидание
+        throw Object.assign(new Error("Сервер Tabora не отвечает. Проверьте соединение и повторите"), { code: "offline" });
+      }
+      if (e.name === "SyntaxError") {
+        throw Object.assign(new Error("Сервер Tabora ответил непонятно. Повторите позже"), { code: "bad-response" });
+      }
+      throw e;
     } finally {
       clearTimeout(timer);
     }
@@ -378,6 +426,26 @@ class HttpBackend {
   devices({ session }) {
     return this._call("GET", "/v1/account/devices", null, session?.token);
   }
+
+  mailPassword({ session }) {
+    return this._call("POST", "/v1/mail/password", {}, session?.token);
+  }
+
+  aliases({ session }) {
+    return this._call("GET", "/v1/mail/aliases", null, session?.token);
+  }
+
+  aliasCreate({ session, site, space, by }) {
+    return this._call("POST", "/v1/mail/aliases", { site, space, by }, session?.token);
+  }
+
+  aliasUpdate({ session, id, on, site, space }) {
+    return this._call("PATCH", `/v1/mail/aliases/${encodeURIComponent(id)}`, { on, site, space }, session?.token);
+  }
+
+  aliasDelete({ session, id }) {
+    return this._call("DELETE", `/v1/mail/aliases/${encodeURIComponent(id)}`, null, session?.token);
+  }
 }
 
 /* ---------- аккаунт ---------- */
@@ -407,6 +475,12 @@ export const Account = {
 
   get isLocalMode() {
     return this.backend.name === "local";
+  },
+
+  /** Аккаунт этого компьютера создан без сервера (или на другом сервере) и на нынешнем не
+   * зарегистрирован: почта и вход с других компьютеров не работают, пока его не подключат. */
+  get needsServerLink() {
+    return !this.isLocalMode && !!this.data?.email && (this.data.server || null) !== this.serverUrl;
   },
 
   async ready() {
@@ -650,6 +724,7 @@ export const Account = {
     this._noteKdf(email, KDF_CURRENT);
     await this._syncVaultPassword(password, { ownerConfirmed });
     this.data = { version: 1, email, userId: r.userId, session: r.session, server: this.serverUrl || null, kdf: KDF_CURRENT, createdAt: new Date().toISOString(), lastLoginAt: new Date().toISOString() };
+    await this._setMailAccess(r.mail);
     await this.save("signed-in");
     this.markFirstRunDone();
     let recoveryKey = null;
@@ -694,6 +769,7 @@ export const Account = {
       await this.backend.setRecovery({ email: this.email, session: this.data.session, recoveryVerifier });
       this.data.recoveryRegisteredAt = recoveryVerifier ? new Date().toISOString() : null;
       this.data.recoveryScheme = recoveryVerifier ? "ed25519" : null;
+      delete this.data.recoveryOffServer;
       await this.save();
       return true;
     } catch (e) {
@@ -715,12 +791,147 @@ export const Account = {
     return Vault.rotateKey({ password, reason: "rebind", recovery: "new" });
   },
 
+  /** Аккаунт, созданный на этом компьютере без сервера, регистрируется на сервере под тем же
+   * адресом. Пароль — пароль аккаунта, он же мастер-пароль сейфа: его принимает сейф (это и
+   * проверка владельца), сервер получает только хеш входа. Если адрес на сервере уже есть и
+   * пароль подходит (аккаунт подключили с другого компьютера), выполняется обычный вход.
+   * Ключ восстановления сервер узнаёт только при создании нового: прежний по-прежнему
+   * открывает сейф, но сбросить им пароль аккаунта нельзя (recoveryOffServer). */
+  async linkToServer(password) {
+    await this.ready();
+    if (this.isLocalMode) {
+      throw new Error("Сервер Tabora не задан");
+    }
+    const email = this.email;
+    if (!email) {
+      throw new Error("На этом компьютере нет аккаунта");
+    }
+    if (!password) {
+      throw new Error("Введите пароль");
+    }
+    await Vault.ready();
+    await Vault.guard.check();
+    if (!Vault.exists || !Vault.hasPassword) {
+      throw new Error("У сейфа этого компьютера нет пароля. Задайте его: «Аккаунт» → «Безопасность» → «Сменить пароль»");
+    }
+    await Vault.verifyPassword(password).catch(e => {
+      throw e.code === "locked-out" ? e : Object.assign(new Error("Неверный пароль"), { code: "bad-credentials" });
+    });
+    if (!Vault.unlocked) {
+      await Vault.unlockWithPassword(password);
+    }
+    this._step("Защищаем пароль");
+    const loginHash = await this.loginHash(email, password, KDF_CURRENT);
+    this._step("Подключаем к серверу");
+    const device = { deviceId: this.deviceId(), deviceName: this.deviceName() };
+    let r;
+    let created = true;
+    try {
+      r = await this.backend.register({ email, loginHash, kdf: KDF_CURRENT, ...device });
+    } catch (e) {
+      if (e.code !== "taken") {
+        throw e;
+      }
+      created = false;
+      r = await this.backend.login({ email, loginHash, ...device }).catch(e2 => {
+        if (e2.code === "bad-credentials") {
+          throw Object.assign(new Error(`Адрес ${email} на сервере уже занят другим человеком. Выйдите из аккаунта и создайте новый с другим именем: сейф и его данные останутся на компьютере`), { code: "taken" });
+        }
+        throw e2;
+      });
+    }
+    this._noteKdf(email, KDF_CURRENT);
+    const prior = this.data;
+    const now = new Date().toISOString();
+    this.data = { version: 1, email, userId: r.userId, session: r.session, server: this.serverUrl, kdf: KDF_CURRENT, createdAt: prior.createdAt || now, lastLoginAt: now, linkedAt: now };
+    if (created) {
+      // сервер новый для этого аккаунта: ключа проверки у него нет
+      this.data.recoveryOffServer = !!Vault.recoveryKeyCreatedAt;
+    } else if (prior.recoveryRegisteredAt) {
+      this.data.recoveryRegisteredAt = prior.recoveryRegisteredAt;
+      this.data.recoveryScheme = prior.recoveryScheme || null;
+    }
+    await this._setMailAccess(r.mail);
+    await this.save("signed-in");
+    this.markFirstRunDone();
+    return { email, created, mail: !!this.data.mailAccess, recoveryOffServer: !!this.data.recoveryOffServer };
+  },
+
+  /* ---- доступ к ящику --------------------------------------------------------------- */
+
+  /** Запомнить выданный сервером доступ к ящику (нужен открытый сейф). Без записи на диск:
+   * вызывающий сохраняет аккаунт сам. */
+  async _setMailAccess(mail) {
+    if (!this.data || !mail || !mail.password) {
+      return;
+    }
+    if (!Vault.unlocked) {
+      return; // запросим у сервера заново, когда сейф откроют (mailAccess)
+    }
+    const bytes = utf8ToBytes(JSON.stringify(mail));
+    try {
+      this.data.mailAccess = await Vault.encrypt(MAIL_INFO, bytes);
+    } finally {
+      wipe(bytes);
+    }
+  },
+
+  /** Доступ к ящику аккаунта: { address, login, password, imap, smtp } или null (нет входа,
+   * сейф закрыт, локальный режим). Если сохранённого доступа нет или он не читается, у сервера
+   * запрашивается новый пароль приложения: прежний при этом перестаёт действовать. */
+  async mailAccess({ refresh = false } = {}) {
+    await this.ready();
+    if (!this.signedIn || this.isLocalMode || this.needsServerLink || !Vault.unlocked) {
+      return null;
+    }
+    if (!refresh && this.data.mailAccess) {
+      try {
+        const bytes = await Vault.decrypt(MAIL_INFO, this.data.mailAccess);
+        try {
+          return JSON.parse(new TextDecoder().decode(bytes));
+        } finally {
+          wipe(bytes);
+        }
+      } catch (e) {
+        console.error("Tabora account: сохранённый доступ к почте не читается, запрашиваем новый", e);
+      }
+    }
+    if (!this._mailRefresh) {
+      this._mailRefresh = (async () => {
+        const r = await this.backend.mailPassword({ session: this.data.session });
+        await this._setMailAccess(r.mail);
+        await this.save();
+        return r.mail || null;
+      })().finally(() => {
+        this._mailRefresh = null;
+      });
+    }
+    return this._mailRefresh;
+  },
+
+  /** Сервер больше не признаёт сессию (выход с другого устройства, сброс или смена пароля там):
+   * здесь аккаунт тоже считается вышедшим. Сейф не блокируется: он заперт своим паролем. */
+  async _sessionExpired(token) {
+    await this.ready();
+    if (!this.data?.session || this.data.session.token !== token) {
+      return;
+    }
+    this.data.session = null;
+    delete this.data.mailAccess;
+    await this.save("signed-out");
+  },
+
   async login(emailInput, password, { vaultPassword = null } = {}) {
     await this.ready();
     await Vault.guard.check();
     const email = this.normalizeEmail(emailInput);
     if (!password) {
       throw new Error("Введите пароль");
+    }
+    if (this.needsServerLink && this.data.email === email && !vaultPassword) {
+      // аккаунт этого компьютера ещё не на сервере: вход его и подключает
+      const linked = await this.linkToServer(password);
+      return { email, rebound: false, recoveryKey: null, rekeyComplete: true, recoveryNeedsUpgrade: this.recoveryNeedsUpgrade, linked: linked.created };
     }
     const deviceId = this.deviceId();
     const deviceName = this.deviceName();
@@ -779,6 +990,10 @@ export const Account = {
       this.data.recoveryRegisteredAt = prior.recoveryRegisteredAt;
       this.data.recoveryScheme = prior.recoveryScheme || null;
     }
+    if (prior?.recoveryOffServer && !rebound) {
+      this.data.recoveryOffServer = true;
+    }
+    await this._setMailAccess(r.mail);
     await this.save("signed-in");
     this.markFirstRunDone();
     let recoveryKey = null;
@@ -891,6 +1106,14 @@ export const Account = {
     this.data.recoveryScheme = "ed25519";
     this.data.kdf = KDF_CURRENT;
     this.data.passwordChangedAt = new Date().toISOString();
+    if (!this.isLocalMode) {
+      // сервер после сброса завершил все сессии и отозвал доступ к почте: входим заново
+      this.data.session = null;
+      delete this.data.mailAccess;
+      await this.save();
+      await this.login(this.email, newPassword);
+      return true;
+    }
     await this.save();
     return true;
   },
@@ -907,6 +1130,7 @@ export const Account = {
       await this.backend.logout({ session: this.data.session });
     } catch (e) {}
     this.data.session = null;
+    delete this.data.mailAccess; // сервер отозвал пароль приложения этого устройства
     await this.save("signed-out");
     await Vault.lock(); // если идёт операция с ключом, блокировка применится сразу после неё
   },
@@ -918,4 +1142,50 @@ export const Account = {
     }
     return this.backend.devices({ email: this.email, session: this.data.session });
   },
+
+  /* ---- алиасы (хранит сервер) ---------------------------------------------------------- */
+
+  _session() {
+    if (!this.signedIn) {
+      throw Object.assign(new Error("Войдите в аккаунт Tabora"), { code: "signed-out" });
+    }
+    return this.data.session;
+  },
+
+  async aliases() {
+    await this.ready();
+    return this.needsServerLink ? [] : this.backend.aliases({ session: this._session() });
+  },
+
+  async aliasCreate({ site = "", space = "", by = "manual" } = {}) {
+    await this.ready();
+    return this.backend.aliasCreate({ session: this._session(), site, space, by });
+  },
+
+  async aliasUpdate(id, patch) {
+    await this.ready();
+    return this.backend.aliasUpdate({ session: this._session(), id, ...patch });
+  },
+
+  async aliasDelete(id) {
+    await this.ready();
+    return this.backend.aliasDelete({ session: this._session(), id });
+  },
 };
+
+/* Смена ключа сейфа: сохранённый доступ к ящику перешифровывается новым подключом. Не
+ * обязательна: если не удалась, доступ запрашивается у сервера заново (mailAccess). */
+Vault.registerRekey(MAIL_INFO, async ({ decryptOld, encryptNew }) => {
+  await Account.ready();
+  const box = Account.data?.mailAccess;
+  if (!box) {
+    return;
+  }
+  const bytes = await decryptOld(MAIL_INFO, box);
+  try {
+    Account.data.mailAccess = await encryptNew(MAIL_INFO, bytes);
+    await Account.save();
+  } finally {
+    wipe(bytes);
+  }
+});

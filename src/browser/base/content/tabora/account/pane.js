@@ -22,7 +22,7 @@ window.TaboraAccountPane = (function () {
   const { Vault } = ChromeUtils.importESModule("chrome://tabora/content/vault/Vault.sys.mjs");
   const Shell = window.browsingContext?.topChromeWindow?.Tabora || null;
   const HTML = "http://www.w3.org/1999/xhtml";
-  const LATER = "появится после запуска сервера аккаунтов";
+  const LATER = "появится в одной из следующих версий";
 
   const TABS = [
     ["profile", "Профиль"],
@@ -109,7 +109,20 @@ window.TaboraAccountPane = (function () {
       try {
         aliases = Shell?.mail().MailStore.aliases?.length || 0;
       } catch (e) {}
+      const link = Account.needsServerLink;
+      const mailbox = Account.isLocalMode
+        ? "Ящик заработает, когда аккаунт подключат к серверу Tabora."
+        : link
+          ? "Ящик заработает после подключения аккаунта к серверу."
+          : `Письма на ${Account.email} приходят на сервер Tabora и открываются в разделе «Почта».`;
       return [
+        link
+          ? group("Сервер Tabora", "", [
+              item("Аккаунт не подключён к серверу", "Он создан на этом компьютере. Подключите его, чтобы заработали почта на этом адресе и вход с других компьютеров. Понадобится пароль аккаунта.", [
+                button("Подключить", shell(s => s.accountDialog("link")), { type: "primary" }),
+              ]),
+            ])
+          : null,
         group("Адрес и вид", "Аккаунт Tabora — это адрес почты и один пароль для входа и для сейфа.", [
           item("Адрес почты", Account.email, [button("Скопировать", shell(s => {
             Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(Account.email);
@@ -120,16 +133,16 @@ window.TaboraAccountPane = (function () {
           Account.data?.lastLoginAt ? item("Последний вход на этом компьютере", "", [value(date(Account.data.lastLoginAt))]) : null,
         ]),
         group("Почта", "Адрес аккаунта — это и почтовый ящик. Для сайтов браузер создаёт отдельные адреса-алиасы, чтобы основной адрес никто не знал.", [
-          item("Почтовый ящик", "В версии 0.1 раздел почты показывает пример ящика. Настоящие адреса на tabora.app начнём выдавать, когда откроем регистрацию.", [button("Открыть почту", shell(s => s.openMail()))]),
+          item("Почтовый ящик", mailbox, [button("Открыть почту", shell(s => s.openMail()))]),
           item("Алиасы", aliases ? `${aliases} ${plural(aliases, "адрес", "адреса", "адресов")} для сайтов. Выключенный алиас перестаёт принимать письма.` : "Пока нет. Алиас создаётся при регистрации на сайте.", [button("Открыть алиасы", shell(s => s.openMail("aliases")))]),
-          item("Место в почте", "", [value("появится с запуском почты", true)]),
         ]),
-      ];
+      ].filter(Boolean);
     },
 
     security() {
       const rkAt = Vault.recoveryKeyCreatedAt;
-      const upgrade = !!rkAt && Account.recoveryNeedsUpgrade;
+      const offServer = !!rkAt && !!Account.data?.recoveryOffServer;
+      const upgrade = !!rkAt && (Account.recoveryNeedsUpgrade || offServer);
       const silent = Vault.hasOsKey && Vault.osUnlockEnabled;
       const unlockTitle = Vault.osUnlockEnabled ? "Спрашивать пароль при запуске" : "Открывать сейф через связку ключей";
       const toggle = el("moz-toggle", { slot: "actions", "aria-label": "Открывать сейф через связку ключей macOS" });
@@ -149,7 +162,13 @@ window.TaboraAccountPane = (function () {
           item("Пароль", "Один для входа в аккаунт и для сейфа. Меняются всегда вместе.", [button("Сменить пароль", shell(s => s.accountDialog("change")))]),
           item(
             "Ключ восстановления",
-            !rkAt ? "Не создан. Если забудете пароль, сейф открыть будет нечем." : upgrade ? `Создан ${date(rkAt)}, но защищён по прежней схеме. Создайте новый: тогда сервер будет хранить только открытый ключ.` : `Создан ${date(rkAt)}. Откроет сейф, если вы забудете пароль.`,
+            !rkAt
+              ? "Не создан. Если забудете пароль, сейф открыть будет нечем."
+              : offServer
+                ? `Создан ${date(rkAt)}, до подключения к серверу: сейф он откроет, но сбросить им забытый пароль аккаунта нельзя. Создайте новый.`
+                : upgrade
+                  ? `Создан ${date(rkAt)}, но защищён по прежней схеме. Создайте новый: тогда сервер будет хранить только открытый ключ.`
+                  : `Создан ${date(rkAt)}. Откроет сейф, если вы забудете пароль.`,
             [button(rkAt ? "Создать новый" : "Создать ключ", shell(s => s.vaultRecoveryCreateSheet()), { type: !rkAt || upgrade ? "primary" : "default" })]
           ),
         ]),
@@ -175,13 +194,18 @@ window.TaboraAccountPane = (function () {
         ["Закладки", "Папки и ссылки из раздела «Закладки»."],
         ["Вкладки и пространства", "Открытые вкладки, закреплённые сайты и пространства."],
       ];
+      const offline = local || Account.needsServerLink;
       return [
-        group("Синхронизация", "Перенос данных между вашими компьютерами. Всё шифруется на устройстве: сервер хранит только шифрованные копии.", [
-          item("Состояние", local ? "Данные хранятся только на этом компьютере." : `Сервер ${new URL(Account.serverUrl).host}.`, [value(local ? LATER : "включена", local)]),
-          ...what.map(([label, text]) => item(label, text, [value(local ? "позже" : "да", true)])),
+        group("Синхронизация", "Перенос данных между вашими компьютерами. Всё будет шифроваться на устройстве: сервер получит только шифрованные копии.", [
+          item(
+            "Состояние",
+            offline ? "Аккаунт есть только на этом компьютере." : `Аккаунт на сервере ${new URL(Account.serverUrl).host}: вход и почта работают с любого компьютера. Пароли, коды, закладки и вкладки пока остаются на каждом компьютере свои.`,
+            [value(offline ? "только здесь" : "вход и почта", true)]
+          ),
+          ...what.map(([label, text]) => item(label, text, [value("позже", true)])),
           item("Фраза восстановления кошелька", "Не синхронизируется никогда: остаётся только на том компьютере, где её ввели.", [value("никогда", true)]),
         ]),
-        group("Устройства", local ? `Список других устройств и выход на них ${LATER}.` : "Компьютеры, на которых выполнен вход в этот аккаунт.", devices),
+        group("Устройства", offline ? "Список появится, когда аккаунт подключат к серверу." : "Компьютеры, на которых выполнен вход в этот аккаунт.", devices),
       ];
     },
 
@@ -243,11 +267,14 @@ window.TaboraAccountPane = (function () {
 
   function tabs() {
     const attention = Shell?.accountStatus().level === "warn";
+    // значок «нужно действие» стоит на той вкладке, где это действие: подключение к серверу —
+    // в «Профиле», ключ восстановления — в «Безопасности»
+    const where = Account.needsServerLink ? "profile" : "security";
     const bar = el("div", { class: "tabora-acc-tabs", role: "tablist", "aria-label": "Разделы аккаунта" }, TABS.map(([id, label]) => {
       const selected = id === state.tab;
       const b = el("button", { class: "tabora-acc-tab", type: "button", role: "tab", id: `tabora-acc-tab-${id}`, "aria-selected": String(selected), tabindex: selected ? "0" : "-1" }, [
         label,
-        id === "security" && attention ? el("span", { class: "tabora-acc-badge", "aria-label": "нужно действие" }, "1") : null,
+        id === where && attention ? el("span", { class: "tabora-acc-badge", "aria-label": "нужно действие" }, "1") : null,
       ]);
       b.addEventListener("click", () => select(id));
       return b;
