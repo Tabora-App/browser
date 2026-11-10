@@ -2,8 +2,9 @@
 # Cloudflare Tunnel для сайта и API: у tabora.app, www и api нет публичного адреса, трафик идёт
 # исходящим соединением сервера к Cloudflare. Наружу открыта только почта (mx.tabora.app).
 # Нужны в /etc/tabora/cloudflare.env (600): CF_ACCOUNT_ID, CF_ZONE_ID и CF_API_TOKEN с правами
-# Account › Cloudflare Tunnel › Edit и Zone › DNS › Edit. После настройки туннеля и DNS (dns.sh)
-# токен можно отозвать: службе cloudflared он не нужен. Идемпотентно.
+# Account › Cloudflare Tunnel › Edit и Zone › DNS › Edit. После успешной настройки скрипт сам
+# удаляет токен из файла: службе cloudflared он не нужен, dns.sh работает с токеном certbot.
+# Повторный запуск (сменить маршруты, пересоздать службу) требует вписать токен снова.
 set -euo pipefail
 DOMAIN=${DOMAIN:-tabora.app}
 MAIL_HOST=${MAIL_HOST:-mx.$DOMAIN}
@@ -65,5 +66,9 @@ render "$HERE/cloudflare/cloudflared.service" /etc/systemd/system/cloudflared.se
 systemctl daemon-reload
 systemctl enable cloudflared >/dev/null 2>&1
 systemctl restart cloudflared
-systemctl is-active -q cloudflared && log "туннель работает: https://$DOMAIN, https://$API_HOST"
-log "токен CF_API_TOKEN больше не нужен службе: после dns.sh удалите его из /etc/tabora/cloudflare.env и отзовите в Cloudflare"
+systemctl is-active -q cloudflared || die "служба cloudflared не запустилась: journalctl -u cloudflared"
+log "туннель работает: https://$DOMAIN, https://$API_HOST"
+# Токен настройки нужен был только здесь: службе он не нужен, а dns.sh работает с токеном certbot.
+# Убираем его с сервера сразу, чтобы токен с правом на туннели аккаунта не лежал без дела.
+sed -i '/^CF_API_TOKEN=/d' /etc/tabora/cloudflare.env
+log "CF_API_TOKEN удалён из /etc/tabora/cloudflare.env. Если токену не задан срок, отзовите его в Cloudflare (My Profile › API Tokens)"

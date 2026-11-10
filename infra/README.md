@@ -34,7 +34,7 @@ API аккаунтов и синхронизации (`tabora-server`, PostgreSQ
 |---|---|---|
 | `server.env` | `root:tabora 640` | для tabora-server: база, ключ подписи, `STALWART_API_KEY` (ключ API учётки `STALWART_SERVICE_USER`) |
 | `stalwart-admin.env` | `root 600` | администратор Stalwart (`STALWART_ADMIN_USER`/`PASS`), вход только с 127.0.0.1 |
-| `cloudflare.env` | `root 600` | `CF_ACCOUNT_ID`, `CF_ZONE_ID`, на время настройки `CF_API_TOKEN` |
+| `cloudflare.env` | `root 600` | `CF_ACCOUNT_ID`, `CF_ZONE_ID`, до настройки туннеля — `CF_API_TOKEN` |
 | `certbot-cloudflare.ini` | `root 600` | токен certbot: только Zone › DNS › Edit и только зона tabora.app (не «All zones», без прав на аккаунт); права файла выставляют `setup.sh` и `enable-tls.sh` при каждом запуске |
 | `backup.env` | `root 600` | `RESTIC_REPOSITORY`, `RESTIC_PASSWORD` (и ключи S3). **Пароль хранить и вне сервера** |
 | `backup_ed25519(.pub)` | `root 600` / `644` | ключ SSH для sftp-хранилища копий (не в `~/.ssh`) |
@@ -65,15 +65,16 @@ API аккаунтов и синхронизации (`tabora-server`, PostgreSQ
 4. На сервере вписать значения в уже созданные файлы (редактором или через stdin, не командой `echo` —
    токен попадёт в историю): `/etc/tabora/cloudflare.env` (`CF_ACCOUNT_ID`, `CF_ZONE_ID`,
    `CF_API_TOKEN` = tabora-setup), `/etc/tabora/certbot-cloudflare.ini` (tabora-certbot).
-5. `infra/deploy.sh tunnel` — туннель, CNAME сайта и API, служба `cloudflared`.
+5. `infra/deploy.sh tunnel` — туннель, CNAME сайта и API, служба `cloudflared`. После успеха скрипт
+   сам удаляет `CF_API_TOKEN` из `cloudflare.env`.
 6. `infra/deploy.sh tls` — сертификат `mx`, `autoconfig`, `autodiscover`, `mta-sts` (DNS-01), nginx на 443,
    сертификат в Stalwart, хук продления. Имена сайта и API не выпускаются (им сертификат не нужен).
 7. `infra/deploy.sh dns` — A/AAAA `mx`, MX, SPF, DKIM, DMARC, MTA-STS, TLS-RPT, SRV, автонастройка.
 8. `infra/deploy.sh site` и `infra/deploy.sh downloads` — сайт и установщик из `.build/signed`.
 9. PTR в Hetzner Console: IPv4 и IPv6 сервера → `mx.tabora.app`. У IPv6 записи по умолчанию нет вовсе,
    а без неё Gmail и другие отклоняют письма с этого адреса (исходящая почта идёт сначала по IPv4).
-10. Удалить строку `CF_API_TOKEN` из `cloudflare.env` и отозвать токен tabora-setup в Cloudflare:
-    туннелю он не нужен, `dns.sh` дальше работает с токеном certbot.
+10. Отозвать токен tabora-setup в Cloudflare, если ему не задан срок: с сервера он уже удалён
+    (шаг 5), туннелю не нужен, `dns.sh` работает с токеном certbot.
 11. Через неделю без отчётов TLS-RPT перевести `infra/mta-sts/mta-sts.txt` в `mode: enforce`.
 
 Настройки зоны в Cloudflare: Always Use HTTPS, минимальный TLS 1.2, режим SSL «Full (strict)».
