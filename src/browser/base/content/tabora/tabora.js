@@ -1132,10 +1132,9 @@ var Tabora = {
       }
       items.push(tab.pinned ? { el: tab, kind: "size", anchor, round: tab.querySelector(".tab-background") } : { el: tab, kind: "clip", anchor });
     }
-    for (const id of ["tabora-wallet-card", "tabora-mail", "tabora-downloads"]) {
-      const el = document.getElementById(id);
+    for (const el of this.dockEls()) {
       if (shown(el)) {
-        items.push({ el, kind: "size", anchor: el.querySelector("svg"), pad: id === "tabora-downloads" ? el.querySelector(".head") : el, round: el });
+        items.push({ el, kind: "size", anchor: el.querySelector("svg"), pad: el.id === "tabora-downloads" ? el.querySelector(".head") : el, round: el });
       }
     }
     for (const id of ["vertical-tabs-newtab-button", "tabora-sidebar-toggle"]) {
@@ -1365,7 +1364,7 @@ var Tabora = {
     const topbar = document.getElementById("tabora-topbar");
     const tabbox = document.getElementById("tabbrowser-tabbox");
     const spaces = document.getElementById("tabora-spaces");
-    const dockItems = ["tabora-wallet-card", "tabora-mail", "tabora-downloads"].map(id => document.getElementById(id)).filter(Boolean);
+    const dock = document.getElementById("tabora-dock");
     if (!toolbox || !navbar || !strip || !topbar || !tabbox) {
       return;
     }
@@ -1378,20 +1377,18 @@ var Tabora = {
       if (spaces) {
         strip.before(spaces);
       }
-      let dock = document.getElementById("tabora-dock");
-      if (!dock) {
-        dock = this.html("div", { id: "tabora-dock", role: "group", "aria-label": "Кошелёк, почта, загрузки" });
+      if (dock) {
+        (document.getElementById("tabora-agent-toggle") || topbar.lastChild).before(dock);
       }
-      dock.append(...dockItems);
-      (document.getElementById("tabora-agent-toggle") || topbar.lastChild).before(dock);
       navbar.append(topbar);
     } else {
       root.removeAttribute("tabora-tabs");
       if (spaces) {
         navbar.after(spaces);
       }
-      toolbox.append(...dockItems);
-      document.getElementById("tabora-dock")?.remove();
+      if (dock) {
+        toolbox.append(dock);
+      }
       tabbox.prepend(topbar);
       this.applySidebarCompact(Services.prefs.getBoolPref(this.SIDEBAR_PREF, false), false);
     }
@@ -1400,6 +1397,7 @@ var Tabora = {
       root.setAttribute("tabora-tabs-switching", "true");
       setTimeout(() => root.removeAttribute("tabora-tabs-switching"), this.MOTION.slow + 60);
     }
+    this.syncDockMode();
     this.syncTopbarInset();
     if (this.drawer?.open) {
       this.sizeDrawer();
@@ -1668,6 +1666,7 @@ var Tabora = {
       ["#tabora-wallet-card", "Кошелёк", document.getElementById("tabora-wallet-total")?.textContent || "⌘⇧W"],
       ["#tabora-mail", "Почта и алиасы", "⌘⇧M"],
       ["#tabora-downloads", "Загрузки", document.getElementById("tabora-downloads-note")?.textContent || "⌘⇧J"],
+      ...this.DOCK.filter(it => !it.el).map(it => [`#${this.dockElId(it)}`, it.label, it.key]),
       ["#tabora-memory", `Память · ${document.getElementById("tabora-memory-value")?.textContent || ""}`, document.getElementById("tabora-memory-note")?.textContent || ""],
       ["#tabora-sidebar-toggle", "Развернуть панель", "⌘B"],
     ];
@@ -1680,12 +1679,16 @@ var Tabora = {
   },
 
   tipMaybe(e) {
-    if (document.documentElement.getAttribute("tabora-sidebar") !== "compact") {
+    const root = document.documentElement;
+    const compact = root.getAttribute("tabora-sidebar") === "compact";
+    // плитки быстрых кнопок в развёрнутой панели без подписей: название — в подсказке над плиткой
+    const tile = !compact && root.getAttribute("tabora-dock") === "tiles" ? e.target.closest("#tabora-dock > *") : null;
+    if (!compact && !tile) {
       return;
     }
     const info = this.tipTextFor(e.target);
-    const el = info ? e.target.closest(".tabbrowser-tab, .tabora-space, #tabora-compact-search, #vertical-tabs-newtab-button, #tabora-wallet-card, #tabora-mail, #tabora-downloads, #tabora-memory, #tabora-sidebar-toggle") : null;
-    if (!el || el === this.tipTarget) {
+    const el = tile || (info ? e.target.closest(".tabbrowser-tab, .tabora-space, #tabora-compact-search, #vertical-tabs-newtab-button, #tabora-wallet-card, #tabora-mail, #tabora-downloads, .tabora-quick, #tabora-memory, #tabora-sidebar-toggle") : null);
+    if (!info || !el || el === this.tipTarget) {
       return;
     }
     this.tipHide();
@@ -1694,9 +1697,17 @@ var Tabora = {
       const r = el.getBoundingClientRect();
       const tip = this.tipEl;
       tip.replaceChildren(this.html("b", {}, info.title), info.sub ? this.html("span", {}, info.sub) : this.html("span"));
+      tip.toggleAttribute("above", !!tile);
       tip.hidden = false;
-      tip.style.left = `${Math.round(r.right + 10)}px`;
-      tip.style.top = `${Math.round(r.top + r.height / 2)}px`;
+      if (tile) {
+        // по центру плитки, но не за краем окна
+        const half = tip.offsetWidth / 2;
+        tip.style.left = `${Math.round(Math.min(window.innerWidth - half - 8, Math.max(half + 8, r.left + r.width / 2)))}px`;
+        tip.style.top = `${Math.round(r.top - 8)}px`;
+      } else {
+        tip.style.left = `${Math.round(r.right + 10)}px`;
+        tip.style.top = `${Math.round(r.top + r.height / 2)}px`;
+      }
       requestAnimationFrame(() => tip.setAttribute("shown", "true"));
     }, 220);
   },
@@ -1779,7 +1790,7 @@ var Tabora = {
     mail.addEventListener("contextmenu", e => {
       e.preventDefault();
       e.stopPropagation();
-      this.showMenu(this.accountMenuItems(), e.clientX, e.clientY);
+      this.showMenu([...this.accountMenuItems(), { separator: true }, { label: "Быстрые кнопки", children: this.dockMenuItems().slice(1) }], e.clientX, e.clientY);
     });
     const walletCard = this.html("button", { id: "tabora-wallet-card", title: "Кошелёк (⌘⇧W)" }, null, [
       this.svg(["M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v2", "M3 7v10a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-7a1 1 0 0 0-1-1H5a2 2 0 0 1-2-2z", "M16 14h.01"], 16, 1.8),
@@ -1789,11 +1800,142 @@ var Tabora = {
     ]);
     walletCard.addEventListener("click", () => this.toggleDrawer("wallet"));
     const downloads = this.buildDownloadsCard();
+    const ready = { wallet: walletCard, mail, downloads };
+    const dock = this.html("div", { id: "tabora-dock", role: "group", "aria-label": "Быстрые кнопки" }, null, this.DOCK.map(it => ready[it.id] || this.buildQuickButton(it)));
     if (sidebar) {
-      sidebar.after(walletCard, mail, downloads); // карточка «Память» убрана по решению пользователя (9 ноября 2026)
+      sidebar.after(dock); // карточка «Память» убрана по решению пользователя (9 ноября 2026)
     } else {
-      toolbox.append(walletCard, mail, downloads);
+      toolbox.append(dock);
     }
+    this.initDock();
+  },
+
+  /* ---- Быстрые кнопки --------------------------------------------------------------------
+   * Контейнер #tabora-dock: под списком вкладок, при вкладках сверху — в строке адреса
+   * (переносит applyTabsLayout). Какие кнопки показывать, выбирает пользователь: «Настройки →
+   * Вкладки и просмотр → Быстрые кнопки» или меню по правой кнопке на любой из них. Порядок кнопок —
+   * порядок списка DOCK. До DOCK_ROWS кнопок в боковой панели стоят строками с подписями;
+   * если их больше или окно ниже DOCK_ROWS_HEIGHT — плитками (стили: tabora-dock="tiles"). */
+
+  DOCK_ROWS: 4,
+  DOCK_ROWS_HEIGHT: 720,
+
+  DOCK_PREF: "tabora.dock.items",
+  DOCK_DEFAULT: "wallet,mail,codes,downloads",
+  // el — id готового элемента; остальным кнопку создаёт buildQuickButton
+  DOCK: [
+    { id: "wallet", label: "Кошелёк", key: "⌘⇧W", el: "tabora-wallet-card" },
+    { id: "mail", label: "Почта и алиасы", key: "⌘⇧M", el: "tabora-mail" },
+    { id: "codes", label: "Коды 2FA", key: "⌘⇧K", icon: ["M4 7h16v10H4z", "M8 12h.01", "M12 12h.01", "M16 12h.01"] },
+    { id: "downloads", label: "Загрузки", key: "⌘⇧J", el: "tabora-downloads" },
+    { id: "history", label: "История", key: "⌘⇧H", icon: ["M12 7v5l3 2", "M3.5 12a8.5 8.5 0 1 0 2.5-6", "M3 4v4h4"] },
+    { id: "bookmarks", label: "Закладки", key: "⌘⇧B", icon: ["M6 4h12v16l-6-4-6 4z"] },
+    { id: "media", label: "Медиа", key: "⌘⇧I", icon: ["M4 5h16v14H4z", "M4 15l5-5 4 4 3-3 4 4", "M15.5 9.5h.01"] },
+    { id: "spaces", label: "Пространства", key: "⌘⇧S", icon: ["M8 8h12v12H8z", "M4 4h12v12", "M4 4v12h12"] },
+  ],
+
+  dockElId(it) {
+    return it.el || `tabora-quick-${it.id}`;
+  },
+
+  buildQuickButton(it) {
+    const btn = this.html("button", { class: "tabora-quick", id: this.dockElId(it), title: `${it.label} (${it.key})` }, null, [
+      this.svg(it.icon, 16, 1.8),
+      this.html("span", {}, it.label),
+      this.html("span", { class: "kbd" }, it.key),
+    ]);
+    btn.addEventListener("click", () => this.toggleDrawer(it.id));
+    return btn;
+  },
+
+  /** Включённые кнопки в порядке списка DOCK. Пустая настройка — ряд скрыт целиком. */
+  dockEnabled() {
+    const want = new Set(Services.prefs.getStringPref(this.DOCK_PREF, this.DOCK_DEFAULT).split(",").map(x => x.trim()));
+    return this.DOCK.filter(it => want.has(it.id)).map(it => it.id);
+  },
+
+  setDockEnabled(ids) {
+    const want = new Set(ids);
+    Services.prefs.setStringPref(this.DOCK_PREF, this.DOCK.filter(it => want.has(it.id)).map(it => it.id).join(","));
+  },
+
+  /** Элементы ряда в порядке списка; all — вместе со скрытыми (для переноса между раскладками). */
+  dockEls(all = false) {
+    return this.DOCK.map(it => document.getElementById(this.dockElId(it))).filter(el => el && (all || !el.hidden));
+  },
+
+  dockMenuItems() {
+    const on = new Set(this.dockEnabled());
+    return [
+      { header: "Быстрые кнопки" },
+      ...this.DOCK.map(it => ({
+        label: it.label,
+        hint: it.key,
+        checked: on.has(it.id),
+        run: () => this.setDockEnabled(on.has(it.id) ? [...on].filter(x => x !== it.id) : [...on, it.id]),
+      })),
+    ];
+  },
+
+  applyDock() {
+    const on = new Set(this.dockEnabled());
+    for (const it of this.DOCK) {
+      const el = document.getElementById(this.dockElId(it));
+      if (el) {
+        el.hidden = !on.has(it.id);
+      }
+    }
+    const dock = document.getElementById("tabora-dock");
+    if (dock) {
+      dock.hidden = !on.size;
+    }
+    this.syncDockMode();
+    this.tipHide?.();
+    // адресная строка считает свою ширину по событию окна (при вкладках сверху ряд стоит рядом с ней)
+    window.dispatchEvent(new Event("resize"));
+  },
+
+  /** Строки или плитки. Признак стоит на корне и при свёрнутой панели: раскладку под него
+   * переключают стили вместе с tabora-sidebar, поэтому сворачивание и разворачивание идут
+   * между верными состояниями без пересчёта посреди движения. */
+  syncDockMode() {
+    const root = document.documentElement;
+    const dock = document.getElementById("tabora-dock");
+    if (!dock) {
+      return;
+    }
+    const n = this.dockEnabled().length;
+    const tiles = !this.horizontalTabs && n > 0 && (n > this.DOCK_ROWS || window.innerHeight < this.DOCK_ROWS_HEIGHT);
+    if (tiles !== (root.getAttribute("tabora-dock") === "tiles")) {
+      this.sidebarMorphEnd?.();
+      if (tiles) {
+        root.setAttribute("tabora-dock", "tiles");
+      } else {
+        root.removeAttribute("tabora-dock");
+      }
+    }
+    // до пяти кнопок — в один ряд, больше — в два поровну
+    dock.style.setProperty("--tabora-dock-cols", String(n <= 5 ? Math.max(n, 1) : Math.ceil(n / 2)));
+  },
+
+  initDock() {
+    for (const it of this.DOCK) {
+      const el = document.getElementById(this.dockElId(it));
+      // у кнопки почты своё меню (аккаунт): выбор кнопок в нём отдельным пунктом
+      if (!el || it.id === "mail") {
+        continue;
+      }
+      el.addEventListener("contextmenu", e => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.showMenu(this.dockMenuItems(), e.clientX, e.clientY);
+      });
+    }
+    const observer = () => this.applyDock();
+    Services.prefs.addObserver(this.DOCK_PREF, observer);
+    window.addEventListener("unload", () => Services.prefs.removeObserver(this.DOCK_PREF, observer), { once: true });
+    window.addEventListener("resize", () => this.syncDockMode());
+    this.applyDock();
   },
 
   /* ---- Карточка загрузок под почтой: кнопка и живой прогресс ------------- */

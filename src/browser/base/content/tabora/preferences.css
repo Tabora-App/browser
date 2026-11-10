@@ -487,6 +487,18 @@ img[src*="fox"] {
   line-height: 1.45;
 }
 
+.tabora-dock-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 24px;
+}
+
+@media (max-width: 720px) {
+  .tabora-dock-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .tabora-card-stat {
   margin: 0;
   font: 500 12px/1 var(--tabora-mono, "JetBrains Mono", monospace);

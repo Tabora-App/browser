@@ -239,9 +239,21 @@
 #navigator-toolbox > #tabora-pinned { order: 2; }
 #navigator-toolbox > #sidebar-container { order: 3 !important; }
 #navigator-toolbox > #tabora-memory { order: 4; }
-#navigator-toolbox > #tabora-wallet-card { order: 5; }
-#navigator-toolbox > #tabora-mail { order: 6; }
-#navigator-toolbox > #tabora-downloads { order: 7; }
+#navigator-toolbox > #tabora-dock { order: 5; }
+
+/* Быстрые кнопки: один контейнер на обе раскладки. Сбоку — колонка строк под списком вкладок
+   (при пяти и более кнопках или низком окне — плитки, см. «Плитки быстрых кнопок»), сверху —
+   группа значков в строке адреса. Порядок кнопок задаёт разметка (список DOCK в tabora.js). */
+#tabora-dock {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+:is(#tabora-wallet-card, #tabora-mail, #tabora-downloads, .tabora-quick, #tabora-dock)[hidden] {
+  display: none !important;
+}
 
 /* Строка 1: кнопки окна, назад, вперёд, обновить, меню. Строка 2: адрес. */
 #nav-bar {
@@ -800,7 +812,7 @@ sidebar-main {
 }
 
 #tabora-wallet-card,
-#tabora-mail {
+:is(#tabora-mail, .tabora-quick) {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -819,29 +831,33 @@ sidebar-main {
 }
 
 #tabora-wallet-card:hover,
-#tabora-mail:hover {
+:is(#tabora-mail, .tabora-quick):hover {
   border-color: var(--tabora-line);
   background: var(--tabora-panel);
 }
 
 #tabora-wallet-card svg,
-#tabora-mail svg {
+:is(#tabora-mail, .tabora-quick) svg {
   color: var(--tabora-text-3);
   flex-shrink: 0;
 }
 
 #tabora-wallet-card > span:first-of-type,
-#tabora-mail > span:first-of-type {
+:is(#tabora-mail, .tabora-quick) > span:first-of-type {
   flex: 1;
+  /* подпись из двух слов не переносится, пока панель сужается */
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 #tabora-wallet-card .kbd,
-#tabora-mail .kbd {
+:is(#tabora-mail, .tabora-quick) .kbd {
   font: 500 10px/1 var(--tabora-mono);
   color: var(--tabora-text-5);
 }
 
-#tabora-mail .pill {
+:is(#tabora-mail, .tabora-quick) .pill {
   margin-inline-start: auto;
   font: 800 11px/1 var(--tabora-font);
   color: var(--tabora-on-accent);
@@ -868,6 +884,9 @@ sidebar-main {
 #tabora-downloads {
   display: flex;
   flex-direction: column;
+  /* как у кнопок рядом: при сворачивании панели размеры задаются явно, и без этого карточка
+     была бы на толщину рамки больше соседей */
+  box-sizing: border-box;
   border: 1px solid var(--tabora-panel-border);
   border-radius: 12px;
   background: transparent;
@@ -1121,7 +1140,7 @@ sidebar-main {
 :root[tabora-sidebar-anim="collapse"] #tabbrowser-tabs[orient="vertical"] .tab-close-button,
 :root[tabora-sidebar-anim="collapse"] #tabora-tabs-head > span,
 :root[tabora-sidebar-anim="collapse"] #tabora-wallet-card > span,
-:root[tabora-sidebar-anim="collapse"] #tabora-mail > span,
+:root[tabora-sidebar-anim="collapse"] :is(#tabora-mail, .tabora-quick) > span,
 :root[tabora-sidebar-anim="collapse"] #tabora-downloads .title,
 :root[tabora-sidebar-anim="collapse"] #tabora-downloads .head .kbd,
 :root[tabora-sidebar-anim="collapse"] #tabora-spaces .tabora-space,
@@ -1138,7 +1157,7 @@ sidebar-main {
 :root[tabora-sidebar-anim="expand"] #tabbrowser-tabs[orient="vertical"] .tab-close-button,
 :root[tabora-sidebar-anim="expand"] #tabora-tabs-head > span,
 :root[tabora-sidebar-anim="expand"] #tabora-wallet-card > span,
-:root[tabora-sidebar-anim="expand"] #tabora-mail > span,
+:root[tabora-sidebar-anim="expand"] :is(#tabora-mail, .tabora-quick) > span,
 :root[tabora-sidebar-anim="expand"] #tabora-downloads .title,
 :root[tabora-sidebar-anim="expand"] #tabora-downloads .head .kbd,
 :root[tabora-sidebar-anim="expand"] #tabora-spaces .tabora-space,
@@ -1156,7 +1175,7 @@ sidebar-main {
   :root[tabora-sidebar-anim="expand"] #tabbrowser-tabs[orient="vertical"] .tab-close-button,
   :root[tabora-sidebar-anim="expand"] #tabora-tabs-head > span,
   :root[tabora-sidebar-anim="expand"] #tabora-wallet-card > span,
-  :root[tabora-sidebar-anim="expand"] #tabora-mail > span,
+  :root[tabora-sidebar-anim="expand"] :is(#tabora-mail, .tabora-quick) > span,
   :root[tabora-sidebar-anim="expand"] #tabora-downloads .title,
   :root[tabora-sidebar-anim="expand"] #tabora-downloads .head .kbd,
   :root[tabora-sidebar-anim="expand"] #tabora-spaces .tabora-space,
@@ -1356,9 +1375,9 @@ sidebar-main {
 }
 
 /* Почта и загрузки: значок, бейдж, тонкая полоска прогресса */
-:root[tabora-sidebar="compact"] #tabora-wallet-card,
-:root[tabora-sidebar="compact"] #tabora-mail,
-:root[tabora-sidebar="compact"] #tabora-downloads .head {
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-wallet-card,
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) :is(#tabora-mail, .tabora-quick),
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads .head {
   justify-content: center;
   width: 36px;
   height: 36px;
@@ -1367,19 +1386,19 @@ sidebar-main {
   gap: 0;
 }
 
-:root[tabora-sidebar="compact"] #tabora-wallet-card > span,
-:root[tabora-sidebar="compact"] #tabora-mail > span,
-:root[tabora-sidebar="compact"] #tabora-downloads .title,
-:root[tabora-sidebar="compact"] #tabora-downloads .head .kbd,
-:root[tabora-sidebar="compact"] #tabora-downloads .live .row {
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-wallet-card > span,
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) :is(#tabora-mail, .tabora-quick) > span,
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads .title,
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads .head .kbd,
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads .live .row {
   display: none;
 }
 
-:root[tabora-sidebar="compact"] #tabora-downloads {
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads {
   position: relative;
 }
 
-:root[tabora-sidebar="compact"] #tabora-downloads .pill {
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads .pill {
   position: absolute;
   top: 6px;
   right: 6px;
@@ -1387,7 +1406,7 @@ sidebar-main {
   font-size: 10px;
 }
 
-:root[tabora-sidebar="compact"] #tabora-downloads .live {
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads .live {
   padding: 0 12px 10px;
 }
 
@@ -1458,9 +1477,9 @@ sidebar-main {
   font-size: 11px;
 }
 
-:root[tabora-sidebar="compact"] #tabora-wallet-card,
-:root[tabora-sidebar="compact"] #tabora-mail,
-:root[tabora-sidebar="compact"] #tabora-downloads {
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-wallet-card,
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) :is(#tabora-mail, .tabora-quick),
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads {
   box-sizing: border-box;
   width: 36px;
   height: 36px;
@@ -1468,12 +1487,12 @@ sidebar-main {
   border-radius: 10px;
 }
 
-:root[tabora-sidebar="compact"] #tabora-downloads .head {
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads .head {
   height: 100%;
   width: 100%;
 }
 
-:root[tabora-sidebar="compact"] #tabora-downloads .live {
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads .live {
   position: absolute;
   left: 8px;
   right: 8px;
@@ -1481,13 +1500,35 @@ sidebar-main {
   padding: 0;
 }
 
-:root[tabora-sidebar="compact"] #tabora-downloads .bar {
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads .bar {
   height: 3px;
 }
 
-:root[tabora-sidebar="compact"] #tabora-downloads .pill {
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads .pill {
   top: -5px;
   right: -5px;
+}
+
+:root[tabora-sidebar="compact"] #tabora-dock {
+  gap: 10px;
+}
+
+/* Плитки быстрых кнопок: в развёрнутой панели при пяти и более кнопках или низком окне строки
+   с подписями заняли бы место списка вкладок. Значки те же, что в свёрнутой панели, но в ряд
+   на ширину колонки, как закреплённые сайты; название и клавиши — в подсказке над плиткой. */
+:root[tabora-dock="tiles"]:not([tabora-sidebar="compact"]) #tabora-dock {
+  display: grid;
+  grid-template-columns: repeat(var(--tabora-dock-cols, 4), minmax(0, 1fr));
+  gap: 8px;
+}
+
+:root[tabora-dock="tiles"]:not([tabora-sidebar="compact"]) #tabora-dock > #tabora-wallet-card,
+:root[tabora-dock="tiles"]:not([tabora-sidebar="compact"]) #tabora-dock > :is(#tabora-mail, .tabora-quick),
+:root[tabora-dock="tiles"]:not([tabora-sidebar="compact"]) #tabora-dock > #tabora-downloads {
+  width: auto;
+  height: 40px;
+  margin: 0;
+  border-radius: 12px;
 }
 
 /* Подсказка справа от значка */
@@ -1517,6 +1558,15 @@ sidebar-main {
 #tabora-tip[shown] {
   opacity: 1;
   transform: translate(0, -50%);
+}
+
+/* над плиткой быстрой кнопки: по центру, выезжает снизу вверх */
+#tabora-tip[above] {
+  transform: translate(-50%, calc(-100% + 4px));
+}
+
+#tabora-tip[above][shown] {
+  transform: translate(-50%, -100%);
 }
 
 #tabora-tip b {
@@ -3983,8 +4033,9 @@ toolbarseparator {
   gap: 8px;
 }
 
-#tabora-dock {
+:root[tabora-tabs="horizontal"] #tabora-dock {
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 2px;
   padding: 3px;
@@ -3993,9 +4044,9 @@ toolbarseparator {
   -moz-window-dragging: no-drag;
 }
 
-#tabora-dock > #tabora-wallet-card,
-#tabora-dock > #tabora-mail,
-#tabora-dock > #tabora-downloads {
+:root[tabora-tabs="horizontal"] #tabora-dock > #tabora-wallet-card,
+:root[tabora-tabs="horizontal"] #tabora-dock > :is(#tabora-mail, .tabora-quick),
+:root[tabora-tabs="horizontal"] #tabora-dock > #tabora-downloads {
   position: relative;
   box-sizing: border-box;
   flex: none;
@@ -4009,25 +4060,25 @@ toolbarseparator {
   justify-content: center;
 }
 
-#tabora-dock > #tabora-wallet-card:hover,
-#tabora-dock > #tabora-mail:hover,
-#tabora-dock > #tabora-downloads:hover {
+:root[tabora-tabs="horizontal"] #tabora-dock > #tabora-wallet-card:hover,
+:root[tabora-tabs="horizontal"] #tabora-dock > :is(#tabora-mail, .tabora-quick):hover,
+:root[tabora-tabs="horizontal"] #tabora-dock > #tabora-downloads:hover {
   background: var(--tabora-raised);
 }
 
-#tabora-dock > #tabora-wallet-card > span,
-#tabora-dock > #tabora-mail > span,
-#tabora-dock #tabora-downloads .title,
-#tabora-dock #tabora-downloads .head .kbd,
-#tabora-dock #tabora-downloads .live .row {
+:root[tabora-tabs="horizontal"] #tabora-dock > #tabora-wallet-card > span,
+:root[tabora-tabs="horizontal"] #tabora-dock > :is(#tabora-mail, .tabora-quick) > span,
+:root[tabora-tabs="horizontal"] #tabora-dock #tabora-downloads .title,
+:root[tabora-tabs="horizontal"] #tabora-dock #tabora-downloads .head .kbd,
+:root[tabora-tabs="horizontal"] #tabora-dock #tabora-downloads .live .row {
   display: none;
 }
 
-#tabora-dock svg {
+:root[tabora-tabs="horizontal"] #tabora-dock svg {
   color: var(--tabora-text-2);
 }
 
-#tabora-dock #tabora-downloads .head {
+:root[tabora-tabs="horizontal"] #tabora-dock #tabora-downloads .head {
   width: 100%;
   height: 100%;
   padding: 0;
@@ -4036,7 +4087,7 @@ toolbarseparator {
 }
 
 /* число загрузок — значком на углу, ход загрузки — полоской под значком */
-#tabora-dock #tabora-downloads .pill {
+:root[tabora-tabs="horizontal"] #tabora-dock #tabora-downloads .pill {
   position: absolute;
   top: -5px;
   right: -5px;
@@ -4044,13 +4095,13 @@ toolbarseparator {
   font-size: 10px;
 }
 
-#tabora-dock #tabora-downloads .live {
+:root[tabora-tabs="horizontal"] #tabora-dock #tabora-downloads .live {
   position: absolute;
   inset: auto 6px 3px;
   padding: 0;
 }
 
-#tabora-dock #tabora-downloads .bar {
+:root[tabora-tabs="horizontal"] #tabora-dock #tabora-downloads .bar {
   height: 3px;
 }
 

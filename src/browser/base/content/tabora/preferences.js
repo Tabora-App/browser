@@ -3,7 +3,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* Собственные карточки Tabora на странице настроек: баннеры cookie в разделе
- * «Приватность и защита», спящие вкладки во «Вкладках и просмотре». Стили — preferences.css. */
+ * «Приватность и защита», спящие вкладки и быстрые кнопки во «Вкладках и просмотре».
+ * Стили — preferences.css. */
 
 (function () {
   const HTML = "http://www.w3.org/1999/xhtml";
@@ -11,6 +12,7 @@
   const PREF_NOTIFY = "tabora.cookies.notify";
   const PREF_COUNT = "tabora.cookies.handledCount";
   const PREF_SLEEP = "tabora.tabs.sleepAfterMinutes";
+  const PREF_DOCK = "tabora.dock.items";
 
   function h(tag, attrs = {}, text) {
     const el = document.createElementNS(HTML, tag);
@@ -98,6 +100,63 @@
     return card;
   }
 
+  /** Быстрые кнопки оболочки: список и порядок берутся у окна браузера (Tabora.DOCK в tabora.js). */
+  function dockCard() {
+    const shell = window.browsingContext.topChromeWindow?.Tabora;
+    if (!shell?.DOCK) {
+      return null;
+    }
+    const card = h("moz-card", { id: "tabora-dock-card", heading: "Быстрые кнопки", class: "tabora-card" });
+    const body = h("div", { class: "tabora-card-body" });
+    body.append(h("p", { class: "tabora-card-sub" }, "Кнопки под списком вкладок, а при вкладках сверху — рядом с адресной строкой. Отметьте те, что нужны под рукой: остальное открывается сочетанием клавиш."));
+    const grid = h("div", { class: "tabora-dock-grid" });
+    const boxes = new Map();
+    const sync = () => {
+      const on = new Set(shell.dockEnabled());
+      for (const [id, box] of boxes) {
+        box.checked = on.has(id);
+        box.toggleAttribute("checked", on.has(id));
+      }
+    };
+    for (const it of shell.DOCK) {
+      const box = h("moz-checkbox", { label: `${it.label} (${it.key})` });
+      box.addEventListener("change", () => {
+        const on = new Set(shell.dockEnabled());
+        if (box.checked) {
+          on.add(it.id);
+        } else {
+          on.delete(it.id);
+        }
+        shell.setDockEnabled([...on]);
+      });
+      boxes.set(it.id, box);
+      grid.append(box);
+    }
+    sync();
+    Services.prefs.addObserver(PREF_DOCK, sync);
+    window.addEventListener("unload", () => Services.prefs.removeObserver(PREF_DOCK, sync), { once: true });
+    body.append(grid);
+    card.append(body);
+    return card;
+  }
+
+  function mountDock() {
+    const anchor = document.getElementById("tabora-sleeping-tabs");
+    if (!anchor || document.getElementById("tabora-dock-card")) {
+      return;
+    }
+    const card = dockCard();
+    if (!card) {
+      return;
+    }
+    // та же категория, что у «Спящих вкладок»: переключатель разделов показывает их вместе
+    if (anchor.hasAttribute("data-category")) {
+      card.setAttribute("data-category", anchor.getAttribute("data-category"));
+      card.hidden = anchor.hidden;
+    }
+    anchor.after(card);
+  }
+
   function mountSleeping(pane) {
     if (document.getElementById("tabora-sleeping-tabs")) {
       return;
@@ -140,6 +199,7 @@
     }
     mountAccount(pane);
     mountSleeping(pane);
+    mountDock();
     if (document.getElementById("tabora-cookie-banners")) {
       return;
     }
@@ -224,7 +284,7 @@
     // Панели настроек создаются лениво и асинхронно: следим за деревом
     let queued = false;
     const mo = new MutationObserver(() => {
-      if (!document.getElementById("tabora-cookie-banners") || !document.getElementById("tabora-sleeping-tabs") || !document.getElementById("tabora-account")) {
+      if (!document.getElementById("tabora-cookie-banners") || !document.getElementById("tabora-sleeping-tabs") || !document.getElementById("tabora-account") || !document.getElementById("tabora-dock-card")) {
         mount();
       }
       if (!queued) {
