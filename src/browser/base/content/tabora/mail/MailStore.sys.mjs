@@ -18,7 +18,13 @@
  * Почта доступна только после входа в аккаунт Tabora и при разблокированном сейфе: кэш писем
  * и пароли внешних ящиков лежат в профиле (tabora-mail.json) зашифрованными подключом сейфа
  * "mail" (AES-GCM); при выходе из аккаунта или блокировке сейфа данные в памяти сбрасываются.
- * Об изменениях модуль сообщает через Services.obs "tabora-mail-changed". */
+ * Об изменениях модуль сообщает через Services.obs "tabora-mail-changed".
+ *
+ * Письма OpenPGP (mail/Pgp.sys.mjs): зашифрованное письмо расшифровывается после получения, в
+ * кэше лежит уже его содержимое (кэш зашифрован сейфом), запись помечается pgp: { encrypted,
+ * signature, signer } либо pgp: { encrypted, error }. Письмо с адреса аккаунта можно отправить
+ * зашифрованным, если известны ключи всех получателей; свои письма несут ключ в заголовке
+ * Autocrypt, ключи собеседников берутся оттуда же. */
 
 const { Vault } = ChromeUtils.importESModule("chrome://tabora/content/vault/Vault.sys.mjs");
 const { Account } = ChromeUtils.importESModule("chrome://tabora/content/account/Account.sys.mjs");
@@ -28,6 +34,7 @@ const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   ImapClient: "chrome://tabora/content/mail/net/Imap.sys.mjs",
   smtpSend: "chrome://tabora/content/mail/net/Smtp.sys.mjs",
+  Pgp: "chrome://tabora/content/mail/Pgp.sys.mjs",
 });
 ChromeUtils.defineLazyGetter(lazy, "Mime", () => ChromeUtils.importESModule("chrome://tabora/content/mail/net/Mime.sys.mjs"));
 
@@ -523,6 +530,10 @@ export const MailStore = {
         const rec = this._record(acc, role, path, box.uidValidity, item);
         if (rec) {
           this._adopt(rec);
+          this._openPgp(rec);
+          if (rec._autocrypt) {
+            lazy.Pgp.noteAutocrypt(rec.from.email, rec._autocrypt, rec.date);
+          }
         }
       }
       if (this.data && need.length > 12) {
@@ -582,8 +593,157 @@ export const MailStore = {
     if (parsed.images) {
       rec.images = parsed.images;
     }
+    if (parsed.pgp) {
+      // расшифровка и проверка подписи идут следом (_openPgp); исходные данные для них в запись
+      // на диске не попадают
+      Object.defineProperty(rec, "_pgp", { value: parsed.pgp, enumerable: false, writable: true });
+      if (parsed.pgp.kind !== "signed") {
+        rec.pgp = { encrypted: true, pending: true };
+        rec.body = [{ p: "Письмо зашифровано. Расшифровываем…" }];
+        rec.snippet = "Зашифрованное письмо";
+        rec.attachments = [];
+      }
+    }
+    if (parsed.autocrypt && role === "inbox") {
+      Object.defineProperty(rec, "_autocrypt", { value: parsed.autocrypt, enumerable: false });
+    }
     this._applyFlags(rec, item.flags, role);
     return rec;
+  },
+
+  /* ---- OpenPGP: расшифровка, подписи, ключи собеседников ------------------------------------ */
+
+  /** Адрес, чьим ключом должна быть подписана запись: у своих писем — свой адрес. */
+  _pgpSender(rec) {
+    return rec.folder === "sent" || rec.folder === "drafts" ? rec.alias || this._acc(rec.account)?.address || "" : rec.from?.email || "";
+  },
+
+  /** Содержимое зашифрованного письма → поля записи. bytes — расшифрованная часть письма. */
+  async _applyDecrypted(rec, kind, bytes, signature) {
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    // письмо без PGP/MIME: внутри просто текст
+    const part = kind === "inline" ? { text: new TextDecoder("utf-8", { fatal: false }).decode(bytes), html: "", attachments: [], images: 0, pgp: null } : lazy.Mime.parseEntity(bin);
+    let sig = signature;
+    if (part.pgp?.kind === "signed" && sig.state === "none") {
+      // подпись не внутри шифрования, а отдельным слоем под ним
+      sig = await lazy.Pgp.verify(lazy.Mime.bytesOf(part.pgp.data), part.pgp.signature, this._pgpSender(rec));
+    }
+    const { body, snippet, code } = lazy.Mime.toBlocks({ ...part, subject: rec.subject });
+    rec.body = body;
+    rec.snippet = snippet;
+    rec.attachments = part.attachments.map(a => ({ ...a, inner: true }));
+    if (code) {
+      rec.code = code;
+      if (!rec.labels.includes("codes")) {
+        rec.labels.push("codes");
+      }
+    }
+    if (part.images) {
+      rec.images = part.images;
+    }
+    rec.pgp = { encrypted: true, signature: sig.state, signer: sig.address || "" };
+    return bin;
+  },
+
+  _pgpFailed(rec, e) {
+    const error = e.code === "no-key" ? "no-key" : e.code === "signed-out" ? "locked" : "failed";
+    rec.pgp = { encrypted: true, error };
+    rec.body = [{ p: error === "no-key" ? "Письмо зашифровано ключом, которого нет в этом профиле. Прочитать его можно там, где этот ключ есть." : "Письмо зашифровано, но расшифровать его не удалось: оно повреждено или зашифровано неизвестным способом." }];
+    rec.snippet = "Зашифрованное письмо";
+  },
+
+  /** Письмо OpenPGP после получения: расшифровать или проверить подпись. Большое зашифрованное
+   * письмо получено не целиком — оно дочитывается с сервера. Работа идёт по очереди. */
+  _openPgp(rec) {
+    const job = rec._pgp;
+    if (!job) {
+      return;
+    }
+    rec._pgp = null;
+    this._pgpQueue = (this._pgpQueue || Promise.resolve()).then(async () => {
+      if (!this.data || !this.data.messages.includes(rec)) {
+        return;
+      }
+      try {
+        if (job.kind === "signed") {
+          const sig = await lazy.Pgp.verify(lazy.Mime.bytesOf(job.data), job.signature, this._pgpSender(rec));
+          rec.pgp = { signature: sig.state, signer: sig.address || "" };
+        } else if (rec.partial) {
+          await this._decryptFull(rec);
+        } else {
+          const { bytes, signature } = await lazy.Pgp.decrypt(job.armored, { from: this._pgpSender(rec) });
+          await this._applyDecrypted(rec, job.kind, bytes, signature);
+        }
+      } catch (e) {
+        if (job.kind === "signed") {
+          rec.pgp = { signature: "unknown", signer: "" };
+        } else {
+          this._pgpFailed(rec, e);
+        }
+      }
+      if (this.data) {
+        this.save();
+      }
+    });
+  },
+
+  /** Исходник письма целиком с сервера и расшифрованная часть: { kind, bin } либо бросает ошибку. */
+  async _fetchDecrypted(rec) {
+    if (!rec.at?.uid) {
+      throw new Error("Письмо ещё не на сервере");
+    }
+    let raw = "";
+    await this._ops;
+    await this._withFolder(rec, async client => {
+      raw = (await client.fetch([rec.at.uid]))[0]?.raw || "";
+    });
+    const parsed = lazy.Mime.parseMessage(raw);
+    if (!parsed.pgp || parsed.pgp.kind === "signed") {
+      throw new Error("Письмо на сервере не зашифровано");
+    }
+    const { bytes, signature } = await lazy.Pgp.decrypt(parsed.pgp.armored, { from: this._pgpSender(rec) });
+    return { kind: parsed.pgp.kind, bytes, signature };
+  },
+
+  async _decryptFull(rec) {
+    const { kind, bytes, signature } = await this._fetchDecrypted(rec);
+    await this._applyDecrypted(rec, kind, bytes, signature);
+    rec.partial = false;
+  },
+
+  /** Повторить расшифровку письма (ключ появился позже, сейф был закрыт). */
+  async decryptAgain(id) {
+    await this.ready();
+    const rec = this.byId(id);
+    if (!rec?.pgp?.encrypted) {
+      return rec;
+    }
+    try {
+      await this._decryptFull(rec);
+    } catch (e) {
+      this._pgpFailed(rec, e);
+    }
+    this.save();
+    return rec;
+  },
+
+  /** Можно ли зашифровать письмо с адреса from этим получателям: { available, possible, missing,
+   * suggested }. available — у отправителя есть ключ (это адрес аккаунта Tabora). */
+  async encryptPlan(from, recipients) {
+    const none = { available: false, possible: false, missing: [], suggested: false };
+    try {
+      await this.ready();
+      if (String(from || "").toLowerCase() !== Account.email) {
+        return none;
+      }
+      await lazy.Pgp.ensureKey();
+      return { available: true, ...(await lazy.Pgp.plan(recipients)) };
+    } catch (e) {
+      return none;
+    }
   },
 
   /** Запись входит в хранилище; местная копия того же письма (только что отправленного или
@@ -593,6 +753,11 @@ export const MailStore = {
     if (twin) {
       rec.id = twin.id;
       rec.thread = twin.thread;
+      if (rec.pgp?.pending && twin.pgp?.encrypted && !twin.pgp.error) {
+        // своё зашифрованное письмо: пока копия с сервера расшифровывается, показываем уже известный текст
+        rec.body = twin.body;
+        rec.snippet = twin.snippet;
+      }
       this.data.messages = this.data.messages.filter(m => m !== twin);
     } else {
       rec.id = `m${++this._seq}`;
@@ -753,8 +918,33 @@ export const MailStore = {
       }
       attachments.push({ name: a.name, type, bytes });
     }
+    // Письмо с адреса аккаунта несёт его открытый ключ в заголовке Autocrypt и может быть
+    // зашифровано; у алиасов и внешних ящиков своего ключа нет.
+    const keyed = acc.id === TABORA && from === Account.email;
+    if (message.encrypt && !keyed) {
+      throw new Error("Зашифровать можно только письмо с адреса аккаунта Tabora");
+    }
+    let entity = lazy.Mime.buildEntity({ text, attachments });
+    const extraHeaders = [];
+    if (keyed) {
+      try {
+        await lazy.Pgp.ensureKey();
+        const autocrypt = await lazy.Pgp.autocryptHeader(from);
+        if (autocrypt) {
+          extraHeaders.push(lazy.Mime.foldHeader("Autocrypt", autocrypt));
+        }
+      } catch (e) {
+        if (message.encrypt) {
+          throw e;
+        }
+        console.error("Tabora mail: ключ шифрования недоступен, письмо уходит без него", e);
+      }
+    }
+    if (message.encrypt) {
+      entity = lazy.Mime.encryptedEntity(await lazy.Pgp.encrypt(lazy.Mime.bytesOf(entity), [...to, ...cc]));
+    }
     const built = lazy.Mime.buildMessage({
-      from: { name, email: from }, to, cc, subject: message.subject || "(без темы)", text, attachments,
+      from: { name, email: from }, to, cc, subject: message.subject || "(без темы)", entity, extraHeaders,
       inReplyTo: original?.messageId || "", references: original ? [...(original.refs || []), original.messageId].filter(Boolean).slice(-10) : [],
     });
     const creds = await this._creds(acc);
@@ -776,6 +966,9 @@ export const MailStore = {
       refs: original ? [...(original.refs || []), original.messageId].filter(Boolean) : [], body: lazy.Mime.toBlocks({ text, html: "", subject: message.subject || "" }).body,
       attachments: attachments.map(a => ({ name: a.name, size: a.bytes.length })),
     };
+    if (message.encrypt) {
+      rec.pgp = { encrypted: true, signature: "valid", signer: from };
+    }
     this.data.messages.unshift(rec);
     this.save();
     // копия в «Отправленные» на сервере (Gmail кладёт её сам)
@@ -802,6 +995,19 @@ export const MailStore = {
     const att = m?.attachments?.[index];
     if (!m || !att || !m.at?.uid) {
       throw new Error("Вложение недоступно");
+    }
+    if (att.inner) {
+      // вложение внутри зашифрованного письма: сервер видит только шифртекст
+      const { bytes } = await this._fetchDecrypted(m);
+      let inner = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        inner += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      }
+      const part = lazy.Mime.findSection(inner, att.section);
+      if (!part) {
+        throw new Error("Вложение недоступно");
+      }
+      return { name: att.name, type: att.type, bytes: lazy.Mime.decodeAttachment(part.bin, part.encoding) };
     }
     let bin = "";
     await this._ops;

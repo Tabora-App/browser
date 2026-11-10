@@ -29,6 +29,14 @@
   --accent-dim: rgba(200, 242, 90, 0.16);
   --on-accent: #0b0c0e;
   --warn: #ffb4a3;
+  /* тон сообщения: можно верить, защита неполная, верить нельзя */
+  --accent-ink: #c8f25a;
+  --tone-ok: var(--accent-ink);
+  --tone-ok-bg: rgba(200, 242, 90, 0.14);
+  --tone-warn: #f2c56b;
+  --tone-warn-bg: rgba(242, 197, 107, 0.14);
+  --tone-bad: #ff9c8a;
+  --tone-bad-bg: rgba(255, 156, 138, 0.14);
   --paper: #ffffff;
   --paper-text: #16171a;
   --paper-text-2: #3d4047;
@@ -110,9 +118,11 @@ kbd {
   line-height: 1.5;
 }
 
-.app[data-view="aliases"] { grid-template-columns: 200px minmax(0, 1fr); }
+.app[data-view="aliases"], .app[data-view="keys"] { grid-template-columns: 200px minmax(0, 1fr); }
 .app[data-view="aliases"] .list,
-.app[data-view="aliases"] .reader { display: none; }
+.app[data-view="aliases"] .reader,
+.app[data-view="keys"] .list,
+.app[data-view="keys"] .reader { display: none; }
 .app[data-view="mail"] .aliases { display: none; }
 
 /* ---- Папки ------------------------------------------------------------- */
@@ -180,7 +190,10 @@ kbd {
 }
 .label-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin: 0 4px; }
 .folder-spacer { flex: 1; }
-.aliases-link { border: 1px solid var(--line-2); height: 42px; border-radius: 12px; color: var(--text); font-weight: 600; }
+.side-links { display: flex; flex-direction: column; border: 1px solid var(--line-2); border-radius: 12px; overflow: hidden; flex-shrink: 0; }
+.side-links .folder-item { height: 40px; border-radius: 0; color: var(--text); font-weight: 600; }
+.side-links .folder-item + .folder-item { border-top: 1px solid var(--line-2); }
+.side-links .folder-item[aria-selected="true"] { font-weight: 700; }
 
 .account-card {
   display: flex;
@@ -509,7 +522,28 @@ kbd {
 .to-chip.link:hover { border-color: var(--stroke); color: var(--text-strong); }
 .to-chip.link::after { content: " · управлять"; color: var(--text-4); font-family: var(--font); font-weight: 600; }
 .to-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 8px; background: var(--field); border: 1px solid var(--field-border); font: 500 11px/1 var(--mono); color: var(--text-2); white-space: nowrap; }
-.mail-item.collapsed .paper, .mail-item.collapsed .attachments { display: none; }
+.mail-item.collapsed .paper, .mail-item.collapsed .attachments, .mail-item.collapsed .pgp-note { display: none; }
+
+/* защита письма (OpenPGP): спокойная строка, когда всё в порядке, и карточка, когда нет */
+.pgp-note { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.pgp-mark { width: 22px; height: 22px; margin-inline: 4px; border-radius: 6px; display: grid; place-items: center; flex: none; background: var(--raised); color: var(--text-3); }
+.pgp-mark svg { width: 13px; height: 13px; }
+.pgp-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; flex: 1; }
+.pgp-text b { font: 700 12px/1.4 var(--font); color: var(--text); }
+.pgp-text span { font-size: 12px; line-height: 1.4; color: var(--text-4); }
+.pgp-note[data-tone="ok"] .pgp-mark { background: var(--tone-ok-bg); color: var(--tone-ok); }
+.pgp-note[data-tone="warn"], .pgp-note[data-tone="bad"] { align-items: flex-start; gap: 12px; padding: 12px 14px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--card); }
+.pgp-note[data-tone="warn"] .pgp-mark, .pgp-note[data-tone="bad"] .pgp-mark { width: 30px; height: 30px; margin-inline: 0; border-radius: 8px; }
+.pgp-note[data-tone="warn"] .pgp-mark svg, .pgp-note[data-tone="bad"] .pgp-mark svg { width: 16px; height: 16px; }
+.pgp-note[data-tone="warn"] .pgp-text, .pgp-note[data-tone="bad"] .pgp-text { flex-direction: column; flex-wrap: nowrap; gap: 2px; }
+.pgp-note[data-tone="warn"] .pgp-text b, .pgp-note[data-tone="bad"] .pgp-text b { font-size: 13px; }
+.pgp-note[data-tone="warn"] .pgp-text span, .pgp-note[data-tone="bad"] .pgp-text span { color: var(--text-3); line-height: 1.45; }
+.pgp-note[data-tone="warn"] .pgp-mark { background: var(--tone-warn-bg); color: var(--tone-warn); }
+.pgp-note[data-tone="bad"] { border-color: color-mix(in srgb, var(--tone-bad) 50%, transparent); }
+.pgp-note[data-tone="bad"] .pgp-mark { background: var(--tone-bad-bg); color: var(--tone-bad); }
+.pgp-note[data-tone="bad"] .pgp-text b { color: var(--tone-bad); }
+.pgp-note .btn { height: 30px; padding: 0 12px; font-size: 12px; flex: none; align-self: center; }
+.pgp-note .btn:disabled { opacity: 0.6; }
 .mail-item.collapsed .mail-item-head { cursor: default; opacity: 0.8; }
 
 .paper {
@@ -654,7 +688,7 @@ kbd {
 .alias-row { min-height: 60px; padding-block: 10px; border-bottom: 1px solid var(--line); transition: background-color var(--ease), opacity var(--ease); }
 .alias-row:hover { background: var(--card); }
 .alias-row[data-on="false"] { opacity: 0.55; }
-.alias-row .glyph { width: 34px; height: 34px; border-radius: 9px; background: var(--raised); color: var(--text); font: 800 13px/1 var(--font); display: flex; align-items: center; justify-content: center; }
+.alias-row .glyph, .key-row .glyph { width: 34px; height: 34px; border-radius: 9px; background: var(--raised); color: var(--text); font: 800 13px/1 var(--font); display: flex; align-items: center; justify-content: center; }
 .alias-row .addr { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .alias-row .addr button {
   border: 0;
@@ -732,7 +766,20 @@ kbd {
   outline: none;
   color: var(--text);
 }
-.modal-field input:focus, .modal-field select:focus, .alias-preview:focus-within { border-color: var(--accent); }
+.modal-field input:focus, .modal-field select:focus, .modal-field textarea:focus, .alias-preview:focus-within { border-color: var(--accent); }
+.modal-field textarea {
+  min-height: 136px;
+  padding: 10px 12px;
+  background: var(--field);
+  border: 1px solid var(--field-border);
+  border-radius: 10px;
+  outline: none;
+  color: var(--text);
+  font: 500 11.5px/1.5 var(--mono);
+  white-space: pre;
+  resize: vertical;
+}
+#key-modal .modal { width: 560px; }
 .alias-preview { display: flex; align-items: center; gap: 2px; height: 38px; padding: 0 12px; background: var(--field); border: 1px solid var(--field-border); border-radius: 10px; font-size: 13px; }
 .alias-preview input { flex: 1; min-width: 0; height: 34px; border: 0; background: transparent; padding: 0; outline: none; font: inherit; color: var(--text); }
 .alias-preview span { color: var(--text-4); }
@@ -791,6 +838,13 @@ kbd {
     --text-5: #9a9ea8;
     --text-strong: #16171a;
     --accent-dim: rgba(200, 242, 90, 0.4);
+    --accent-ink: #5f7d0a;
+    --tone-ok-bg: rgba(200, 242, 90, 0.42);
+    --tone-warn: #8a5a00;
+    --tone-warn-bg: rgba(233, 170, 40, 0.2);
+    --tone-bad: #b3261e;
+    --tone-bad-bg: rgba(179, 38, 30, 0.1);
+    --warn: #c2362b;
     --paper-border: #e0dcd3;
     --shadow: 0 24px 70px rgba(40, 36, 30, 0.22);
   }
@@ -859,3 +913,33 @@ kbd {
 .modal-more[open] summary::after { content: " ⌄"; }
 .modal-more[open] summary { margin-bottom: 10px; }
 .modal-grid { display: grid; grid-template-columns: minmax(0, 1fr) 84px; gap: 10px; margin-bottom: 10px; }
+
+/* ---- Шифрование: свой ключ и ключи собеседников ---- */
+.keys-body { flex: 1; overflow-y: auto; padding: 20px 28px 28px; display: flex; flex-direction: column; gap: 12px; }
+.key-card { max-width: 860px; padding: 16px 18px 18px; background: var(--card); border: 1px solid var(--line-2); border-radius: 14px; display: flex; flex-direction: column; gap: 12px; }
+.key-card-head { display: flex; align-items: center; gap: 12px; }
+.key-card .pgp-mark { width: 34px; height: 34px; margin-inline: 0; border-radius: 9px; background: var(--tone-ok-bg); color: var(--tone-ok); }
+.key-card .pgp-mark svg { width: 17px; height: 17px; }
+.key-card-title { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.key-card-title b { font: 700 14px/1.3 var(--font); }
+.key-card-title span { font-size: 12px; color: var(--text-3); overflow-wrap: anywhere; }
+.key-card .btn { height: 32px; font-size: 12px; flex: none; }
+.key-print { font: 500 15px/1.5 var(--mono); letter-spacing: 0.03em; color: var(--text-strong); user-select: text; overflow-wrap: anywhere; }
+.key-hint { margin: 0; max-width: 620px; font-size: 12px; line-height: 1.5; color: var(--text-3); }
+.keys-list-head { display: flex; align-items: baseline; gap: 8px; margin-top: 14px; }
+.keys-list-head h2 { margin: 0; font: 800 15px/1.2 var(--font); letter-spacing: -0.005em; }
+.keys-list-head span { font-size: 12px; color: var(--text-4); }
+.keys-empty { max-width: 860px; padding: 36px 24px; border: 1px dashed var(--line-2); border-radius: 14px; }
+.keys-empty span { max-width: 420px; line-height: 1.5; }
+.key-row { max-width: 860px; display: grid; grid-template-columns: 34px minmax(200px, 340px) minmax(0, 1fr) auto; gap: 12px; align-items: center; min-height: 58px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.key-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.key-who b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.key-who span { font-size: 11px; color: var(--text-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.key-print.small { border: 0; background: transparent; padding: 0; text-align: left; font-size: 11.5px; letter-spacing: 0.02em; color: var(--text-2); transition: color var(--ease); }
+.key-print.small:hover { color: var(--accent-ink); }
+.key-row:hover .key-remove { opacity: 1; }
+@media (max-width: 980px) {
+  .key-row { grid-template-columns: 34px minmax(0, 1fr) auto; }
+  .key-row .key-print.small { grid-column: 2 / -1; }
+  .key-card-head { flex-wrap: wrap; }
+}

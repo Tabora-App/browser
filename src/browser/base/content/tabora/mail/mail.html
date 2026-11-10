@@ -26,10 +26,16 @@
       </button>
       <div class="folder-list" id="folder-list" role="tablist" aria-label="Папки"></div>
       <div class="folder-spacer"></div>
-      <button class="folder-item aliases-link" id="aliases-link" type="button">
-        <span class="folder-name">Алиасы</span>
-        <span class="folder-count mono" id="aliases-count"></span>
-      </button>
+      <div class="side-links">
+        <button class="folder-item" id="aliases-link" type="button">
+          <span class="folder-name">Алиасы</span>
+          <span class="folder-count mono" id="aliases-count"></span>
+        </button>
+        <button class="folder-item" id="keys-link" type="button">
+          <span class="folder-name">Шифрование</span>
+          <span class="folder-count mono" id="keys-count"></span>
+        </button>
+      </div>
       <div class="boxes" id="boxes" aria-label="Ящики"></div>
       <button class="folder-item add-box" id="add-box-btn" type="button">
         <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -124,6 +130,44 @@
       </div>
       <div class="alias-rows" id="alias-rows"></div>
     </section>
+
+    <!-- Шифрование: свой ключ и ключи собеседников -->
+    <section class="aliases keys" id="keys-pane" aria-label="Шифрование" hidden>
+      <header class="aliases-head">
+        <div class="aliases-title-row">
+          <div>
+            <h1 class="aliases-title">Шифрование</h1>
+            <p class="aliases-sub">Зашифрованное письмо читаете только вы и получатель: на почтовых серверах лежит набор знаков. Ключи хранятся в сейфе этого профиля.</p>
+          </div>
+          <button class="primary" id="new-key-btn" type="button">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            Ключ собеседника
+          </button>
+        </div>
+      </header>
+      <div class="keys-body" id="keys-body"></div>
+    </section>
+
+    <!-- Ключ собеседника -->
+    <div class="modal-backdrop" id="key-modal" hidden>
+      <div class="modal" role="dialog" aria-labelledby="key-modal-title">
+        <h2 id="key-modal-title">Ключ собеседника</h2>
+        <p class="modal-sub">Открытый ключ OpenPGP человека, которому вы пишете. Обычно он приходит с письмом собеседника и добавляется сам; вручную ключ вносят, когда его передали другим путём.</p>
+        <label class="modal-field">
+          <span>Адрес почты</span>
+          <input id="key-address" type="email" placeholder="имя@example.org" autocomplete="off" spellcheck="false" />
+        </label>
+        <label class="modal-field">
+          <span>Открытый ключ</span>
+          <textarea id="key-armored" rows="7" wrap="off" placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----" spellcheck="false" autocomplete="off"></textarea>
+        </label>
+        <p class="modal-error" id="key-error" role="alert" hidden></p>
+        <div class="modal-actions">
+          <button class="ghost" id="key-cancel" type="button">Отмена</button>
+          <button class="primary" id="key-add" type="button">Добавить ключ</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Новый алиас -->
     <div class="modal-backdrop" id="alias-modal" hidden>

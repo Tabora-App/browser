@@ -22,7 +22,7 @@ ChromeUtils.defineLazyGetter(lazy, "parser", () => {
 
 /* ---- байты и кодировки ---- */
 
-function bytesOf(bin) {
+export function bytesOf(bin) {
   const u = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) {
     u[i] = bin.charCodeAt(i) & 0xff;
@@ -284,7 +284,24 @@ function walk(raw, out, section, depth) {
   const cd = parseParams(first(headers, "content-disposition"));
   const cte = first(headers, "content-transfer-encoding");
   if (ct.value.startsWith("multipart/") && ct.params.boundary && depth < 10) {
-    splitMultipart(body, ct.params.boundary).forEach((part, i) => walk(part, out, section ? `${section}.${i + 1}` : String(i + 1), depth + 1));
+    const parts = splitMultipart(body, ct.params.boundary);
+    const protocol = String(ct.params.protocol || "").toLowerCase();
+    // PGP/MIME (RFC 3156) на верхнем уровне письма: вторая часть — зашифрованное письмо или подпись
+    if (depth === 0 && parts.length >= 2 && (ct.value === "multipart/encrypted" || ct.value === "multipart/signed")) {
+      const [head2, body2] = splitHeaderBody(parts[1]);
+      const second = decodeTransfer(body2, first(parseHeaders(head2), "content-transfer-encoding")).trim();
+      if (ct.value === "multipart/encrypted" && protocol === "application/pgp-encrypted" && second.includes("-----BEGIN PGP MESSAGE-----")) {
+        out.pgp = { kind: "encrypted", armored: second };
+        return;
+      }
+      if (ct.value === "multipart/signed" && protocol === "application/pgp-signature" && second.includes("-----BEGIN PGP SIGNATURE-----")) {
+        // подписана первая часть ровно в том виде, в каком пришла, с концами строк CRLF
+        out.pgp = { kind: "signed", data: parts[0].replace(/\r?\n/g, "\r\n"), signature: second };
+        walk(parts[0], out, section ? `${section}.1` : "1", depth + 1);
+        return;
+      }
+    }
+    parts.forEach((part, i) => walk(part, out, section ? `${section}.${i + 1}` : String(i + 1), depth + 1));
     return;
   }
   const name = cd.params.filename || ct.params.name || "";
@@ -308,12 +325,57 @@ function walk(raw, out, section, depth) {
   out.attachments.push({ name: name || defaultName(ct.value), type: ct.value, size, section: section || "1", encoding: enc || "7bit" });
 }
 
+/** Зашифрованный блок прямо в тексте письма (без PGP/MIME): так пишут старые программы. */
+function inlinePgp(out) {
+  if (!out.pgp && out.text.includes("-----BEGIN PGP MESSAGE-----")) {
+    const m = /-----BEGIN PGP MESSAGE-----[\s\S]+?-----END PGP MESSAGE-----/.exec(out.text);
+    if (m) {
+      out.pgp = { kind: "inline", armored: m[0] };
+    }
+  }
+}
+
+/** Разбор одной части письма (заголовки Content-* и тело): так выглядит расшифрованное
+ * содержимое PGP/MIME. Возвращает { text, html, attachments, images, pgp }. */
+export function parseEntity(raw) {
+  const out = { text: "", html: "", attachments: [], images: 0, pgp: null };
+  walk(raw, out, "", 0);
+  inlinePgp(out);
+  return out;
+}
+
+/** Часть письма по номеру секции, как его считает parseMessage: { bin, encoding, type, name }
+ * или null. Нужна вложениям внутри расшифрованного письма: сервер их по номеру не отдаст. */
+export function findSection(raw, target, section = "", depth = 0) {
+  const [head, body] = splitHeaderBody(raw);
+  const headers = parseHeaders(head);
+  const ct = parseParams(first(headers, "content-type") || "text/plain");
+  if (ct.value.startsWith("multipart/") && ct.params.boundary && depth < 10) {
+    const parts = splitMultipart(body, ct.params.boundary);
+    for (let i = 0; i < parts.length; i++) {
+      const found = findSection(parts[i], target, section ? `${section}.${i + 1}` : String(i + 1), depth + 1);
+      if (found) {
+        return found;
+      }
+    }
+    return null;
+  }
+  if ((section || "1") !== target) {
+    return null;
+  }
+  const cd = parseParams(first(headers, "content-disposition"));
+  return { bin: body, encoding: first(headers, "content-transfer-encoding").trim().toLowerCase() || "7bit", type: ct.value, name: cd.params.filename || ct.params.name || "" };
+}
+
 /** Разбор исходника письма (возможно, обрезанного после первых N байт). */
 export function parseMessage(raw) {
   const [head] = splitHeaderBody(raw);
   const headers = parseHeaders(head);
-  const out = { text: "", html: "", attachments: [], images: 0 };
+  const out = { text: "", html: "", attachments: [], images: 0, pgp: null };
   walk(raw, out, "", 0);
+  inlinePgp(out);
+  // ключ отправителя: заголовок Autocrypt действителен, только если он в письме один
+  const autocrypt = headers.get("autocrypt") || [];
   const from = parseAddresses(first(headers, "from"))[0] || { name: "Неизвестный отправитель", email: "" };
   const date = new Date(first(headers, "date"));
   const delivered = (headers.get("delivered-to") || []).concat(headers.get("x-original-to") || []).map(s => s.trim().toLowerCase()).filter(s => s.includes("@"));
@@ -333,6 +395,8 @@ export function parseMessage(raw) {
     html: out.html,
     attachments: out.attachments,
     images: out.images,
+    pgp: out.pgp,
+    autocrypt: autocrypt.length === 1 ? autocrypt[0] : "",
   };
 }
 
@@ -641,12 +705,68 @@ function attachmentPart({ name, type, bytes }) {
   ].join("\r\n");
 }
 
-/** Письмо к отправке: текст без оформления (UTF-8) и вложения [{ name, type?, bytes: Uint8Array }].
- * Возвращает { raw, messageId }. */
-export function buildMessage({ from, to = [], cc = [], subject = "", text = "", messageId = "", inReplyTo = "", references = [], date = new Date(), attachments = [] }) {
-  const id = messageId || newMessageId(from.email.split("@")[1]);
-  const boundary = `tabora-${Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, "0")).join("")}`;
+const newBoundary = () => `tabora-${Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, "0")).join("")}`;
+
+/** Содержимое письма как часть MIME: заголовки Content-* и тело. Текст без оформления (UTF-8)
+ * и вложения [{ name, type?, bytes: Uint8Array }]. Именно эта часть шифруется в PGP/MIME. */
+export function buildEntity({ text = "", attachments = [] }) {
   const textHeaders = ['Content-Type: text/plain; charset="UTF-8"', "Content-Transfer-Encoding: quoted-printable"];
+  const body = quotedPrintable(utf8Bytes(String(text).replace(/\r\n?/g, "\n")));
+  if (!attachments.length) {
+    return `${textHeaders.join("\r\n")}\r\n\r\n${body}\r\n`;
+  }
+  const boundary = newBoundary();
+  const parts = [`${textHeaders.join("\r\n")}\r\n\r\n${body}`, ...attachments.map(attachmentPart)];
+  return `Content-Type: multipart/mixed; boundary="${boundary}"\r\n\r\n${parts.map(part => `--${boundary}\r\n${part}\r\n`).join("")}--${boundary}--\r\n`;
+}
+
+/** Зашифрованное содержимое в виде PGP/MIME (RFC 3156): armored — броня OpenPGP. */
+export function encryptedEntity(armored) {
+  const boundary = newBoundary();
+  return [
+    `Content-Type: multipart/encrypted; protocol="application/pgp-encrypted"; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
+    "Content-Type: application/pgp-encrypted",
+    "Content-Description: PGP/MIME version identification",
+    "",
+    "Version: 1",
+    "",
+    `--${boundary}`,
+    'Content-Type: application/octet-stream; name="encrypted.asc"',
+    "Content-Description: OpenPGP encrypted message",
+    'Content-Disposition: inline; filename="encrypted.asc"',
+    "",
+    String(armored).trim().replace(/\r?\n/g, "\r\n"),
+    "",
+    `--${boundary}--`,
+    "",
+  ].join("\r\n");
+}
+
+/** Длинный заголовок складывается в несколько строк: продолжение начинается с пробела. Слова
+ * длиннее строки (Base64 ключа в Autocrypt) режутся; пробелы внутри такого значения допустимы. */
+export function foldHeader(name, value) {
+  const lines = [];
+  let line = `${name}:`;
+  for (const word of String(value).split(/\s+/).filter(Boolean)) {
+    for (const piece of word.length > 72 ? word.match(/.{1,72}/g) : [word]) {
+      if (line.length + 1 + piece.length > 76 && line.trim()) {
+        lines.push(line);
+        line = "";
+      }
+      line = `${line} ${piece}`;
+    }
+  }
+  lines.push(line);
+  return lines.join("\r\n");
+}
+
+/** Письмо к отправке. Содержимое — либо text и attachments, либо готовая часть entity (например,
+ * зашифрованная); extraHeaders — готовые строки дополнительных заголовков.
+ * Возвращает { raw, messageId }. */
+export function buildMessage({ from, to = [], cc = [], subject = "", text = "", messageId = "", inReplyTo = "", references = [], date = new Date(), attachments = [], entity = "", extraHeaders = [] }) {
+  const id = messageId || newMessageId(from.email.split("@")[1]);
   const headers = [
     `From: ${addressHeader(from)}`,
     `To: ${to.join(", ")}`,
@@ -656,13 +776,8 @@ export function buildMessage({ from, to = [], cc = [], subject = "", text = "", 
     `Message-ID: <${id}>`,
     inReplyTo ? `In-Reply-To: <${inReplyTo}>` : null,
     references.length ? `References: ${references.map(r => `<${r}>`).join("\r\n ")}` : null,
+    ...extraHeaders,
     "MIME-Version: 1.0",
-    ...(attachments.length ? [`Content-Type: multipart/mixed; boundary="${boundary}"`] : textHeaders),
   ].filter(Boolean);
-  const body = quotedPrintable(utf8Bytes(String(text).replace(/\r\n?/g, "\n")));
-  if (!attachments.length) {
-    return { raw: `${headers.join("\r\n")}\r\n\r\n${body}\r\n`, messageId: id };
-  }
-  const parts = [`${textHeaders.join("\r\n")}\r\n\r\n${body}`, ...attachments.map(attachmentPart)];
-  return { raw: `${headers.join("\r\n")}\r\n\r\n${parts.map(part => `--${boundary}\r\n${part}\r\n`).join("")}--${boundary}--\r\n`, messageId: id };
+  return { raw: `${headers.join("\r\n")}\r\n${entity || buildEntity({ text, attachments })}`, messageId: id };
 }

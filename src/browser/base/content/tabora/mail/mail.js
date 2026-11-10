@@ -24,6 +24,8 @@ const { MailStore, ACCOUNT, SPACE_COLORS } = ChromeUtils.importESModule("chrome:
 const { Account } = ChromeUtils.importESModule("chrome://tabora/content/account/Account.sys.mjs");
 const { Vault } = ChromeUtils.importESModule("chrome://tabora/content/vault/Vault.sys.mjs");
 const Shell = window.browsingContext?.topChromeWindow?.Tabora || null;
+const lazy = {};
+ChromeUtils.defineESModuleGetters(lazy, { Pgp: "chrome://tabora/content/mail/Pgp.sys.mjs" });
 
 /* Доступ к данным почты только через этот посредник: без входа в аккаунт он отдаёт пустые
  * данные и показывает экран входа, ничего не читая из хранилища. */
@@ -78,7 +80,52 @@ const ICONS = {
   more: "M5 12h.01M12 12h.01M19 12h.01",
   open: "M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5",
   mask: "M4 10c0-2.8 2.2-5 5-5h6c2.8 0 5 2.2 5 5v1.5c0 2.5-2 4.5-4.5 4.5-1.4 0-2.6-.6-3.5-1.6-.9 1-2.1 1.6-3.5 1.6C6 16 4 14 4 11.5z",
+  lock: "M7 11V8a5 5 0 0 1 10 0v3M6 11h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z",
+  seal: "M12 3 5 6v5c0 4.6 2.9 8.2 7 10 4.1-1.8 7-5.4 7-10V6zM9 12l2 2 4-4",
+  alert: "M12 3 5 6v5c0 4.6 2.9 8.2 7 10 4.1-1.8 7-5.4 7-10V6zM12 8v5M12 16.5v.5",
 };
+
+/* Что сказать о защите письма (OpenPGP): [тон, значок, заголовок, пояснение]. Тон: ok — письму
+ * можно верить, warn — защита неполная, bad — письму верить нельзя, info — дело в процессе. */
+function pgpNote(m) {
+  const p = m.pgp;
+  if (!p) {
+    return null;
+  }
+  const mine = m.folder === "sent" || m.folder === "drafts";
+  if (p.pending) {
+    return ["info", "lock", "Письмо зашифровано", "Расшифровываем…"];
+  }
+  if (p.error) {
+    const why = {
+      "no-key": "Оно зашифровано ключом, которого нет в этом профиле. Прочитать его можно там, где этот ключ есть.",
+      locked: "Когда письмо пришло, сейф был закрыт.",
+    }[p.error] || "Письмо повреждено или зашифровано способом, которого Tabora не знает.";
+    return ["warn", "lock", "Письмо не расшифровано", why];
+  }
+  const other = `Подпись сделана ключом адреса ${p.signer}, а не отправителя.`;
+  const noKey = "Ключа, которым оно подписано, здесь нет: он придёт с письмом отправителя или добавляется в разделе «Шифрование».";
+  if (p.encrypted) {
+    return {
+      valid: ["ok", "lock", "Зашифровано и подписано", mine ? "Прочитать письмо можете только вы и получатели." : "Прочитать письмо могли только вы и другие получатели. Подпись отправителя верна."],
+      none: ["warn", "lock", "Зашифровано, но не подписано", "Прочитать письмо могли только получатели, а вот кто его написал, проверить нельзя."],
+      unknown: ["warn", "lock", "Зашифровано, подпись не проверена", noKey],
+      other: ["warn", "lock", "Зашифровано, подписано другим адресом", other],
+      invalid: ["bad", "alert", "Зашифровано, но подпись неверна", "Письмо изменили после подписи или подписал его не отправитель."],
+    }[p.signature] || ["ok", "lock", "Зашифровано", "Прочитать письмо могли только получатели."];
+  }
+  return {
+    valid: ["ok", "seal", "Подпись верна", "Письмо написал владелец этого адреса, и в пути оно не менялось."],
+    unknown: ["info", "seal", "Подпись не проверена", noKey],
+    other: ["warn", "seal", "Подписано другим адресом", other],
+    invalid: ["bad", "alert", "Подпись неверна", "Письмо изменили в пути или подписал его не отправитель."],
+  }[p.signature] || null;
+}
+
+/** Отпечаток ключа группами по четыре знака: так его сверяют по телефону. */
+function fingerprintText(fp) {
+  return String(fp || "").toUpperCase().replace(/(.{4})/g, "$1 ").trim();
+}
 
 const FOLDERS = [
   { id: "inbox", name: "Входящие", icon: "inbox" },
@@ -388,7 +435,7 @@ const App = {
     const app = $("app");
     app.hidden = true;
     // уже показанные письма убираем со страницы
-    for (const id of ["messages", "thread", "folder-list", "alias-rows", "alias-stats"]) {
+    for (const id of ["messages", "thread", "folder-list", "alias-rows", "alias-stats", "keys-body"]) {
       $(id)?.replaceChildren();
     }
     $("thread").hidden = true;
@@ -444,7 +491,7 @@ const App = {
         this.checkAccess();
       },
     };
-    const topics = [MailStore.TOPIC, Account.TOPIC, Vault.TOPIC];
+    const topics = [MailStore.TOPIC, Account.TOPIC, Vault.TOPIC, lazy.Pgp.TOPIC];
     for (const t of topics) {
       Services.obs.addObserver(recheck, t);
     }
@@ -465,8 +512,8 @@ const App = {
   route() {
     const hash = location.hash.replace(/^#/, "");
     const [kind, arg] = hash.split("/");
-    if (kind === "aliases") {
-      this.view = "aliases";
+    if (kind === "aliases" || kind === "keys") {
+      this.view = kind;
     } else {
       this.view = "mail";
       if (kind === "folder" && FOLDERS.some(f => f.id === arg)) {
@@ -500,12 +547,15 @@ const App = {
     }
     $("app").dataset.view = this.view;
     $("aliases-pane").hidden = this.view !== "aliases";
+    $("keys-pane").hidden = this.view !== "keys";
     $("list-pane").hidden = this.view !== "mail";
     $("reader").hidden = this.view !== "mail";
     this.renderFolders();
     if (this.view === "mail") {
       this.renderList();
       this.renderReader();
+    } else if (this.view === "keys") {
+      this.renderKeys();
     } else {
       this.renderAliases();
     }
@@ -514,7 +564,7 @@ const App = {
 
   updateTitle() {
     const unread = Store.messages.filter(m => m.folder === "inbox" && m.unread).length;
-    const where = this.view === "aliases" ? "Алиасы" : this.currentName();
+    const where = this.view === "aliases" ? "Алиасы" : this.view === "keys" ? "Шифрование" : this.currentName();
     document.title = `${where}${unread && this.view === "mail" ? ` (${unread})` : ""} · Почта`;
   },
 
@@ -546,6 +596,17 @@ const App = {
     $("aliases-count").textContent = String(Store.aliases.filter(a => a.on).length);
     $("aliases-link").setAttribute("aria-selected", String(this.view === "aliases"));
     $("aliases-link").onclick = () => this.go("aliases");
+    $("keys-link").setAttribute("aria-selected", String(this.view === "keys"));
+    $("keys-link").onclick = () => this.go("keys");
+    this.countKeys();
+  },
+
+  /** Число ключей собеседников рядом со ссылкой «Шифрование». */
+  countKeys() {
+    lazy.Pgp.peers().then(
+      list => ($("keys-count").textContent = list.length ? String(list.length) : ""),
+      () => ($("keys-count").textContent = "")
+    );
   },
 
   countFor(folderId) {
@@ -701,6 +762,7 @@ const App = {
           m.agent ? el("span", { class: "tag", text: "агент вставил код" }) : code ? el("span", { class: "tag neutral", text: "код" }) : null,
           m.newsletter ? el("span", { class: "tag neutral", text: "рассылка" }) : null,
           el("span", { class: "meta" }, [
+            m.pgp?.encrypted ? icon("lock", 13) : null,
             m.attachments?.length ? icon("clip", 13) : null,
             el("button", {
               class: "star", type: "button", dataset: { on: String(!!m.starred) }, "aria-label": m.starred ? "Снять звезду" : "Поставить звезду", "aria-pressed": String(!!m.starred),
@@ -955,8 +1017,21 @@ const App = {
     if (m.images) {
       paper.append(el("div", { class: "fine", text: `Картинки из письма не загружаются (${m.images}): так отправитель не узнаёт, что письмо открыли.` }));
     }
-    item.append(head, paper);
-    if (m.attachments?.length) {
+    const note = pgpNote(m);
+    const sealed = !!(m.pgp?.error || m.pgp?.pending); // текста нет: вместо него объяснение
+    item.append(head);
+    if (note) {
+      const [tone, glyph, title, text] = note;
+      item.append(el("div", { class: "pgp-note", dataset: { tone }, role: tone === "bad" ? "alert" : null }, [
+        el("span", { class: "pgp-mark", "aria-hidden": "true" }, icon(glyph, 15, 1.9)),
+        el("div", { class: "pgp-text" }, [el("b", { text: title }), el("span", { text })]),
+        m.pgp.error && m.at?.uid ? el("button", { class: "btn", type: "button", text: "Повторить", onclick: e => this.decryptAgain(m, e.currentTarget) }) : null,
+      ]));
+    }
+    if (!sealed) {
+      item.append(paper);
+    }
+    if (m.attachments?.length && !sealed) {
       item.append(el("div", { class: "attachments" }, m.attachments.map((a, index) => el("button", {
         class: "attachment", type: "button", title: `Сохранить ${a.name} в «Загрузки»`,
         onclick: e => this.saveAttachment(m, index, e.currentTarget),
@@ -966,6 +1041,17 @@ const App = {
       ]))));
     }
     return item;
+  },
+
+  /** Повторная расшифровка: ключ мог появиться после того, как письмо пришло. */
+  async decryptAgain(m, button) {
+    button.disabled = true;
+    button.textContent = "Расшифровываем…";
+    const rec = await MailStore.decryptAgain(m.id).catch(() => null);
+    if (rec?.pgp?.error) {
+      this.toast("Письмо не расшифровано: подходящего ключа по-прежнему нет");
+    }
+    this.renderReader();
   },
 
   /** Вложение скачивается с сервера и сохраняется через загрузки браузера (с его же защитой). */
@@ -1014,10 +1100,18 @@ const App = {
     const mine = MailStore.senders().map(s => s.address);
     const from = mine.includes(to.alias) ? to.alias : ACCOUNT.address;
     const subject = /^re:/i.test(to.subject || "") ? to.subject : `Re: ${to.subject || ""}`.trim();
+    const recipient = to.replyTo || to.from.email;
     try {
-      await MailStore.send({ from: { email: from }, to: [to.replyTo || to.from.email], subject, text, replyTo: to.id, labels: to.labels });
+      const plan = await MailStore.encryptPlan(from, [recipient]);
+      if (to.pgp?.encrypted && !plan.possible) {
+        // ответ на зашифрованное письмо не уходит открытым незаметно: решение — в окне письма
+        this.openCompose({ reply: to, text });
+        return;
+      }
+      const encrypt = plan.possible && (!!to.pgp?.encrypted || plan.suggested);
+      await MailStore.send({ from: { email: from }, to: [recipient], subject, text, replyTo: to.id, labels: to.labels, encrypt });
       this.renderAll();
-      this.toast(`Ответ отправлен ${to.from.name}`);
+      this.toast(encrypt ? `Ответ отправлен ${to.from.name} зашифрованным` : `Ответ отправлен ${to.from.name}`);
     } catch (e) {
       this.toast(`Ответ не отправлен. ${e.message}`);
     } finally {
@@ -1037,6 +1131,7 @@ const App = {
       forwardOf: opts.forward?.id,
       draftId: opts.draft?.id,
       to: opts.to,
+      text: opts.text,
     });
   },
 
@@ -1099,6 +1194,133 @@ const App = {
           },
         }),
       ]));
+    }
+  },
+
+  /* ---- Шифрование: свой ключ и ключи собеседников ---- */
+
+  async renderKeys() {
+    const box = $("keys-body");
+    const turn = (this._keysTurn = (this._keysTurn || 0) + 1);
+    let own = null;
+    let peers = [];
+    let failed = "";
+    try {
+      // ключ аккаунта появляется при первом обращении: создание занимает меньше секунды
+      own = MailStore.accounts.some(a => a.kind === "tabora") ? await lazy.Pgp.ensureKey() : await lazy.Pgp.own();
+      peers = await lazy.Pgp.peers();
+    } catch (e) {
+      failed = e.message || String(e);
+    }
+    if (turn !== this._keysTurn || this.view !== "keys") {
+      return;
+    }
+    box.replaceChildren();
+    if (failed) {
+      box.append(el("div", { class: "empty" }, [el("strong", { text: "Ключи недоступны" }), el("span", { text: failed })]));
+      return;
+    }
+    const date = iso => {
+      const d = new Date(iso);
+      return Number.isNaN(d.getTime()) ? "" : `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+    };
+    box.append(el("section", { class: "key-card" }, own ? [
+      el("div", { class: "key-card-head" }, [
+        el("span", { class: "pgp-mark", "aria-hidden": "true" }, icon("lock", 16, 1.9)),
+        el("div", { class: "key-card-title" }, [el("b", { text: "Ваш ключ" }), el("span", { text: `${own.address}${date(own.created) ? `, создан ${date(own.created)}` : ""}` })]),
+        el("button", { class: "btn", type: "button", onclick: () => this.copy(own.publicKey, "Открытый ключ скопирован: его можно отправить собеседнику") }, [icon("copy", 14), "Скопировать открытый ключ"]),
+      ]),
+      el("div", { class: "key-print", title: "Отпечаток ключа", text: fingerprintText(own.fingerprint) }),
+      el("p", { class: "key-hint", text: "Отпечаток — короткое имя ключа. Чтобы убедиться, что ключ не подменили по дороге, сверьте его с собеседником голосом или при встрече. Открытый ключ уходит с каждым вашим письмом, закрытый не покидает сейф." }),
+    ] : [
+      el("div", { class: "key-card-head" }, [
+        el("span", { class: "pgp-mark", "aria-hidden": "true" }, icon("lock", 16, 1.9)),
+        el("div", { class: "key-card-title" }, [el("b", { text: "Ключа пока нет" }), el("span", { text: "Он появится, когда у аккаунта будет ящик Tabora: подключите аккаунт к серверу." })]),
+      ]),
+    ]));
+
+    box.append(el("div", { class: "keys-list-head" }, [
+      el("h2", { text: "Ключи собеседников" }),
+      el("span", { class: "mono", text: peers.length ? String(peers.length) : "" }),
+    ]));
+    if (!peers.length) {
+      box.append(el("div", { class: "empty keys-empty" }, [
+        el("strong", { text: "Ключей пока нет" }),
+        el("span", { text: "Ключ собеседника приходит с его письмом и запоминается сам. После этого письма ему можно шифровать." }),
+      ]));
+      return;
+    }
+    const sources = { manual: "добавлен вручную", autocrypt: "из письма", directory: "из каталога Tabora" };
+    for (const p of peers) {
+      box.append(el("div", { class: "key-row" }, [
+        el("span", { class: "glyph", "aria-hidden": "true", text: letterOf(p.address) }),
+        el("span", { class: "key-who" }, [
+          el("b", { text: p.address }),
+          el("span", { text: `${sources[p.source] || "из письма"}${p.seen ? ` ${dateWord(new Date(p.seen).toISOString())}` : ""}${p.prefer === "mutual" || p.source === "manual" ? ", шифруем по умолчанию" : ""}` }),
+        ]),
+        el("button", { class: "key-print small", type: "button", title: "Скопировать отпечаток", text: fingerprintText(p.fingerprint), onclick: () => this.copy(fingerprintText(p.fingerprint), "Отпечаток скопирован") }),
+        el("button", {
+          class: "box-remove key-remove", type: "button", "aria-label": `Удалить ключ ${p.address}`, title: "Удалить ключ",
+          onclick: e => {
+            const btn = e.currentTarget;
+            if (btn.dataset.sure !== "true") {
+              // второй щелчок подтверждает
+              btn.dataset.sure = "true";
+              btn.textContent = "Удалить?";
+              setTimeout(() => {
+                if (btn.isConnected) {
+                  btn.dataset.sure = "false";
+                  btn.replaceChildren(icon("close", 12, 2.4));
+                }
+              }, 4000);
+              return;
+            }
+            lazy.Pgp.removePeer(p.address).then(() => this.toast(`Ключ ${p.address} удалён: письма ему пойдут открытыми`), err => this.toast(err.message));
+          },
+        }, icon("close", 12, 2.4)),
+      ]));
+    }
+  },
+
+  openKeyModal() {
+    $("key-address").value = "";
+    $("key-armored").value = "";
+    $("key-error").hidden = true;
+    $("key-modal").hidden = false;
+    setTimeout(() => $("key-address").focus(), 20);
+  },
+
+  async addKey() {
+    const button = $("key-add");
+    if (button.disabled) {
+      return;
+    }
+    const error = $("key-error");
+    const show = text => {
+      error.textContent = text;
+      error.hidden = false;
+    };
+    error.hidden = true;
+    const address = $("key-address").value.trim();
+    if (!validEmail(address)) {
+      show("Проверьте адрес почты");
+      $("key-address").focus();
+      return;
+    }
+    if (!$("key-armored").value.includes("BEGIN PGP PUBLIC KEY BLOCK")) {
+      show("Вставьте открытый ключ целиком: он начинается со строки «-----BEGIN PGP PUBLIC KEY BLOCK-----»");
+      $("key-armored").focus();
+      return;
+    }
+    button.disabled = true;
+    try {
+      const k = await lazy.Pgp.setPeer(address, $("key-armored").value, { source: "manual" });
+      $("key-modal").hidden = true;
+      this.toast(`Ключ ${k.address} добавлен: письма ему шифруются по умолчанию`);
+    } catch (e) {
+      show(e.message || "Ключ не добавлен");
+    } finally {
+      button.disabled = false;
     }
   },
 
@@ -1269,6 +1491,8 @@ const App = {
     if (e.key === "Escape") {
       if (!$("alias-modal").hidden) {
         $("alias-modal").hidden = true;
+      } else if (!$("key-modal").hidden) {
+        $("key-modal").hidden = true;
       } else if (!$("box-modal").hidden) {
         $("box-modal").hidden = true;
       } else if (this.checked.size) {
@@ -1306,7 +1530,7 @@ const App = {
     };
     if (this.pendingG) {
       this.pendingG = false;
-      const go = { i: "folder/inbox", s: "folder/starred", t: "folder/sent", d: "folder/drafts", a: "aliases" }[e.key];
+      const go = { i: "folder/inbox", s: "folder/starred", t: "folder/sent", d: "folder/drafts", a: "aliases", k: "keys" }[e.key];
       if (go) {
         e.preventDefault();
         this.go(go);
@@ -1371,6 +1595,16 @@ const App = {
     });
     $("alias-create").addEventListener("click", () => this.createAlias());
     $("alias-site").addEventListener("keydown", e => e.key === "Enter" && this.createAlias());
+
+    $("new-key-btn").addEventListener("click", () => this.openKeyModal());
+    $("key-cancel").addEventListener("click", () => ($("key-modal").hidden = true));
+    $("key-modal").addEventListener("click", e => {
+      if (e.target === $("key-modal")) {
+        $("key-modal").hidden = true;
+      }
+    });
+    $("key-add").addEventListener("click", () => this.addKey());
+    $("key-address").addEventListener("keydown", e => e.key === "Enter" && $("key-armored").focus());
 
     $("box-cancel").addEventListener("click", () => ($("box-modal").hidden = true));
     $("box-modal").addEventListener("click", e => {

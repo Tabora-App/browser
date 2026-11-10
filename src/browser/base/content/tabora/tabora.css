@@ -3233,6 +3233,31 @@ toolbarseparator {
   outline: 1px solid #ffb4a3;
 }
 
+/* замок у получателя: его ключ известен, письмо ему можно зашифровать */
+#tabora-compose .chip .key {
+  display: none;
+  margin-inline-start: -3px;
+  color: var(--tabora-accent-ink);
+}
+
+#tabora-compose .chip[data-key="true"] .key {
+  display: inline-flex;
+}
+
+/* замок письма: нажат — письмо уйдёт зашифрованным */
+#tabora-compose .icon-btn.lock {
+  transition: background-color var(--tabora-t-fast) var(--tabora-curve), color var(--tabora-t-fast) var(--tabora-curve);
+}
+
+#tabora-compose .icon-btn.lock[data-state="on"] {
+  background: var(--tabora-accent-dim);
+  color: var(--tabora-accent-ink);
+}
+
+#tabora-compose .icon-btn.lock[data-state="blocked"] {
+  color: #e9a23b;
+}
+
 #tabora-compose .chip button {
   border: 0;
   background: transparent;

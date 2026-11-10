@@ -196,6 +196,7 @@ var Tabora = {
       h("div", { class: "foot" }, null, [
         h("button", { class: "primary", id: "tabora-compose-send", type: "button" }, null, [document.createTextNode("Отправить"), h("span", { class: "kbd" }, "⌘⏎")]),
         iconBtn("tabora-compose-attach", "Прикрепить файл", ["m21 12-8.5 8.5a5 5 0 0 1-7-7L14 5a3.3 3.3 0 0 1 4.7 4.7L10.5 18a1.7 1.7 0 0 1-2.4-2.4L16 7.7"]),
+        iconBtn("tabora-compose-lock", "Шифрование", [this.LOCK_OPEN, this.LOCK_BODY], "lock"),
         h("span", { class: "status", id: "tabora-compose-status" }, "Черновик сохраняется автоматически"),
         iconBtn("tabora-compose-discard", "Удалить черновик", ["M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"], "danger"),
       ]),
@@ -206,6 +207,14 @@ var Tabora = {
     this.compose = { box, state: null, draftTimer: null };
 
     const $ = id => document.getElementById(id);
+    $("tabora-compose-lock").hidden = true;
+    $("tabora-compose-lock").setAttribute("aria-pressed", "false");
+    $("tabora-compose-lock").addEventListener("click", () => this.toggleComposeLock());
+    fromSelect.addEventListener("change", () => this.updateComposeLock());
+    $("tabora-compose-cc").addEventListener("input", () => {
+      clearTimeout(this.compose.lockTimer);
+      this.compose.lockTimer = setTimeout(() => this.updateComposeLock(), 400);
+    });
     $("tabora-compose-close").addEventListener("click", () => this.closeCompose());
     $("tabora-compose-discard").addEventListener("click", () => this.closeCompose(true));
     $("tabora-compose-min").addEventListener("click", () => {
@@ -224,6 +233,7 @@ var Tabora = {
       } else if (e.key === "Backspace" && !toInput.value && this.compose.state?.to.length) {
         this.compose.state.to.pop();
         $("tabora-compose-chips").querySelector(".chip:last-of-type")?.remove();
+        this.updateComposeLock();
       }
     });
     toInput.addEventListener("blur", () => toInput.value.trim() && this.addRecipient(toInput.value));
@@ -356,7 +366,10 @@ var Tabora = {
     from.replaceChildren(...senders.map(s => this.html("option", { value: s.address, "data-note": s.note }, s.address)));
     from.value = ACCOUNT.address;
     from._tsel?.refresh();
-    this.compose.state = { to: [], attachments: [], draftId: null, thread: null, labels: [], replyTo: null };
+    // encryptChoice — явный выбор пользователя (null — решает правило), secret — письмо отвечает
+    // на зашифрованное или пересылает его: открытым оно уходит только с подтверждением
+    this.compose.state = { to: [], attachments: [], draftId: null, thread: null, labels: [], replyTo: null, encrypt: false, encryptChoice: null, secret: false, plan: null };
+    $("tabora-compose-lock").hidden = true;
     $("tabora-compose-chips").querySelectorAll(".chip").forEach(n => n.remove());
     $("tabora-compose-to").value = "";
     $("tabora-compose-cc").value = "";
@@ -375,8 +388,9 @@ var Tabora = {
       if (m) {
         this.addRecipient(m.replyTo || m.from.email);
         this.compose.state.replyTo = m.id;
+        this.compose.state.secret = !!m.pgp?.encrypted;
         $("tabora-compose-subject").value = m.subject.startsWith("Re:") ? m.subject : `Re: ${m.subject}`;
-        $("tabora-compose-text").value = `\n\n${when(m.date)}, ${m.from.name} <${m.from.email}>:\n> ${text(m).split("\n")[0]}`;
+        $("tabora-compose-text").value = `${opts.text || ""}\n\n${when(m.date)}, ${m.from.name} <${m.from.email}>:\n> ${text(m).split("\n")[0]}`;
         $("tabora-compose-title").textContent = `Ответ: ${m.from.name}`;
         this.compose.state.thread = m.thread;
         this.compose.state.labels = m.labels;
@@ -391,6 +405,7 @@ var Tabora = {
         $("tabora-compose-subject").value = `Fwd: ${m.subject}`;
         $("tabora-compose-text").value = `\n\n---------- Пересланное письмо ----------\nОт: ${m.from.name} <${m.from.email}>\nДата: ${when(m.date)}\nТема: ${m.subject}\n\n${text(m)}`;
         $("tabora-compose-title").textContent = "Переслать";
+        this.compose.state.secret = !!m.pgp?.encrypted;
         // вложения исходного письма берутся с сервера в момент отправки
         this.compose.state.attachments = m.at?.uid ? (m.attachments || []).map((a, index) => ({ name: a.name, size: a.size, source: { id: m.id, index } })) : [];
       }
@@ -408,6 +423,7 @@ var Tabora = {
       this.addRecipient(opts.to);
     }
     this.renderComposeAttachments();
+    this.updateComposeLock();
     box.hidden = false;
     box.dataset.min = "false";
     this.restoreComposeRect();
@@ -477,17 +493,93 @@ var Tabora = {
     }
     const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
     this.compose.state.to.push(value);
-    const chip = this.html("span", { class: "chip", "data-bad": String(!ok), title: ok ? value : "Похоже, адрес с ошибкой" }, null, [
+    const chip = this.html("span", { class: "chip", "data-bad": String(!ok), "data-address": value, "data-key": "false", title: ok ? value : "Похоже, адрес с ошибкой" }, null, [
+      this.html("span", { class: "key", "aria-hidden": "true" }, null, [this.svg([this.LOCK_CLOSED, this.LOCK_BODY], 11, 2.2)]),
       document.createTextNode(value),
       this.html("button", { type: "button", "aria-label": `Убрать ${value}` }, null, [this.svg(["M6 6l12 12M18 6 6 18"], 11, 2.4)]),
     ]);
     chip.lastChild.addEventListener("click", () => {
       this.compose.state.to = this.compose.state.to.filter(v => v !== value);
       chip.remove();
+      this.updateComposeLock();
     });
     const input = document.getElementById("tabora-compose-to");
     input.before(chip);
     input.value = "";
+    this.updateComposeLock();
+  },
+
+  /* Замок окна письма. Письмо шифруется, если есть ключи всех получателей и этого хочет
+   * пользователь; без его явного выбора — когда об этом просят сами получатели (их ключ
+   * внесён вручную или их программа объявляет это в заголовке Autocrypt) и когда письмо
+   * отвечает на зашифрованное. */
+  LOCK_BODY: "M6 11h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z",
+  LOCK_CLOSED: "M7 11V8a5 5 0 0 1 10 0v3",
+  LOCK_OPEN: "M7 11V8a5 5 0 0 1 9.8-1.4",
+
+  async updateComposeLock() {
+    const s = this.compose.state;
+    if (!s) {
+      return;
+    }
+    const $ = id => document.getElementById(id);
+    const turn = (s.lockTurn = (s.lockTurn || 0) + 1);
+    const valid = v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+    const all = [...s.to, ...$("tabora-compose-cc").value.split(/[,;\s]+/).map(v => v.trim()).filter(Boolean)];
+    const plan = await this.mail().MailStore.encryptPlan($("tabora-compose-from").value, all.filter(valid));
+    if (this.compose.state !== s || s.lockTurn !== turn) {
+      return;
+    }
+    const possible = plan.possible && all.every(valid);
+    // письмо, которое уже собиралось уйти зашифрованным, остаётся «ожидающим шифрования»:
+    // появился получатель без ключа — замок предупреждает, а не молча снимается
+    const wanted = s.encryptChoice ?? (plan.suggested || s.secret || s.expected);
+    s.plan = { ...plan, possible, wanted };
+    s.encrypt = possible && wanted;
+    s.expected ||= s.encrypt;
+    s.plainConfirmed = false;
+    const lock = $("tabora-compose-lock");
+    const blocked = plan.available && wanted && !possible && all.length > 0;
+    const state = s.encrypt ? "on" : blocked ? "blocked" : "off";
+    const was = s.lockState || null;
+    s.lockState = state;
+    lock.hidden = !plan.available;
+    lock.dataset.state = state;
+    lock.setAttribute("aria-pressed", String(s.encrypt));
+    lock.querySelector("path").setAttribute("d", s.encrypt ? this.LOCK_CLOSED : this.LOCK_OPEN);
+    const title = s.encrypt
+      ? "Письмо уйдёт зашифрованным. Нажмите, чтобы отправить открытым"
+      : possible
+        ? "Зашифровать письмо"
+        : plan.missing.length
+          ? `Зашифровать нельзя: нет ключа ${plan.missing.join(", ")}`
+          : "Шифрование: сначала укажите получателя";
+    lock.title = title;
+    lock.setAttribute("aria-label", title);
+    for (const chip of $("tabora-compose-chips").querySelectorAll(".chip")) {
+      const a = chip.dataset.address;
+      chip.dataset.key = String(plan.available && valid(a) && !plan.missing.includes(a.toLowerCase()));
+    }
+    if (state !== was && (state !== "off" || was)) {
+      const more = plan.missing.length - 1;
+      $("tabora-compose-status").textContent = s.encrypt ? "Письмо уйдёт зашифрованным" : blocked && plan.missing.length ? `Нет ключа ${plan.missing[0]}${more > 0 ? ` и ещё ${more}` : ""}: письмо уйдёт открытым` : "Письмо уйдёт открытым";
+    }
+  },
+
+  toggleComposeLock() {
+    const s = this.compose.state;
+    if (!s?.plan) {
+      return;
+    }
+    if (!s.plan.possible) {
+      this.notice(s.plan.missing.length
+        ? `Нет ключа ${s.plan.missing.join(", ")}. Он придёт с письмом собеседника или добавляется в почте, в разделе «Шифрование»`
+        : "Укажите получателя: зашифровать можно письмо тому, чей ключ известен");
+      return;
+    }
+    s.encryptChoice = !s.encrypt;
+    s.expected = false;
+    this.updateComposeLock();
   },
 
   renderComposeAttachments() {
@@ -508,7 +600,7 @@ var Tabora = {
     }
   },
 
-  sendCompose() {
+  async sendCompose() {
     const { MailStore } = this.mail();
     const s = this.compose.state;
     if (!s) {
@@ -542,26 +634,37 @@ var Tabora = {
       return;
     }
     button.disabled = true;
-    status.textContent = "Отправляем…";
-    MailStore.send({ ...draft, subject: draft.subject || "(без темы)", thread: s.thread || undefined }).then(
-      () => {
-        if (s.draftId) {
-          MailStore.remove(s.draftId);
-        }
-        // окно могли успеть открыть для другого письма: закрываем только своё
-        if (this.compose.state === s) {
-          this.compose.box.hidden = true;
-          this.compose.state = null;
-        }
-        button.disabled = false;
-        this.notice(`Отправлено: ${draft.to.join(", ")}`);
-      },
-      e => {
-        button.disabled = false;
-        status.textContent = "Не отправлено: письмо осталось в окне";
-        this.notice(`Письмо не отправлено. ${e.message}`);
+    try {
+      // замок должен отвечать тому, что сейчас в полях
+      const confirmed = s.plainConfirmed;
+      await this.updateComposeLock();
+      if (this.compose.state !== s) {
+        return;
       }
-    );
+      if (s.plan?.wanted && !s.encrypt && s.plan.available && !confirmed) {
+        // письмо, которое должно было уйти зашифрованным, открытым уходит только с ведома пользователя
+        s.plainConfirmed = true;
+        status.textContent = "Письмо уйдёт открытым";
+        this.notice(`${s.plan.missing.length ? `Нет ключа ${s.plan.missing.join(", ")}` : "Зашифровать не получится"}. Нажмите «Отправить» ещё раз, чтобы письмо ушло открытым`);
+        return;
+      }
+      status.textContent = s.encrypt ? "Шифруем и отправляем…" : "Отправляем…";
+      await MailStore.send({ ...draft, subject: draft.subject || "(без темы)", thread: s.thread || undefined, encrypt: s.encrypt });
+      if (s.draftId) {
+        MailStore.remove(s.draftId);
+      }
+      // окно могли успеть открыть для другого письма: закрываем только своё
+      if (this.compose.state === s) {
+        this.compose.box.hidden = true;
+        this.compose.state = null;
+      }
+      this.notice(`${s.encrypt ? "Отправлено зашифрованным" : "Отправлено"}: ${draft.to.join(", ")}`);
+    } catch (e) {
+      status.textContent = "Не отправлено: письмо осталось в окне";
+      this.notice(`Письмо не отправлено. ${e.message}`);
+    } finally {
+      button.disabled = false;
+    }
   },
 
   /** Вложение письма сохраняется в «Загрузки» через загрузки браузера: с его проверками и
