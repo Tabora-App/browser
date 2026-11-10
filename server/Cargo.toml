@@ -1,0 +1,28 @@
+[package]
+name = "tabora-server"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+publish = false
+description = "Сервер аккаунтов Tabora: вход, устройства, ящик и алиасы на tabora.app"
+
+[dependencies]
+axum = { version = "0.7", default-features = false, features = ["http1", "json", "query", "tokio"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "signal", "sync"] }
+tokio-postgres = "0.7"
+deadpool-postgres = "0.14"
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ed25519-dalek = "2"
+hmac = "0.12"
+sha2 = "0.10"
+subtle = "2"
+rand = "0.8"
+hex = "0.4"
+base64 = "0.22"
+
+[profile.release]
+opt-level = 2
+lto = "thin"
+strip = true

@@ -1,0 +1,126 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+//! tabora-server: аккаунты Tabora, устройства, ящики и алиасы на почтовом сервере.
+//!
+//! Слушает только локальный адрес (наружу его публикует nginx за туннелем Cloudflare).
+//! Настройки — переменные окружения (на сервере /etc/tabora/server.env):
+//!   TABORA_DOMAIN            домен почты, например tabora.app
+//!   TABORA_LISTEN            адрес и порт, по умолчанию 127.0.0.1:7700
+//!   TABORA_DB                строка подключения PostgreSQL
+//!   APP_SIGNING_KEY          секрет сервера, hex, не короче 32 байт
+//!   STALWART_URL             адрес JMAP почтового сервера (пусто — без почты)
+//!   STALWART_API_KEY         служебный ключ с правом на учётки пользователей
+//!   TABORA_MAIL_HOST         имя почтового хоста для клиентов, по умолчанию mx.<домен>
+//!   TABORA_MAIL_QUOTA_MB     место под ящик, по умолчанию 2048
+//!   TABORA_SIGNUP            open | closed, по умолчанию open
+//!   TABORA_SIGNUP_DAILY_CAP  новых аккаунтов в сутки на весь сервер, по умолчанию 50
+//!   TABORA_SIGNUP_PER_IP     новых аккаунтов в сутки с одного адреса, по умолчанию 3
+//!   TABORA_ALIAS_MAX         алиасов на аккаунт, по умолчанию 100
+
+mod api;
+mod db;
+mod limit;
+mod mail;
+mod util;
+
+use std::sync::Arc;
+use std::time::Duration;
+
+fn env(name: &str) -> String {
+    std::env::var(name).unwrap_or_default().trim().to_string()
+}
+
+fn env_num<T: std::str::FromStr>(name: &str, default: T) -> T {
+    env(name).parse().unwrap_or(default)
+}
+
+fn fail(text: &str) -> ! {
+    eprintln!("tabora-server: {text}");
+    std::process::exit(2);
+}
+
+async fn shutdown() {
+    let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).expect("обработчик SIGTERM");
+    tokio::select! {
+        _ = term.recv() => {}
+        _ = tokio::signal::ctrl_c() => {}
+    }
+    eprintln!("tabora-server: остановка");
+}
+
+#[tokio::main]
+async fn main() {
+    let domain = env("TABORA_DOMAIN");
+    if domain.is_empty() {
+        fail("не задан TABORA_DOMAIN");
+    }
+    let listen = Some(env("TABORA_LISTEN")).filter(|s| !s.is_empty()).unwrap_or_else(|| "127.0.0.1:7700".to_string());
+    let master = hex::decode(env("APP_SIGNING_KEY")).ok().filter(|k| k.len() >= 32).unwrap_or_else(|| fail("APP_SIGNING_KEY должен быть hex не короче 32 байт"));
+    // независимые ключи из секрета сервера: «перец» для хешей входа и основа основных паролей ящиков
+    let pepper = util::hmac256(&master, &[b"tabora/login-pepper/v1"]);
+    let mail_key = util::hmac256(&master, &[b"tabora/mail-primary/v1"]);
+
+    let pool = db::pool(&env("TABORA_DB")).unwrap_or_else(|e| fail(&e));
+    // база может подняться позже сервера (загрузка системы): ждём до минуты
+    let mut ready = false;
+    for attempt in 0..30 {
+        match pool.get().await {
+            Ok(c) => match c.batch_execute(db::SCHEMA).await {
+                Ok(()) => {
+                    ready = true;
+                    break;
+                }
+                Err(e) => fail(&format!("схема базы не применена: {e}")),
+            },
+            Err(e) => {
+                if attempt == 29 {
+                    fail(&format!("база недоступна: {e}"));
+                }
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+        }
+    }
+    if !ready {
+        fail("база недоступна");
+    }
+
+    let mail_host = Some(env("TABORA_MAIL_HOST")).filter(|s| !s.is_empty()).unwrap_or_else(|| format!("mx.{domain}"));
+    let quota = env_num::<u64>("TABORA_MAIL_QUOTA_MB", 2048) * 1024 * 1024;
+    let stalwart = mail::Stalwart::new(&env("STALWART_URL"), &env("STALWART_API_KEY"), &domain, mail_key, quota);
+    let app = Arc::new(api::App {
+        domain: domain.clone(),
+        mail_host,
+        pool: pool.clone(),
+        mail: stalwart,
+        limiter: limit::Limiter::default(),
+        pepper,
+        signup_open: env("TABORA_SIGNUP") != "closed",
+        signup_daily_cap: env_num("TABORA_SIGNUP_DAILY_CAP", 50),
+        signup_per_ip_day: env_num("TABORA_SIGNUP_PER_IP", 3),
+        alias_max: env_num("TABORA_ALIAS_MAX", 100),
+    });
+
+    // уборка раз в час: истёкшие сессии и nonce, старые счётчики ограничителей
+    let housekeeping = app.clone();
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(3600));
+        loop {
+            tick.tick().await;
+            let now = util::now_ms();
+            housekeeping.limiter.sweep(now);
+            if let Ok(c) = housekeeping.pool.get().await {
+                if let Err(e) = db::purge_expired(&c, now).await {
+                    eprintln!("уборка: {e:?}");
+                }
+            }
+        }
+    });
+
+    let listener = tokio::net::TcpListener::bind(&listen).await.unwrap_or_else(|e| fail(&format!("не удалось занять {listen}: {e}")));
+    eprintln!("tabora-server {}: {listen}, домен {domain}, почта {}", env!("CARGO_PKG_VERSION"), if app.mail.enabled() { "включена" } else { "выключена" });
+    if let Err(e) = axum::serve(listener, api::router(app)).with_graceful_shutdown(shutdown()).await {
+        fail(&format!("сервер остановился с ошибкой: {e}"));
+    }
+}
