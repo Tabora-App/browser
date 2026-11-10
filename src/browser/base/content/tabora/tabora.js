@@ -8,7 +8,14 @@
 "use strict";
 
 var Tabora = {
-  SLEEP_AFTER_MS: 15 * 60 * 1000,
+  // Автоусыпление неактивных вкладок: минуты простоя, 0 — никогда (по умолчанию). Усыплённая
+  // вкладка загружается заново при возврате, поэтому включается только по желанию в настройках.
+  SLEEP_PREF: "tabora.tabs.sleepAfterMinutes",
+
+  get sleepAfterMs() {
+    const min = Services.prefs.getIntPref(this.SLEEP_PREF, 0);
+    return min > 0 ? min * 60 * 1000 : 0;
+  },
   MEMORY_BAR_MAX_MB: 4096,
   HTML_NS: "http://www.w3.org/1999/xhtml",
 
@@ -2772,14 +2779,23 @@ var Tabora = {
   },
 
   sleepIdleTabs() {
-    const limit = Date.now() - this.SLEEP_AFTER_MS;
+    const after = this.sleepAfterMs;
+    if (!after) {
+      return;
+    }
+    const limit = Date.now() - after;
     for (const tab of gBrowser.tabs) {
+      const sharing = tab._sharingState?.webRTC;
       if (
         tab.selected ||
         tab.pinned ||
         tab.closing ||
         tab.hasAttribute("pending") ||
         tab.soundPlaying ||
+        tab.hasAttribute("activemedia-blocked") ||
+        sharing?.camera ||
+        sharing?.microphone ||
+        sharing?.screen ||
         tab.lastAccessed > limit
       ) {
         continue;
@@ -2808,7 +2824,7 @@ var Tabora = {
     document.getElementById("tabora-memory-bar").style.width = `${Math.min(100, (mb / this.MEMORY_BAR_MAX_MB) * 100)}%`;
     document.getElementById("tabora-memory-note").textContent = sleeping
       ? `${sleeping} ${this.plural(sleeping, "вкладка спит", "вкладки спят", "вкладок спят")} и не ${sleeping === 1 ? "занимает" : "занимают"} RAM`
-      : `${awake} ${this.plural(awake, "вкладка активна", "вкладки активны", "вкладок активны")}, через 15 минут простоя засыпают`;
+      : `${awake} ${this.plural(awake, "вкладка активна", "вкладки активны", "вкладок активны")}`;
   },
 
   plural(n, one, few, many) {
