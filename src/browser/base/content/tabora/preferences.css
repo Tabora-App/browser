@@ -204,14 +204,11 @@ setting-group[groupid="dataCollection"] {
   display: none !important;
 }
 /* Псевдонимы Firefox Relay: у Tabora свои алиасы, а сама возможность выключена настройкой.
-   «Внешний вид браузера» (горизонтальные или вертикальные вкладки): горизонтальной раскладки
-   у оболочки нет, настройка закреплена (configs/prefs/release.js).
    Темы оформления Firefox и «Плотность окна»: окно рисует оболочка Tabora, на неё они не
-   действуют. Ссылка «Настроить макет браузера» вела к скрытому выбору раскладки. */
+   действуют. «Внешний вид браузера» (вкладки сверху или сбоку) остаётся: обе раскладки у
+   оболочки есть (applyTabsLayout в tabora.js). */
 #setting-control-relayIntegration,
 #setting-control-web-appearance-manage-themes-link,
-#setting-control-related-settings-tabs-browsing-link,
-setting-group[groupid="browserLayout"],
 setting-group[groupid="windowDensity"] {
   display: none !important;
 }

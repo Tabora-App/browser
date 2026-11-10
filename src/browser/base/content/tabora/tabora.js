@@ -50,7 +50,7 @@ var Tabora = {
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
       "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initWalletProvider", "initVaultActor", "initAccount", "initUpdates", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "initLegacyShellUrls", "initMailToggle", "startTimers", "updateTitle", "localizeUrlbar",
-      "routeUrlbarToCommandBar", "initTabMotion", "initMotion", "initBookmarkDefaults",
+      "routeUrlbarToCommandBar", "initTabMotion", "initMotion", "initBookmarkDefaults", "initTabsLayout",
     ]) {
       try {
         this[step]();
@@ -1212,6 +1212,12 @@ var Tabora = {
   applySidebarCompact(on, animate = true) {
     const root = document.documentElement;
     this.sidebarMorphEnd(); // прерванное движение доводится до конца сразу
+    if (this.horizontalTabs) {
+      // колонки нет: вкладки и адрес стоят двумя строками сверху (applyTabsLayout)
+      root.removeAttribute("tabora-sidebar");
+      root.removeAttribute("tabora-sidebar-anim");
+      return;
+    }
     const now = root.getAttribute("tabora-sidebar") === "compact";
     if (!animate || this.reducedMotion || now === on) {
       root.removeAttribute("tabora-sidebar-anim");
@@ -1278,6 +1284,84 @@ var Tabora = {
     if (!animate && this.drawer?.open) {
       this.sizeDrawer();
     }
+  },
+
+  /* ---- Раскладка: вкладки сбоку или двумя строками сверху ---------------------------------
+   * Настройка Firefox sidebar.verticalTabs («Настройки → Вкладки и просмотр → Внешний вид
+   * браузера»). При вкладках сверху Firefox сам переносит полосу вкладок в #TabsToolbar, со
+   * своим перетаскиванием, прокруткой и анимацией. Оболочка переставляет своё:
+   *   строка 1: кнопки окна, пространства (буквами), закреплённые сайты, вкладки, «+»;
+   *   строка 2: назад, вперёд, обновить, меню, адрес, кошелёк, почта, загрузки, «Агент», аккаунт.
+   * Заголовок страницы не нужен: название видно на вкладке. Стили — в tabora.css, блок
+   * «Горизонтальная раскладка» (атрибут tabora-tabs="horizontal" на корне). */
+
+  TABS_LAYOUT_PREF: "sidebar.verticalTabs",
+
+  get horizontalTabs() {
+    return !Services.prefs.getBoolPref(this.TABS_LAYOUT_PREF, true);
+  },
+
+  initTabsLayout() {
+    // Firefox переносит полосу вкладок своим наблюдателем той же настройки: ждём, пока он закончит
+    const observer = () => setTimeout(() => this.applyTabsLayout(), 0);
+    Services.prefs.addObserver(this.TABS_LAYOUT_PREF, observer);
+    window.addEventListener("unload", () => Services.prefs.removeObserver(this.TABS_LAYOUT_PREF, observer), { once: true });
+    this.applyTabsLayout({ animate: false });
+  },
+
+  applyTabsLayout({ animate = true } = {}) {
+    const root = document.documentElement;
+    const horizontal = this.horizontalTabs;
+    if ((root.getAttribute("tabora-tabs") === "horizontal") === horizontal) {
+      return;
+    }
+    const toolbox = document.getElementById("navigator-toolbox");
+    const navbar = document.getElementById("nav-bar");
+    const strip = document.querySelector("#TabsToolbar .toolbar-items");
+    const topbar = document.getElementById("tabora-topbar");
+    const tabbox = document.getElementById("tabbrowser-tabbox");
+    const spaces = document.getElementById("tabora-spaces");
+    const dockItems = ["tabora-wallet-card", "tabora-mail", "tabora-downloads"].map(id => document.getElementById(id)).filter(Boolean);
+    if (!toolbox || !navbar || !strip || !topbar || !tabbox) {
+      return;
+    }
+    this.sidebarMorphEnd();
+    if (horizontal) {
+      // свёрнутая колонка — понятие вертикальной раскладки
+      root.removeAttribute("tabora-sidebar");
+      root.removeAttribute("tabora-sidebar-anim");
+      root.setAttribute("tabora-tabs", "horizontal");
+      if (spaces) {
+        strip.before(spaces);
+      }
+      let dock = document.getElementById("tabora-dock");
+      if (!dock) {
+        dock = this.html("div", { id: "tabora-dock", role: "group", "aria-label": "Кошелёк, почта, загрузки" });
+      }
+      dock.append(...dockItems);
+      (document.getElementById("tabora-agent-toggle") || topbar.lastChild).before(dock);
+      navbar.append(topbar);
+    } else {
+      root.removeAttribute("tabora-tabs");
+      if (spaces) {
+        navbar.after(spaces);
+      }
+      toolbox.append(...dockItems);
+      document.getElementById("tabora-dock")?.remove();
+      tabbox.prepend(topbar);
+      this.applySidebarCompact(Services.prefs.getBoolPref(this.SIDEBAR_PREF, false), false);
+    }
+    if (animate && !this.reducedMotion) {
+      // смена раскладки проявляется, а не перескакивает (tabora-layout-in в tabora.css)
+      root.setAttribute("tabora-tabs-switching", "true");
+      setTimeout(() => root.removeAttribute("tabora-tabs-switching"), this.MOTION.slow + 60);
+    }
+    this.syncTopbarInset();
+    if (this.drawer?.open) {
+      this.sizeDrawer();
+    }
+    // адресная строка и переполнение панелей считают свои размеры по событию окна
+    window.dispatchEvent(new Event("resize"));
   },
 
   /* ---- Исчезновение поверхностей -------------------------------------------------------
@@ -1440,6 +1524,7 @@ var Tabora = {
 
   tabCanLeave(tab) {
     return (
+      gBrowser.tabContainer.verticalMode && // в горизонтальной полосе закрытие анимирует сам Firefox
       this._tabMotionReady &&
       !this.reducedMotion &&
       !this._sidebarMorph &&
@@ -1459,7 +1544,7 @@ var Tabora = {
   },
 
   tabEnter(tab) {
-    if (!this._tabMotionReady || this.reducedMotion || this._sidebarMorph || tab.pinned || tab.hidden || !tab.isConnected) {
+    if (!gBrowser.tabContainer.verticalMode || !this._tabMotionReady || this.reducedMotion || this._sidebarMorph || tab.pinned || tab.hidden || !tab.isConnected) {
       return;
     }
     const full = this.tabRowMetrics(tab);
@@ -1511,6 +1596,10 @@ var Tabora = {
   },
 
   toggleSidebar(force) {
+    if (this.horizontalTabs) {
+      this.notice("Боковая панель есть только при вкладках сбоку. Раскладка меняется в настройках: «Вкладки и просмотр».");
+      return;
+    }
     const on = force ?? document.documentElement.getAttribute("tabora-sidebar") !== "compact";
     Services.prefs.setBoolPref(this.SIDEBAR_PREF, on);
     this.applySidebarCompact(on);
@@ -1885,7 +1974,7 @@ var Tabora = {
     }
     const lights = document.querySelector("#nav-bar .titlebar-buttonbox")?.getBoundingClientRect();
     let inset = 0;
-    if (lights && lights.width > 0 && !window.fullScreen) {
+    if (lights && lights.width > 0 && !window.fullScreen && !this.horizontalTabs) {
       const basePad = 8; // собственный отступ панели слева (tabora.css)
       inset = Math.max(0, Math.round(lights.right + this.TOPBAR_LIGHTS_GAP - (bar.getBoundingClientRect().left + basePad)));
     }
@@ -2974,6 +3063,7 @@ var Tabora = {
       { glyph: "✉", title: "Почта и алиасы", note: "Входящие, коды подтверждения, алиасы", key: "⌘⇧M", tags: "mail почта email письма алиасы inbox", run: () => this.openMail() },
       { glyph: "⚙", title: "Настройки", note: "Поведение, приватность, внешний вид", key: "⌘,", tags: "settings preferences", run: () => openPreferences() },
       { glyph: "⟨", title: document.documentElement.getAttribute("tabora-sidebar") === "compact" ? "Развернуть боковую панель" : "Свернуть боковую панель", note: "Только значки вкладок, названия по наведению", key: "⌘B", tags: "sidebar панель свернуть compact", run: () => this.toggleSidebar() },
+      { glyph: "▭", title: this.horizontalTabs ? "Вкладки сбоку" : "Вкладки сверху", note: this.horizontalTabs ? "Вернуть боковую панель с вкладками" : "Вкладки и адрес двумя строками сверху, страница на всю ширину", tags: "layout раскладка вкладки сверху сбоку горизонтальные вертикальные tabs", run: () => Services.prefs.setBoolPref(this.TABS_LAYOUT_PREF, this.horizontalTabs) },
     ];
   },
 

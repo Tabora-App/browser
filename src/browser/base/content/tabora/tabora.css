@@ -3706,3 +3706,376 @@ toolbarseparator {
   overflow: auto;
   padding: 20px;
 }
+
+/* ---- Горизонтальная раскладка: вкладки и адрес двумя строками сверху ------------------------
+   Включается настройкой Firefox sidebar.verticalTabs = false; applyTabsLayout (tabora.js) ставит
+   на корень tabora-tabs="horizontal" и переносит пространства в строку вкладок, а кошелёк,
+   почту, загрузки, «Агента» и аккаунт — во вторую строку. Полосу вкладок в #TabsToolbar
+   переносит сам Firefox.
+
+   Колонка инструментов вынута из потока и лежит сверху: ящик, страница и панель агента под ней
+   раскладываются тем же рядом, что и при вкладках сбоку. Две строки по 44px, как верхняя панель
+   вкладки: кнопки окна стоят в той же точке окна, что и при вкладках сбоку. */
+
+:root[tabora-tabs="horizontal"] #browser {
+  padding-top: calc(10px + 92px + 8px);
+}
+
+:root[tabora-tabs="horizontal"] #navigator-toolbox {
+  position: absolute;
+  inset: 10px 10px auto;
+  z-index: 1;
+  width: auto;
+  min-width: 0;
+  height: 92px;
+  gap: 4px;
+  padding: 0;
+}
+
+:root[tabora-tabs="horizontal"] #sidebar-container,
+:root[tabora-tabs="horizontal"] #tabora-sidebar-foot,
+:root[tabora-tabs="horizontal"] #tabora-memory,
+:root[tabora-tabs="horizontal"] #tabora-compact-search,
+:root[tabora-tabs="horizontal"] #tabora-tabs-head,
+:root[tabora-tabs="horizontal"] #tabora-topbar > .title,
+:root[tabora-tabs="horizontal"] #nav-bar > .titlebar-buttonbox-container,
+:root[tabora-tabs="horizontal"] #TabsToolbar toolbarspring,
+:root[tabora-tabs="horizontal"] #TabsToolbar .titlebar-spacer {
+  display: none !important;
+}
+
+:root[tabora-tabs="horizontal"] #nav-bar::before {
+  display: none;
+}
+
+/* ---- Строка 1: кнопки окна, пространства, вкладки ---- */
+
+/* полоса уведомлений Firefox не занимает места между строками: она ложится под ними */
+:root[tabora-tabs="horizontal"] #notifications-toolbar {
+  position: absolute;
+  inset: 100% 0 auto;
+}
+
+:root[tabora-tabs="horizontal"] #TabsToolbar {
+  display: flex !important;
+  order: 0;
+  flex: none;
+  height: 44px;
+  min-height: 44px !important;
+  align-items: center;
+  gap: 10px;
+  padding: 0 0 0 8px !important;
+  margin: 0;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+/* кнопки окна: в начале строки, в той же точке окна, что и при вкладках сбоку */
+:root[tabora-tabs="horizontal"] #TabsToolbar > .titlebar-buttonbox-container {
+  display: flex !important;
+  order: 0;
+  flex: none;
+  height: 28px;
+  margin: 0;
+}
+
+:root[tabora-tabs="horizontal"] #TabsToolbar > #tabora-spaces {
+  order: 1;
+}
+
+:root[tabora-tabs="horizontal"] #TabsToolbar > .toolbar-items {
+  order: 2;
+  flex: 1;
+  min-width: 0;
+}
+
+/* пространства — буквами, как в свёрнутой колонке; название целиком в подсказке */
+:root[tabora-tabs="horizontal"] #tabora-spaces {
+  flex: none;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+}
+
+:root[tabora-tabs="horizontal"] .tabora-space {
+  flex: none;
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  border-radius: 7px;
+  font-size: 0;
+}
+
+:root[tabora-tabs="horizontal"] .tabora-space::before {
+  content: attr(data-initial);
+  font: 700 12px/1 var(--tabora-font);
+  letter-spacing: 0;
+}
+
+:root[tabora-tabs="horizontal"] #TabsToolbar-customization-target {
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+#tabbrowser-tabs[orient="horizontal"] {
+  --tab-min-height: 34px;
+  --tab-block-margin: 0px;
+  --tab-border-radius: 10px;
+  --tab-inline-padding: 10px;
+  flex: 1;
+  min-width: 0;
+  min-height: 34px;
+  margin: 0 !important;
+  padding: 0 !important;
+  font-family: var(--tabora-font);
+}
+
+#tabbrowser-tabs[orient="horizontal"] .tabbrowser-tab {
+  color: var(--tabora-text-2);
+  font-weight: 600;
+  font-size: 13px;
+  padding-inline: 2px;
+  outline: none !important;
+}
+
+#tabbrowser-tabs[orient="horizontal"] .tabbrowser-tab[selected] {
+  color: var(--tabora-text-strong);
+  font-weight: 700;
+}
+
+#tabbrowser-tabs[orient="horizontal"] .tab-background {
+  min-height: 34px;
+  margin-block: 0 !important;
+  border: 0 !important;
+  border-radius: 10px;
+  outline: none !important;
+  box-shadow: none !important;
+  /* слои градиентной рамки Firefox убраны, обрезка фона обычная (см. правило для вкладок сбоку) */
+  background-image: none !important;
+  background-clip: padding-box !important;
+  background-origin: padding-box !important;
+  transition: background-color var(--tabora-ease);
+}
+
+#tabbrowser-tabs[orient="horizontal"] .tab-background:not([selected], [multiselected]) {
+  background-color: transparent !important;
+}
+
+#tabbrowser-tabs[orient="horizontal"] .tabbrowser-tab:hover > .tab-stack > .tab-background:not([selected]) {
+  background-color: var(--tabora-panel) !important;
+}
+
+#tabbrowser-tabs[orient="horizontal"] .tab-background[selected] {
+  background-color: var(--tabora-raised) !important;
+}
+
+#tabbrowser-tabs[orient="horizontal"] .tabbrowser-tab:focus-visible > .tab-stack > .tab-background {
+  outline: 1px solid var(--tabora-accent) !important;
+  outline-offset: -1px;
+}
+
+#tabbrowser-tabs[orient="horizontal"] .tab-icon-image {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+#tabbrowser-tabs[orient="horizontal"] .tab-close-button {
+  border-radius: 6px;
+  color: var(--tabora-text-3);
+}
+
+#tabbrowser-tabs[orient="horizontal"] .tab-close-button:hover {
+  background-color: var(--tabora-raised-2);
+  color: var(--tabora-text-strong);
+}
+
+/* закреплённые сайты — квадратные плитки в начале полосы, как плитки колонки */
+#tabbrowser-tabs[orient="horizontal"] #pinned-tabs-container:has(tab) {
+  margin-inline-end: 8px;
+  padding-inline-end: 8px;
+  border-inline-end: 1px solid var(--tabora-line);
+}
+
+#tabbrowser-tabs[orient="horizontal"] #pinned-tabs-container .tabbrowser-tab {
+  padding-inline: 3px;
+}
+
+#tabbrowser-tabs[orient="horizontal"] #pinned-tabs-container .tab-background {
+  background-color: var(--tabora-panel) !important;
+  outline: 1px solid var(--tabora-panel-border) !important;
+  outline-offset: -1px;
+}
+
+#tabbrowser-tabs[orient="horizontal"] #pinned-tabs-container .tab-background[selected] {
+  background-color: var(--tabora-raised) !important;
+  outline-color: var(--tabora-accent) !important;
+}
+
+/* «+» после последней вкладки: при вкладках сбоку его заменяет «+» в заголовке списка, и общее
+   правило его прячет */
+:root[tabora-tabs="horizontal"] #tabbrowser-arrowscrollbox-periphery > #tabs-newtab-button {
+  display: flex !important;
+}
+
+/* «+» и список всех вкладок */
+:root[tabora-tabs="horizontal"] #tabs-newtab-button,
+:root[tabora-tabs="horizontal"] #new-tab-button,
+:root[tabora-tabs="horizontal"] #alltabs-button {
+  --toolbarbutton-inner-padding: 9px;
+  margin: 0 !important;
+  padding: 0 !important;
+  color: var(--tabora-text-3);
+}
+
+:root[tabora-tabs="horizontal"] #tabs-newtab-button > .toolbarbutton-icon,
+:root[tabora-tabs="horizontal"] #new-tab-button > .toolbarbutton-icon,
+:root[tabora-tabs="horizontal"] #alltabs-button > .toolbarbutton-badge-stack,
+:root[tabora-tabs="horizontal"] #alltabs-button > .toolbarbutton-icon {
+  width: 34px;
+  height: 34px;
+  padding: 9px;
+  border-radius: 10px;
+  fill: var(--tabora-text-3);
+  transition: background-color var(--tabora-ease), fill var(--tabora-ease);
+}
+
+:root[tabora-tabs="horizontal"] #tabs-newtab-button:hover > .toolbarbutton-icon,
+:root[tabora-tabs="horizontal"] #new-tab-button:hover > .toolbarbutton-icon,
+:root[tabora-tabs="horizontal"] #alltabs-button:hover > .toolbarbutton-badge-stack,
+:root[tabora-tabs="horizontal"] #alltabs-button:hover > .toolbarbutton-icon {
+  background: var(--tabora-raised);
+  fill: var(--tabora-text);
+}
+
+/* ---- Строка 2: навигация, адрес, кошелёк, почта, загрузки, «Агент», аккаунт ---- */
+
+:root[tabora-tabs="horizontal"] #nav-bar {
+  order: 1;
+  flex: none;
+  height: 44px;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 2px;
+  padding-inline: 2px 0 !important;
+}
+
+:root[tabora-tabs="horizontal"] #PanelUI-button {
+  margin-inline-start: 0;
+}
+
+:root[tabora-tabs="horizontal"] #urlbar-container {
+  order: 5;
+  flex: 1 1 0 !important;
+  width: auto !important;
+  min-width: 160px !important;
+  margin: 0 8px 0 6px !important;
+}
+
+:root[tabora-tabs="horizontal"] #nav-bar > #tabora-topbar {
+  order: 6;
+  flex: none;
+  height: 44px;
+  padding: 0;
+  gap: 8px;
+}
+
+#tabora-dock {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--tabora-panel);
+  -moz-window-dragging: no-drag;
+}
+
+#tabora-dock > #tabora-wallet-card,
+#tabora-dock > #tabora-mail,
+#tabora-dock > #tabora-downloads {
+  position: relative;
+  box-sizing: border-box;
+  flex: none;
+  width: 34px;
+  height: 30px;
+  padding: 0;
+  gap: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  justify-content: center;
+}
+
+#tabora-dock > #tabora-wallet-card:hover,
+#tabora-dock > #tabora-mail:hover,
+#tabora-dock > #tabora-downloads:hover {
+  background: var(--tabora-raised);
+}
+
+#tabora-dock > #tabora-wallet-card > span,
+#tabora-dock > #tabora-mail > span,
+#tabora-dock #tabora-downloads .title,
+#tabora-dock #tabora-downloads .head .kbd,
+#tabora-dock #tabora-downloads .live .row {
+  display: none;
+}
+
+#tabora-dock svg {
+  color: var(--tabora-text-2);
+}
+
+#tabora-dock #tabora-downloads .head {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+}
+
+/* число загрузок — значком на углу, ход загрузки — полоской под значком */
+#tabora-dock #tabora-downloads .pill {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  padding: 2px 5px;
+  font-size: 10px;
+}
+
+#tabora-dock #tabora-downloads .live {
+  position: absolute;
+  inset: auto 6px 3px;
+  padding: 0;
+}
+
+#tabora-dock #tabora-downloads .bar {
+  height: 3px;
+}
+
+/* страница занимает всё место под строками: своей верхней панели у вкладки нет */
+:root[tabora-tabs="horizontal"] #tabora-start {
+  inset: 0;
+}
+
+/* полный экран: поля окна убраны, строки остаются сверху */
+:root[inFullscreen][tabora-tabs="horizontal"] #browser {
+  padding: 100px 0 0;
+}
+
+:root[inFullscreen][tabora-tabs="horizontal"] #navigator-toolbox {
+  inset: 4px 8px auto;
+}
+
+:root[inDOMFullscreen][tabora-tabs="horizontal"] #browser {
+  padding-top: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* раскладку сменили: панели и страница проявляются на новых местах */
+  :root[tabora-tabs-switching] #navigator-toolbox,
+  :root[tabora-tabs-switching] #tabbrowser-tabbox {
+    animation: tabora-fade-in var(--tabora-t-slow) var(--tabora-curve);
+  }
+}

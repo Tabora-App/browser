@@ -347,7 +347,9 @@ Object.assign(Tabora, {
       const toolbox = document.getElementById("navigator-toolbox");
       const cs = getComputedStyle(browser);
       const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth);
-      const width = browser.getBoundingClientRect().width - pad - toolbox.getBoundingClientRect().width - 10;
+      // при вкладках сверху колонки слева нет: ящик занимает всю ширину под верхними строками
+      const column = this.horizontalTabs ? -10 : toolbox.getBoundingClientRect().width;
+      const width = browser.getBoundingClientRect().width - pad - column - 10;
       d.el.style.width = `${Math.max(this.DRAWER_WIDTH, Math.round(width))}px`;
       d.inner.style.width = d.el.style.width;
     } else {
@@ -1429,6 +1431,7 @@ Object.assign(Tabora, {
       const b = this.html("button", { class: "tabora-space", role: "tab", "data-space": space.id, style: `--space:${this.spaceHex(space)}` }, space.name);
       const name = (space.name || "?").trim();
       b.dataset.initial = taken[letter(name)] > 1 ? letter(name) + name.charAt(1).toLowerCase() : letter(name);
+      b.title = name; // в строке вкладок и в свёрнутой колонке видна только буква
       b.setAttribute("aria-selected", String(space.id === this.activeSpaceId));
       b.addEventListener("click", () => this.switchSpace(space.id));
       bar.append(b);
