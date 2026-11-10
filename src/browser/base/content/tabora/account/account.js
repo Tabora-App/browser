@@ -476,7 +476,7 @@ Object.assign(Tabora, {
   /* ---- Кнопка аккаунта в правом верхнем углу ------------------------------------------
    * Без входа — «Войти». После входа — кружок с первой буквой и имя до @; точка на кружке:
    * зелёная — всё в порядке, жёлтая — нужно действие (нет ключа восстановления или его пора
-   * обновить), серая — сейф заблокирован. Щелчок открывает страницу аккаунта. */
+   * обновить), серая — сейф заблокирован. Щелчок открывает раздел «Аккаунт» в настройках. */
 
   AVATAR_PREF: "tabora.account.avatarColor",
   AVATAR_COLORS: ["#c8f25a", "#7cc4ff", "#b9a6ff", "#ff9f5a", "#5ee0d0", "#ff8fb3"],
@@ -588,20 +588,14 @@ Object.assign(Tabora, {
     this.notice(Vault.lockPending ? "Сейф заблокируется, как только закончится текущая операция с ключом" : "Сейф заблокирован: пароли сайтов и коды закрыты до проверки");
   },
 
-  /* ---- Страница аккаунта ----------------------------------------------------------------
-   * Профиль с настройками по разделам — отдельная страница (account/profile.html), как почта.
-   * Чувствительные действия она не дублирует: зовёт те же окна и листы оболочки. */
+  /* ---- Раздел «Аккаунт» в настройках ------------------------------------------------------
+   * Профиль аккаунта — раздел страницы настроек (account/pane.js, about:preferences#sync),
+   * с горизонтальными вкладками. Чувствительные действия он не дублирует: зовёт те же окна и
+   * листы оболочки. */
 
-  ACCOUNT_URL: "chrome://tabora/content/account/profile.html",
-
-  /** tab — раздел страницы: profile, security, devices, sync, mail, data, exit. */
+  /** tab — вкладка раздела: profile, security, sync, data, exit. */
   openAccountPage(tab = "") {
-    const url = this.ACCOUNT_URL + (tab ? `#${tab}` : "");
-    const existing = gBrowser.tabs.find(t => (t.linkedBrowser?.currentURI?.spec || "").startsWith(this.ACCOUNT_URL) && !t.hidden);
-    if (existing && tab) {
-      existing.linkedBrowser.loadURI(Services.io.newURI(url), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
-    }
-    this.openInternal(existing ? this.ACCOUNT_URL : url);
+    openPreferences(tab && tab !== "profile" ? `sync-${tab}` : "paneSync");
   },
 
   /** Пароли из файла CSV: разбор и запись делает штатный модуль Firefox, хранилище — сейф. */

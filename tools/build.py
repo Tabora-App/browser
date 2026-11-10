@@ -402,6 +402,7 @@ def fetch_l10n(config: dict) -> None:
     stamp = L10N_BASE / ".tabora-l10n"
     want = f"{rev} {' '.join(sorted(locales))}\n"
     if stamp.exists() and stamp.read_text() == want and all((L10N_BASE / loc).is_dir() for loc in locales):
+        rebrand_l10n(config)
         return
     log(f"переводы {', '.join(locales)}: firefox-l10n {rev[:12]}")
     if L10N_BASE.exists():
@@ -418,6 +419,40 @@ def fetch_l10n(config: dict) -> None:
     if head != rev:
         die(f"firefox-l10n: получена ревизия {head}, ожидалась {rev}")
     stamp.write_text(want)
+    rebrand_l10n(config)
+
+
+# Названия возможностей браузера, в которых Mozilla пишет «Firefox» независимо от бренда сборки
+# («Домашняя страница Firefox»). Названия сервисов Mozilla (Relay, Monitor, VPN) не трогаем:
+# это чужие продукты, и в интерфейсе Tabora их разделы скрыты.
+REBRAND_TERMS = ("-firefox-home-brand-name", "-firefoxview-brand-name", "-firefoxlabs-brand-name", "-firefox-suggest-brand-name")
+
+
+def rebrand_terms(path: Path, brand: str = "Tabora") -> bool:
+    """В brandings.ftl заменяет «Firefox» на бренд сборки внутри терминов REBRAND_TERMS.
+    Повторный вызов ничего не меняет. Возвращает True, если файл изменён."""
+    if not path.is_file():
+        return False
+    out, inside, changed = [], False, False
+    for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+        if line[:1] not in (" ", "\t", "\n", "#", ""):
+            # начало нового термина или сообщения
+            inside = line.split("=")[0].strip() in REBRAND_TERMS
+        if inside and "Firefox" in line and not line.lstrip().startswith("#"):
+            line = line.replace("Firefox", brand)
+            changed = True
+        out.append(line)
+    if changed:
+        path.write_text("".join(out), encoding="utf-8")
+    return changed
+
+
+def rebrand_l10n(config: dict) -> None:
+    """Термины с «Firefox» в загруженных переводах. Вызывается из fetch_l10n при каждом
+    обращении: выборка переводов пересоздаётся только при смене ревизии."""
+    for loc in [loc for loc in config.get("locales", []) if loc != "en-US"]:
+        if rebrand_terms(L10N_BASE / loc / "toolkit" / "toolkit" / "branding" / "brandings.ftl"):
+            log(f"перевод {loc}: названия возможностей с «Firefox» заменены на Tabora")
 
 
 def cmd_l10n(args: argparse.Namespace) -> None:
@@ -826,6 +861,39 @@ def cmd_bootstrap(args: argparse.Namespace) -> None:
     mach(["--no-interactive", "bootstrap", "--application-choice", "browser"], config, brand)
 
 
+def register_dev_locales(config: dict) -> None:
+    """Возвращает встроенные переводы в сборку разработчика (dist/bin).
+
+    Файлы перевода (chrome/<язык>, localization/<язык>, с брендом Tabora) попадают в dist/bin
+    при упаковке (package-multi-locale) и остаются там, но mach build пересоздаёт общий
+    chrome.manifest и список языков только с en-US, и приложение из dist/ про перевод не знает.
+    Раньше русский в такой сборке давал языковой пакет-дополнение с нашим брендом; с обязательной
+    подписью дополнений он отключается, а менеджер дополнений сам заменяет его официальным
+    пакетом Mozilla, где бренд — Firefox. Поэтому перевод включается здесь, без дополнений."""
+    dist_bin = objdir() / "dist" / "bin"
+    ready = []
+    for loc in [loc for loc in config.get("locales", []) if loc != "en-US"]:
+        bases = (dist_bin, dist_bin / "browser")
+        if not all((base / "chrome" / f"{loc}.manifest").is_file() for base in bases):
+            log(f"перевод {loc} в dist/bin не собран (появится после tools/build.py package)")
+            continue
+        for base in bases:
+            top = base / "chrome.manifest"
+            line = f"manifest chrome/{loc}.manifest"
+            text = top.read_text() if top.is_file() else ""
+            if line not in text.splitlines():
+                top.write_text(text.rstrip("\n") + "\n" + line + "\n")
+        rebrand_terms(dist_bin / "localization" / loc / "toolkit" / "branding" / "brandings.ftl")
+        ready.append(loc)
+    # dist/bin/res/multilocale.txt — ссылка на этот файл; формат как у gen_multilocale.py
+    listing = objdir() / "toolkit" / "locales" / "multilocale.txt"
+    want = ",".join(["en-US", *ready])
+    if listing.is_file() and listing.read_text().strip() != want:
+        listing.write_text(want + "\n")
+    if ready:
+        log(f"встроенные переводы в dist/bin: {', '.join(ready)}")
+
+
 def cmd_build(args: argparse.Namespace) -> None:
     config = load_config()
     brand = brand_name(config, args.brand)
@@ -836,11 +904,13 @@ def cmd_build(args: argparse.Namespace) -> None:
     else:
         log(f"полная сборка {target_platform()}/{target_arch()}, бренд «{brand}»")
         mach(["build"], config, brand)
+    register_dev_locales(config)
 
 
 def cmd_run(args: argparse.Namespace) -> None:
     config = load_config()
     brand = brand_name(config, args.brand)
+    register_dev_locales(config)
     mach(["run", "--noprofile", *args.args], config, brand)
 
 

@@ -1,5 +1,5 @@
 diff --git a/toolkit/components/passwordmgr/LoginStorageMigrator.sys.mjs b/toolkit/components/passwordmgr/LoginStorageMigrator.sys.mjs
-index 2f06eec51d..f2151ab81d 100644
+index 2f06eec51d..7554657c39 100644
 --- a/toolkit/components/passwordmgr/LoginStorageMigrator.sys.mjs
 +++ b/toolkit/components/passwordmgr/LoginStorageMigrator.sys.mjs
 @@ -139,6 +139,12 @@ export class LoginStorageMigrator {

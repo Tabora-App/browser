@@ -1,5 +1,5 @@
 diff --git a/toolkit/components/passwordmgr/storage-rust.sys.mjs b/toolkit/components/passwordmgr/storage-rust.sys.mjs
-index 16af79d554..c361213e9f 100644
+index 16af79d554..2156ab4ba0 100644
 --- a/toolkit/components/passwordmgr/storage-rust.sys.mjs
 +++ b/toolkit/components/passwordmgr/storage-rust.sys.mjs
 @@ -28,6 +28,7 @@ import {

@@ -140,7 +140,9 @@ pref("browser.startup.homepage_override.mstone", "ignore");
 
 // Оболочка Tabora: вертикальные вкладки в боковой панели Firefox, без лишних инструментов
 pref("sidebar.revamp", true);
-pref("sidebar.verticalTabs", true);
+// Настройка закреплена: у оболочки нет горизонтальной раскладки, и при её выборе вкладки и кнопки
+// окна пропадают вовсе. Переключатель в настройках скрыт (preferences.css).
+pref("sidebar.verticalTabs", true, locked);
 pref("sidebar.visibility", "always-show");
 pref("sidebar.expandOnHover", false);
 pref("sidebar.main.tools", "");

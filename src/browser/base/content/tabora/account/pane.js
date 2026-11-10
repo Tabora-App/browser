@@ -1,0 +1,374 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Раздел «Аккаунт» на странице настроек (about:preferences#sync). Занимает место раздела
+ * Firefox «Аккаунт и синхронизация»: его группы скрыты (preferences.css), а сюда встаёт
+ * профиль аккаунта Tabora с горизонтальными вкладками.
+ *
+ * Группы и строки собраны из тех же компонентов, что остальные настройки (moz-card,
+ * moz-fieldset, moz-box-group, moz-box-item, moz-button, moz-toggle), поэтому раздел выглядит
+ * так же, как соседние. Чувствительные действия раздел сам не выполняет: смена пароля,
+ * проверка владельца, ключ восстановления, импорт и экспорт паролей — окна и листы оболочки
+ * (Tabora.accountDialog, vaultOwnerCheck, vaultRecoveryCreateSheet). То, чему нужен сервер
+ * аккаунтов, так и подписано, пока он не запущен.
+ *
+ * Подключается из preferences.js. Разметка строится через DOM, стили — preferences.css. */
+
+"use strict";
+
+window.TaboraAccountPane = (function () {
+  const { Account } = ChromeUtils.importESModule("chrome://tabora/content/account/Account.sys.mjs");
+  const { Vault } = ChromeUtils.importESModule("chrome://tabora/content/vault/Vault.sys.mjs");
+  const Shell = window.browsingContext?.topChromeWindow?.Tabora || null;
+  const HTML = "http://www.w3.org/1999/xhtml";
+  const LATER = "появится после запуска сервера аккаунтов";
+
+  const TABS = [
+    ["profile", "Профиль"],
+    ["security", "Безопасность"],
+    ["sync", "Синхронизация"],
+    ["data", "Данные"],
+    ["exit", "Выход"],
+  ];
+
+  const state = { tab: "profile", root: null, pane: null, devices: null, devicesFor: "", timer: null };
+
+  /* ---- Помощники разметки -------------------------------------------------- */
+
+  function el(tag, attrs = {}, children = []) {
+    const node = document.createElementNS(HTML, tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v !== null && v !== undefined && v !== false) {
+        node.setAttribute(k, v === true ? "" : v);
+      }
+    }
+    for (const c of [].concat(children)) {
+      if (c !== null && c !== undefined && c !== false) {
+        node.append(c);
+      }
+    }
+    return node;
+  }
+
+  function button(label, onClick, { type = "default", disabled = false } = {}) {
+    const b = el("moz-button", { label, type: type === "default" ? null : type, slot: "actions" });
+    b.disabled = disabled;
+    b.addEventListener("click", onClick);
+    return b;
+  }
+
+  function value(text, muted = false) {
+    return el("span", { class: `tabora-acc-value${muted ? " muted" : ""}`, slot: "actions" }, text);
+  }
+
+  /** Строка: название и пояснение слева, справа кнопки, переключатель или значение. */
+  function item(label, description, actions = []) {
+    return el("moz-box-item", { label, description: description || null }, actions);
+  }
+
+  /** Группа настроек: та же обёртка, что рисует setting-group у остальных разделов. */
+  function group(label, description, items) {
+    return el("moz-card", { role: "presentation", class: "tabora-acc-group" }, [
+      el("moz-fieldset", { label, description: description || null, headinglevel: "2" }, [el("moz-box-group", { type: "list" }, items.filter(Boolean))]),
+    ]);
+  }
+
+  function date(v) {
+    // без хвоста «г.»: дата стоит в середине фраз
+    return v ? new Date(v).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" }).replace(/\s*г\.$/, "") : "";
+  }
+
+  function plural(n, one, few, many) {
+    const m10 = n % 10;
+    const m100 = n % 100;
+    return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
+  }
+
+  /** Действие оболочки; если страницу открыли вне окна браузера, ничего не делаем. */
+  const shell = fn => () => Shell && fn(Shell);
+
+  /* ---- Вкладки ------------------------------------------------------------- */
+
+  const PANELS = {
+    profile() {
+      const colors = Shell?.AVATAR_COLORS || [];
+      const current = Shell?.accountAvatarColor();
+      const names = { "#c8f25a": "лаймовый", "#7cc4ff": "голубой", "#b9a6ff": "сиреневый", "#ff9f5a": "оранжевый", "#5ee0d0": "бирюзовый", "#ff8fb3": "розовый" };
+      const swatches = el("div", { class: "tabora-acc-swatches", role: "radiogroup", "aria-label": "Цвет аватара", slot: "actions" }, colors.map(color => {
+        const b = el("button", { class: "tabora-acc-swatch", type: "button", role: "radio", "aria-checked": String(color === current), "aria-label": names[color] || color, title: names[color] || color });
+        b.style.setProperty("--avatar", color);
+        b.addEventListener("click", () => {
+          Services.prefs.setStringPref(Shell.AVATAR_PREF, color);
+          Shell.renderAccountButton();
+          render();
+        });
+        return b;
+      }));
+      let aliases = 0;
+      try {
+        aliases = Shell?.mail().MailStore.aliases?.length || 0;
+      } catch (e) {}
+      return [
+        group("Адрес и вид", "Аккаунт Tabora — это адрес почты и один пароль для входа и для сейфа.", [
+          item("Адрес почты", Account.email, [button("Скопировать", shell(s => {
+            Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(Account.email);
+            s.notice("Адрес скопирован");
+          }))]),
+          item("Цвет аватара", "Кружок с первой буквой адреса виден в правом верхнем углу окна и в почте.", [swatches]),
+          Account.data?.createdAt ? item("Аккаунт создан", "", [value(date(Account.data.createdAt))]) : null,
+          Account.data?.lastLoginAt ? item("Последний вход на этом компьютере", "", [value(date(Account.data.lastLoginAt))]) : null,
+        ]),
+        group("Почта", "Адрес аккаунта — это и почтовый ящик. Для сайтов браузер создаёт отдельные адреса-алиасы, чтобы основной адрес никто не знал.", [
+          item("Почтовый ящик", "В версии 0.1 раздел почты показывает пример ящика. Настоящие адреса на tabora.app начнём выдавать, когда откроем регистрацию.", [button("Открыть почту", shell(s => s.openMail()))]),
+          item("Алиасы", aliases ? `${aliases} ${plural(aliases, "адрес", "адреса", "адресов")} для сайтов. Выключенный алиас перестаёт принимать письма.` : "Пока нет. Алиас создаётся при регистрации на сайте.", [button("Открыть алиасы", shell(s => s.openMail("aliases")))]),
+          item("Место в почте", "", [value("появится с запуском почты", true)]),
+        ]),
+      ];
+    },
+
+    security() {
+      const rkAt = Vault.recoveryKeyCreatedAt;
+      const upgrade = !!rkAt && Account.recoveryNeedsUpgrade;
+      const silent = Vault.hasOsKey && Vault.osUnlockEnabled;
+      const unlockTitle = Vault.osUnlockEnabled ? "Спрашивать пароль при запуске" : "Открывать сейф через связку ключей";
+      const toggle = el("moz-toggle", { slot: "actions", "aria-label": "Открывать сейф через связку ключей macOS" });
+      toggle.pressed = !!silent;
+      toggle.disabled = !Vault.hasPassword;
+      toggle.addEventListener("toggle", () => {
+        // состояние меняется только после проверки владельца: до неё переключатель возвращается
+        toggle.pressed = !!silent;
+        shell(s => s.vaultOwnerCheck(unlockTitle, async () => {
+          await Vault.setOsUnlock(!Vault.osUnlockEnabled);
+          s.notice(Vault.osUnlockEnabled ? "Сейф снова открывается сам через связку ключей" : "Сейф будет спрашивать пароль при запуске");
+          render();
+        }))();
+      });
+      return [
+        group("Пароль и восстановление", "Пароли сайтов, коды входа и почта на этом компьютере зашифрованы ключом сейфа. Открыть его можно паролем аккаунта или ключом восстановления.", [
+          item("Пароль", "Один для входа в аккаунт и для сейфа. Меняются всегда вместе.", [button("Сменить пароль", shell(s => s.accountDialog("change")))]),
+          item(
+            "Ключ восстановления",
+            !rkAt ? "Не создан. Если забудете пароль, сейф открыть будет нечем." : upgrade ? `Создан ${date(rkAt)}, но защищён по прежней схеме. Создайте новый: тогда сервер будет хранить только открытый ключ.` : `Создан ${date(rkAt)}. Откроет сейф, если вы забудете пароль.`,
+            [button(rkAt ? "Создать новый" : "Создать ключ", shell(s => s.vaultRecoveryCreateSheet()), { type: !rkAt || upgrade ? "primary" : "default" })]
+          ),
+        ]),
+        group("Сейф", "", [
+          item("Открывать сейф через связку ключей macOS", silent ? "Сейф открывается сам при запуске браузера на этом компьютере." : "При каждом запуске браузер спрашивает пароль.", [toggle]),
+          item("Состояние", Vault.unlocked ? "Сейф открыт: пароли и коды подставляются на сайтах." : "Сейф заблокирован: пароли и коды закрыты до проверки.", [
+            Vault.unlocked ? button("Заблокировать", shell(s => s.accountLockVault())) : button("Разблокировать", shell(s => s.vaultUnlockByUser()), { type: "primary" }),
+          ]),
+        ]),
+      ];
+    },
+
+    sync() {
+      const local = Account.isLocalMode;
+      const here = Account.deviceId();
+      const list = state.devices || [];
+      const devices = list.length
+        ? list.map(dev => item(dev.name || "Устройство", dev.id === here ? "Этот компьютер" : "", [value(dev.at ? `вход ${date(dev.at)}` : "")]))
+        : [item(Account.deviceName(), "Этот компьютер")];
+      const what = [
+        ["Пароли сайтов", "Логины и пароли из сейфа."],
+        ["Коды входа", "Одноразовые коды двухфакторной защиты."],
+        ["Закладки", "Папки и ссылки из раздела «Закладки»."],
+        ["Вкладки и пространства", "Открытые вкладки, закреплённые сайты и пространства."],
+      ];
+      return [
+        group("Синхронизация", "Перенос данных между вашими компьютерами. Всё шифруется на устройстве: сервер хранит только шифрованные копии.", [
+          item("Состояние", local ? "Данные хранятся только на этом компьютере." : `Сервер ${new URL(Account.serverUrl).host}.`, [value(local ? LATER : "включена", local)]),
+          ...what.map(([label, text]) => item(label, text, [value(local ? "позже" : "да", true)])),
+          item("Фраза восстановления кошелька", "Не синхронизируется никогда: остаётся только на том компьютере, где её ввели.", [value("никогда", true)]),
+        ]),
+        group("Устройства", local ? `Список других устройств и выход на них ${LATER}.` : "Компьютеры, на которых выполнен вход в этот аккаунт.", devices),
+      ];
+    },
+
+    data() {
+      return [
+        group("Принести в Tabora", "Закладки, историю и пароли из другого браузера переносит «Импорт данных браузера» ниже.", [
+          item("Пароли из файла CSV", "Подходят файлы из Chrome, Firefox, Safari, Bitwarden и 1Password.", [button("Выбрать файл", shell(s => s.accountImportPasswords()))]),
+          item("Коды входа", "Экспорт Google Authenticator, Aegis, 2FAS или список ссылок otpauth://.", [button("Выбрать файл", shell(s => s.otpImportFile()))]),
+        ]),
+        group("Забрать из Tabora", "", [
+          item("Пароли в файл CSV", "Файл не зашифрован: кто его откроет, увидит все пароли. Удалите его сразу после переноса.", [button("Сохранить файл", shell(s => s.accountExportPasswords()))]),
+        ]),
+      ];
+    },
+
+    exit() {
+      return [
+        group("Выход", "После выхода сейф блокируется. Пароли, коды и кошелёк остаются на этом компьютере зашифрованными.", [
+          item("Выйти из аккаунта", Account.email, [button("Выйти", shell(s => s.accountLogout({ thenLogin: false })))]),
+          item("Войти в другой аккаунт", "Текущий аккаунт останется на компьютере, к нему можно вернуться.", [button("Сменить аккаунт", shell(s => s.accountLogout({ thenLogin: true, blankEmail: true })))]),
+        ]),
+        group("Удаление", "", [item("Удалить аккаунт", `Удаление аккаунта вместе с почтой ${LATER}.`, [button("Удалить", () => {}, { type: "destructive", disabled: true })])]),
+      ];
+    },
+  };
+
+  /* ---- Отрисовка ----------------------------------------------------------- */
+
+  function who() {
+    const email = Account.email;
+    if (!Account.signedIn) {
+      return el("div", { class: "tabora-acc-who out" }, [
+        el("div", { class: "tabora-acc-id" }, [
+          el("b", {}, email ? "Вы вышли из аккаунта" : "Аккаунт Tabora"),
+          el("span", {}, email ? `${email}. Войдите, чтобы открыть сейф и настройки аккаунта.` : "Адрес почты на tabora.app и один пароль для входа и сейфа. Аккаунт нужен, чтобы перенести пароли и коды на другой компьютер."),
+        ]),
+        el("div", { class: "tabora-acc-actions" }, [
+          (() => {
+            const b = button(email ? "Войти" : "Создать аккаунт", shell(s => s.accountDialog(email ? "login" : "register")), { type: "primary" });
+            b.removeAttribute("slot");
+            return b;
+          })(),
+          (() => {
+            const b = button(email ? "Другой аккаунт" : "Войти", shell(s => s.accountDialog(email ? "register" : "login", { blankEmail: true })));
+            b.removeAttribute("slot");
+            return b;
+          })(),
+        ]),
+      ]);
+    }
+    const status = Shell?.accountStatus() || { level: "ok", text: "" };
+    const avatar = el("span", { class: "tabora-acc-avatar", "aria-hidden": "true" }, (email || "?").trim().charAt(0).toUpperCase());
+    avatar.style.setProperty("--avatar", Shell?.accountAvatarColor() || "#c8f25a");
+    return el("div", { class: "tabora-acc-who" }, [
+      avatar,
+      el("div", { class: "tabora-acc-id" }, [el("b", {}, email), el("span", { class: "tabora-acc-status" }, [el("i", { class: `tabora-acc-dot ${status.level}` }), status.text])]),
+    ]);
+  }
+
+  function tabs() {
+    const attention = Shell?.accountStatus().level === "warn";
+    const bar = el("div", { class: "tabora-acc-tabs", role: "tablist", "aria-label": "Разделы аккаунта" }, TABS.map(([id, label]) => {
+      const selected = id === state.tab;
+      const b = el("button", { class: "tabora-acc-tab", type: "button", role: "tab", id: `tabora-acc-tab-${id}`, "aria-selected": String(selected), tabindex: selected ? "0" : "-1" }, [
+        label,
+        id === "security" && attention ? el("span", { class: "tabora-acc-badge", "aria-label": "нужно действие" }, "1") : null,
+      ]);
+      b.addEventListener("click", () => select(id));
+      return b;
+    }));
+    // стрелки переключают вкладки, как положено списку вкладок
+    bar.addEventListener("keydown", e => {
+      const i = TABS.findIndex(t => t[0] === state.tab);
+      const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+      if (step) {
+        e.preventDefault();
+        select(TABS[(i + step + TABS.length) % TABS.length][0], { focus: true });
+      } else if (e.key === "Home" || e.key === "End") {
+        e.preventDefault();
+        select(TABS[e.key === "Home" ? 0 : TABS.length - 1][0], { focus: true });
+      }
+    });
+    return bar;
+  }
+
+  function render() {
+    const root = state.root;
+    if (!root?.isConnected) {
+      return;
+    }
+    const signedIn = Account.signedIn;
+    // состояние читает preferences.css: без входа — только приглашение; на вкладке «Данные»
+    // под нашими группами показывается штатный «Импорт данных браузера»
+    state.pane?.setAttribute("data-acc-tab", signedIn ? state.tab : "out");
+    if (!signedIn) {
+      root.replaceChildren(who());
+      return;
+    }
+    const panel = el("div", { class: "tabora-acc-panel", role: "tabpanel", "aria-labelledby": `tabora-acc-tab-${state.tab}` }, PANELS[state.tab]());
+    root.replaceChildren(who(), tabs(), panel);
+    if (state.tab === "sync") {
+      loadDevices();
+    }
+  }
+
+  function select(id, { focus = false, fromHash = false } = {}) {
+    if (!PANELS[id]) {
+      return;
+    }
+    state.tab = id;
+    if (!fromHash) {
+      // адрес меняется без события hashchange: страница настроек не переключает раздел заново
+      history.replaceState(null, "", id === "profile" ? "#sync" : `#sync-${id}`);
+    }
+    render();
+    if (focus) {
+      document.getElementById(`tabora-acc-tab-${id}`)?.focus();
+    }
+  }
+
+  function tabFromHash() {
+    const m = /^#sync-([a-z]+)$/.exec(location.hash);
+    return m && PANELS[m[1]] ? m[1] : null;
+  }
+
+  async function loadDevices() {
+    if (state.devicesFor === Account.email && state.devices) {
+      return;
+    }
+    const email = Account.email;
+    try {
+      state.devices = await Account.devices();
+    } catch (e) {
+      state.devices = [];
+    }
+    state.devicesFor = email;
+    if (state.tab === "sync" && Account.email === email) {
+      render();
+    }
+  }
+
+  /** section — секция раздела paneSync. Повторный вызов ничего не делает. */
+  function mount(section) {
+    if (state.root?.isConnected) {
+      return;
+    }
+    state.pane = section.closest("setting-pane");
+    state.root = el("div", { id: "tabora-account" });
+    const header = section.querySelector("moz-page-header");
+    if (header) {
+      // заголовок раздела: «Аккаунт» вместо «Аккаунт и синхронизация» Firefox
+      header.removeAttribute("data-l10n-id");
+      header.setAttribute("heading", "Аккаунт");
+      header.heading = "Аккаунт";
+      header.after(state.root);
+    } else {
+      section.prepend(state.root);
+    }
+    state.tab = tabFromHash() || state.tab;
+    Promise.all([Account.ready(), Vault.ready()]).then(render, render);
+  }
+
+  window.addEventListener("hashchange", () => {
+    if (location.hash === "#sync") {
+      select("profile", { fromHash: true });
+    } else {
+      const id = tabFromHash();
+      if (id) {
+        select(id, { fromHash: true });
+      }
+    }
+  });
+
+  // аккаунт или сейф изменились (вход, выход, блокировка, новый ключ): перерисовать
+  const refresh = () => {
+    clearTimeout(state.timer);
+    state.timer = setTimeout(() => {
+      state.devices = null;
+      render();
+    }, 60);
+  };
+  Services.obs.addObserver(refresh, Account.TOPIC);
+  Services.obs.addObserver(refresh, Vault.TOPIC);
+  window.addEventListener("unload", () => {
+    Services.obs.removeObserver(refresh, Account.TOPIC);
+    Services.obs.removeObserver(refresh, Vault.TOPIC);
+  }, { once: true });
+
+  return { mount, render };
+})();

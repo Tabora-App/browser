@@ -90,6 +90,13 @@ def build_langpack(locale: str, version: str, branding_dir: Path, out_dir: Path)
                 manifest["name"] = NAMES.get(locale, manifest.get("name", locale))
                 manifest["description"] = "Перевод интерфейса Tabora на основе локализации Firefox."
                 manifest.pop("author", None)
+                # Пакет носит идентификатор Mozilla, и без своего адреса обновлений менеджер
+                # дополнений спрашивает о нём AMO: тот отдаёт официальный пакет с брендом
+                # Firefox, и браузер молча заменяет им наш (так «Tabora» в интерфейсе стала
+                # «Firefox»). Адрес в зоне .invalid не разрешается никогда (RFC 2606): запрос
+                # никуда не уходит, подмены нет.
+                gecko = manifest.setdefault("browser_specific_settings", {}).setdefault("gecko", {})
+                gecko["update_url"] = "https://langpack-updates.tabora.invalid/none.json"
                 data = json.dumps(manifest, ensure_ascii=False, indent=2).encode()
             for pattern, ours in BRANDING_FILES.items():
                 if name == pattern.format(locale=locale):

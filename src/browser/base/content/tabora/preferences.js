@@ -123,11 +123,22 @@
     }
   }
 
+  // Раздел «Аккаунт» (account/pane.js) встаёт на место раздела Firefox «Аккаунт и синхронизация»
+  Services.scriptloader.loadSubScript("chrome://tabora/content/account/pane.js", window);
+
+  function mountAccount(pane) {
+    const section = pane.querySelector('setting-pane[data-category="paneSync"] section');
+    if (section && !document.getElementById("tabora-account")) {
+      window.TaboraAccountPane.mount(section);
+    }
+  }
+
   function mount() {
     const pane = document.getElementById("mainPrefPane");
     if (!pane) {
       return;
     }
+    mountAccount(pane);
     mountSleeping(pane);
     if (document.getElementById("tabora-cookie-banners")) {
       return;
@@ -175,8 +186,19 @@
     document.addEventListener("auxclick", open, true);
   }
 
+  // Пункты меню настроек под Tabora: «Аккаунт» вместо «Аккаунт и синхронизация» (раздел занят
+  // аккаунтом Tabora), «Расширения» без тем (тем оформления Firefox у оболочки нет).
+  const NAV_LABELS = { "category-sync": "Аккаунт", addonsButton: "Расширения" };
+
   /** Мелкие правки готовых блоков страницы; вызывается при каждом изменении дерева. */
   function tidy() {
+    for (const [id, label] of Object.entries(NAV_LABELS)) {
+      const el = document.getElementById(id);
+      if (el && (el.hasAttribute("data-l10n-id") || el.textContent !== label)) {
+        el.removeAttribute("data-l10n-id"); // иначе перевод вернёт прежнюю подпись
+        el.textContent = label;
+      }
+    }
     for (const [id, url] of Object.entries(SUPPORT_LINKS)) {
       const el = document.getElementById(id);
       if (el && el.localName === "moz-box-link" && el.getAttribute("href") !== url) {
@@ -202,7 +224,7 @@
     // Панели настроек создаются лениво и асинхронно: следим за деревом
     let queued = false;
     const mo = new MutationObserver(() => {
-      if (!document.getElementById("tabora-cookie-banners") || !document.getElementById("tabora-sleeping-tabs")) {
+      if (!document.getElementById("tabora-cookie-banners") || !document.getElementById("tabora-sleeping-tabs") || !document.getElementById("tabora-account")) {
         mount();
       }
       if (!queued) {

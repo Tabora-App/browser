@@ -1990,14 +1990,11 @@ var Tabora = {
       return hash === "aliases" ? "tabora://mail/aliases" : "tabora://mail";
     }
     if (spec.startsWith("about:preferences")) {
-      return "tabora://settings";
+      // раздел «Аккаунт» занимает место раздела Firefox «Аккаунт и синхронизация» (#sync)
+      return /#sync(-|$)/.test(spec) ? "tabora://settings/account" : "tabora://settings";
     }
     if (spec.startsWith(this.DOWNLOADS_URL)) {
       return "tabora://downloads";
-    }
-    if (this.ACCOUNT_URL && spec.startsWith(this.ACCOUNT_URL)) {
-      const tab = spec.split("#")[1] || "";
-      return tab && tab !== "profile" ? `tabora://account/${tab}` : "tabora://account";
     }
     return spec;
   },
