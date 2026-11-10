@@ -1116,8 +1116,14 @@ export const Vault = {
     if (password) {
       this._passwordSet();
     }
+    this._createdInSession = true;
     this._adopt(key);
     return true;
+  },
+
+  /** Сейф создан в этом сеансе работы браузера (а не прочитан с диска). */
+  get createdInSession() {
+    return !!this._createdInSession;
   },
 
   _passwordSet() {
@@ -1236,6 +1242,59 @@ export const Vault = {
   },
 
   /* ---------- разблокировка ---------- */
+
+  /** Новый сейф вместо прежнего, который нечем открыть: пароль аккаунта сбросили по письму, а
+   * прежнего пароля, ключа восстановления и ключа в связке системы нет. Прежний файл сейфа и
+   * всё, что зашифровано его ключом, остаются рядом под новым именем: если прежний пароль
+   * вспомнится, их можно вернуть на место вручную. Вызывается только при входе в аккаунт. */
+  async startOver({ password }) {
+    return this._exclusive(async () => {
+      await this._requireAccount();
+      if (this.state === "corrupt") {
+        throw new Error("Файл сейфа повреждён: выберите восстановление в разделе «Коды»");
+      }
+      if (!this.exists) {
+        throw new Error("Сейфа в этом профиле нет");
+      }
+      if (this.unlocked) {
+        throw new Error("Сейф открыт: заменять его незачем");
+      }
+      checkPasswordLength(password);
+      const tag = `vault-replaced-${stamp()}`;
+      const names = ["tabora-vault.json", "tabora-vault.json.bak", ...DEPENDENT_FILES, ...(await this._profileNames()).filter(n => OTP_CORRUPT_RE.test(n))];
+      const moved = [];
+      const putBack = async () => {
+        for (const path of moved.reverse()) {
+          await IOUtils.move(`${path}.${tag}`, path, { noOverwrite: true }).catch(e => console.error("Tabora vault: файл не возвращён на место", e));
+        }
+      };
+      try {
+        for (const name of names) {
+          const path = PathUtils.join(PathUtils.profileDir, name);
+          if (await IOUtils.exists(path)) {
+            await IOUtils.move(path, `${path}.${tag}`, { noOverwrite: true });
+            moved.push(path);
+          }
+        }
+      } catch (e) {
+        await putBack();
+        throw e;
+      }
+      Services.prefs.setBoolPref(REKEYED_PREF, true);
+      const before = { data: this.data, state: this.state };
+      this.data = null;
+      this.state = "absent";
+      this.notify("reset"); // модули сбрасывают данные в памяти
+      try {
+        return await this._create({ password, checkStrength: false });
+      } catch (e) {
+        await putBack();
+        this.data = before.data;
+        this.state = before.state;
+        throw e;
+      }
+    });
+  },
 
   /** Разблокировка через хранилище ключей системы. Без user — тихо; после явной блокировки
    * тихо не открывается. С user: true — системная проверка (Touch ID или пароль macOS);

@@ -35,7 +35,8 @@ window.TaboraAccountPane = (function () {
     ["exit", "Выход"],
   ];
 
-  const state = { tab: "profile", root: null, pane: null, devices: null, devicesFor: "", profiles: null, timer: null };
+  // security: настройки входа с сервера (null — ещё не загружены, { error } — сервер не ответил)
+  const state = { tab: "profile", root: null, pane: null, devices: null, devicesFor: "", profiles: null, security: null, timer: null };
 
   /* ---- Помощники разметки -------------------------------------------------- */
 
@@ -161,6 +162,7 @@ window.TaboraAccountPane = (function () {
         }))();
       });
       return [
+        signInGroup(),
         group("Пароль и восстановление", "Пароли сайтов, коды входа и почта на этом компьютере зашифрованы ключом сейфа. Открыть его можно паролем аккаунта или ключом восстановления.", [
           item("Пароль", "Один для входа в аккаунт и для сейфа. Меняются всегда вместе.", [button("Сменить пароль", shell(s => s.accountDialog("change")))]),
           item(
@@ -251,6 +253,75 @@ window.TaboraAccountPane = (function () {
     },
   };
 
+  /** Группа «Вход в аккаунт»: двухфакторная защита и резервный адрес. Их хранит сервер. */
+  function signInGroup() {
+    const sec = state.security;
+    const dialog = (step, opts) => shell(s => s.accountDialog(step, opts));
+    let twoFactor;
+    let backup;
+    if (!sec || sec.error) {
+      const text = sec?.error ? "Не удалось получить настройки с сервера. Проверьте соединение." : "Загружаем настройки с сервера.";
+      const retry = sec?.error ? [button("Повторить", () => loadSecurity(true))] : [];
+      twoFactor = item("Двухфакторная защита", text, retry);
+      backup = item("Резервный адрес", text);
+    } else if (sec.local || sec.unsupported) {
+      const later = sec.unsupported ? "Появится после обновления сервера Tabora." : "Появится, когда аккаунт подключат к серверу Tabora.";
+      twoFactor = item("Двухфакторная защита", later, [button("Включить", () => {}, { disabled: true })]);
+      backup = item("Резервный адрес", later, [button("Указать", () => {}, { disabled: true })]);
+    } else {
+      const on = sec.twoFactor.enabled;
+      const left = sec.twoFactor.backupCodes;
+      twoFactor = on
+        ? item("Двухфакторная защита", `Включена ${date(sec.twoFactor.since)}. Резервных кодов осталось: ${left}.`, [
+            button("Резервные коды", dialog("twofa-codes"), { type: left < 3 ? "primary" : "default" }),
+            button("Выключить", dialog("twofa-off")),
+          ])
+        : item("Двухфакторная защита", "Выключена: для входа достаточно пароля. С защитой понадобится ещё код из приложения на телефоне.", [button("Включить", dialog("twofa"), { type: "primary" })]);
+      const set = sec.backupEmail;
+      const pending = sec.backupEmailPending;
+      if (pending) {
+        backup = item("Резервный адрес", `${pending.address} ждёт подтверждения: введите код из письма.${set ? ` Пока действует прежний адрес ${set.address}.` : ""}`, [
+          button("Ввести код", dialog("bemail-code", { address: pending.address, twoFactor: on }), { type: "primary" }),
+          button("Другой адрес", dialog("bemail", { twoFactor: on })),
+        ]);
+      } else if (set) {
+        backup = item("Резервный адрес", `${set.address}. Сюда придёт код, если вы забудете пароль.${on ? "" : " Тот, кто получит этот ящик, сможет сбросить пароль аккаунта: включите двухфакторную защиту."}`, [
+          button("Изменить", dialog("bemail", { twoFactor: on })),
+          button("Удалить", dialog("bemail-off", { address: set.address, twoFactor: on })),
+        ]);
+      } else if (!sec.mail) {
+        backup = item("Резервный адрес", "Сервер сейчас не отправляет письма: указать адрес пока нельзя.", [button("Указать", () => {}, { disabled: true })]);
+      } else {
+        backup = item("Резервный адрес", "Не указан. На него придёт код, если вы забудете пароль; без него пароль вернёт только ключ восстановления.", [button("Указать", dialog("bemail", { twoFactor: on }))]);
+      }
+    }
+    return group("Вход в аккаунт", "Защита входа в аккаунт на сервере: с неё начинается доступ к почте, кошельку, кодам и паролям.", [twoFactor, backup]);
+  }
+
+  /** Настройки входа хранит сервер: читаются при открытии вкладки и после каждой перемены. */
+  async function loadSecurity(force = false) {
+    if (!Account.signedIn || (state.securityLoading && !force)) {
+      return;
+    }
+    state.securityLoading = true;
+    if (force) {
+      state.security = null;
+      render();
+    }
+    let result;
+    try {
+      result = await Account.security();
+    } catch (e) {
+      result = { error: e.message || String(e) };
+    }
+    state.securityLoading = false;
+    const changed = JSON.stringify(result) !== JSON.stringify(state.security);
+    state.security = result;
+    if (changed && state.tab === "security") {
+      render();
+    }
+  }
+
   /* ---- Отрисовка ----------------------------------------------------------- */
 
   function who() {
@@ -330,6 +401,9 @@ window.TaboraAccountPane = (function () {
     root.replaceChildren(who(), tabs(), panel);
     if (state.tab === "sync") {
       loadDevices();
+    }
+    if (state.tab === "security" && !state.security) {
+      loadSecurity();
     }
   }
 
@@ -435,11 +509,18 @@ window.TaboraAccountPane = (function () {
   });
 
   // аккаунт или сейф изменились (вход, выход, блокировка, новый ключ): перерисовать
-  const refresh = () => {
+  const refresh = (subject, topic, what) => {
     clearTimeout(state.timer);
     state.timer = setTimeout(() => {
       state.devices = null;
+      if (!Account.signedIn) {
+        state.security = null;
+      }
       render();
+      // перемена в аккаунте: настройки входа перечитываются в фоне, прежние видны до ответа
+      if (topic === Account.TOPIC && what !== "first-run" && state.tab === "security") {
+        loadSecurity();
+      }
     }, 60);
   };
   Services.obs.addObserver(refresh, Account.TOPIC);

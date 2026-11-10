@@ -284,6 +284,51 @@ class LocalBackend {
     return true;
   }
 
+  // двухфакторную защиту и резервный адрес хранит только сервер
+  async security() {
+    return { local: true, mail: false, twoFactor: { enabled: false, since: null, backupCodes: 0 }, backupEmail: null, backupEmailPending: null };
+  }
+
+  _noServer() {
+    throw Object.assign(new Error("Появится, когда аккаунт подключат к серверу Tabora"), { code: "no-server" });
+  }
+
+  async twoFactorSetup() {
+    this._noServer();
+  }
+
+  async twoFactorEnable() {
+    this._noServer();
+  }
+
+  async twoFactorDisable() {
+    this._noServer();
+  }
+
+  async twoFactorCodes() {
+    this._noServer();
+  }
+
+  async backupEmailSet() {
+    this._noServer();
+  }
+
+  async backupEmailVerify() {
+    this._noServer();
+  }
+
+  async backupEmailRemove() {
+    this._noServer();
+  }
+
+  async resetEmailStart() {
+    this._noServer();
+  }
+
+  async resetEmailConfirm() {
+    this._noServer();
+  }
+
   async devices({ email }) {
     const d = await this._load();
     return Object.entries(d.users[email]?.devices || {}).map(([id, v]) => ({ id, ...v }));
@@ -427,6 +472,49 @@ class HttpBackend {
 
   resetPassword({ email, nonce, recoveryProof, legacyRecoveryProof, newRecoveryVerifier, newLoginHash, kdf }) {
     return this._call("POST", "/v1/account/reset", { email, nonce, recoveryProof, legacyRecoveryProof: legacyRecoveryProof || undefined, newRecoveryVerifier, newLoginHash, kdf });
+  }
+
+  /* Настройки входа: двухфакторная защита (коды приложения и резервные коды) и резервный
+   * адрес, на который приходит код сброса пароля. Перемены требуют хеш входа заново, а при
+   * включённой защите — ещё и её код (code). */
+  security({ session }) {
+    return this._call("GET", "/v1/account/security", null, session?.token);
+  }
+
+  twoFactorSetup({ session, loginHash }) {
+    return this._call("POST", "/v1/account/2fa/setup", { loginHash }, session?.token);
+  }
+
+  twoFactorEnable({ session, code }) {
+    return this._call("POST", "/v1/account/2fa/enable", { code }, session?.token);
+  }
+
+  twoFactorDisable({ session, loginHash, code }) {
+    return this._call("POST", "/v1/account/2fa/disable", { loginHash, code }, session?.token);
+  }
+
+  twoFactorCodes({ session, loginHash, code }) {
+    return this._call("POST", "/v1/account/2fa/codes", { loginHash, code }, session?.token);
+  }
+
+  backupEmailSet({ session, loginHash, code, address }) {
+    return this._call("POST", "/v1/account/backup-email", { loginHash, code: code || undefined, address }, session?.token);
+  }
+
+  backupEmailVerify({ session, code }) {
+    return this._call("POST", "/v1/account/backup-email/verify", { code }, session?.token);
+  }
+
+  backupEmailRemove({ session, loginHash, code }) {
+    return this._call("POST", "/v1/account/backup-email/remove", { loginHash, code: code || undefined }, session?.token);
+  }
+
+  resetEmailStart({ email }) {
+    return this._call("POST", "/v1/account/reset/email", { email });
+  }
+
+  resetEmailConfirm({ email, code, newLoginHash, kdf, totp, deviceId, deviceName }) {
+    return this._call("POST", "/v1/account/reset/email/confirm", { email, code, newLoginHash, kdf, totp: totp || undefined, deviceId, deviceName });
   }
 
   logout({ session }) {
@@ -673,10 +761,34 @@ export const Account = {
     return Math.max(Number(kdf) === 1 ? 1 : KDF_CURRENT, this._kdfFloor(email));
   },
 
+  /** Сейф без пароля, который в этом же сеансе создало для себя хранилище паролей и в котором
+   * ещё ничего нет (так выглядит свежий профиль): защищать в нём нечего, проверка владельца
+   * была бы только лишним системным окном при создании аккаунта. Любое сомнение — не пустой. */
+  async _vaultIsBlank() {
+    try {
+      if (!Vault.createdInSession || !Vault.unlocked || Vault.hasPassword || Vault.hasRecoveryKey || Vault.rekeyPending) {
+        return false;
+      }
+      for (const name of ["tabora-otp.json", "tabora-otp.json.bak", "tabora-mail.json", "tabora-agent.json", "tabora-wallet.json"]) {
+        if (await IOUtils.exists(PathUtils.join(PathUtils.profileDir, name))) {
+          return false;
+        }
+      }
+      await Services.logins.initializationPromise;
+      return (await Services.logins.getAllLogins()).length === 0;
+    } catch (e) {
+      return false;
+    }
+  },
+
   /** Системная проверка владельца перед тем, как задать мастер-пароль существующему сейфу
    * без пароля: иначе любой, кто сел за открытый браузер, вошёл бы в свой аккаунт и получил
-   * пароль от чужого сейфа (и возможность унести его файл). */
+   * пароль от чужого сейфа (и возможность унести его файл). Пустому сейфу, созданному в этом
+   * же сеансе, она не нужна (_vaultIsBlank). */
   async _confirmVaultOwner() {
+    if (await this._vaultIsBlank()) {
+      return;
+    }
     if (!(await Vault.confirmOwner("задать мастер-пароль сейфа Tabora"))) {
       throw Object.assign(new Error("Сейф этого компьютера уже создан. Чтобы задать ему пароль аккаунта, подтвердите, что вы владелец компьютера (Touch ID или пароль системы)"), { code: "owner-check" });
     }
@@ -974,7 +1086,15 @@ export const Account = {
     return this._entering(() => this._login(emailInput, password, opts));
   },
 
-  async _login(emailInput, password, { vaultPassword = null } = {}) {
+  /** opts: totp — код двухфакторной защиты (приложение или резервный код);
+   * vaultPassword — прежний пароль сейфа, если он отличается от пароля аккаунта;
+   * vaultOpen — чем открыть сейф, когда прежний пароль забыт (после сброса по письму):
+   *   { via: "os" } — проверкой системы, { via: "recovery", key } — ключом восстановления,
+   *   { via: "fresh" } — начать с пустого сейфа (прежний остаётся на диске под другим именем).
+   * В профиле своего аккаунта сейф при этом только переходит на новый пароль: ключ K и ключ
+   * восстановления остаются прежними. K меняется лишь тогда, когда первый аккаунт принимает
+   * сейф, созданный до него под другим паролем (_rebindVault). */
+  async _login(emailInput, password, { vaultPassword = null, totp = "", vaultOpen = null } = {}) {
     await this.ready();
     await Vault.guard.check();
     const email = this.normalizeEmail(emailInput);
@@ -990,39 +1110,52 @@ export const Account = {
       const linked = await this._linkToServer(password);
       return { email, rebound: false, recoveryKey: null, rekeyComplete: true, recoveryNeedsUpgrade: this.recoveryNeedsUpgrade, linked: linked.created };
     }
-    const deviceId = this.deviceId();
-    const deviceName = this.deviceName();
-    this._step("Проверяем пароль");
-    const kdf = await this._kdfFor(email);
-    const loginHash = await this.loginHash(email, password, kdf);
-    this._step("Входим в аккаунт");
-    let r;
-    try {
-      r = await this.backend.login({ email, loginHash, deviceId, deviceName });
-    } catch (e) {
-      if (e.code === "bad-credentials") {
-        await Vault.guard.fail();
-      }
-      throw e;
-    }
-    // Счётчик попыток здесь не сбрасывается: успешный вход в аккаунт на сервере ничего не
-    // говорит о пароле сейфа этого компьютера. Сбросит его только пароль, подошедший к сейфу.
-    let usedKdf = Math.max(Number(r.kdf) || kdf, kdf);
-    if (usedKdf < KDF_CURRENT) {
-      // аккаунт создан со слабым хешем входа: заменяем его сразу после успешного входа
+    let pending = this._takePending(email, password);
+    if (!pending) {
+      await this._dropPending();
+      const deviceId = this.deviceId();
+      const deviceName = this.deviceName();
+      this._step("Проверяем пароль");
+      const kdf = await this._kdfFor(email);
+      const loginHash = await this.loginHash(email, password, kdf);
+      this._step("Входим в аккаунт");
+      let r;
       try {
-        const newLoginHash = await this.loginHash(email, password, KDF_CURRENT);
-        await this.backend.upgradeLogin({ email, session: r.session, oldLoginHash: loginHash, newLoginHash, kdf: KDF_CURRENT });
-        usedKdf = KDF_CURRENT;
+        r = await this.backend.login({ email, loginHash, deviceId, deviceName, totp: totp || undefined });
       } catch (e) {
-        console.error("Tabora account: хеш входа не обновлён, повторим при следующем входе", e);
+        if (e.code === "bad-credentials") {
+          await Vault.guard.fail();
+        }
+        throw e;
       }
+      // Счётчик попыток здесь не сбрасывается: успешный вход в аккаунт на сервере ничего не
+      // говорит о пароле сейфа этого компьютера. Сбросит его только пароль, подошедший к сейфу.
+      let usedKdf = Math.max(Number(r.kdf) || kdf, kdf);
+      if (usedKdf < KDF_CURRENT) {
+        // аккаунт создан со слабым хешем входа: заменяем его сразу после успешного входа
+        try {
+          const newLoginHash = await this.loginHash(email, password, KDF_CURRENT);
+          await this.backend.upgradeLogin({ email, session: r.session, oldLoginHash: loginHash, newLoginHash, kdf: KDF_CURRENT });
+          usedKdf = KDF_CURRENT;
+        } catch (e) {
+          console.error("Tabora account: хеш входа не обновлён, повторим при следующем входе", e);
+        }
+      }
+      this._noteKdf(email, usedKdf);
+      pending = this._keepPending(email, password, r, usedKdf);
     }
-    this._noteKdf(email, usedKdf);
+    const { r, usedKdf } = pending;
     this._step("Открываем сейф");
     let rebound = null;
+    let fresh = false;
     await Vault.ready();
-    if (vaultPassword && Vault.exists && Vault.hasPassword) {
+    if (vaultPassword && !vaultOpen && this.data?.email === email) {
+      vaultOpen = { via: "password", password: vaultPassword };
+    }
+    const mismatch = Vault.exists && Vault.hasPassword && vaultOpen && !(await Vault.verifyPassword(password, { count: false }).then(() => true, e => (e.code === "bad-password" ? false : Promise.reject(e))));
+    if (mismatch) {
+      fresh = await this._openForgottenVault(vaultOpen, password);
+    } else if (vaultPassword && Vault.exists && Vault.hasPassword) {
       // Владелец назвал пароль сейфа: сначала проверяется он (это и есть попытка), и только
       // после этого пароль аккаунта сверяется с сейфом без счёта — владение уже доказано.
       await Vault.verifyPassword(vaultPassword).catch(e => {
@@ -1052,13 +1185,94 @@ export const Account = {
     }
     await this._setMailAccess(r.mail);
     await this.save("signed-in");
+    this._dropPending({ revoke: false }); // сессия стала сессией аккаунта
     this.markFirstRunDone();
     let recoveryKey = null;
     if (rebound) {
       recoveryKey = rebound.recoveryKey;
       await this.registerRecoveryKey(recoveryKey);
+    } else if (fresh) {
+      // у нового сейфа ключа восстановления ещё нет, а прежний к нему не подходит
+      try {
+        recoveryKey = await this.createRecoveryKey({ password });
+      } catch (e) {
+        console.error("Tabora account: ключ восстановления не создан", e);
+      }
     }
-    return { email, rebound: !!rebound, recoveryKey, rekeyComplete: rebound ? rebound.complete : true, recoveryNeedsUpgrade: this.recoveryNeedsUpgrade };
+    return { email, rebound: !!rebound, fresh, recoveryKey, rekeyComplete: rebound ? rebound.complete : true, recoveryNeedsUpgrade: this.recoveryNeedsUpgrade };
+  },
+
+  /* Сервер уже впустил, а сейф ещё не открыт (он под прежним паролем): сессия ждёт здесь, в
+   * памяти, пока человек выбирает, чем открыть сейф. Повторный вход с тем же паролем к серверу
+   * не обращается: одноразовый код двухфакторной защиты не нужен второй раз. Не дождавшись,
+   * сессия отзывается. Пароль не хранится: только его метка под случайным ключом процесса. */
+  _pending: null,
+
+  _passwordTag(email, password) {
+    this._tagKey ||= randomBytes(32);
+    return bytesToHex(hmac(sha256, this._tagKey, utf8ToBytes(`${email}|${password}`)));
+  },
+
+  _takePending(email, password) {
+    const p = this._pending;
+    return p && p.email === email && Date.now() - p.at < 10 * 60000 && sameHex(p.tag, this._passwordTag(email, password)) ? p : null;
+  },
+
+  _keepPending(email, password, r, usedKdf) {
+    clearTimeout(this._pendingTimer);
+    this._pending = { email, tag: this._passwordTag(email, password), r, usedKdf, at: Date.now() };
+    this._pendingTimer = setTimeout(() => this._dropPending(), 10 * 60000);
+    return this._pending;
+  },
+
+  /** Забыть ожидающую сессию; revoke — отозвать её на сервере (вход не довели до конца). */
+  async _dropPending({ revoke = true } = {}) {
+    const p = this._pending;
+    this._pending = null;
+    clearTimeout(this._pendingTimer);
+    if (p && revoke) {
+      try {
+        await this.backend.logout({ session: p.r.session });
+      } catch (e) {}
+    }
+  },
+
+  /** Окно входа закрыли, не открыв сейф: выданная сервером сессия не нужна. */
+  cancelLogin() {
+    return this._dropPending();
+  },
+
+  /** Пароль аккаунта сменили, а сейф под прежним: сейф открывается прежним паролем или, если
+   * тот забыт, иным способом и переходит на пароль аккаунта. Ключ K при этом не меняется, прежний ключ восстановления
+   * продолжает действовать. Возвращает true, если вместо прежнего сейфа создан новый. */
+  async _openForgottenVault({ via, key = "", password: previous = "" }, password) {
+    if (via === "password") {
+      // прежний пароль помнят: это обычная попытка открыть сейф, она считается
+      await Vault.unlockWithPassword(previous).catch(e => {
+        throw e.code === "bad-password" ? new Error("Неверный прежний пароль сейфа") : e;
+      });
+    } else if (via === "os") {
+      if (!Vault.hasOsKey || !Vault.osUnlockEnabled) {
+        throw new Error("На этом компьютере сейф не открывается проверкой системы");
+      }
+      if (!(await Vault.unlock({ user: true, prompt: "открыть сейф Tabora после смены пароля аккаунта" }))) {
+        throw Object.assign(new Error("Проверка системы не пройдена"), { code: "owner-check" });
+      }
+    } else if (via === "recovery") {
+      await Vault.unlockWithRecoveryKey(key);
+    } else if (via === "fresh") {
+      const askAtStart = !Vault.osUnlockEnabled;
+      await Vault.startOver({ password });
+      if (askAtStart) {
+        // прежний сейф спрашивал пароль при запуске: новый не должен быть слабее
+        await Vault.setOsUnlock(false).catch(e => console.error("Tabora account: настройка разблокировки не перенесена", e));
+      }
+      return true;
+    } else {
+      throw new Error("Неизвестный способ открыть сейф");
+    }
+    await Vault.setPassword(password, { checkStrength: false });
+    return false;
   },
 
   /** Смена пароля аккаунта и мастер-пароля сейфа вместе. rotate: true — заодно сменить ключ
@@ -1140,10 +1354,11 @@ export const Account = {
     const newLoginHash = await this.loginHash(this.email, newPassword, KDF_CURRENT);
     const signer = Vault.recoverySigner(recoveryKey);
     const legacyKey = this.data.recoveryScheme === "ed25519" ? null : Vault.recoveryAuthKey(recoveryKey);
+    let reset = null;
     try {
       const { nonce } = await this.backend.resetChallenge({ email: this.email });
       const n = String(nonce || "");
-      await this.backend.resetPassword({
+      reset = await this.backend.resetPassword({
         email: this.email,
         nonce,
         recoveryProof: bytesToHex(signer.sign(resetMessage(this.email, newLoginHash, n))),
@@ -1177,7 +1392,117 @@ export const Account = {
       // сброс заканчивается входом: без него сейф закрылся бы обратно
       await this._login(this.email, newPassword);
     }
-    return true;
+    return { twoFactorDisabled: !!reset?.twoFactorDisabled };
+  },
+
+  /* ---- настройки входа: двухфакторная защита и резервный адрес (хранит сервер) ----------- */
+
+  /** { local?, mail, twoFactor: { enabled, since, backupCodes }, backupEmail: { address, since } | null,
+   * backupEmailPending: { address, expiresAt } | null }. local — аккаунт не на сервере. */
+  async security() {
+    await this.ready();
+    const local = { local: true, mail: false, twoFactor: { enabled: false, since: null, backupCodes: 0 }, backupEmail: null, backupEmailPending: null };
+    if (this.needsServerLink) {
+      return local;
+    }
+    try {
+      return await this.backend.security({ session: this._session() });
+    } catch (e) {
+      if (e.status === 404) {
+        // сервер прежней версии этих настроек не знает
+        return { ...local, local: false, unsupported: true };
+      }
+      throw e;
+    }
+  },
+
+  /** Хеш входа для повторной проверки пароля перед переменой в настройках входа. */
+  async _reauth(password) {
+    await this.ready();
+    const session = this._session();
+    if (!password) {
+      throw new Error("Введите пароль");
+    }
+    this._step("Проверяем пароль");
+    const loginHash = await this.loginHash(this.email, password, await this._kdfFor(this.email));
+    return { session, loginHash };
+  },
+
+  /** Начало настройки: { secret, uri } для приложения кодов. Защита включится первым кодом. */
+  async twoFactorSetup(password) {
+    return this.backend.twoFactorSetup(await this._reauth(password));
+  },
+
+  /** Возвращает { backupCodes }: резервные коды показываются один раз. */
+  async twoFactorEnable(code) {
+    await this.ready();
+    return this._securityChanged(await this.backend.twoFactorEnable({ session: this._session(), code }));
+  },
+
+  async twoFactorDisable(password, code) {
+    return this._securityChanged(await this.backend.twoFactorDisable({ ...(await this._reauth(password)), code }));
+  },
+
+  async twoFactorCodes(password, code) {
+    return this._securityChanged(await this.backend.twoFactorCodes({ ...(await this._reauth(password)), code }));
+  },
+
+  /** На адрес уходит код; резервным он становится после backupEmailVerify. */
+  async backupEmailSet(password, address, code = "") {
+    return this._securityChanged(await this.backend.backupEmailSet({ ...(await this._reauth(password)), address: String(address || "").trim(), code }));
+  },
+
+  async backupEmailVerify(code) {
+    await this.ready();
+    return this._securityChanged(await this.backend.backupEmailVerify({ session: this._session(), code }));
+  },
+
+  async backupEmailRemove(password, code = "") {
+    return this._securityChanged(await this.backend.backupEmailRemove({ ...(await this._reauth(password)), code }));
+  },
+
+  /** Настройки входа изменились: раздел «Безопасность» перечитывает их с сервера. */
+  _securityChanged(result) {
+    this.notify("security");
+    return result;
+  },
+
+  /** Сброс забытого пароля по коду из письма на резервный адрес. Сервер отвечает одинаково,
+   * есть у аккаунта резервный адрес или нет. */
+  async resetByEmailStart(emailInput) {
+    await this.ready();
+    const email = this.normalizeEmail(emailInput);
+    if (this.data?.email && this.data.email !== email) {
+      throw bound(`Этот профиль принадлежит аккаунту ${this.data.email}`, { email });
+    }
+    await this.backend.resetEmailStart({ email });
+    return { email };
+  },
+
+  /** Новый пароль аккаунта по коду из письма. Сейф при этом остаётся под прежним паролем:
+   * сервер его ключа не знает. Его открывают при входе (login, vaultOpen). */
+  async resetByEmailConfirm(emailInput, code, newPassword, { totp = "" } = {}) {
+    await this.ready();
+    const email = this.normalizeEmail(emailInput);
+    checkPassword(newPassword);
+    this._step("Защищаем пароль");
+    const newLoginHash = await this.loginHash(email, newPassword, KDF_CURRENT);
+    this._step("Меняем пароль");
+    const r = await this.backend.resetEmailConfirm({ email, code, newLoginHash, kdf: KDF_CURRENT, totp, deviceId: this.deviceId(), deviceName: this.deviceName() });
+    this._noteKdf(email, KDF_CURRENT);
+    if (this.data?.email === email && this.data.session) {
+      // сервер завершил все сессии: здесь аккаунт тоже вышел
+      this.data.session = null;
+      delete this.data.mailAccess;
+      await this.save("signed-out");
+      await Vault.lock();
+    }
+    await this._dropPending();
+    if (r?.session) {
+      // сервер сразу выдал сессию этому устройству: вход продолжится с неё (login)
+      this._keepPending(email, newPassword, r, KDF_CURRENT);
+    }
+    return { email };
   },
 
   /** Выход: сессия удаляется, сейф блокируется. Пароли сайтов, коды, кошелёк и почта закрыты
