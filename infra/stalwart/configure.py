@@ -35,7 +35,8 @@ ZONE_FILE = f"/etc/tabora/dns-{DOMAIN}.zone"
 POSTMASTER_ENV = "/etc/tabora/postmaster.env"      # root:root 600, ящик postmaster@ (служебная почта)
 PRIVILEGED_STATE = "/var/lib/tabora/privileged.json"  # привилегированные учётки на момент apply
 # служебные адреса (RFC 2142, требования Let's Encrypt и почтовых провайдеров) — алиасы ящика postmaster
-POSTMASTER_ALIASES = ("abuse", "hostmaster", "security", "webmaster")
+# hello@ указан на сайте как адрес для связи
+POSTMASTER_ALIASES = ("abuse", "hostmaster", "security", "webmaster", "hello")
 DAY_MS = 86400 * 1000
 # Сроки встроенных банов Stalwart (x:Security). По умолчанию null — бан навсегда: адреса
 # переходят к другим людям, а список растёт без конца.

@@ -39,31 +39,46 @@ API аккаунтов и синхронизации (`tabora-server`, PostgreSQ
 | `backup.env` | `root 600` | `RESTIC_REPOSITORY`, `RESTIC_PASSWORD` (и ключи S3). **Пароль хранить и вне сервера** |
 | `backup_ed25519(.pub)` | `root 600` / `644` | ключ SSH для sftp-хранилища копий (не в `~/.ssh`) |
 | `alert.env` | `root 600` | `ALERT_URL`, `ALERT_FORMAT`, `ALERT_TOKEN` — оповещения мониторинга |
-| `postmaster.env` | `root 600` | логин и пароль ящика `postmaster@` (алиасы `abuse@`, `hostmaster@`, `security@`, `webmaster@`) |
+| `postmaster.env` | `root 600` | логин и пароль ящика `postmaster@` (алиасы `abuse@`, `hostmaster@`, `security@`, `webmaster@`, `hello@`) |
 | `/etc/cloudflared/<id>.json` | `root 600` | учётные данные туннеля (службе передаются через `LoadCredential`) |
 
 Файлы создаются с правами до записи; секреты не передаются в аргументах команд (`ps` их не видит).
 
 ## Ввод в строй
 
+Сделано 10 ноября 2026: домен `tabora.app` зарегистрирован в Namesilo (автопродление, данные владельца
+скрыты), зона в Cloudflare (серверы имён `emerie` и `norm`), DNSSEC включён (DS передан регистратору),
+сертификат почтового хоста выпущен, почтовые записи опубликованы, почта ходит в обе стороны. Порядок
+на случай повторения:
+
 1. `infra/deploy.sh setup`.
-2. Купить домен, добавить зону в Cloudflare, включить DNSSEC.
-3. Создать в Cloudflare (My Profile › API Tokens › Create Custom Token) два токена:
+2. Купить домен, добавить зону в Cloudflare, прописать у регистратора выданные Cloudflare серверы имён.
+   После активации зоны включить DNSSEC и передать регистратору запись DS из Cloudflare.
+3. Создать в Cloudflare два токена (My Profile › API Tokens › Create Custom Token или `POST /user/tokens`):
    - **tabora-setup** — Account › Cloudflare Tunnel › Edit; Zone › DNS › Edit, зона только tabora.app.
-     Временный: нужен `setup-tunnel.sh` и первому `dns.sh`.
+     Временный (срок сутки): нужен `setup-tunnel.sh` и первому `dns.sh`.
    - **tabora-certbot** — Zone › DNS › Edit, зона только tabora.app. Постоянный: продление сертификатов
      и повторные `dns.sh`.
-4. На сервере вписать значения в уже созданные файлы (редактором, не командой `echo` — токен попадёт
-   в историю): `ssh tabora`, `nano /etc/tabora/cloudflare.env` (`CF_ACCOUNT_ID`, `CF_ZONE_ID`,
-   `CF_API_TOKEN` = tabora-setup), `nano /etc/tabora/certbot-cloudflare.ini` (tabora-certbot).
+
+   Обоим токенам задано условие «только с адресов сервера» (Client IP Address Filtering: IPv4 и /64
+   IPv6): с другой машины они не работают. После переезда на новый адрес токен certbot выпустить заново.
+4. На сервере вписать значения в уже созданные файлы (редактором или через stdin, не командой `echo` —
+   токен попадёт в историю): `/etc/tabora/cloudflare.env` (`CF_ACCOUNT_ID`, `CF_ZONE_ID`,
+   `CF_API_TOKEN` = tabora-setup), `/etc/tabora/certbot-cloudflare.ini` (tabora-certbot).
 5. `infra/deploy.sh tunnel` — туннель, CNAME сайта и API, служба `cloudflared`.
 6. `infra/deploy.sh tls` — сертификат `mx`, `autoconfig`, `autodiscover`, `mta-sts` (DNS-01), nginx на 443,
    сертификат в Stalwart, хук продления. Имена сайта и API не выпускаются (им сертификат не нужен).
 7. `infra/deploy.sh dns` — A/AAAA `mx`, MX, SPF, DKIM, DMARC, MTA-STS, TLS-RPT, SRV, автонастройка.
-8. PTR в Hetzner Console: IPv4 и IPv6 сервера → `mx.tabora.app`.
-9. Удалить строку `CF_API_TOKEN` из `cloudflare.env` и отозвать токен tabora-setup в Cloudflare:
-   туннелю он не нужен, `dns.sh` дальше работает с токеном certbot.
-10. Через неделю без отчётов TLS-RPT перевести `infra/mta-sts/mta-sts.txt` в `mode: enforce`.
+8. `infra/deploy.sh site` и `infra/deploy.sh downloads` — сайт и установщик из `.build/signed`.
+9. PTR в Hetzner Console: IPv4 и IPv6 сервера → `mx.tabora.app`. У IPv6 записи по умолчанию нет вовсе,
+   а без неё Gmail и другие отклоняют письма с этого адреса (исходящая почта идёт сначала по IPv4).
+10. Удалить строку `CF_API_TOKEN` из `cloudflare.env` и отозвать токен tabora-setup в Cloudflare:
+    туннелю он не нужен, `dns.sh` дальше работает с токеном certbot.
+11. Через неделю без отчётов TLS-RPT перевести `infra/mta-sts/mta-sts.txt` в `mode: enforce`.
+
+Настройки зоны в Cloudflare: Always Use HTTPS, минимальный TLS 1.2, режим SSL «Full (strict)».
+Проверка доставки: письмо с `postmaster@` на `check-auth@verifier.port25.com` возвращает отчёт
+SPF/DKIM (подпись Ed25519 старые проверяющие не понимают, поэтому писем подписей две — вторая RSA).
 
 ## Stalwart: учётки и доступ
 
@@ -99,7 +114,8 @@ API аккаунтов и синхронизации (`tabora-server`, PostgreSQ
   `stalwart.env` его нет. Он появляется только на время создания постоянного администратора
   (`setup.sh` делает это сам, если `stalwart-admin.env` нет или пароль не подходит) и сразу убирается.
 
-- **postmaster@** — обычный ящик (роль User) с алиасами `abuse`, `hostmaster`, `security`, `webmaster`;
+- **postmaster@** — обычный ящик (роль User) с алиасами `abuse`, `hostmaster`, `security`, `webmaster`,
+  `hello` (адрес для связи на сайте);
   пароль в `postmaster.env`, читать по IMAP/JMAP после включения TLS.
 - **Шифрование почты на диске** (`encryptionAtRest`) у новых учёток `Disabled` (проверено), общий
   выключатель `x:Encryption.atRestEnable` включён, но настройки «включать всем» в Stalwart нет: нужен
