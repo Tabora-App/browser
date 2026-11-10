@@ -346,12 +346,17 @@ var Tabora = {
     const $ = id => document.getElementById(id);
     const box = this.compose.box;
     const from = $("tabora-compose-from");
-    from.replaceChildren(this.html("option", { value: ACCOUNT.address }, ACCOUNT.address));
-    for (const a of MailStore.aliases.filter(a => a.on)) {
-      from.append(this.html("option", { value: a.address, "data-note": a.site }, a.address));
+    const senders = MailStore.senders();
+    if (!senders.length) {
+      const { Account } = this.accountMod();
+      this.notice(Account.needsServerLink ? "Писать пока не с чего: подключите аккаунт к серверу или добавьте ящик в почте" : "Писать пока не с чего: добавьте ящик в почте");
+      return;
     }
+    // адреса отправителя: ящик аккаунта, его включённые алиасы, внешние ящики
+    from.replaceChildren(...senders.map(s => this.html("option", { value: s.address, "data-note": s.note }, s.address)));
+    from.value = ACCOUNT.address;
     from._tsel?.refresh();
-    this.compose.state = { to: [], attachments: [], draftId: null, thread: null, labels: [] };
+    this.compose.state = { to: [], attachments: [], draftId: null, thread: null, labels: [], replyTo: null };
     $("tabora-compose-chips").querySelectorAll(".chip").forEach(n => n.remove());
     $("tabora-compose-to").value = "";
     $("tabora-compose-cc").value = "";
@@ -360,14 +365,16 @@ var Tabora = {
     $("tabora-compose-text").value = "";
     $("tabora-compose-attachments").replaceChildren();
     $("tabora-compose-title").textContent = "Новое письмо";
-    $("tabora-compose-status").textContent = "Черновик сохраняется автоматически";
+    $("tabora-compose-status").textContent = "Черновик сохраняется на этом компьютере";
+    $("tabora-compose-send").disabled = false;
 
     const when = iso => new Date(iso).toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
-    const text = m => (m.body || []).map(b => b.p || b.h || b.code || "").filter(Boolean).join("\n");
+    const text = m => (m.body || []).map(b => b.p || b.h || b.q || b.code || b.btn || "").filter(Boolean).join("\n");
     if (opts.replyTo) {
       const m = MailStore.byId(opts.replyTo);
       if (m) {
-        this.addRecipient(m.from.email);
+        this.addRecipient(m.replyTo || m.from.email);
+        this.compose.state.replyTo = m.id;
         $("tabora-compose-subject").value = m.subject.startsWith("Re:") ? m.subject : `Re: ${m.subject}`;
         $("tabora-compose-text").value = `\n\n${when(m.date)}, ${m.from.name} <${m.from.email}>:\n> ${text(m).split("\n")[0]}`;
         $("tabora-compose-title").textContent = `Ответ: ${m.from.name}`;
@@ -384,7 +391,8 @@ var Tabora = {
         $("tabora-compose-subject").value = `Fwd: ${m.subject}`;
         $("tabora-compose-text").value = `\n\n---------- Пересланное письмо ----------\nОт: ${m.from.name} <${m.from.email}>\nДата: ${when(m.date)}\nТема: ${m.subject}\n\n${text(m)}`;
         $("tabora-compose-title").textContent = "Переслать";
-        this.compose.state.attachments = (m.attachments || []).map(a => ({ ...a }));
+        // вложения исходного письма берутся с сервера в момент отправки
+        this.compose.state.attachments = m.at?.uid ? (m.attachments || []).map((a, index) => ({ name: a.name, size: a.size, source: { id: m.id, index } })) : [];
       }
     } else if (opts.draftId) {
       const m = MailStore.byId(opts.draftId);
@@ -441,6 +449,7 @@ var Tabora = {
     return {
       id: s.draftId || `d${Date.now()}`, thread: s.thread || `td${Date.now()}`, folder: "drafts", unread: false, starred: false,
       labels: s.labels || [], from: { name: "Я", email: $("tabora-compose-from").value }, to: s.to.slice(), alias: $("tabora-compose-from").value,
+      cc: $("tabora-compose-cc").value.split(/[,;\s]+/).map(v => v.trim()).filter(Boolean), replyTo: s.replyTo || undefined,
       date: new Date().toISOString(), subject: $("tabora-compose-subject").value.trim(), body: text.split(/\n{2,}/).filter(Boolean).map(p => ({ p })),
       attachments: s.attachments.slice(), draft: true,
     };
@@ -520,16 +529,61 @@ var Tabora = {
       this.notice(`Проверьте адрес: ${bad}`);
       return;
     }
-    clearTimeout(this.compose.draftTimer);
-    const message = { ...this.composeDraft(), id: `s${Date.now()}`, thread: s.thread || `ts${Date.now()}`, folder: "sent", draft: false };
-    message.subject ||= "(без темы)";
-    if (s.draftId) {
-      MailStore.remove(s.draftId);
+    const draft = this.composeDraft();
+    const badCc = draft.cc.find(v => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v));
+    if (badCc) {
+      this.notice(`Проверьте адрес в копии: ${badCc}`);
+      return;
     }
-    MailStore.add(message);
-    this.compose.box.hidden = true;
-    this.compose.state = null;
-    this.notice(`Отправлено: ${message.to.join(", ")}`);
+    clearTimeout(this.compose.draftTimer);
+    const button = $("tabora-compose-send");
+    const status = $("tabora-compose-status");
+    if (button.disabled) {
+      return;
+    }
+    button.disabled = true;
+    status.textContent = "Отправляем…";
+    MailStore.send({ ...draft, subject: draft.subject || "(без темы)", thread: s.thread || undefined }).then(
+      () => {
+        if (s.draftId) {
+          MailStore.remove(s.draftId);
+        }
+        // окно могли успеть открыть для другого письма: закрываем только своё
+        if (this.compose.state === s) {
+          this.compose.box.hidden = true;
+          this.compose.state = null;
+        }
+        button.disabled = false;
+        this.notice(`Отправлено: ${draft.to.join(", ")}`);
+      },
+      e => {
+        button.disabled = false;
+        status.textContent = "Не отправлено: письмо осталось в окне";
+        this.notice(`Письмо не отправлено. ${e.message}`);
+      }
+    );
+  },
+
+  /** Вложение письма сохраняется в «Загрузки» через загрузки браузера: с его проверками и
+   * отметкой карантина macOS, как у файла, скачанного с сайта. Возвращает имя сохранённого файла. */
+  async saveMailAttachment(id, index) {
+    const { MailStore } = this.mail();
+    const { Downloads } = ChromeUtils.importESModule("resource://gre/modules/Downloads.sys.mjs");
+    const got = await MailStore.attachment(id, index);
+    // имя из письма: только имя файла, без путей и управляющих знаков
+    const clean = String(got.name || "вложение").replace(/[\u0000-\u001f\u007f/\\:]/g, "_").replace(/^\.+/, "").slice(0, 120) || "вложение";
+    const tmp = await IOUtils.createUniqueFile(PathUtils.tempDir, "tabora-mail-attachment", 0o600);
+    try {
+      await IOUtils.write(tmp, got.bytes);
+      const dir = await Downloads.getPreferredDownloadsDirectory();
+      const target = await IOUtils.createUniqueFile(dir, clean, 0o600);
+      const download = await Downloads.createDownload({ source: { url: PathUtils.toFileURI(tmp) }, target });
+      (await Downloads.getList(Downloads.PUBLIC)).add(download);
+      await download.start();
+      return PathUtils.filename(target);
+    } finally {
+      IOUtils.remove(tmp, { ignoreAbsent: true }).catch(() => {});
+    }
   },
 
   /** Короткое уведомление оболочки внизу окна. */

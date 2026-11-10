@@ -1534,6 +1534,8 @@ Object.assign(Tabora, {
           set("tabora-compose-text", body);
           return { ok: true, note: "окно письма открыто, отправит пользователь" };
         }
+        // код мог прийти секунду назад: перед чтением сверяемся с сервером
+        await MailStore.sync().catch(() => {});
         const msgs = MailStore.messages.filter(m => m.folder === "inbox").sort((x, y) => new Date(y.date) - new Date(x.date));
         if (action === "find_code") {
           const needle = cleanSite(site);
@@ -1550,7 +1552,7 @@ Object.assign(Tabora, {
         if (!(await this.agentSignedIn())) {
           return noAccount();
         }
-        const { MailStore, ACCOUNT } = this.mail();
+        const { MailStore } = this.mail();
         await MailStore.ready();
         const host = aliasHost(site);
         if (!host) {
@@ -1559,16 +1561,17 @@ Object.assign(Tabora, {
         if (!(await gate(aliasItem(host)))) {
           return declined();
         }
-        const base = (host.split(".")[0] || "site").replace(/[^a-z0-9]/g, "").slice(0, 12) || "site";
         const existing = MailStore.aliases.find(x => x.site === host && x.on);
         if (existing) {
           return { address: existing.address, existed: true };
         }
-        const rnd = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => "abcdefghjkmnpqrstuvwxyz23456789"[b % 31]).join("");
-        const address = `${base}-${rnd}@${ACCOUNT.domain}`;
-        MailStore.aliases.unshift({ id: `a${Date.now()}`, address, site: host, by: "агент при регистрации", count: 0, created: new Date().toISOString(), space: space()?.name || "Личное", on: true, agent: true });
-        MailStore.save();
-        return { address, existed: false };
+        try {
+          // адрес выдаёт сервер аккаунтов: site-xxxx@домен
+          const created = await MailStore.aliasCreate({ site: host, space: space()?.name || "Личное", by: "agent" });
+          return { address: created.address, existed: false };
+        } catch (e) {
+          return fail(`алиас не создан: ${e.message}`);
+        }
       }, { plan: async ({ site }) => { const host = aliasHost(site); return host ? [aliasItem(host)] : []; } }),
       tool("generate_password", "Сгенерировать надёжный пароль.", P({ length: { type: "integer", description: "По умолчанию 20" } }), async ({ length }) => {
         const n = Math.min(64, Math.max(12, parseInt(length, 10) || 20));

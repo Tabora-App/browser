@@ -1,8 +1,8 @@
 diff --git a/browser/base/jar.mn b/browser/base/jar.mn
-index b2b5db6040..4d078bd17a 100644
+index b2b5db6040..e5430ac5c9 100644
 --- a/browser/base/jar.mn
 +++ b/browser/base/jar.mn
-@@ -33,6 +33,78 @@ browser.jar:
+@@ -33,6 +33,82 @@ browser.jar:
          content/browser/aboutTabCrashed.xhtml         (content/aboutTabCrashed.xhtml)
          content/browser/blanktab.html                 (content/blanktab.html)
          content/browser/browser.js                    (content/browser.js)
@@ -14,6 +14,10 @@ index b2b5db6040..4d078bd17a 100644
 +        content/tabora/mail/mail.js  (content/tabora/mail/mail.js)
 +        content/tabora/mail/icon.svg  (content/tabora/mail/icon.svg)
 +        content/tabora/mail/MailStore.sys.mjs  (content/tabora/mail/MailStore.sys.mjs)
++        content/tabora/mail/net/Socket.sys.mjs  (content/tabora/mail/net/Socket.sys.mjs)
++        content/tabora/mail/net/Imap.sys.mjs  (content/tabora/mail/net/Imap.sys.mjs)
++        content/tabora/mail/net/Smtp.sys.mjs  (content/tabora/mail/net/Smtp.sys.mjs)
++        content/tabora/mail/net/Mime.sys.mjs  (content/tabora/mail/net/Mime.sys.mjs)
 +        content/tabora/downloads/downloads.html  (content/tabora/downloads/downloads.html)
 +        content/tabora/downloads/downloads.css  (content/tabora/downloads/downloads.css)
 +        content/tabora/downloads/downloads.js  (content/tabora/downloads/downloads.js)

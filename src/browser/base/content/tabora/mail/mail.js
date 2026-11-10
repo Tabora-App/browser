@@ -27,12 +27,13 @@ const Shell = window.browsingContext?.topChromeWindow?.Tabora || null;
 
 /* Доступ к данным почты только через этот посредник: без входа в аккаунт он отдаёт пустые
  * данные и показывает экран входа, ничего не читая из хранилища. */
-const EMPTY = { v: 3, messages: [], aliases: [], blockedThisMonth: 0 };
+const EMPTY = { v: 5, accounts: [], messages: [], aliases: [] };
 const Store = new Proxy(MailStore, {
   get(target, prop, receiver) {
     switch (prop) {
       case "messages":
       case "aliases":
+      case "accounts":
         return App.access() ? Reflect.get(target, prop, receiver) : [];
       case "data":
         return App.access() ? target.data : EMPTY;
@@ -207,8 +208,28 @@ function letterOf(name) {
 }
 
 function snippetOf(m) {
+  if (m.snippet) {
+    return m.snippet;
+  }
   const first = (m.body || []).find(b => b.p || b.h);
   return first ? first.p || first.h : "";
+}
+
+/** Ссылка из письма: открывается новой вкладкой в браузере, сама страница почты никуда не уходит. */
+function mailLink(text, href, cls = "") {
+  const a = el("a", { class: cls || null, href, title: href, rel: "noopener noreferrer", text });
+  a.addEventListener("click", e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const shell = window.browsingContext?.topChromeWindow;
+    if (/^mailto:/i.test(href)) {
+      shell?.Tabora?.openCompose({ to: decodeURIComponent(href.slice(7).split("?")[0]) });
+    } else if (/^https?:\/\//i.test(href)) {
+      // адрес пришёл из письма: открываем как ссылку с веб-страницы, без прав браузера
+      shell?.openWebLinkIn(href, "tab");
+    }
+  });
+  return a;
 }
 
 function codeOf(m) {
@@ -242,6 +263,15 @@ const App = {
   started: false,
   gate: null,
 
+  /** Письма цепочки для текущего вида: в «Корзине» — её удалённые письма (их можно открыть и
+   * вернуть), в остальных папках — вся переписка, кроме удалённого. */
+  threadMsgs(threadId) {
+    if (this.folder === "trash" && !this.label) {
+      return Store.messages.filter(m => m.thread === threadId && m.folder === "trash").sort((a, b) => a.date.localeCompare(b.date));
+    }
+    return Store.thread(threadId);
+  },
+
   /** Строка аккаунта под папками: адрес из аккаунта Tabora, смена пароля и выход через оболочку. */
   initAccountRow() {
     const row = document.getElementById("account-row");
@@ -249,6 +279,8 @@ const App = {
       return;
     }
     const shell = () => window.browsingContext?.topChromeWindow?.Tabora;
+    $("add-box-btn").addEventListener("click", () => this.openBoxModal());
+    $("refresh-btn").addEventListener("click", () => this.refresh());
     document.getElementById("account-change").addEventListener("click", () => shell()?.accountDialog("change"));
     document.getElementById("account-switch").addEventListener("click", () => shell()?.accountLogout({ thenLogin: true, blankEmail: true }));
     document.getElementById("account-logout").addEventListener("click", () => shell()?.accountLogout({ thenLogin: false }));
@@ -258,6 +290,54 @@ const App = {
     const email = Account.email || ACCOUNT.address;
     $("account-email").textContent = email;
     $("account-avatar").textContent = (email[0] || "T").toUpperCase();
+    this.renderBoxes();
+  },
+
+  /** Ящики: ящик аккаунта и внешние. Внешний можно убрать с этого компьютера. */
+  renderBoxes() {
+    const box = $("boxes");
+    const list = MailStore.accounts;
+    box.replaceChildren();
+    // один только ящик аккаунта уже показан строкой аккаунта ниже: список нужен, когда есть
+    // внешние ящики или с ящиком что-то не так
+    box.hidden = !list.some(a => a.kind !== "tabora" || a.error);
+    for (const a of list) {
+      const external = a.kind !== "tabora";
+      const sub = a.error ? a.error : external ? "внешний ящик" : "ящик Tabora";
+      const row = el("div", { class: "box-row", dataset: { error: String(!!a.error) }, title: a.error || a.address }, [
+        el("span", { class: "box-letter", "aria-hidden": "true", text: letterOf(a.address) }),
+        el("span", { class: "box-text" }, [el("b", { text: a.address }), el("span", { text: sub })]),
+        external
+          ? el("button", {
+              class: "box-remove", type: "button", "aria-label": `Убрать ящик ${a.address}`, title: "Убрать ящик с этого компьютера",
+              onclick: e => {
+                const btn = e.currentTarget;
+                if (btn.dataset.sure !== "true") {
+                  // второй щелчок подтверждает
+                  btn.dataset.sure = "true";
+                  btn.textContent = "Убрать?";
+                  setTimeout(() => {
+                    if (btn.isConnected) {
+                      btn.dataset.sure = "false";
+                      btn.replaceChildren(icon("close", 12, 2.4));
+                    }
+                  }, 4000);
+                  return;
+                }
+                MailStore.removeAccount(a.id).then(() => this.toast(`Ящик ${a.address} убран с этого компьютера`), err => this.toast(err.message));
+              },
+            }, icon("close", 12, 2.4))
+          : null,
+      ]);
+      box.append(row);
+    }
+  },
+
+  refresh() {
+    $("refresh-btn").dataset.busy = "true";
+    MailStore.sync().finally(() => {
+      $("refresh-btn").dataset.busy = "false";
+    });
   },
 
   /** Можно ли сейчас трогать данные почты. Если нет — показать экран входа (не синхронно,
@@ -345,7 +425,25 @@ const App = {
 
   init() {
     this.initAccountRow();
-    const recheck = { observe: () => this.checkAccess() };
+    const recheck = {
+      observe: (subject, topic, what) => {
+        if (topic === MailStore.TOPIC && what === "error") {
+          // ошибка сервера: показываем один раз, данные перерисует следующая сверка
+          const err = MailStore.lastError;
+          if (err && err.at !== this._shownError) {
+            this._shownError = err.at;
+            this.toast(`Не получилось: ${err.where}. ${err.message}`);
+          }
+          return;
+        }
+        if (topic === MailStore.TOPIC && what === "sync") {
+          $("refresh-btn").dataset.busy = String(MailStore.syncing);
+          return;
+        }
+        $("refresh-btn").dataset.busy = String(MailStore.syncing);
+        this.checkAccess();
+      },
+    };
     const topics = [MailStore.TOPIC, Account.TOPIC, Vault.TOPIC];
     for (const t of topics) {
       Services.obs.addObserver(recheck, t);
@@ -490,7 +588,7 @@ const App = {
     for (const m of msgs) {
       const cur = byThread.get(m.thread);
       if (!cur || m.date > cur.latest.date) {
-        byThread.set(m.thread, { latest: m, all: Store.thread(m.thread) });
+        byThread.set(m.thread, { latest: m, all: this.threadMsgs(m.thread) });
       }
     }
     return [...byThread.values()].sort((a, b) => b.latest.date.localeCompare(a.latest.date));
@@ -529,9 +627,23 @@ const App = {
     this.renderBulk();
 
     if (!threads.length) {
+      const filtered = this.query || this.filters.size;
+      const none = !MailStore.accounts.length;
+      const title = filtered ? "Ничего не нашлось" : none ? "Ящика пока нет" : MailStore.syncing && !Store.messages.length ? "Загружаем письма" : "Здесь пусто";
+      const text = filtered
+        ? "Попробуйте другой запрос или снимите фильтры."
+        : none
+          ? Account.needsServerLink
+            ? "Подключите аккаунт к серверу Tabora, и адрес аккаунта начнёт принимать письма. Или добавьте свой ящик."
+            : "Добавьте ящик: Gmail, Яндекс или любой другой с доступом по IMAP."
+          : MailStore.syncing && !Store.messages.length
+            ? "Первая загрузка занимает несколько секунд."
+            : "Новые письма появятся здесь, как только придут.";
       box.append(el("div", { class: "empty" }, [
-        el("strong", { text: this.query || this.filters.size ? "Ничего не нашлось" : "Здесь пусто" }),
-        el("span", { text: this.query || this.filters.size ? "Попробуйте другой запрос или снимите фильтры." : "Новые письма появятся сразу, как придут." }),
+        el("strong", { text: title }),
+        el("span", { text }),
+        none && Account.needsServerLink ? el("button", { class: "primary", type: "button", text: "Подключить аккаунт", onclick: () => Shell?.accountDialog("link") }) : null,
+        none ? el("button", { class: none && Account.needsServerLink ? "ghost" : "primary", type: "button", text: "Добавить ящик", onclick: () => this.openBoxModal() }) : null,
       ]));
       return;
     }
@@ -628,7 +740,7 @@ const App = {
   open(threadId) {
     this.selectedThread = threadId;
     $("app").dataset.open = "true";
-    for (const m of Store.thread(threadId)) {
+    for (const m of this.threadMsgs(threadId)) {
       if (m.unread) {
         Store.update(m.id, { unread: false });
       }
@@ -649,17 +761,19 @@ const App = {
   },
 
   setRead(threadId, read) {
-    for (const m of Store.thread(threadId)) {
+    for (const m of this.threadMsgs(threadId)) {
       Store.update(m.id, { unread: !read });
     }
     this.renderAll();
   },
 
   moveThread(threadId, folder) {
-    const msgs = Store.thread(threadId);
+    const msgs = this.threadMsgs(threadId);
     const before = msgs.map(m => [m.id, m.folder]);
     for (const m of msgs) {
-      if (folder === "trash" || m.folder === "inbox" || m.folder === "spam" || m.folder === "archive") {
+      // отправленные и черновики остаются на месте, если переписку убирают в архив; из корзины
+      // письмо возвращается туда, куда просят
+      if (folder === "trash" || ["inbox", "spam", "archive", "trash"].includes(m.folder)) {
         Store.update(m.id, { folder });
       }
     }
@@ -687,7 +801,7 @@ const App = {
     }
     if (action === "read") {
       for (const t of ids) {
-        for (const m of Store.thread(t)) {
+        for (const m of this.threadMsgs(t)) {
           Store.update(m.id, { unread: false });
         }
       }
@@ -697,7 +811,7 @@ const App = {
     }
     const before = [];
     for (const t of ids) {
-      for (const m of Store.thread(t)) {
+      for (const m of this.threadMsgs(t)) {
         before.push([m.id, m.folder]);
         Store.update(m.id, { folder: action });
       }
@@ -718,7 +832,7 @@ const App = {
   /* ---- Письмо ---- */
 
   renderReader() {
-    const thread = this.selectedThread ? Store.thread(this.selectedThread) : [];
+    const thread = this.selectedThread ? this.threadMsgs(this.selectedThread) : [];
     $("reader-empty").hidden = thread.length > 0;
     const box = $("thread");
     box.hidden = !thread.length;
@@ -818,31 +932,67 @@ const App = {
       }
     });
     const paper = el("div", { class: "paper" });
+    // текст со ссылками: куски текста и ссылки по очереди
+    const runs = block => (block.runs || []).map(r => (typeof r === "string" ? r : mailLink(r.t, r.href)));
     for (const block of m.body || []) {
       if (block.h) {
         paper.append(el("h3", { text: block.h }));
       } else if (block.p) {
-        paper.append(el("p", { text: block.p }));
+        paper.append(block.runs ? el("p", {}, runs(block)) : el("p", { text: block.p }));
+      } else if (block.q) {
+        paper.append(block.runs ? el("blockquote", {}, runs(block)) : el("blockquote", { text: block.q }));
       } else if (block.code) {
         paper.append(el("div", { class: "big-code", text: block.code }));
       } else if (block.fine) {
-        paper.append(el("div", { class: "fine", text: block.fine }));
+        paper.append(block.runs ? el("div", { class: "fine" }, runs(block)) : el("div", { class: "fine", text: block.fine }));
       } else if (block.btn) {
-        paper.append(el("span", { class: "paper-btn", text: block.btn }));
+        paper.append(block.href ? mailLink(block.btn, block.href, "paper-btn") : el("span", { class: "paper-btn", text: block.btn }));
       }
+    }
+    if (!(m.body || []).length) {
+      paper.append(el("div", { class: "fine", text: "В письме нет текста." }));
+    }
+    if (m.images) {
+      paper.append(el("div", { class: "fine", text: `Картинки из письма не загружаются (${m.images}): так отправитель не узнаёт, что письмо открыли.` }));
     }
     item.append(head, paper);
     if (m.attachments?.length) {
-      item.append(el("div", { class: "attachments" }, m.attachments.map(a => el("button", { class: "attachment", type: "button", title: a.name, onclick: () => this.toast("Скачивание вложений появится вместе с почтовым сервером") }, [
-        el("span", { class: "ext", text: a.name.split(".").pop().slice(0, 4) }),
+      item.append(el("div", { class: "attachments" }, m.attachments.map((a, index) => el("button", {
+        class: "attachment", type: "button", title: `Сохранить ${a.name} в «Загрузки»`,
+        onclick: e => this.saveAttachment(m, index, e.currentTarget),
+      }, [
+        el("span", { class: "ext", text: a.name.includes(".") ? a.name.split(".").pop().slice(0, 4) : "файл" }),
         el("span", { style: "display:flex;flex-direction:column;min-width:0" }, [el("span", { class: "name", text: a.name }), el("span", { class: "size", text: size(a.size) })]),
       ]))));
     }
     return item;
   },
 
+  /** Вложение скачивается с сервера и сохраняется через загрузки браузера (с его же защитой). */
+  async saveAttachment(m, index, button) {
+    if (m.local || !m.at?.uid) {
+      this.toast("Вложение этого письма осталось на сервере отправителя");
+      return;
+    }
+    if (!Shell?.saveMailAttachment) {
+      this.toast("Вложения сохраняются только внутри Tabora");
+      return;
+    }
+    button.disabled = true;
+    button.dataset.busy = "true";
+    try {
+      const name = await Shell.saveMailAttachment(m.id, index);
+      this.toast(`Сохранено в «Загрузки»: ${name}`);
+    } catch (e) {
+      this.toast(`Вложение не сохранено. ${e.message}`);
+    } finally {
+      button.disabled = false;
+      button.dataset.busy = "false";
+    }
+  },
+
   deleteForever(threadId) {
-    const msgs = Store.thread(threadId).concat(Store.messages.filter(m => m.thread === threadId));
+    const msgs = this.threadMsgs(threadId).concat(Store.messages.filter(m => m.thread === threadId));
     for (const m of new Set(msgs)) {
       Store.remove(m.id);
     }
@@ -851,18 +1001,28 @@ const App = {
     this.toast("Удалено навсегда");
   },
 
-  sendQuickReply(to, text) {
+  async sendQuickReply(to, text) {
     if (!text.trim()) {
       this.openCompose({ reply: to });
       return;
     }
-    Store.add({
-      id: `s${Date.now()}`, thread: to.thread, folder: "sent", unread: false, starred: false, labels: to.labels,
-      from: { name: "Я", email: ACCOUNT.address }, to: [to.from.email], alias: ACCOUNT.address,
-      date: new Date().toISOString(), subject: to.subject, body: text.split(/\n{2,}/).map(p => ({ p })),
-    });
-    this.renderAll();
-    this.toast(`Ответ отправлен ${to.from.name}`);
+    if (this._sending) {
+      return;
+    }
+    this._sending = true;
+    // отвечаем с того адреса, на который письмо пришло (алиас остаётся алиасом)
+    const mine = MailStore.senders().map(s => s.address);
+    const from = mine.includes(to.alias) ? to.alias : ACCOUNT.address;
+    const subject = /^re:/i.test(to.subject || "") ? to.subject : `Re: ${to.subject || ""}`.trim();
+    try {
+      await MailStore.send({ from: { email: from }, to: [to.replyTo || to.from.email], subject, text, replyTo: to.id, labels: to.labels });
+      this.renderAll();
+      this.toast(`Ответ отправлен ${to.from.name}`);
+    } catch (e) {
+      this.toast(`Ответ не отправлен. ${e.message}`);
+    } finally {
+      this._sending = false;
+    }
   },
 
   /* ---- Написать: окно живёт в оболочке браузера ---- */
@@ -890,7 +1050,7 @@ const App = {
       this.stat("Активных", String(on)),
       this.stat("Выключено", String(all.length - on)),
       this.stat("Создано агентом", String(agent), true),
-      this.stat("Писем отсечено за месяц", String(Store.data.blockedThisMonth)),
+      this.stat("Писем на алиасы", String(all.reduce((n, a) => n + (a.count || 0), 0))),
     );
     for (const chip of $("alias-filters").children) {
       chip.setAttribute("aria-pressed", String(chip.dataset.afilter === this.aliasFilter));
@@ -925,17 +1085,17 @@ const App = {
         el("button", {
           class: "toggle", type: "button", role: "switch", "aria-checked": String(a.on),
           "aria-label": `Алиас ${a.address} ${a.on ? "включён" : "выключен"}`,
-          onclick: () => {
-            a.on = !a.on;
-            if (!a.on && !a.warn) {
-              a.warn = "выключен";
-            } else if (a.on && a.warn === "выключен") {
-              delete a.warn;
+          onclick: async e => {
+            const btn = e.currentTarget;
+            btn.disabled = true;
+            try {
+              const next = await MailStore.aliasSet(a.id, !a.on);
+              this.toast(next.on ? `Алиас ${a.address.split("@")[0]} включён` : "Алиас выключен: письма на него больше не придут");
+            } catch (err) {
+              this.toast(`Алиас не изменён. ${err.message}`);
             }
-            Store.save();
             this.renderAliases();
             this.renderFolders();
-            this.toast(a.on ? `Алиас ${a.address.split("@")[0]} включён` : `Алиас выключен: письма на него больше не придут`);
           },
         }),
       ]));
@@ -947,38 +1107,114 @@ const App = {
   },
 
   openAliasModal() {
+    if (!MailStore.accounts.some(a => a.kind === "tabora")) {
+      this.toast(Account.needsServerLink ? "Алиасы появятся после подключения аккаунта к серверу Tabora" : "Алиасы работают для ящика Tabora");
+      return;
+    }
     $("alias-modal").hidden = false;
     $("alias-site").value = "";
-    $("alias-domain").textContent = `@${ACCOUNT.domain}`;
-    $("alias-local").value = this.suggestLocal("");
+    $("alias-note").textContent = `Адрес подберёт сервер: название сайта и четыре случайных знака, например booking-k3f9@${ACCOUNT.domain}.`;
     setTimeout(() => $("alias-site").focus(), 20);
   },
 
-  suggestLocal(site) {
-    const base = site.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split(/[/?#]/)[0].split(".")[0].replace(/[^a-z0-9]+/g, "") || "alias";
-    const rnd = Array.from({ length: 4 }, () => "abcdefghjkmnpqrstuvwxyz23456789"[Math.floor(Math.random() * 31)]).join("");
-    return `${base.slice(0, 14)}-${rnd}`;
+  async createAlias() {
+    const button = $("alias-create");
+    if (button.disabled) {
+      return;
+    }
+    button.disabled = true;
+    try {
+      const a = await MailStore.aliasCreate({ site: $("alias-site").value.trim(), space: $("alias-space").value, by: "manual" });
+      $("alias-modal").hidden = true;
+      this.renderAliases();
+      this.renderFolders();
+      this.copy(a.address, `Алиас создан и скопирован: ${a.address}`);
+    } catch (e) {
+      this.toast(`Алиас не создан. ${e.message}`);
+    } finally {
+      button.disabled = false;
+    }
   },
 
-  createAlias() {
-    const site = $("alias-site").value.trim();
-    const local = $("alias-local").value.trim().toLowerCase();
-    if (!/^[a-z0-9][a-z0-9._-]{1,40}$/.test(local)) {
-      this.toast("Адрес: латиница, цифры, точка, дефис");
-      $("alias-local").focus();
+  /* ---- Внешний ящик ---- */
+
+  openBoxModal() {
+    for (const id of ["box-address", "box-password", "box-imap-host", "box-imap-port", "box-smtp-host", "box-smtp-port", "box-login"]) {
+      $(id).value = "";
+      delete $(id).dataset.edited;
+    }
+    $("box-note").hidden = true;
+    $("box-error").hidden = true;
+    $("box-more").open = false;
+    $("box-modal").hidden = false;
+    setTimeout(() => $("box-address").focus(), 20);
+  },
+
+  /** Адрес введён: подставляем серверы известной службы или автонастройку домена. */
+  async guessBox() {
+    const address = $("box-address").value.trim();
+    if (!validEmail(address) || address === this._guessedFor) {
       return;
     }
-    const address = `${local}@${ACCOUNT.domain}`;
-    if (Store.aliases.some(a => a.address === address)) {
-      this.toast("Такой алиас уже есть");
+    this._guessedFor = address;
+    const g = await MailStore.guessSettings(address).catch(() => null);
+    if (!g || $("box-address").value.trim() !== address) {
       return;
     }
-    Store.aliases.unshift({ id: `a${Date.now()}`, address, site: site || "без привязки к сайту", by: "вручную", count: 0, created: new Date().toISOString(), space: $("alias-space").value, on: true, agent: false });
-    Store.save();
-    $("alias-modal").hidden = true;
-    this.renderAliases();
-    this.renderFolders();
-    this.copy(address, `Алиас создан и скопирован: ${address}`);
+    const set = (id, value) => {
+      if ($(id).dataset.edited !== "true") {
+        $(id).value = String(value);
+      }
+    };
+    set("box-imap-host", g.imap.host);
+    set("box-imap-port", g.imap.port);
+    set("box-smtp-host", g.smtp.host);
+    set("box-smtp-port", g.smtp.port);
+    $("box-note").textContent = g.note || (g.source === "guess" ? "Серверы подставлены по имени домена: проверьте их в разделе «Серверы»." : "");
+    $("box-note").hidden = !$("box-note").textContent;
+    if (g.source === "guess") {
+      $("box-more").open = true;
+    }
+  },
+
+  async addBox() {
+    const button = $("box-add");
+    if (button.disabled) {
+      return;
+    }
+    const error = $("box-error");
+    error.hidden = true;
+    const address = $("box-address").value.trim();
+    if (!validEmail(address)) {
+      error.textContent = "Проверьте адрес почты";
+      error.hidden = false;
+      $("box-address").focus();
+      return;
+    }
+    button.disabled = true;
+    button.textContent = "Проверяем…";
+    try {
+      await this.guessBox();
+      const r = await MailStore.addAccount({
+        address,
+        password: $("box-password").value,
+        login: $("box-login").value.trim(),
+        imap: { host: $("box-imap-host").value, port: $("box-imap-port").value },
+        smtp: { host: $("box-smtp-host").value, port: $("box-smtp-port").value },
+      });
+      $("box-modal").hidden = true;
+      $("box-password").value = "";
+      this.toast(`Ящик ${r.address} добавлен: загружаем письма`);
+      this.renderAll();
+    } catch (e) {
+      // ответ сервера (например, требование пароля приложения) показываем как есть
+      error.textContent = e.server ? `${e.message}. Ответ сервера: ${e.server}` : e.message;
+      error.hidden = false;
+      $("box-more").open = $("box-more").open || e.code === "network" || e.code === "protocol" || e.code === "tls";
+    } finally {
+      button.disabled = false;
+      button.textContent = "Проверить и добавить";
+    }
   },
 
   /* ---- Служебное ---- */
@@ -1033,6 +1269,8 @@ const App = {
     if (e.key === "Escape") {
       if (!$("alias-modal").hidden) {
         $("alias-modal").hidden = true;
+      } else if (!$("box-modal").hidden) {
+        $("box-modal").hidden = true;
       } else if (this.checked.size) {
         this.checked.clear();
         this.renderList();
@@ -1057,12 +1295,12 @@ const App = {
       o: () => this.focusedThread() && this.open(this.focusedThread()),
       e: () => this.focusedThread() && this.moveThread(this.focusedThread(), "archive"),
       "#": () => this.focusedThread() && this.moveThread(this.focusedThread(), "trash"),
-      s: () => this.focusedThread() && this.toggleStar(Store.thread(this.focusedThread()).at(-1).id),
+      s: () => this.focusedThread() && this.toggleStar(this.threadMsgs(this.focusedThread()).at(-1).id),
       u: () => this.focusedThread() && this.setRead(this.focusedThread(), false),
       x: () => this.focusedThread() && this.toggleCheck(this.focusedThread()),
       c: () => this.openCompose(),
-      r: () => this.selectedThread && this.openCompose({ reply: Store.thread(this.selectedThread).at(-1) }),
-      f: () => this.selectedThread && this.openCompose({ forward: Store.thread(this.selectedThread).at(-1) }),
+      r: () => this.selectedThread && this.openCompose({ reply: this.threadMsgs(this.selectedThread).at(-1) }),
+      f: () => this.selectedThread && this.openCompose({ forward: this.threadMsgs(this.selectedThread).at(-1) }),
       "/": () => (this.view === "aliases" ? $("alias-search") : $("search-input")).focus(),
       "?": () => this.toast("J/K листать · ⏎ открыть · E архив · # удалить · S звезда · U непрочитано · X выбрать · C написать · R ответить · F переслать · / поиск"),
     };
@@ -1132,10 +1370,23 @@ const App = {
       }
     });
     $("alias-create").addEventListener("click", () => this.createAlias());
-    $("alias-site").addEventListener("input", e => ($("alias-local").value = this.suggestLocal(e.target.value)));
     $("alias-site").addEventListener("keydown", e => e.key === "Enter" && this.createAlias());
-    $("alias-local").addEventListener("keydown", e => e.key === "Enter" && this.createAlias());
-    $("alias-regen").addEventListener("click", () => ($("alias-local").value = this.suggestLocal($("alias-site").value)));
+
+    $("box-cancel").addEventListener("click", () => ($("box-modal").hidden = true));
+    $("box-modal").addEventListener("click", e => {
+      if (e.target === $("box-modal")) {
+        $("box-modal").hidden = true;
+      }
+    });
+    $("box-add").addEventListener("click", () => this.addBox());
+    $("box-address").addEventListener("change", () => this.guessBox());
+    $("box-password").addEventListener("focus", () => this.guessBox());
+    for (const id of ["box-imap-host", "box-imap-port", "box-smtp-host", "box-smtp-port"]) {
+      $(id).addEventListener("input", e => (e.target.dataset.edited = "true"));
+    }
+    for (const id of ["box-address", "box-password", "box-login"]) {
+      $(id).addEventListener("keydown", e => e.key === "Enter" && this.addBox());
+    }
     $("alias-search").addEventListener("input", e => {
       this.aliasQuery = e.target.value;
       this.renderAliases();

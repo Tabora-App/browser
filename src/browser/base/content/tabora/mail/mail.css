@@ -814,3 +814,48 @@ kbd {
 .account-actions button { height: 30px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--text); font: 600 12px var(--font); text-align: left; padding: 0 8px; cursor: pointer; }
 .account-actions button:hover { background: var(--card-2); }
 .account-actions button.danger { color: #e5484d; }
+
+/* ---- Ящики: ящик аккаунта и внешние ---- */
+.boxes { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
+.boxes[hidden] { display: none; }
+.box-row { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 4px 6px 4px 10px; border-radius: 10px; }
+.box-row:hover { background: var(--card-2); }
+.box-letter { width: 22px; height: 22px; border-radius: 6px; background: var(--raised); color: var(--text-2); display: grid; place-items: center; font: 800 11px/1 var(--font); flex: none; }
+.box-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.box-text b { font: 600 12px/1.2 var(--font); color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.box-text span { font: 500 10.5px/1.25 var(--font); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.box-row[data-error="true"] .box-text span { color: var(--warn); }
+.box-remove { height: 24px; min-width: 24px; padding: 0 6px; border: 0; border-radius: 7px; background: transparent; color: var(--text-4); font: 700 11px/1 var(--font); display: inline-flex; align-items: center; justify-content: center; opacity: 0; transition: opacity var(--ease); }
+.box-row:hover .box-remove, .box-remove:focus-visible, .box-remove[data-sure="true"] { opacity: 1; }
+.box-remove:hover { background: var(--raised); color: var(--text-strong); }
+.box-remove[data-sure="true"] { color: var(--warn); }
+.add-box { color: var(--text-3); }
+.add-box svg { color: var(--text-4); flex-shrink: 0; margin-inline: 1px; }
+
+/* проверка почты: значок крутится, пока идёт сверка с сервером */
+.list-title-row .refresh { margin-inline-start: auto; align-self: center; width: 28px; height: 28px; border-color: transparent; }
+.list-title-row .list-sub { margin-inline-start: 0; }
+.refresh[data-busy="true"] svg { animation: mail-spin 900ms linear infinite; }
+@keyframes mail-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .refresh[data-busy="true"] svg { animation: none; opacity: 0.5; } }
+
+/* текст письма: переносы строк простого текста сохраняются, ссылки и цитаты видны */
+.paper p, .paper .fine, .paper blockquote { white-space: pre-line; overflow-wrap: anywhere; }
+.paper blockquote { margin: 0; padding-inline-start: 12px; border-inline-start: 3px solid var(--paper-border); color: #868b95; }
+.paper a { text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.paper a.paper-btn { text-decoration: none; }
+.attachment[data-busy="true"] { opacity: 0.6; }
+
+.empty .primary, .empty .ghost { margin-top: 10px; }
+
+/* окно внешнего ящика */
+.modal-note { margin: -4px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--card-2); font-size: 12px; line-height: 1.45; color: var(--text-2); }
+.modal-note[hidden], .modal-error[hidden] { display: none; }
+.modal-error { margin: 0; font-size: 12px; line-height: 1.45; color: var(--warn); overflow-wrap: anywhere; }
+.modal-more { border-top: 1px solid var(--line-2); padding-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.modal-more summary { font: 700 12px/1 var(--font); color: var(--text-3); cursor: pointer; list-style: none; }
+.modal-more summary::-webkit-details-marker { display: none; }
+.modal-more summary::after { content: " ›"; }
+.modal-more[open] summary::after { content: " ⌄"; }
+.modal-more[open] summary { margin-bottom: 10px; }
+.modal-grid { display: grid; grid-template-columns: minmax(0, 1fr) 84px; gap: 10px; margin-bottom: 10px; }

@@ -30,6 +30,11 @@
         <span class="folder-name">Алиасы</span>
         <span class="folder-count mono" id="aliases-count"></span>
       </button>
+      <div class="boxes" id="boxes" aria-label="Ящики"></div>
+      <button class="folder-item add-box" id="add-box-btn" type="button">
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        <span class="folder-name">Добавить ящик</span>
+      </button>
       <details class="account-row" id="account-row">
         <summary>
           <span class="account-avatar" id="account-avatar" aria-hidden="true"></span>
@@ -50,6 +55,9 @@
         <div class="list-title-row">
           <h1 class="list-title" id="list-title">Входящие</h1>
           <span class="list-sub" id="list-sub"></span>
+          <button class="icon-btn refresh" id="refresh-btn" type="button" title="Проверить почту" aria-label="Проверить почту">
+            <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg>
+          </button>
         </div>
         <div class="search" id="search">
           <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
@@ -126,10 +134,7 @@
           <span>Сайт или назначение</span>
           <input id="alias-site" type="text" placeholder="например, aliexpress.com" autocomplete="off" />
         </label>
-        <label class="modal-field">
-          <span>Адрес</span>
-          <div class="alias-preview mono"><input id="alias-local" type="text" spellcheck="false" /><span id="alias-domain">@tabora.app</span><button class="link-btn" id="alias-regen" type="button">Другой</button></div>
-        </label>
+        <p class="modal-note" id="alias-note">Адрес подберёт сервер: название сайта и четыре случайных знака, например booking-k3f9@tabora.app.</p>
         <label class="modal-field">
           <span>Пространство</span>
           <select id="alias-space"><option>Личное</option><option>Работа</option><option>Проекты</option></select>
@@ -137,6 +142,41 @@
         <div class="modal-actions">
           <button class="ghost" id="alias-cancel" type="button">Отмена</button>
           <button class="primary" id="alias-create" type="button">Создать и скопировать</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Внешний ящик -->
+    <div class="modal-backdrop" id="box-modal" hidden>
+      <div class="modal" role="dialog" aria-labelledby="box-modal-title">
+        <h2 id="box-modal-title">Добавить ящик</h2>
+        <p class="modal-sub">Gmail, Яндекс, свой сервер — любой ящик с доступом по IMAP и SMTP. Пароль хранится на этом компьютере зашифрованным ключом сейфа.</p>
+        <label class="modal-field">
+          <span>Адрес почты</span>
+          <input id="box-address" type="email" placeholder="имя@gmail.com" autocomplete="off" spellcheck="false" />
+        </label>
+        <label class="modal-field">
+          <span>Пароль</span>
+          <input id="box-password" type="password" autocomplete="off" />
+        </label>
+        <p class="modal-note" id="box-note" hidden></p>
+        <details class="modal-more" id="box-more">
+          <summary>Серверы</summary>
+          <div class="modal-grid">
+            <label class="modal-field"><span>IMAP</span><input id="box-imap-host" type="text" placeholder="imap.example.com" spellcheck="false" autocomplete="off" /></label>
+            <label class="modal-field short"><span>Порт</span><input id="box-imap-port" type="text" inputmode="numeric" placeholder="993" autocomplete="off" /></label>
+            <label class="modal-field"><span>SMTP</span><input id="box-smtp-host" type="text" placeholder="smtp.example.com" spellcheck="false" autocomplete="off" /></label>
+            <label class="modal-field short"><span>Порт</span><input id="box-smtp-port" type="text" inputmode="numeric" placeholder="465" autocomplete="off" /></label>
+          </div>
+          <label class="modal-field">
+            <span>Логин, если отличается от адреса</span>
+            <input id="box-login" type="text" spellcheck="false" autocomplete="off" />
+          </label>
+        </details>
+        <p class="modal-error" id="box-error" role="alert" hidden></p>
+        <div class="modal-actions">
+          <button class="ghost" id="box-cancel" type="button">Отмена</button>
+          <button class="primary" id="box-add" type="button">Проверить и добавить</button>
         </div>
       </div>
     </div>
