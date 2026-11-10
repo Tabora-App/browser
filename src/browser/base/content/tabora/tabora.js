@@ -50,7 +50,7 @@ var Tabora = {
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
       "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initWalletProvider", "initVaultActor", "initAccount", "initUpdates", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "initLegacyShellUrls", "initMailToggle", "startTimers", "updateTitle", "localizeUrlbar",
-      "routeUrlbarToCommandBar", "initTabMotion", "initMotion", "initBookmarkDefaults", "initTabsLayout",
+      "routeUrlbarToCommandBar", "initTabMotion", "initMotion", "initBookmarkDefaults", "initTabsLayout", "initAddonsPage",
     ]) {
       try {
         this[step]();
@@ -106,6 +106,16 @@ var Tabora = {
         console.error("Tabora: закладки по умолчанию", e);
       }
     }, 4000);
+  },
+
+  /* Страница расширений запоминает последний открытый раздел. Вводный экран «Рекомендации»
+   * (реклама каталога Mozilla) выключен настройкой extensions.getAddons.showPane, но в профиле,
+   * где он был открыт последним, страница продолжала бы открываться на нём. */
+  initAddonsPage() {
+    const PREF = "extensions.ui.lastCategory";
+    if (Services.prefs.getStringPref(PREF, "") === "addons://discover/") {
+      Services.prefs.clearUserPref(PREF);
+    }
   },
 
   /* ---- Окно нового письма: живёт в оболочке, видно на любой вкладке ------ */

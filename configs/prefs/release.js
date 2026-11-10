@@ -41,6 +41,9 @@ pref("app.shield.optoutstudies.enabled", false);
 pref("app.normandy.enabled", false);
 pref("browser.discovery.enabled", false);
 pref("extensions.htmlaboutaddons.recommendations.enabled", false);
+// Страница расширений открывается сразу на списке расширений: вводный экран «Рекомендации»
+// без самих рекомендаций — это только реклама каталога Mozilla (и упоминание Firefox)
+pref("extensions.getAddons.showPane", false);
 // Сборка идёт без MOZ_DATA_REPORTING (src/browser/moz.configure.patch), поэтому all.js не задаёт
 // значения политики отправки данных. Задаём их сами, чтобы код, читающий их без запасного
 // значения, не падал; отправка при этом выключена и сборкой, и настройками выше.

@@ -179,3 +179,10 @@ treecol {
   border-color: var(--tabora-card-border);
   font-weight: 700;
 }
+
+/* Страница расширений (about:addons): тем оформления Firefox у Tabora нет — окно рисует своя
+   оболочка, и тема на неё не действует. Раздел «Темы» из меню убран; вводный экран с
+   рекомендациями Mozilla выключен настройкой extensions.getAddons.showPane. */
+categories-box #category-theme {
+  display: none !important;
+}
