@@ -82,6 +82,7 @@ const ICONS = {
   mask: "M4 10c0-2.8 2.2-5 5-5h6c2.8 0 5 2.2 5 5v1.5c0 2.5-2 4.5-4.5 4.5-1.4 0-2.6-.6-3.5-1.6-.9 1-2.1 1.6-3.5 1.6C6 16 4 14 4 11.5z",
   lock: "M7 11V8a5 5 0 0 1 10 0v3M6 11h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z",
   seal: "M12 3 5 6v5c0 4.6 2.9 8.2 7 10 4.1-1.8 7-5.4 7-10V6zM9 12l2 2 4-4",
+  back: "M15 5l-7 7 7 7",
   alert: "M12 3 5 6v5c0 4.6 2.9 8.2 7 10 4.1-1.8 7-5.4 7-10V6zM12 8v5M12 16.5v.5",
 };
 
@@ -419,6 +420,7 @@ const App = {
       this.selectedThread = null; // открытое письмо лежит в другом ящике
     }
     this.renderBoxes();
+    this.setNav(false);
     if (this.view !== "mail") {
       this.go(`folder/${this.folder || "inbox"}`);
     } else {
@@ -607,7 +609,23 @@ const App = {
     this.renderAll();
   },
 
+  /** Папки в узком окне: выезжают поверх страницы по кнопке и убираются после выбора. */
+  setNav(on) {
+    $("app").dataset.nav = String(!!on);
+    for (const b of document.querySelectorAll(".nav-btn")) {
+      b.setAttribute("aria-expanded", String(!!on));
+    }
+  },
+
+  /** Закрыть открытое письмо и вернуться к списку. */
+  closeThread() {
+    this.selectedThread = null;
+    history.replaceState(null, "", this.label ? `#label/${this.label}` : `#folder/${this.folder}`);
+    this.renderAll();
+  },
+
   go(hash) {
+    this.setNav(false);
     if (location.hash !== `#${hash}`) {
       history.replaceState(null, "", `#${hash}`);
     }
@@ -989,6 +1007,7 @@ const App = {
   renderReader() {
     const thread = this.selectedThread ? this.threadMsgs(this.selectedThread) : [];
     const box = $("thread");
+    $("app").dataset.open = String(thread.length > 0); // в узком окне письмо занимает место списка
     const same = this._readerThread === this.selectedThread;
     const aliases = new Set(Store.aliases.map(a => a.address));
     const sig = JSON.stringify([
@@ -1011,7 +1030,6 @@ const App = {
     box.hidden = !thread.length;
     box.replaceChildren();
     if (!thread.length) {
-      $("app").dataset.open = "false";
       return;
     }
     const latest = thread[thread.length - 1];
@@ -1020,6 +1038,7 @@ const App = {
 
     const head = el("div", { class: "thread-head" }, [
       el("div", { class: "thread-title-row" }, [
+        el("button", { class: "icon-btn back-btn", type: "button", title: "К списку (Esc)", "aria-label": "К списку писем", onclick: () => this.closeThread() }, icon("back", 16, 2.2)),
         el("h2", { class: "thread-title", text: latest.subject || "(без темы)" }),
         el("button", { class: "icon-btn", type: "button", title: latest.starred ? "Снять звезду (S)" : "Звезда (S)", "aria-pressed": String(!!latest.starred), "aria-label": "Звезда", onclick: () => this.toggleStar(latest.id) }, icon("star", 15, latest.starred ? 0 : 2)),
         el("button", { class: "icon-btn", type: "button", title: "Не прочитано (U)", "aria-label": "Отметить непрочитанным", onclick: () => this.setRead(latest.thread, false) }, icon("read")),
@@ -1712,7 +1731,9 @@ const App = {
     }
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable;
     if (e.key === "Escape") {
-      if (!$("alias-modal").hidden) {
+      if ($("app").dataset.nav === "true") {
+        this.setNav(false);
+      } else if (!$("alias-modal").hidden) {
         $("alias-modal").hidden = true;
       } else if (!$("key-modal").hidden) {
         $("key-modal").hidden = true;
@@ -1727,9 +1748,7 @@ const App = {
       } else if (typing) {
         e.target.blur();
       } else if (this.selectedThread) {
-        this.selectedThread = null;
-        history.replaceState(null, "", this.label ? `#label/${this.label}` : `#folder/${this.folder}`);
-        this.renderAll();
+        this.closeThread();
       }
       return;
     }
@@ -1776,7 +1795,16 @@ const App = {
   },
 
   bindStatic() {
-    $("compose-btn").addEventListener("click", () => this.openCompose());
+    $("compose-btn").addEventListener("click", () => {
+      this.setNav(false);
+      this.openCompose();
+    });
+    $("compose-mini").addEventListener("click", () => this.openCompose());
+    for (const b of document.querySelectorAll(".nav-btn")) {
+      b.addEventListener("click", () => this.setNav($("app").dataset.nav !== "true"));
+    }
+    $("nav-scrim").addEventListener("click", () => this.setNav(false));
+    $("add-box-btn").addEventListener("click", () => this.setNav(false));
 
     $("search-input").addEventListener("input", e => {
       this.query = e.target.value;

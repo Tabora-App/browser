@@ -243,6 +243,9 @@ setting-pane[data-category="paneSync"][data-acc-tab="data"] setting-group[groupi
 
 #tabora-account {
   gap: 22.5px;
+  /* Раздел не диктует странице настроек свою ширину: у её контейнера min-width: min-content,
+     и строка вкладок раздела растягивала бы всю страницу шире узкого окна. */
+  contain: inline-size;
 }
 
 .tabora-acc-who {

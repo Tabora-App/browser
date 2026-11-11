@@ -381,6 +381,13 @@ window.TaboraAccountPane = (function () {
         select(TABS[e.key === "Home" ? 0 : TABS.length - 1][0], { focus: true });
       }
     });
+    // в узком окне строка вкладок прокручивается: выбранная вкладка должна быть на виду
+    requestAnimationFrame(() => {
+      const sel = bar.querySelector('[aria-selected="true"]');
+      if (sel && bar.scrollWidth > bar.clientWidth) {
+        bar.scrollLeft = sel.offsetLeft - (bar.clientWidth - sel.offsetWidth) / 2;
+      }
+    });
     return bar;
   }
 

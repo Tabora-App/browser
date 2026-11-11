@@ -335,29 +335,44 @@ Object.assign(Tabora, {
     }
   },
 
+  /** Ширина ящика. Обычный раздел занимает DRAWER_WIDTH рядом со страницей. Широкий раздел и
+   * любой раздел в узком окне, где странице рядом не остаётся PAGE_MIN, занимают всю область
+   * страницы: она на это время скрыта. */
+  PAGE_MIN: 360,
+
   sizeDrawer() {
     const d = this.drawer;
+    const browser = document.getElementById("browser");
     if (!d.open) {
       d.el.style.width = "0px";
+      browser.removeAttribute("tabora-drawer-full");
       return;
     }
-    const wide = this.SECTIONS[d.section]?.wide;
-    if (wide) {
-      const browser = document.getElementById("browser");
-      const toolbox = document.getElementById("navigator-toolbox");
-      const cs = getComputedStyle(browser);
-      const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth);
-      // при вкладках сверху колонки слева нет: ящик занимает всю ширину под верхними строками
-      const column = this.horizontalTabs ? -10 : toolbox.getBoundingClientRect().width;
-      const width = browser.getBoundingClientRect().width - pad - column - 10;
-      d.el.style.width = `${Math.max(this.DRAWER_WIDTH, Math.round(width))}px`;
-      d.inner.style.width = d.el.style.width;
-    } else {
-      d.el.style.width = `${this.DRAWER_WIDTH}px`;
-      d.inner.style.width = `${this.DRAWER_WIDTH}px`;
+    const wide = !!this.SECTIONS[d.section]?.wide;
+    const toolbox = document.getElementById("navigator-toolbox");
+    const cs = getComputedStyle(browser);
+    const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth);
+    // при вкладках сверху колонки слева нет: ящик занимает всю ширину под верхними строками
+    const column = this.horizontalTabs ? -10 : toolbox.getBoundingClientRect().width;
+    let room = Math.round(browser.getBoundingClientRect().width - pad - column - 10);
+    // открытая панель агента занимает часть этого места; в узком окне она занимает его целиком,
+    // и тогда ящик открывается вместо неё
+    const agent = document.getElementById("tabora-agent");
+    if (agent?.hasAttribute("open")) {
+      if (!wide && window.matchMedia("(max-width: 840px)").matches) {
+        this.toggleAgent(false);
+      } else {
+        room -= Math.round(agent.getBoundingClientRect().width) + 10;
+      }
     }
-    d.el.toggleAttribute("wide", !!wide);
-    document.getElementById("browser").toggleAttribute("tabora-drawer-wide", !!wide);
+    const full = wide || room < this.DRAWER_WIDTH + this.PAGE_MIN;
+    const width = full ? (wide ? Math.max(this.DRAWER_WIDTH, room) : Math.max(280, room)) : this.DRAWER_WIDTH;
+    d.el.style.width = `${width}px`;
+    d.inner.style.width = `${width}px`;
+    d.el.toggleAttribute("wide", wide);
+    d.el.toggleAttribute("full", full && !wide);
+    browser.toggleAttribute("tabora-drawer-wide", wide);
+    browser.toggleAttribute("tabora-drawer-full", full && !wide);
   },
 
   openDrawer(section) {
@@ -397,6 +412,8 @@ Object.assign(Tabora, {
     const browser = document.getElementById("browser");
     browser.removeAttribute("tabora-drawer-open");
     browser.removeAttribute("tabora-drawer-wide");
+    browser.removeAttribute("tabora-drawer-full");
+    d.el.removeAttribute("full");
     this.sizeDrawer();
     this.renderRail();
     gBrowser.selectedBrowser?.focus();

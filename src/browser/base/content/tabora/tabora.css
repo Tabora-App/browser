@@ -2096,6 +2096,28 @@ sidebar-main {
   display: none;
 }
 
+/* Узкое окно: панели агента и странице вместе не хватает места. Панель занимает всю область
+   страницы, страница на это время скрыта (как при полноширинном ящике). Ширину страницы держит
+   правило xul.css [flex="1"] (оно важнее авторских), поэтому панель просто забирает всё место:
+   её основа 100%, а странице с нулевой основой не достаётся ничего. */
+@media (max-width: 840px) {
+  #browser:has(> #tabora-agent[open]) #tabbrowser-tabbox {
+    min-width: 0 !important;
+    margin-inline-end: -10px !important; /* промежуток строки у скрытой страницы не нужен */
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  #browser > #tabora-agent[open] {
+    flex: 0 1 100%;
+    width: auto;
+  }
+
+  #browser > #tabora-agent > .agent-inner {
+    width: 100%;
+  }
+}
+
 #tabora-agent > .agent-inner {
   position: absolute;
   inset: 0 0 0 auto;
@@ -4115,6 +4137,32 @@ toolbarseparator {
   height: 44px;
   padding: 0;
   gap: 8px;
+}
+
+/* Узкое окно при вкладках сверху: вторая строка шире окна. «Агент» остаётся значком, кнопка
+   чтения видна только когда доступна, адрес сжимается сильнее. */
+@media (max-width: 760px) {
+  :root[tabora-tabs="horizontal"] #tabora-agent-toggle {
+    width: 36px;
+    padding: 0;
+    gap: 0;
+    justify-content: center;
+    font-size: 0;
+  }
+
+  :root[tabora-tabs="horizontal"] #tabora-agent-toggle .kbd,
+  :root[tabora-tabs="horizontal"] #tabora-reader:disabled {
+    display: none;
+  }
+
+  :root[tabora-tabs="horizontal"] #urlbar-container {
+    min-width: 96px !important;
+    margin-inline: 4px !important;
+  }
+
+  :root[tabora-tabs="horizontal"] #nav-bar > #tabora-topbar {
+    gap: 4px;
+  }
 }
 
 :root[tabora-tabs="horizontal"] #tabora-dock {

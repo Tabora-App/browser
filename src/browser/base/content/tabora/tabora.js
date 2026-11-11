@@ -1263,7 +1263,36 @@ var Tabora = {
     });
     toolbox.addEventListener("mousedown", () => this.tipHide(), true);
     toolbox.addEventListener("wheel", () => this.tipHide(), { passive: true });
-    this.applySidebarCompact(Services.prefs.getBoolPref(this.SIDEBAR_PREF, false), false);
+    this.applySidebarCompact(this.sidebarCompactWanted, false);
+    this.narrowQuery.addEventListener("change", () => this.applyNarrowWindow());
+    document.documentElement.toggleAttribute("tabora-narrow", this.narrowQuery.matches);
+  },
+
+  /* ---- Узкое окно: колонка сама сворачивается до значков ------------------------------
+   * В окне уже NARROW_WINDOW развёрнутая колонка оставляет странице меньше половины ширины.
+   * Колонка сворачивается сама и сама разворачивается, когда окно снова широкое; настройка
+   * tabora.sidebar.compact при этом не меняется. Кнопка и ⌘B в узком окне действуют до
+   * следующей смены ширины. Корню ставится атрибут tabora-narrow. */
+  NARROW_WINDOW: 900,
+
+  get narrowQuery() {
+    return (this._narrowQuery ||= window.matchMedia(`(max-width: ${this.NARROW_WINDOW}px)`));
+  },
+
+  get sidebarCompactWanted() {
+    return this.narrowQuery.matches ? (this._narrowChoice ?? true) : Services.prefs.getBoolPref(this.SIDEBAR_PREF, false);
+  },
+
+  applyNarrowWindow() {
+    this._narrowChoice = null;
+    document.documentElement.toggleAttribute("tabora-narrow", this.narrowQuery.matches);
+    if (!this.horizontalTabs) {
+      this.applySidebarCompact(this.sidebarCompactWanted);
+    }
+    this.syncTopbarInset();
+    if (this.drawer?.open) {
+      this.sizeDrawer();
+    }
   },
 
   /* ---- Движение: одна система на весь интерфейс ---------------------------------------
@@ -1568,7 +1597,7 @@ var Tabora = {
         toolbox.append(dock);
       }
       tabbox.prepend(topbar);
-      this.applySidebarCompact(Services.prefs.getBoolPref(this.SIDEBAR_PREF, false), false);
+      this.applySidebarCompact(this.sidebarCompactWanted, false);
     }
     if (animate && !this.reducedMotion) {
       // смена раскладки проявляется, а не перескакивает (tabora-layout-in в tabora.css)
@@ -1821,7 +1850,11 @@ var Tabora = {
       return;
     }
     const on = force ?? document.documentElement.getAttribute("tabora-sidebar") !== "compact";
-    Services.prefs.setBoolPref(this.SIDEBAR_PREF, on);
+    if (this.narrowQuery.matches) {
+      this._narrowChoice = on; // в узком окне выбор временный: настройка для широкого окна не трогается
+    } else {
+      Services.prefs.setBoolPref(this.SIDEBAR_PREF, on);
+    }
     this.applySidebarCompact(on);
   },
 
@@ -3182,12 +3215,20 @@ var Tabora = {
     const show = force === undefined ? !isOpen : force;
     document.getElementById("tabora-agent-toggle")?.setAttribute("aria-pressed", String(show));
     if (show) {
+      if (this.drawer?.open && document.getElementById("browser").hasAttribute("tabora-drawer-full")) {
+        this.closeDrawer(); // в узком окне место одно: панель агента занимает его вместо ящика
+      }
       panel.hidden = false;
       panel.getBoundingClientRect(); // кадр на раскладку, затем выезд справа
       panel.setAttribute("open", "true");
       document.getElementById("tabora-agent-input")?.focus({ preventScroll: true });
     } else {
       panel.removeAttribute("open");
+    }
+    if (this.drawer?.open) {
+      // панель меняет место, оставшееся ящику и странице: ящик пересчитывается, когда она доедет
+      clearTimeout(this._agentResize);
+      this._agentResize = setTimeout(() => this.sizeDrawer(), 240);
     }
   },
 

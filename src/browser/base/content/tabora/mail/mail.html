@@ -55,14 +55,23 @@
       </details>
     </nav>
 
+    <!-- В узком окне папки выезжают поверх страницы, этот слой затемняет её и закрывает папки щелчком -->
+    <button class="nav-scrim" id="nav-scrim" type="button" tabindex="-1" aria-label="Закрыть папки"></button>
+
     <!-- Список писем -->
     <section class="list" id="list-pane" aria-label="Список писем">
       <header class="list-head">
         <div class="list-title-row">
+          <button class="icon-btn nav-btn" type="button" title="Папки" aria-label="Папки" aria-expanded="false">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
           <h1 class="list-title" id="list-title">Входящие</h1>
           <span class="list-sub" id="list-sub"></span>
           <button class="icon-btn refresh" id="refresh-btn" type="button" title="Проверить почту" aria-label="Проверить почту">
             <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg>
+          </button>
+          <button class="icon-btn compose-mini" id="compose-mini" type="button" title="Написать (C)" aria-label="Написать">
+            <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
           </button>
         </div>
         <div class="search" id="search">
@@ -102,6 +111,9 @@
     <section class="aliases" id="aliases-pane" aria-label="Алиасы" hidden>
       <header class="aliases-head">
         <div class="aliases-title-row">
+          <button class="icon-btn nav-btn" type="button" title="Папки" aria-label="Папки" aria-expanded="false">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
           <div>
             <h1 class="aliases-title">Алиасы</h1>
             <p class="aliases-sub">Каждый сайт получает свой адрес. Выключили алиас: письма с него больше не приходят, а сайт не узнаёт ваш настоящий.</p>
@@ -135,6 +147,9 @@
     <section class="aliases keys" id="keys-pane" aria-label="Шифрование" hidden>
       <header class="aliases-head">
         <div class="aliases-title-row">
+          <button class="icon-btn nav-btn" type="button" title="Папки" aria-label="Папки" aria-expanded="false">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
           <div>
             <h1 class="aliases-title">Шифрование</h1>
             <p class="aliases-sub">Зашифрованное письмо читаете только вы и получатель: на почтовых серверах лежит набор знаков. Ключи хранятся в сейфе этого профиля.</p>
