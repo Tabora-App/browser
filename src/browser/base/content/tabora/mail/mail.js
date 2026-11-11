@@ -23,6 +23,7 @@
 const { MailStore, ACCOUNT, SPACE_COLORS } = ChromeUtils.importESModule("chrome://tabora/content/mail/MailStore.sys.mjs");
 const { Account } = ChromeUtils.importESModule("chrome://tabora/content/account/Account.sys.mjs");
 const { Vault } = ChromeUtils.importESModule("chrome://tabora/content/vault/Vault.sys.mjs");
+const { RichEditor } = ChromeUtils.importESModule("chrome://tabora/content/mail/RichEditor.sys.mjs");
 const Shell = window.browsingContext?.topChromeWindow?.Tabora || null;
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, { Pgp: "chrome://tabora/content/mail/Pgp.sys.mjs" });
@@ -377,7 +378,8 @@ const App = {
   compose: null,
   visibleThreads: [],
   box: null, // показаны письма только этого ящика (его id) или всех
-  replyTexts: new Map(), // набранный быстрый ответ по цепочкам: переживает перерисовку письма
+  replyTexts: new Map(), // набранный быстрый ответ по цепочкам ({ text, html }): переживает уход из переписки
+  _reply: null, // быстрый ответ открытой переписки: { thread, el, editor, update }
   sendingReply: null, // цепочка, ответ на которую сейчас отправляется
   expanded: new Set(), // письма открытой цепочки, развёрнутые вручную
   htmlHeights: new Map(), // высота писем с вёрсткой: при повторном показе место отводится сразу
@@ -1103,10 +1105,15 @@ const App = {
       }
       return;
     }
-    const oldReply = box.querySelector(".quick-reply textarea");
-    const kept = same
-      ? { scroll: box.querySelector(".thread-body")?.scrollTop || 0, caret: oldReply && document.activeElement === oldReply ? [oldReply.selectionStart, oldReply.selectionEnd] : null }
-      : null;
+    const oldBody = box.querySelector(".thread-body");
+    const kept = same ? { scroll: oldBody?.scrollTop || 0 } : null;
+    // Быстрый ответ набирается в рамке, а рамка, вынутая из документа, теряет набранное, курсор и
+    // историю правок. Пока открыта та же переписка, её тело и ответ остаются на месте: меняются
+    // только письма над ответом.
+    const reply = same && last && !last.draft && this._reply?.thread === this.selectedThread && oldBody?.contains(this._reply.el) ? this._reply : null;
+    if (!reply) {
+      this.dropQuickReply();
+    }
     if (!same) {
       this.expanded.clear();
     }
@@ -1115,12 +1122,23 @@ const App = {
     this._readerHeadSig = headSig;
     $("reader-empty").hidden = thread.length > 0;
     box.hidden = !thread.length;
-    box.replaceChildren();
     if (!thread.length) {
+      box.replaceChildren();
       return;
     }
-    const latest = thread[thread.length - 1];
     const head = this.renderThreadHead(thread);
+    if (reply) {
+      for (const child of [...oldBody.children]) {
+        if (child !== reply.el) {
+          child.remove();
+        }
+      }
+      box.querySelector(".thread-head").replaceWith(head);
+      this.fillThreadBody(thread, oldBody, reply);
+      oldBody.scrollTop = kept.scroll;
+      return;
+    }
+    box.replaceChildren();
     const body = el("div", { class: "thread-body" });
     // элемент просмотра письма живёт в другом процессе: после прокрутки ему сообщается новое место
     body.addEventListener("scroll", () => {
@@ -1135,20 +1153,70 @@ const App = {
         }
       }, 120);
     }, { passive: true });
-    this.fillThreadBody(thread, body);
+    this.fillThreadBody(thread, body, null);
     box.append(head, body);
-    const ta = body.querySelector(".quick-reply textarea");
-    if (ta?.value) {
-      ta.style.height = "auto";
-      ta.style.height = `${Math.min(240, ta.scrollHeight)}px`;
-    }
     if (kept) {
       body.scrollTop = kept.scroll;
-      if (kept.caret && ta) {
-        ta.focus({ preventScroll: true });
-        ta.setSelectionRange(...kept.caret);
-      }
     }
+  },
+
+  /** Быстрый ответ уходит со страницы (открыта другая переписка, письмо стало черновиком):
+   * набранное запоминается и вернётся, когда переписку откроют снова. */
+  dropQuickReply() {
+    const reply = this._reply;
+    if (!reply) {
+      return;
+    }
+    this._reply = null;
+    const content = reply.editor.content();
+    if (content.text.trim()) {
+      this.replyTexts.set(reply.thread, content);
+    } else {
+      this.replyTexts.delete(reply.thread);
+    }
+    reply.editor.destroy();
+  },
+
+  /** Быстрый ответ: редактор с оформлением, панель (видна, пока в ответе курсор или текст) и
+   * строка с кнопками. update(latest, sending) приводит его к состоянию переписки. */
+  buildQuickReply(first) {
+    const reply = { thread: first.thread, latest: first };
+    const send = () => this.sendQuickReply(reply.latest, editor.content());
+    const sync = () => (reply.el.dataset.active = String(editor.focused || !editor.empty));
+    const editor = new RichEditor(document, {
+      label: "Быстрый ответ",
+      grow: { min: 44, max: 320 },
+      menu: (items, rect) => Shell?.showMenuFromContent?.(window, items, rect.left, rect.bottom + 6),
+      onInput: () => sync(),
+      onFocus: () => sync(),
+      onSubmit: send,
+    });
+    const hint = el("span", { class: "hint", role: "status" });
+    const forward = el("button", { class: "btn", type: "button", onclick: () => this.openCompose({ forward: reply.latest }) }, [icon("forward", 14), "Переслать"]);
+    const submit = el("button", { class: "primary", type: "button", style: "height:32px;font-size:12px", onclick: send }, "Отправить");
+    reply.editor = editor;
+    reply.el = el("div", { class: "quick-reply" }, [editor.el, el("div", { class: "format" }, editor.bar), el("div", { class: "bar" }, [hint, editor.toggle, forward, submit])]);
+    reply.update = (latest, sending) => {
+      reply.latest = latest;
+      reply.el.dataset.sending = String(sending);
+      editor.setPlaceholder(`Ответить ${latest.from.name}…`);
+      editor.setReadOnly(sending);
+      hint.textContent = sending ? "Отправляем…" : "⌘⏎ отправить · R развернуть ответ";
+      forward.disabled = sending;
+      submit.disabled = sending;
+      submit.classList.toggle("loading", sending);
+      if (sending) {
+        submit.setAttribute("aria-busy", "true");
+      } else {
+        submit.removeAttribute("aria-busy");
+      }
+    };
+    const saved = this.replyTexts.get(first.thread);
+    if (saved) {
+      editor.set(saved);
+    }
+    sync();
+    return reply;
   },
 
   /** Шапка открытого письма: «Назад», тема, действия, ярлыки. */
@@ -1175,11 +1243,14 @@ const App = {
   },
 
   /** Тело открытого письма: карточка кода, письма цепочки, быстрый ответ. */
-  fillThreadBody(thread, body) {
+  /** Письма переписки и быстрый ответ под ними. reply — быстрый ответ, который уже стоит в теле
+   * (та же переписка перестраивается): письма встают над ним. */
+  fillThreadBody(thread, body, reply) {
     const latest = thread[thread.length - 1];
     const code = codeOf(latest);
+    const add = node => (reply ? body.insertBefore(node, reply.el) : body.append(node));
     if (latest.agent) {
-      body.append(el("div", { class: "agent-card" }, [
+      add(el("div", { class: "agent-card" }, [
         el("span", { class: "mark" }, el("span")),
         el("div", { class: "text" }, [
           el("b", { text: `Агент уже вставил этот код на ${latest.agent.site}` }),
@@ -1188,7 +1259,7 @@ const App = {
         el("button", { class: "btn", type: "button", text: "К вкладке", onclick: () => this.toast("Переключение на вкладку появится вместе с агентом") }),
       ]));
     } else if (code) {
-      body.append(el("div", { class: "code-card" }, [
+      add(el("div", { class: "code-card" }, [
         el("div", {}, [el("div", { class: "label", text: "Код подтверждения" }), el("div", { class: "code", text: code })]),
         el("span", { class: "spacer" }),
         el("span", { class: "note", text: "Найден в письме автоматически" }),
@@ -1198,50 +1269,21 @@ const App = {
 
     thread.forEach((m, i) => {
       try {
-        body.append(this.renderMessage(m, i < thread.length - 1 && !this.expanded.has(m.id)));
+        add(this.renderMessage(m, i < thread.length - 1 && !this.expanded.has(m.id)));
       } catch (e) {
         // одно письмо, которое не удалось показать, не должно оставлять пустой всю переписку
         console.error("Tabora mail: письмо не показано", e);
-        body.append(el("div", { class: "mail-item" }, el("div", { class: "paper" }, el("div", { class: "fine", text: "Это письмо не удалось показать." }))));
+        add(el("div", { class: "mail-item" }, el("div", { class: "paper" }, el("div", { class: "fine", text: "Это письмо не удалось показать." }))));
       }
     });
 
-    let ta = null;
-    let fit = () => {};
     if (!latest.draft) {
-      const sending = this.sendingReply === latest.thread;
-      ta = el("textarea", { placeholder: `Ответить ${latest.from.name}…`, rows: "1", "aria-label": "Быстрый ответ" });
-      ta.value = this.replyTexts.get(latest.thread) || "";
-      ta.readOnly = sending;
-      fit = () => {
-        ta.style.height = "auto";
-        ta.style.height = `${Math.min(240, ta.scrollHeight)}px`;
-      };
-      ta.addEventListener("input", () => {
-        if (ta.value) {
-          this.replyTexts.set(latest.thread, ta.value);
-        } else {
-          this.replyTexts.delete(latest.thread);
-        }
-        fit();
-      });
-      ta.addEventListener("keydown", e => {
-        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-          e.preventDefault();
-          this.sendQuickReply(latest, ta.value);
-        }
-      });
-      body.append(el("div", { class: "quick-reply", dataset: { sending: String(sending) } }, [
-        ta,
-        el("div", { class: "bar" }, [
-          el("span", { class: "hint", role: "status", text: sending ? "Отправляем…" : "⌘⏎ отправить · R развернуть ответ" }),
-          el("button", { class: "btn", type: "button", disabled: sending, onclick: () => this.openCompose({ forward: latest }) }, [icon("forward", 14), "Переслать"]),
-          el("button", {
-            class: `primary${sending ? " loading" : ""}`, type: "button", disabled: sending, "aria-busy": sending ? "true" : null,
-            style: "height:32px;font-size:12px", onclick: () => this.sendQuickReply(latest, ta.value),
-          }, "Отправить"),
-        ]),
-      ]));
+      const quick = reply || this.buildQuickReply(latest);
+      quick.update(latest, this.sendingReply === latest.thread);
+      if (!reply) {
+        body.append(quick.el);
+        this._reply = quick;
+      }
     } else {
       body.append(el("div", { class: "quick-reply" }, [
         el("div", { class: "bar" }, [
@@ -1507,7 +1549,10 @@ const App = {
     this.toast("Удалено навсегда");
   },
 
-  async sendQuickReply(to, text) {
+  /** content — набранное в быстром ответе: { text, html } (html пуст, если оформления нет). */
+  async sendQuickReply(to, content) {
+    const text = typeof content === "string" ? content : content?.text || "";
+    const html = (typeof content === "object" && content?.html) || "";
     if (!text.trim()) {
       this.openCompose({ reply: to });
       return;
@@ -1515,8 +1560,13 @@ const App = {
     if (this.sendingReply) {
       return;
     }
+    const clearReply = () => {
+      this.replyTexts.delete(to.thread);
+      if (this._reply?.thread === to.thread) {
+        this._reply.editor.clear();
+      }
+    };
     this.sendingReply = to.thread;
-    this.replyTexts.set(to.thread, text);
     this.renderReader(); // кнопка занята, поле не правится, пока письмо уходит
     // отвечаем с того адреса, на который письмо пришло (алиас остаётся алиасом)
     const mine = MailStore.senders().map(s => s.address);
@@ -1527,13 +1577,13 @@ const App = {
       const plan = await MailStore.encryptPlan(from, [recipient]);
       if (to.pgp?.encrypted && !plan.possible) {
         // ответ на зашифрованное письмо не уходит открытым незаметно: решение — в окне письма
-        this.replyTexts.delete(to.thread);
-        this.openCompose({ reply: to, text });
+        clearReply();
+        this.openCompose({ reply: to, text, html });
         return;
       }
       const encrypt = plan.possible && (!!to.pgp?.encrypted || plan.suggested);
-      await MailStore.send({ from: { email: from }, to: [recipient], subject, text, replyTo: to.id, labels: to.labels, encrypt });
-      this.replyTexts.delete(to.thread);
+      await MailStore.send({ from: { email: from }, to: [recipient], subject, text, html, replyTo: to.id, labels: to.labels, encrypt });
+      clearReply();
       this.toast(encrypt ? `Ответ отправлен ${to.from.name} зашифрованным` : `Ответ отправлен ${to.from.name}`);
     } catch (e) {
       this.toast(`Ответ не отправлен. ${e.message}`);
@@ -1556,6 +1606,7 @@ const App = {
       draftId: opts.draft?.id,
       to: opts.to,
       text: opts.text,
+      html: opts.html,
     });
   },
 

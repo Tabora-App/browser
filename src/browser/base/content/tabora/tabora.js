@@ -166,6 +166,18 @@ var Tabora = {
     const h = (tag, attrs, text, children) => this.html(tag, attrs, text, children);
     const iconBtn = (id, title, paths, extra = "") => h("button", { class: `icon-btn ${extra}`.trim(), id, type: "button", title, "aria-label": title }, null, [this.svg(paths, 14, 2)]);
 
+    // Текст письма набирается в редакторе с оформлением: рамка без прав браузера, панель снаружи
+    // (mail/RichEditor.sys.mjs).
+    const { RichEditor } = ChromeUtils.importESModule("chrome://tabora/content/mail/RichEditor.sys.mjs");
+    const editor = new RichEditor(document, {
+      label: "Текст письма",
+      placeholder: "Текст письма",
+      menu: (items, rect) => this.showMenu(items, rect.left, rect.bottom + 6),
+      onInput: () => this.composeChanged(),
+      onSubmit: () => this.sendCompose(),
+      onEscape: () => this.closeCompose(),
+    });
+    editor.el.id = "tabora-compose-text";
     const fromSelect = h("select", { id: "tabora-compose-from", "aria-label": "Отправитель" });
     const toInput = h("input", { id: "tabora-compose-to", type: "text", placeholder: "Адрес, Enter или запятая", autocomplete: "off" });
     const box = h("div", { id: "tabora-compose", hidden: "true", role: "dialog", "aria-label": "Новое письмо", "data-min": "false" }, null, [
@@ -190,11 +202,13 @@ var Tabora = {
           h("label", { for: "tabora-compose-subject" }, "Тема"),
           h("input", { id: "tabora-compose-subject", type: "text", placeholder: "О чём письмо" }),
         ]),
-        h("textarea", { id: "tabora-compose-text", placeholder: "Текст письма", "aria-label": "Текст письма" }),
+        editor.el,
         h("div", { class: "attachments", id: "tabora-compose-attachments" }),
       ]),
+      h("div", { class: "format" }, null, [editor.bar]),
       h("div", { class: "foot" }, null, [
         h("button", { class: "primary", id: "tabora-compose-send", type: "button" }, null, [document.createTextNode("Отправить"), h("span", { class: "kbd" }, "⌘⏎")]),
+        editor.toggle,
         iconBtn("tabora-compose-attach", "Прикрепить файл", ["m21 12-8.5 8.5a5 5 0 0 1-7-7L14 5a3.3 3.3 0 0 1 4.7 4.7L10.5 18a1.7 1.7 0 0 1-2.4-2.4L16 7.7"]),
         iconBtn("tabora-compose-lock", "Шифрование", [this.LOCK_OPEN, this.LOCK_BODY], "lock"),
         h("span", { class: "status", id: "tabora-compose-status" }, "Черновик сохраняется автоматически"),
@@ -204,7 +218,7 @@ var Tabora = {
     ]);
     document.getElementById("browser").append(box);
     window.TaboraSelect.enhance(fromSelect, { inline: true });
-    this.compose = { box, state: null, draftTimer: null };
+    this.compose = { box, editor, state: null, draftTimer: null };
 
     const $ = id => document.getElementById(id);
     $("tabora-compose-lock").hidden = true;
@@ -249,13 +263,7 @@ var Tabora = {
       }
       this.renderComposeAttachments();
     });
-    for (const id of ["tabora-compose-subject", "tabora-compose-text"]) {
-      $(id).addEventListener("input", () => {
-        clearTimeout(this.compose.draftTimer);
-        $("tabora-compose-status").textContent = "Сохраняется…";
-        this.compose.draftTimer = setTimeout(() => this.saveDraft(), 1200);
-      });
-    }
+    $("tabora-compose-subject").addEventListener("input", () => this.composeChanged());
     box.addEventListener("keydown", e => {
       if (e.key === "Escape") {
         e.stopPropagation();
@@ -307,6 +315,16 @@ var Tabora = {
       grip.addEventListener("pointerup", up);
     });
     window.addEventListener("resize", () => !box.hidden && this.keepComposeInWindow());
+  },
+
+  /** Тема или текст письма изменились: черновик сохранится через секунду с небольшим. */
+  composeChanged() {
+    if (!this.compose.state) {
+      return;
+    }
+    clearTimeout(this.compose.draftTimer);
+    document.getElementById("tabora-compose-status").textContent = "Сохраняется…";
+    this.compose.draftTimer = setTimeout(() => this.saveDraft(), 1200);
   },
 
   placeCompose(left, top) {
@@ -375,7 +393,10 @@ var Tabora = {
     $("tabora-compose-cc").value = "";
     $("tabora-compose-cc-field").hidden = true;
     $("tabora-compose-subject").value = "";
-    $("tabora-compose-text").value = "";
+    const editor = this.compose.editor;
+    const { fromText } = ChromeUtils.importESModule("chrome://tabora/content/mail/RichText.sys.mjs");
+    editor.clear();
+    editor.setReadOnly(false);
     $("tabora-compose-attachments").replaceChildren();
     $("tabora-compose-title").textContent = "Новое письмо";
     $("tabora-compose-status").textContent = "Черновик сохраняется на этом компьютере";
@@ -390,7 +411,9 @@ var Tabora = {
         this.compose.state.replyTo = m.id;
         this.compose.state.secret = !!m.pgp?.encrypted;
         $("tabora-compose-subject").value = m.subject.startsWith("Re:") ? m.subject : `Re: ${m.subject}`;
-        $("tabora-compose-text").value = `${opts.text || ""}\n\n${when(m.date)}, ${m.from.name} <${m.from.email}>:\n> ${text(m).split("\n")[0]}`;
+        // исходное письмо цитируется текстом; набранное в быстром ответе переносится с оформлением
+        const quote = `\n\n${when(m.date)}, ${m.from.name} <${m.from.email}>:\n> ${text(m).split("\n")[0]}`;
+        editor.set(opts.html ? { html: opts.html + fromText(quote) } : { text: `${opts.text || ""}${quote}` });
         $("tabora-compose-title").textContent = `Ответ: ${m.from.name}`;
         this.compose.state.thread = m.thread;
         this.compose.state.labels = m.labels;
@@ -403,7 +426,7 @@ var Tabora = {
       const m = MailStore.byId(opts.forwardOf);
       if (m) {
         $("tabora-compose-subject").value = `Fwd: ${m.subject}`;
-        $("tabora-compose-text").value = `\n\n---------- Пересланное письмо ----------\nОт: ${m.from.name} <${m.from.email}>\nДата: ${when(m.date)}\nТема: ${m.subject}\n\n${text(m)}`;
+        editor.set({ text: `\n\n---------- Пересланное письмо ----------\nОт: ${m.from.name} <${m.from.email}>\nДата: ${when(m.date)}\nТема: ${m.subject}\n\n${text(m)}` });
         $("tabora-compose-title").textContent = "Переслать";
         this.compose.state.secret = !!m.pgp?.encrypted;
         // вложения исходного письма берутся с сервера в момент отправки
@@ -414,7 +437,7 @@ var Tabora = {
       if (m) {
         m.to.forEach(t => this.addRecipient(t));
         $("tabora-compose-subject").value = m.subject;
-        $("tabora-compose-text").value = (m.body || []).map(b => b.p).join("\n\n");
+        editor.set({ html: m.rich || "", text: typeof m.text === "string" ? m.text : (m.body || []).map(b => b.p).join("\n\n") });
         this.compose.state.draftId = m.id;
         this.compose.state.attachments = (m.attachments || []).map(a => ({ ...a }));
         $("tabora-compose-title").textContent = "Черновик";
@@ -432,7 +455,7 @@ var Tabora = {
 
   composeHasContent() {
     const s = this.compose.state;
-    return !!(s && (s.to.length || document.getElementById("tabora-compose-subject").value.trim() || document.getElementById("tabora-compose-text").value.trim() || s.attachments.length));
+    return !!(s && (s.to.length || document.getElementById("tabora-compose-subject").value.trim() || !this.compose.editor.empty || s.attachments.length));
   },
 
   closeCompose(discard = false) {
@@ -461,13 +484,14 @@ var Tabora = {
   composeDraft() {
     const s = this.compose.state;
     const $ = id => document.getElementById(id);
-    const text = $("tabora-compose-text").value;
+    // text — текстовый вид письма, rich — разметка с оформлением (пусто, если оформления нет)
+    const { text, html } = this.compose.editor.content();
     return {
       id: s.draftId || `d${Date.now()}`, thread: s.thread || `td${Date.now()}`, folder: "drafts", unread: false, starred: false,
       labels: s.labels || [], from: { name: "Я", email: $("tabora-compose-from").value }, to: s.to.slice(), alias: $("tabora-compose-from").value,
       cc: $("tabora-compose-cc").value.split(/[,;\s]+/).map(v => v.trim()).filter(Boolean), replyTo: s.replyTo || undefined,
       date: new Date().toISOString(), subject: $("tabora-compose-subject").value.trim(), body: text.split(/\n{2,}/).filter(Boolean).map(p => ({ p })),
-      attachments: s.attachments.slice(), draft: true,
+      attachments: s.attachments.slice(), draft: true, text, rich: html || undefined,
     };
   },
 
@@ -639,6 +663,7 @@ var Tabora = {
       button.classList.toggle("loading", on);
       button.toggleAttribute("aria-busy", on);
       this.compose.box.toggleAttribute("sending", on);
+      this.compose.editor.setReadOnly(on);
     };
     busy(true);
     try {
@@ -656,7 +681,7 @@ var Tabora = {
         return;
       }
       status.textContent = s.encrypt ? "Шифруем и отправляем…" : "Отправляем…";
-      await MailStore.send({ ...draft, subject: draft.subject || "(без темы)", thread: s.thread || undefined, encrypt: s.encrypt });
+      await MailStore.send({ ...draft, html: draft.rich || "", subject: draft.subject || "(без темы)", thread: s.thread || undefined, encrypt: s.encrypt });
       if (s.draftId) {
         MailStore.remove(s.draftId);
       }
@@ -4034,17 +4059,34 @@ var Tabora = {
 
   /* ---- Клавиши ---------------------------------------------------------- */
 
+  /** Фокус стоит в редакторе письма (окно письма или быстрый ответ в почте): его рамка —
+   *  отдельный документ, и document.activeElement окна об этом не говорит. */
+  inMailEditor() {
+    const isFrame = el => !!el?.classList?.contains("tb-editor-frame");
+    const active = document.activeElement;
+    if (isFrame(active)) {
+      return true; // окно письма
+    }
+    try {
+      // быстрый ответ на странице почты: страница живёт в этом же процессе
+      return active === gBrowser.selectedBrowser && isFrame(active.contentDocument?.activeElement);
+    } catch (e) {
+      return false;
+    }
+  },
+
   initKeys() {
     window.addEventListener(
       "keydown",
       e => {
         const mod = e.metaKey || e.ctrlKey;
+        const editing = this.inMailEditor();
         if (!mod && !e.altKey && e.key.length === 1 && !e.isComposing) {
           // На стартовой странице любая буква открывает командную строку.
           const start = document.getElementById("tabora-start");
           const cmd = document.getElementById("tabora-cmd");
           const active = document.activeElement;
-          const typing = active && (active.localName === "input" || active.localName === "textarea" || active.isContentEditable);
+          const typing = editing || (active && (active.localName === "input" || active.localName === "textarea" || active.isContentEditable));
           if (start && !start.hidden && cmd?.hidden && !typing) {
             this.openCommandBar(e.key);
             e.preventDefault();
@@ -4070,7 +4112,8 @@ var Tabora = {
           this.openCommandBar();
           e.preventDefault();
           e.stopPropagation();
-        } else if (!e.shiftKey && e.code === "KeyB") {
+        } else if (!e.shiftKey && e.code === "KeyB" && !editing) {
+          // в редакторе письма ⌘B — жирный
           this.toggleSidebar();
           e.preventDefault();
           e.stopPropagation();

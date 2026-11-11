@@ -624,18 +624,13 @@ kbd {
   flex-direction: column;
   transition: border-color var(--ease);
 }
-.quick-reply:focus-within { border-color: var(--accent); }
-.quick-reply textarea {
-  border: 0;
-  background: transparent;
-  resize: none;
-  min-height: 44px;
-  padding: 12px 14px 4px;
-  outline: none;
-  color: var(--text);
-  line-height: 1.45;
-}
-.quick-reply textarea::placeholder { color: var(--text-4); }
+.quick-reply:focus-within, .quick-reply:has(.tb-editor[data-focus]) { border-color: var(--accent); }
+/* быстрый ответ: редактор с оформлением (editor.css); рамка редактора растёт по тексту. Панель
+   оформления видна, пока в ответе стоит курсор или что-то набрано. */
+.quick-reply .tb-editor { min-height: 44px; }
+.quick-reply .format { padding: 2px 8px 0; }
+.quick-reply:not([data-active="true"]) .format, .quick-reply .format:has(> .tb-editor-bar[hidden]) { display: none; }
+.quick-reply .tb-editor-toggle { height: 32px; }
 .quick-reply .bar { display: flex; align-items: center; gap: 6px; padding: 6px 8px 8px 14px; }
 .quick-reply .bar .hint { flex: 1; font-size: 11px; color: var(--text-5); }
 .btn {
@@ -691,7 +686,6 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   .primary.loading::after, .btn.loading::after, .ghost.loading::after { animation-duration: 2s; }
 }
-.quick-reply[data-sending="true"] textarea { color: var(--text-3); }
 .ghost { height: 36px; padding: 0 14px; border: 1px solid var(--stroke); border-radius: 10px; background: transparent; color: var(--text-2); font-weight: 600; font-size: 13px; }
 .ghost:hover { background: var(--raised); color: var(--text-strong); }
 

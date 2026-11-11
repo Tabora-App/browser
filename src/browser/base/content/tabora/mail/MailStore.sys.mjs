@@ -40,6 +40,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
 });
 ChromeUtils.defineLazyGetter(lazy, "Mime", () => ChromeUtils.importESModule("chrome://tabora/content/mail/net/Mime.sys.mjs"));
+ChromeUtils.defineLazyGetter(lazy, "RichText", () => ChromeUtils.importESModule("chrome://tabora/content/mail/RichText.sys.mjs"));
 
 const FILE = () => PathUtils.join(PathUtils.profileDir, "tabora-mail.json");
 const FORMAT = 4; // файл: { v: 4, enc: { iv, ct } }
@@ -1297,7 +1298,17 @@ export const MailStore = {
     if (!to.length) {
       throw new Error("Укажите получателя");
     }
-    const text = typeof message.text === "string" ? message.text : (message.body || []).map(b => b.p || b.h || b.q || "").filter(Boolean).join("\n\n");
+    let text = typeof message.text === "string" ? message.text : (message.body || []).map(b => b.p || b.h || b.q || "").filter(Boolean).join("\n\n");
+    // Оформление: разметка из редактора строится заново из разрешённого (RichText.clean), что бы
+    // ни передал вызывающий. Без оформления письмо уходит одним текстом, как раньше.
+    let html = "";
+    if (typeof message.html === "string" && message.html) {
+      const rich = lazy.RichText.clean(message.html, { own: true });
+      if (rich.formatted) {
+        html = lazy.RichText.wrap(rich.html);
+        text = rich.text;
+      }
+    }
     const original = message.replyTo ? this.byId(message.replyTo) : null;
     const name = acc.id === TABORA ? "" : acc.name || "";
     // вложения: файлы с диска (path) и пересылаемые из другого письма (source: { id, index })
@@ -1329,7 +1340,7 @@ export const MailStore = {
     if (message.encrypt && !keyed) {
       throw new Error("Зашифровать можно только письмо с адреса аккаунта Tabora");
     }
-    let entity = lazy.Mime.buildEntity({ text, attachments });
+    let entity = lazy.Mime.buildEntity({ text, html, attachments });
     const extraHeaders = [];
     if (keyed) {
       try {
@@ -1372,6 +1383,9 @@ export const MailStore = {
       refs: original ? [...(original.refs || []), original.messageId].filter(Boolean) : [], body: lazy.Mime.toBlocks({ text, html: "", subject: message.subject || "" }).body,
       attachments: attachments.map(a => ({ name: a.name, size: a.bytes.length })),
     };
+    if (html) {
+      this._keepHtml(rec, { html }); // отправленное с оформлением показывается с оформлением
+    }
     if (message.encrypt) {
       rec.pgp = { encrypted: true, signature: "valid", signer: from };
     }

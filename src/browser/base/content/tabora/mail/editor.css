@@ -1,0 +1,247 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Редактор письма с оформлением (mail/RichEditor.sys.mjs): рамка с текстом, панель оформления,
+   кнопка «Аа». Один файл на оболочку (окно письма) и страницу почты (быстрый ответ): переменные
+   оформления у них названы по-разному, поэтому здесь свои, с запасным значением. */
+
+.tb-editor,
+.tb-editor-bar,
+.tb-editor-toggle {
+  --tbe-text: var(--tabora-text, var(--text));
+  --tbe-text-2: var(--tabora-text-3, var(--text-3));
+  --tbe-text-strong: var(--tabora-text-strong, var(--text-strong));
+  --tbe-placeholder: var(--tabora-text-4, var(--text-4));
+  --tbe-link: var(--tabora-accent-ink, var(--accent-ink));
+  --tbe-line: var(--tabora-line, var(--stroke));
+  --tbe-selection: var(--tabora-accent-dim, var(--accent-dim));
+  --tbe-raised: var(--tabora-raised, var(--raised));
+  --tbe-panel: var(--tabora-panel, var(--card));
+  --tbe-field: var(--tabora-field, var(--field));
+  --tbe-field-border: var(--tabora-field-border, var(--field-border));
+  --tbe-accent: var(--tabora-accent, var(--accent));
+  --tbe-ease: var(--tabora-ease, var(--ease));
+  --tbe-font: var(--tabora-font, var(--font));
+}
+
+.tb-editor {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* рамка без своей рамки и полей: высота рамки равна высоте текста (см. «Прокрутка» в mail.css) */
+.tb-editor-frame {
+  display: block;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+}
+
+/* ---- панель оформления ---- */
+
+.tb-editor-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--tbe-raised);
+  font-family: var(--tbe-font);
+  -moz-window-dragging: no-drag;
+}
+
+.tb-editor-bar[hidden],
+.tb-editor-bar [hidden] {
+  display: none;
+}
+
+.tb-editor-bar[data-disabled] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* одна строка: что не поместилось, переносится ниже, обрезается и доступно по кнопке «Ещё» */
+.tb-editor-tools {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 1px;
+  overflow: hidden;
+}
+
+.tb-editor-btn {
+  flex: none;
+  box-sizing: border-box;
+  height: 28px;
+  min-width: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tbe-text-2);
+  font: 600 12px/1 var(--tbe-font);
+  cursor: default;
+  transition: background-color var(--tbe-ease), color var(--tbe-ease);
+}
+
+.tb-editor-btn:hover {
+  background: var(--tbe-panel);
+  color: var(--tbe-text-strong);
+}
+
+.tb-editor-btn[aria-pressed="true"] {
+  background: var(--tbe-panel);
+  color: var(--tbe-link);
+}
+
+.tb-editor-btn:focus-visible,
+.tb-editor-toggle:focus-visible {
+  outline: 1px solid var(--tbe-accent);
+  outline-offset: -1px;
+}
+
+.tb-editor-pick {
+  padding: 0 4px 0 7px;
+}
+
+.tb-editor-pick > svg:last-child {
+  opacity: 0.7;
+}
+
+.tb-editor-pick-label {
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* «А» с полоской выбранного цвета */
+.tb-editor-color-icon {
+  position: relative;
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+}
+
+.tb-editor-color {
+  position: absolute;
+  inset: auto 1px -3px;
+  height: 3px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.tb-editor-sep {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  margin: 6px 4px;
+  background: var(--tbe-line);
+}
+
+.tb-editor-sep[data-trailing] {
+  visibility: hidden;
+}
+
+.tb-editor-more {
+  margin-inline-start: auto;
+}
+
+/* ---- строка ссылки: поверх панели, пока вводится адрес ---- */
+
+.tb-editor-link {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--tbe-raised);
+}
+
+.tb-editor-link-input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--tbe-field-border);
+  border-radius: 8px;
+  background: var(--tbe-field);
+  color: var(--tbe-text);
+  font: 500 13px/1 var(--tbe-font);
+  outline: none;
+  transition: border-color var(--tbe-ease);
+}
+
+.tb-editor-link-input:focus {
+  border-color: var(--tbe-accent);
+}
+
+.tb-editor-link-input[aria-invalid="true"] {
+  border-color: #ff7b7b;
+}
+
+.tb-editor-link-apply,
+.tb-editor-link-remove {
+  flex: none;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--tbe-panel);
+  color: var(--tbe-text);
+  font: 600 12px/1 var(--tbe-font);
+  cursor: default;
+  transition: background-color var(--tbe-ease), color var(--tbe-ease);
+}
+
+.tb-editor-link-apply:hover,
+.tb-editor-link-remove:hover {
+  color: var(--tbe-text-strong);
+}
+
+/* ---- «Аа»: показать или спрятать панель ---- */
+
+.tb-editor-toggle {
+  flex: none;
+  box-sizing: border-box;
+  width: 34px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--tbe-text-2);
+  font: 700 13px/1 var(--tbe-font);
+  letter-spacing: -0.02em;
+  cursor: default;
+  transition: background-color var(--tbe-ease), color var(--tbe-ease);
+}
+
+.tb-editor-toggle:hover {
+  background: var(--tbe-raised);
+  color: var(--tbe-text-strong);
+}
+
+.tb-editor-toggle[aria-pressed="true"] {
+  background: var(--tbe-raised);
+  color: var(--tbe-link);
+}

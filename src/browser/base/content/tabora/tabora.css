@@ -13,6 +13,7 @@
 @import url("chrome://tabora/content/vault/vault.css");
 @import url("chrome://tabora/content/account/account.css");
 @import url("chrome://tabora/content/update/update.css");
+@import url("chrome://tabora/content/mail/editor.css");
 
 :root {
   --tabora-bg: #0b0c0e;
@@ -3336,17 +3337,24 @@ toolbarseparator {
   color: var(--tabora-text-strong);
 }
 
-#tabora-compose textarea {
+/* текст письма: редактор с оформлением (mail/editor.css), занимает всё место под полями */
+#tabora-compose-text {
   flex: 1;
   min-height: 160px;
-  resize: none;
-  border: 0;
-  background: transparent;
-  outline: none;
-  padding: 12px 0;
-  line-height: 1.5;
-  color: var(--tabora-text);
-  font: inherit;
+}
+
+/* панель оформления над строкой отправки; прячется и показывается кнопкой «Аа» */
+#tabora-compose .format {
+  flex-shrink: 0;
+  padding: 0 16px 10px;
+}
+
+#tabora-compose .format:has(> .tb-editor-bar[hidden]) {
+  display: none;
+}
+
+#tabora-compose[data-min="true"] .format {
+  display: none;
 }
 
 #tabora-compose .attachments {

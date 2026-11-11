@@ -751,17 +751,25 @@ function attachmentPart({ name, type, bytes }) {
 
 const newBoundary = () => `tabora-${Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, "0")).join("")}`;
 
-/** Содержимое письма как часть MIME: заголовки Content-* и тело. Текст без оформления (UTF-8)
- * и вложения [{ name, type?, bytes: Uint8Array }]. Именно эта часть шифруется в PGP/MIME. */
-export function buildEntity({ text = "", attachments = [] }) {
-  const textHeaders = ['Content-Type: text/plain; charset="UTF-8"', "Content-Transfer-Encoding: quoted-printable"];
-  const body = quotedPrintable(utf8Bytes(String(text).replace(/\r\n?/g, "\n")));
+/** Содержимое письма как часть MIME: заголовки Content-* и тело. Текст (UTF-8), необязательная
+ * разметка html (тогда письмо несёт оба вида, multipart/alternative: программа получателя
+ * покажет оформленный, а не умеющая — текстовый) и вложения [{ name, type?, bytes: Uint8Array }].
+ * Именно эта часть шифруется в PGP/MIME. html — готовое содержимое письма (см. RichText.clean). */
+export function buildEntity({ text = "", html = "", attachments = [] }) {
+  const part = (type, content) =>
+    `Content-Type: ${type}; charset="UTF-8"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n${quotedPrintable(utf8Bytes(String(content).replace(/\r\n?/g, "\n")))}`;
+  let content = part("text/plain", text);
+  if (html) {
+    const boundary = newBoundary();
+    const page = `<!DOCTYPE html><html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"></head><body>${html}</body></html>`;
+    content = `Content-Type: multipart/alternative; boundary="${boundary}"\r\n\r\n--${boundary}\r\n${part("text/plain", text)}\r\n--${boundary}\r\n${part("text/html", page)}\r\n--${boundary}--`;
+  }
   if (!attachments.length) {
-    return `${textHeaders.join("\r\n")}\r\n\r\n${body}\r\n`;
+    return `${content}\r\n`;
   }
   const boundary = newBoundary();
-  const parts = [`${textHeaders.join("\r\n")}\r\n\r\n${body}`, ...attachments.map(attachmentPart)];
-  return `Content-Type: multipart/mixed; boundary="${boundary}"\r\n\r\n${parts.map(part => `--${boundary}\r\n${part}\r\n`).join("")}--${boundary}--\r\n`;
+  const parts = [content, ...attachments.map(attachmentPart)];
+  return `Content-Type: multipart/mixed; boundary="${boundary}"\r\n\r\n${parts.map(p => `--${boundary}\r\n${p}\r\n`).join("")}--${boundary}--\r\n`;
 }
 
 /** Зашифрованное содержимое в виде PGP/MIME (RFC 3156): armored — броня OpenPGP. */
