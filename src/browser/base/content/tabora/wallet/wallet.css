@@ -803,6 +803,20 @@
   justify-content: flex-end;
 }
 
+/* под резервной фразой: «Скопировать» и «QR-код» поровну в одну строку */
+:is(#tabora-drawer, #tabora-modal) .w-actions.w-phrase-tools {
+  flex-wrap: nowrap;
+}
+
+:is(#tabora-drawer, #tabora-modal) .w-phrase-tools .w-btn {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+:is(#tabora-drawer, #tabora-modal) .w-phrase-qr .w-qr {
+  align-self: center;
+}
+
 /* Активы */
 :is(#tabora-drawer, #tabora-modal) .w-head-actions {
   display: flex;

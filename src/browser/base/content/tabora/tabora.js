@@ -1277,11 +1277,12 @@ var Tabora = {
     ]);
     toggle.addEventListener("click", () => this.toggleSidebar());
     // «Разделы» показывает рейку ящика (drawer.js): почта, загрузки, кошелёк, коды и остальное.
-    // Пока рейка спрятана, на кнопке стоят число непрочитанных писем и ход загрузок.
+    // На кнопке стоит общее число событий разделов (новые письма, поступления в кошелёк,
+    // загрузки) и ход идущих загрузок; по разделам они разложены на рейке.
     const sections = this.html("button", { id: "tabora-sections", type: "button", title: "Разделы", "aria-pressed": String(!!(this.drawer?.open || this.drawer?.rail)) }, null, [
       this.svg(["M4 4h6.5v6.5H4z", "M13.5 4H20v6.5h-6.5z", "M4 13.5h6.5V20H4z", "M13.5 13.5H20V20h-6.5z"], 16, 1.8),
       this.html("span", { class: "label" }, "Разделы"),
-      this.html("span", { class: "pill", "data-badge": "unread", hidden: "true" }),
+      this.html("span", { class: "pill", "data-badge": "total", hidden: "true" }),
       this.html("span", { class: "bar", "data-badge": "progress", "aria-hidden": "true", hidden: "true" }, null, [this.html("span")]),
     ]);
     sections.addEventListener("click", () => this.toggleRail());
@@ -2028,6 +2029,7 @@ var Tabora = {
     const walletCard = this.html("button", { id: "tabora-wallet-card", title: "Кошелёк (⌘⇧W)" }, null, [
       this.svg(["M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v2", "M3 7v10a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-7a1 1 0 0 0-1-1H5a2 2 0 0 1-2-2z", "M16 14h.01"], 16, 1.8),
       this.html("span", {}, "Кошелёк"),
+      this.html("span", { class: "pill count", "data-badge": "wallet", hidden: "true" }),
       this.html("span", { class: "pill mono", id: "tabora-wallet-total", hidden: "true" }),
       this.html("span", { class: "kbd" }, "⌘⇧W"),
     ]);
@@ -2183,7 +2185,11 @@ var Tabora = {
       return;
     }
     const { Downloads } = ChromeUtils.importESModule("resource://gre/modules/Downloads.sys.mjs");
-    this._dl = { list: await Downloads.getList(Downloads.ALL), items: new Set(), timer: null };
+    // fresh — загрузки, законченные при открытом окне и ещё не просмотренные в разделе загрузок
+    this._dl = { list: await Downloads.getList(Downloads.ALL), items: new Set(), fresh: new Set(), timer: null };
+    const seen = { observe: () => this.downloadsSeen(false) };
+    Services.obs.addObserver(seen, "tabora-downloads-seen");
+    window.addEventListener("unload", () => Services.obs.removeObserver(seen, "tabora-downloads-seen"), { once: true });
     const refresh = () => {
       this.updateDownloadsCard();
       this.drawerDirty?.("downloads");
@@ -2191,7 +2197,7 @@ var Tabora = {
     await this._dl.list.addView({
       onDownloadAdded: d => { this._dl.items.add(d); refresh(); },
       onDownloadChanged: d => { this.downloadFinished(d); refresh(); },
-      onDownloadRemoved: d => { this._dl.items.delete(d); refresh(); },
+      onDownloadRemoved: d => { this._dl.items.delete(d); this._dl.fresh.delete(d); refresh(); },
     });
   },
 
@@ -2200,7 +2206,23 @@ var Tabora = {
       d._taboraNoticed = true;
       if (this._dl.seenStart && d.startTime >= this._dl.seenStart) {
         this.notice(`Скачано: ${PathUtils.filename(d.target.path)}`);
+        // законченная загрузка — событие, пока раздел загрузок не открыт
+        if (!(this.drawer?.open && this.drawer.section === "downloads")) {
+          this._dl.fresh.add(d);
+        }
       }
+    }
+  },
+
+  /** Раздел загрузок открыт: законченные загрузки просмотрены (во всех окнах). */
+  downloadsSeen(tell = true) {
+    if (!this._dl?.fresh.size) {
+      return;
+    }
+    this._dl.fresh.clear();
+    this.updateDownloadsCard();
+    if (tell) {
+      Services.obs.notifyObservers(null, "tabora-downloads-seen");
     }
   },
 
@@ -2219,15 +2241,17 @@ var Tabora = {
     const live = document.getElementById("tabora-downloads-live");
     const pill = document.getElementById("tabora-downloads-pill");
     const all = [...running, ...paused];
-    pill.hidden = !all.length;
-    pill.textContent = String(all.length);
+    // число на значке: идущие загрузки и законченные, но ещё не просмотренные
+    const count = all.length + this._dl.fresh.size;
+    pill.hidden = !count;
+    pill.textContent = String(count);
     card.toggleAttribute("active", !!running.length);
     card.toggleAttribute("paused", !running.length && !!paused.length);
     live.hidden = !all.length;
     if (!all.length) {
       clearInterval(this._dl.timer);
       this._dl.timer = null;
-      this.setBadges?.({ downloads: 0, progress: null, running: false });
+      this.setBadges?.({ downloads: count, active: 0, progress: null, running: false });
       return;
     }
     if (!this._dl.timer) {
@@ -2246,7 +2270,7 @@ var Tabora = {
     pctEl.textContent = pct === null ? "" : `${pct}%`;
     bar.style.width = `${pct ?? 100}%`;
     bar.classList.toggle("indeterminate", pct === null && !!running.length);
-    this.setBadges?.({ downloads: all.length, progress: pct, running: !!running.length });
+    this.setBadges?.({ downloads: count, active: all.length, progress: pct, running: !!running.length });
     const parts = [];
     const bytes = total ? `${fmt(done)} из ${fmt(total)}` : fmt(done);
     if (running.length) {
@@ -2483,6 +2507,7 @@ var Tabora = {
   },
 
   openDownloads() {
+    this.downloadsSeen?.();
     this.openInternal(this.DOWNLOADS_URL);
   },
 
@@ -2595,7 +2620,7 @@ var Tabora = {
       const n = MailStore.available ? MailStore.unreadInbox() : 0;
       pill.textContent = n > 99 ? "99+" : String(n);
       pill.hidden = !n;
-      this.setBadges?.({ unread: n });
+      this.setBadges?.({ mail: n });
       const button = document.getElementById("tabora-mail");
       button.title = n ? `Почта и алиасы: ${n} ${this.plural(n, "новое письмо", "новых письма", "новых писем")} (⌘⇧M)` : "Почта и алиасы (⌘⇧M)";
     };
@@ -2809,6 +2834,24 @@ var Tabora = {
 
   startLabel() {
     return this.isPrivate ? "Приватная вкладка" : "Новая вкладка";
+  },
+
+  /** Число новых писем на вкладке почты: атрибут tabora-unread и переменная --tabora-unread,
+   *  по которым стили рисуют число в строке вкладки или на углу её значка. */
+  syncMailTabs() {
+    const n = this.badges?.mail || 0;
+    const text = n > 99 ? "99+" : String(n);
+    for (const tab of gBrowser.tabs) {
+      if (n && this.isMailUrl(tab.linkedBrowser?.currentURI?.spec)) {
+        if (tab.getAttribute("tabora-unread") !== text) {
+          tab.setAttribute("tabora-unread", text);
+          tab.style.setProperty("--tabora-unread", `"${text}"`);
+        }
+      } else if (tab.hasAttribute("tabora-unread")) {
+        tab.removeAttribute("tabora-unread");
+        tab.style.removeProperty("--tabora-unread");
+      }
+    }
   },
 
   /** Стартовые вкладки получают атрибут tabora-start: свой значок вместо глобуса Firefox. */
@@ -3913,6 +3956,7 @@ var Tabora = {
       const tab = e.target;
       if (e.detail?.changed?.some(a => a === "image" || a === "label" || a === "busy")) {
         this.markStartTab(tab);
+        this.syncMailTabs();
       }
       if (
         e.detail?.changed?.includes("label") &&

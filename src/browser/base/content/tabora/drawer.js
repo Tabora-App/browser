@@ -22,9 +22,9 @@ Object.assign(Tabora, {
   RAIL_PINNED_PREF: "tabora.drawer.pinned",
 
   // page — раздел без панели: имя метода, который открывает его страницу во вкладке (и возвращает
-  // с неё), current — стоит ли страница перед глазами; badge — отметка на значке раздела
+  // с неё), current — стоит ли страница перед глазами; badge — у раздела есть счётчик событий
   SECTIONS: {
-    mail: { label: "Почта", key: "⌘⇧M", icon: ["M3.5 6.5h17v11h-17z", "M3.5 7l8.5 6 8.5-6"], page: "toggleMail", current: () => Tabora.isMailUrl(gBrowser.selectedBrowser?.currentURI?.spec), badge: "unread" },
+    mail: { label: "Почта", key: "⌘⇧M", icon: ["M3.5 6.5h17v11h-17z", "M3.5 7l8.5 6 8.5-6"], page: "toggleMail", current: () => Tabora.isMailUrl(gBrowser.selectedBrowser?.currentURI?.spec), badge: "mail" },
     downloads: { label: "Загрузки", key: "⌘⇧J", icon: ["M12 4v11", "M7 10l5 5 5-5", "M4 19h16"], search: "Имя файла или сайт", full: "Открыть страницу загрузок", badge: "downloads" },
     history: { label: "История", key: "⌘⇧H", icon: ["M12 7v5l3 2", "M3.5 12a8.5 8.5 0 1 0 2.5-6", "M3 4v4h4"], search: "Поиск в истории" },
     media: { label: "Медиа", key: "⌘⇧I", icon: ["M4 5h16v14H4z", "M4 15l5-5 4 4 3-3 4 4", "M15.5 9.5h.01"], search: "Поиск по медиа" },
@@ -340,10 +340,14 @@ Object.assign(Tabora, {
     }
   },
 
-  /* ---- Отметки: непрочитанные письма и идущие загрузки --------------------------------
-   * Стоят на разделах рейки и, пока рейка спрятана, на кнопке «Разделы». Элемент с атрибутом
-   * data-badge получает значение: unread и downloads — число, progress — полоску хода. */
-  badges: { unread: 0, downloads: 0, progress: null, running: false },
+  /* ---- События разделов ---------------------------------------------------------------
+   * То, что произошло и ещё не просмотрено: новые письма (mail), поступления в кошелёк
+   * (wallet), загрузки — идущие и законченные, но не просмотренные (downloads). Число стоит на
+   * своём разделе рейки и на значке в строке адреса, сумма всех — на кнопке «Разделы», число
+   * писем — ещё и на вкладке почты. Элемент с атрибутом data-badge получает значение: имя
+   * раздела — его число, total — сумму, progress — полоску хода загрузок (active — идут ли они). */
+  badges: { mail: 0, wallet: 0, downloads: 0, active: 0, progress: null, running: false },
+  BADGE_SECTIONS: ["mail", "wallet", "downloads"],
 
   setBadges(patch) {
     Object.assign(this.badges, patch);
@@ -353,16 +357,17 @@ Object.assign(Tabora, {
   paintBadges() {
     const b = this.badges;
     const text = n => (n > 99 ? "99+" : String(n));
+    const total = this.BADGE_SECTIONS.reduce((n, id) => n + (b[id] || 0), 0);
     for (const el of document.querySelectorAll("[data-badge]")) {
       const kind = el.dataset.badge;
       if (kind === "progress") {
-        el.hidden = !b.downloads;
+        el.hidden = !b.active;
         el.toggleAttribute("paused", !b.running);
         const fill = el.firstElementChild;
         fill.style.width = `${b.progress ?? 100}%`;
         fill.classList.toggle("indeterminate", b.progress === null && b.running);
       } else {
-        const n = b[kind] || 0;
+        const n = kind === "total" ? total : b[kind] || 0;
         el.textContent = text(n);
         el.hidden = !n;
       }
@@ -370,15 +375,19 @@ Object.assign(Tabora, {
     const button = document.getElementById("tabora-sections");
     if (button) {
       const parts = [];
-      if (b.unread) {
-        parts.push(`${b.unread} ${this.plural(b.unread, "новое письмо", "новых письма", "новых писем")}`);
+      if (b.mail) {
+        parts.push(`${b.mail} ${this.plural(b.mail, "новое письмо", "новых письма", "новых писем")}`);
+      }
+      if (b.wallet) {
+        parts.push(`${b.wallet} ${this.plural(b.wallet, "поступление", "поступления", "поступлений")} в кошелёк`);
       }
       if (b.downloads) {
-        parts.push(`${b.downloads} ${this.plural(b.downloads, "загрузка", "загрузки", "загрузок")}${b.progress === null ? "" : `, ${b.progress}%`}`);
+        parts.push(`${b.downloads} ${this.plural(b.downloads, "загрузка", "загрузки", "загрузок")}${b.active && b.progress !== null ? `, ${b.progress}%` : ""}`);
       }
       button.dataset.note = parts.join(" · ");
       button.title = parts.length ? `Разделы: ${parts.join(" · ")}` : "Разделы";
     }
+    this.syncMailTabs?.();
   },
 
   /* ---- Рейка без панели и закрепление --------------------------------------------------- */
@@ -703,6 +712,12 @@ Object.assign(Tabora, {
     const s = this.SECTIONS[d.section];
     const panel = d.el.querySelector(".dpanel");
     panel.setAttribute("data-section", d.section);
+    // раздел перед глазами: его события просмотрены
+    if (d.section === "wallet") {
+      this.walletSeen?.();
+    } else if (d.section === "downloads") {
+      this.downloadsSeen?.();
+    }
     const input = document.getElementById("tabora-drawer-search");
     input.placeholder = s.search || "Поиск";
     panel.querySelector(".dhead").hidden = !!s.wide || !!s.noSearch;

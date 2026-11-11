@@ -886,6 +886,16 @@ sidebar-main {
   display: none;
 }
 
+/* число непросмотренных поступлений на кнопке кошелька: как число писем у почты */
+#tabora-wallet-card .pill.count {
+  font: 800 11px/1 var(--tabora-font);
+  color: var(--tabora-on-accent);
+  background: var(--tabora-accent);
+  border-radius: 10px;
+  padding: 3px 7px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* число непрочитанных писем: в строке — перед сочетанием клавиш, на плитке и значке — на углу */
 #tabora-mail .pill {
   margin-inline-end: 4px;
@@ -1227,8 +1237,8 @@ sidebar-main {
   -moz-window-dragging: no-drag;
 }
 
-/* «Разделы»: показывает рейку ящика. Пока рейка спрятана, на кнопке стоят число непрочитанных
-   писем и полоска хода загрузок; когда рейка на экране, они видны на её разделах. */
+/* «Разделы»: показывает рейку ящика. На кнопке — общее число событий разделов (новые письма,
+   поступления в кошелёк, загрузки) и полоска хода идущих загрузок. */
 #tabora-sections {
   position: relative;
   box-sizing: border-box;
@@ -1321,8 +1331,7 @@ sidebar-main {
   animation: tabora-dl-slide 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-#tabora-sections :is(.pill, .bar)[hidden],
-#tabora-sections[aria-pressed="true"] :is(.pill, .bar) {
+#tabora-sections :is(.pill, .bar)[hidden] {
   display: none;
 }
 
@@ -4096,6 +4105,39 @@ toolbarseparator {
   color: var(--tabora-text-3);
 }
 
+/* Число новых писем на вкладке почты (атрибут tabora-unread и переменная --tabora-unread ставит
+   syncMailTabs в tabora.js): в строке вкладки — перед крестиком, на плитке свёрнутой колонки и
+   на вкладке, сжатой до значка, — на углу. */
+#tabbrowser-tabs .tabbrowser-tab[tabora-unread] .tab-content {
+  position: relative;
+}
+
+#tabbrowser-tabs .tabbrowser-tab[tabora-unread] .tab-content::after {
+  content: var(--tabora-unread);
+  order: 2;
+  flex: none;
+  margin-inline: 6px 2px;
+  padding: 3px 7px;
+  border-radius: 10px;
+  background: var(--tabora-accent);
+  color: var(--tabora-on-accent);
+  font: 800 11px/1 var(--tabora-font);
+  font-variant-numeric: tabular-nums;
+}
+
+#tabbrowser-tabs .tabbrowser-tab[tabora-unread] .tab-close-button {
+  order: 3;
+}
+
+:root[tabora-sidebar="compact"] #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[tabora-unread] .tab-content::after {
+  position: absolute;
+  top: -3px;
+  inset-inline-end: -3px;
+  margin: 0;
+  padding: 2px 5px;
+  font-size: 10px;
+}
+
 /* Теснота: вкладка сжимается до значка, как плитка свёрнутой колонки, и только когда не
    помещаются и значки, полоса начинает прокручиваться. Ширину вкладки стили узнают контейнерным
    запросом. У сжатой вкладки нет ни названия, ни крестика: закрывают её средней кнопкой, ⌘W или
@@ -4131,6 +4173,15 @@ toolbarseparator {
 
   .tabbrowser-tab[selected]:hover .tab-icon-stack {
     display: none;
+  }
+
+  .tabbrowser-tab[tabora-unread] .tab-content::after {
+    position: absolute;
+    top: 0;
+    inset-inline-end: 0;
+    margin: 0;
+    padding: 2px 4px;
+    font-size: 9px;
   }
 
   .tabbrowser-tab[selected]:hover .tab-close-button {
@@ -4326,14 +4377,20 @@ toolbarseparator {
   justify-content: center;
 }
 
-/* число загрузок — значком на углу, ход загрузки — полоской под значком */
-:root[tabora-tabs="horizontal"] #tabora-dock :is(#tabora-downloads, #tabora-mail) .pill {
+/* число событий (новые письма, поступления, загрузки) — значком на углу, ход загрузки —
+   полоской под значком. У почты и кошелька число — подпись внутри кнопки, а подписи в строке
+   адреса спрятаны: числу показ возвращается явно. */
+:root[tabora-tabs="horizontal"] #tabora-dock :is(#tabora-downloads, #tabora-mail, #tabora-wallet-card) .pill:not(.mono) {
   position: absolute;
   top: -5px;
   right: -5px;
   margin: 0;
   padding: 2px 5px;
   font-size: 10px;
+}
+
+:root[tabora-tabs="horizontal"] #tabora-dock > :is(#tabora-mail, #tabora-wallet-card) > .pill:not(.mono, [hidden]) {
+  display: block;
 }
 
 :root[tabora-tabs="horizontal"] #tabora-dock #tabora-downloads .live {

@@ -1201,6 +1201,38 @@ Object.assign(Tabora, {
     const tick = () => this.walletWatchTick().catch(() => {});
     this._walletWatch = setInterval(tick, 60000);
     setTimeout(tick, 15000);
+    const unseen = () => this.setBadges?.({ wallet: this.walletUnseen().length });
+    Services.prefs.addObserver(this.WALLET_UNSEEN_PREF, unseen);
+    window.addEventListener("unload", () => Services.prefs.removeObserver(this.WALLET_UNSEEN_PREF, unseen), { once: true });
+    unseen();
+  },
+
+  /* Поступления, которые пользователь ещё не видел: число стоит на разделе «Кошелёк» и входит в
+   * сумму на кнопке «Разделы». Список общий для всех окон (у каждого своё наблюдение, поступление
+   * записывается один раз по своему признаку) и переживает перезапуск; очищается, когда кошелёк
+   * открыт. В списке только признаки поступлений (сеть, монета, новый остаток), без адресов. */
+  WALLET_UNSEEN_PREF: "tabora.wallet.unseen",
+
+  walletUnseen() {
+    try {
+      const list = JSON.parse(Services.prefs.getStringPref(this.WALLET_UNSEEN_PREF, "[]"));
+      return Array.isArray(list) ? list.filter(x => typeof x === "string") : [];
+    } catch (e) {
+      return [];
+    }
+  },
+
+  walletNoteIncoming(mark) {
+    const list = this.walletUnseen();
+    if (!list.includes(mark)) {
+      Services.prefs.setStringPref(this.WALLET_UNSEEN_PREF, JSON.stringify([...list, mark].slice(-99)));
+    }
+  },
+
+  walletSeen() {
+    if (this.walletUnseen().length) {
+      Services.prefs.setStringPref(this.WALLET_UNSEEN_PREF, "[]");
+    }
   },
 
   async walletWatchTick() {
@@ -1234,7 +1266,7 @@ Object.assign(Tabora, {
           const delta = parseFloat(bal.native) - parseFloat(prev.native);
           const usd = delta * (prices[chain.symbol] || 0);
           if (!prices[chain.symbol] || usd >= 0.01) {
-            incoming.push({ chain, text: `${delta.toLocaleString("en-US", { maximumFractionDigits: 6 })} ${chain.symbol}`, usd });
+            incoming.push({ chain, text: `${delta.toLocaleString("en-US", { maximumFractionDigits: 6 })} ${chain.symbol}`, usd, mark: `${id}:${chain.symbol}:${bal.native}` });
           }
         }
         for (const t of bal.tokens || []) {
@@ -1251,7 +1283,7 @@ Object.assign(Tabora, {
               if (t.custom) {
                 w.customNotified[tkey] = Date.now();
               }
-              incoming.push({ chain, text: `${delta} ${t.symbol}${t.custom ? " (свой токен, без оценки)" : ""}`, usd });
+              incoming.push({ chain, text: `${delta} ${t.symbol}${t.custom ? " (свой токен, без оценки)" : ""}`, usd, mark: `${id}:${t.symbol}:${now}` });
             }
           }
         }
@@ -1261,6 +1293,7 @@ Object.assign(Tabora, {
     }));
     if (incoming.length) {
       for (const it of incoming) {
+        this.walletNoteIncoming(it.mark);
         this.walletNotifyIncoming(it);
       }
       this.walletLoadHistory(true);

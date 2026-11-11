@@ -301,7 +301,7 @@ Object.assign(Tabora, {
       this.wAppend(body, 
         h("div", { class: "w-warn" }, null, [
           h("b", {}, "Крайне не рекомендуем"),
-          h("p", {}, "Без пароля любой, кто откроет этот профиль браузера, сможет подписывать транзакции и увидеть фразу. Ключ будет лежать в менеджере паролей Firefox. Кошелёк будет постоянно помечен как незащищённый."),
+          h("p", {}, "Без пароля любой, кто откроет этот профиль браузера, сможет подписывать транзакции и увидеть фразу. Ключ будет лежать в хранилище паролей Tabora, в этом профиле. Кошелёк будет постоянно помечен как незащищённый."),
         ]),
         h("label", { class: "w-check" }, null, [agree, h("span", {}, "Я понимаю, что средства могут быть украдены")]),
         err, go,
@@ -346,7 +346,7 @@ Object.assign(Tabora, {
       });
       this.wAppend(body, 
         h("p", { class: "w-sub" }, "Запишите слова по порядку и храните офлайн. Это единственный способ восстановить кошелёк. Никому не показывайте, Tabora никогда её не спросит."),
-        count, grid, reveal, err, next
+        count, grid, this.walletPhraseTools(() => f.words.join(" ")), reveal, err, next
       );
     } else if (f.step === "quiz") {
       const list = WalletStore.wordlist();
@@ -1061,6 +1061,37 @@ Object.assign(Tabora, {
     }, 50);
   },
 
+  /** Две кнопки под резервной фразой: скопировать её и показать QR-кодом (для переноса в
+   * кошелёк на телефоне). Фраза в буфере обмена помечена как секрет (в историю буфера и его
+   * менеджеры она не попадает) и стирается оттуда через минуту; QR-код скрывается через минуту
+   * и при переключении окна, как сама фраза. phrase — функция, которая отдаёт фразу в момент нажатия. */
+  walletPhraseTools(phrase) {
+    const copy = this.wButton("Скопировать", "ghost", () => {
+      this.copyWithExpiry(phrase(), 60000);
+      this.notice("Фраза скопирована. Буфер обмена очистится через минуту");
+    });
+    const qr = this.wButton("QR-код", "ghost", () => this.walletPhraseQr(phrase()));
+    return this.html("div", { class: "w-actions w-phrase-tools" }, null, [copy, qr]);
+  },
+
+  walletPhraseQr(phrase) {
+    const h = (t, a, x, c) => this.html(t, a, x, c);
+    const canvas = h("canvas", { class: "w-qr", width: "220", height: "220" });
+    this.drawQr(canvas, phrase);
+    const close = this.wButton("Скрыть", "primary", () => {
+      clearTimeout(timer);
+      sheet.remove();
+    });
+    const sheet = h("div", { class: "w-sheet w-reveal w-phrase-qr" }, null, [h("div", { class: "w-sheet-card" }, null, [
+      h("b", {}, "Резервная фраза QR-кодом"),
+      canvas,
+      h("p", { class: "w-hint" }, "Сканируйте только своим устройством: кто снимет этот код, получит кошелёк целиком. Код скроется через минуту."),
+      close,
+    ])]);
+    this.wSheetShow(sheet);
+    const timer = setTimeout(() => sheet.remove(), 60000);
+  },
+
   walletRevealFlow(wallet) {
     const { WalletStore } = this.walletStore();
     this.walletPassword(`Фраза: ${wallet.name}`, "Никому не показывайте. Фраза скроется при переключении окна и через 60 секунд.", async pass => {
@@ -1069,7 +1100,7 @@ Object.assign(Tabora, {
       const grid = h("ol", { class: "w-phrase" }, null, phrase.split(" ").map((w, i) => h("li", {}, null, [h("i", {}, String(i + 1)), h("span", {}, w)])));
       grid.addEventListener("copy", e => e.preventDefault());
       const close = this.wButton("Скрыть", "primary", () => sheet.remove());
-      const sheet = h("div", { class: "w-sheet w-reveal" }, null, [h("div", { class: "w-sheet-card" }, null, [h("b", {}, wallet.name), grid, close])]);
+      const sheet = h("div", { class: "w-sheet w-reveal" }, null, [h("div", { class: "w-sheet-card" }, null, [h("b", {}, wallet.name), grid, this.walletPhraseTools(() => phrase), close])]);
       this.wSheetShow(sheet);
       clearTimeout(this.wallet.hideTimer);
       this.wallet.hideTimer = setTimeout(() => sheet.remove(), 60000);
@@ -1112,7 +1143,7 @@ Object.assign(Tabora, {
 setTimeout(() => Tabora.walletStartWatch?.(), 5000);
 
 // Регистрация раздела в ящике
-Tabora.SECTIONS.wallet = { label: "Кошелёк", key: "⌘⇧W", noSearch: true, icon: ["M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v2", "M3 7v10a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-7a1 1 0 0 0-1-1H5a2 2 0 0 1-2-2z", "M16 14h.01"], wide: false };
+Tabora.SECTIONS.wallet = { label: "Кошелёк", key: "⌘⇧W", noSearch: true, badge: "wallet", icon: ["M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v2", "M3 7v10a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-7a1 1 0 0 0-1-1H5a2 2 0 0 1-2-2z", "M16 14h.01"], wide: false };
 if (!Tabora.SECTION_ORDER.includes("wallet")) {
   Tabora.SECTION_ORDER.splice(Tabora.SECTION_ORDER.indexOf("downloads") + 1, 0, "wallet");
 }

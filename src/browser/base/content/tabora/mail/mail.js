@@ -734,9 +734,9 @@ const App = {
   },
 
   updateTitle() {
-    const unread = Store.messages.filter(m => m.folder === "inbox" && m.unread).length;
     const where = this.view === "aliases" ? "Алиасы" : this.view === "keys" ? "Шифрование" : this.currentName();
-    document.title = `${where}${unread && this.view === "mail" ? ` (${unread})` : ""} · Почта`;
+    // число новых писем на вкладке показывает оболочка (значком), в заголовке оно не повторяется
+    document.title = `${where} · Почта`;
   },
 
   currentName() {
