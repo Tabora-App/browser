@@ -208,6 +208,12 @@ pref("tabora.mail.notify", true);
 // Почта: в пустом поле адреса на сайте предлагать алиас для этого сайта и основной адрес.
 pref("tabora.mail.suggest", true);
 
+// Блокировщик рекламы (shield/Shield.sys.mjs): включён; списки фильтров и исключения сайтов
+// меняются в настройках приватности и в счётчике заблокированного.
+pref("tabora.shield.enabled", true);
+pref("tabora.shield.lists", "easylist,ruadlist,easyprivacy,lowe");
+pref("tabora.shield.allow", "[]");
+
 // Синхронизация между компьютерами аккаунта (sync/Sync.sys.mjs): включает пользователь в
 // настройках аккаунта; наборы включены все, каждый можно выключить отдельно.
 pref("tabora.sync.enabled", false);

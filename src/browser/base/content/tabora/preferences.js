@@ -69,6 +69,67 @@
     return card;
   }
 
+  /* Блокировщик рекламы (shield/Shield.sys.mjs): выключатель, списки фильтров, исключения. */
+  function shieldCard() {
+    const { Shield } = ChromeUtils.importESModule("chrome://tabora/content/shield/Shield.sys.mjs");
+    const card = h("moz-card", { id: "tabora-shield", heading: "Блокировка рекламы", class: "tabora-card" });
+    const body = h("div", { class: "tabora-card-body" });
+    card.append(body);
+    const plural = (n, a, b, c) => (n % 10 === 1 && n % 100 !== 11 ? a : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? b : c);
+    const when = at => new Date(at).toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+    const draw = () => {
+      const on = Shield.enabled;
+      body.replaceChildren();
+      body.append(h("p", { class: "tabora-card-sub" }, "Запросы к рекламным и следящим серверам отменяются, рекламные блоки на страницах скрываются. Сайт, где это мешает, исключается одним нажатием: счётчик заблокированного в верхней панели → «Не блокировать на этом сайте»."));
+      const toggle = h("moz-toggle", { label: "Блокировать рекламу и трекеры", id: "tabora-shield-toggle" });
+      toggle.pressed = on;
+      toggle.addEventListener("toggle", () => Shield.setEnabled(toggle.pressed));
+      body.append(toggle);
+
+      const lists = h("div", { class: "tabora-shield-lists" });
+      for (const l of Shield.lists()) {
+        const state = l.error && !l.at ? `не загружен: ${l.error}` : l.at ? `обновлён ${when(l.at)}${l.error ? `; последняя попытка: ${l.error}` : ""}` : l.on && on ? "загружается…" : "не загружен";
+        const box = h("moz-checkbox", { label: l.title, description: `${l.note}. ${state[0].toUpperCase()}${state.slice(1)}.` });
+        box.checked = l.on;
+        box.disabled = !on;
+        box.addEventListener("change", () => Shield.setList(l.id, box.checked));
+        lists.append(box);
+      }
+      body.append(lists);
+
+      const row = h("div", { class: "tabora-shield-row" });
+      const refresh = h("moz-button", { label: Shield.busy ? "Обновляю…" : "Обновить списки" });
+      refresh.disabled = !on || Shield.busy;
+      refresh.addEventListener("click", () => Shield.update({ force: true }).catch(() => {}));
+      const counts = Shield.counts;
+      row.append(refresh, h("span", { class: "tabora-card-stat" }, !on ? "Блокировка выключена" : counts ? `${counts.network.toLocaleString("ru-RU")} ${plural(counts.network, "правило", "правила", "правил")} для запросов, ${(counts.generic + counts.specific).toLocaleString("ru-RU")} для скрытия блоков` : "Списки ещё не загружены"));
+      body.append(row);
+
+      const allow = Shield.allowList();
+      if (allow.length) {
+        body.append(h("p", { class: "tabora-card-sub" }, "Сайты, на которых реклама не блокируется:"));
+        const sites = h("div", { class: "tabora-shield-sites" });
+        for (const site of allow) {
+          const chip = h("span", { class: "tabora-shield-site" });
+          const remove = h("button", { type: "button", title: `Снова блокировать на ${site}`, "aria-label": `Снова блокировать на ${site}` }, "×");
+          remove.addEventListener("click", () => Shield.setAllowed(site, false));
+          chip.append(h("span", {}, site), remove);
+          sites.append(chip);
+        }
+        body.append(sites);
+      }
+    };
+    draw();
+    let timer = null;
+    const changed = () => {
+      clearTimeout(timer);
+      timer = setTimeout(draw, 80);
+    };
+    Services.obs.addObserver(changed, Shield.TOPIC);
+    window.addEventListener("unload", () => Services.obs.removeObserver(changed, Shield.TOPIC), { once: true });
+    return card;
+  }
+
   function sleepingTabsCard() {
     const current = String(Services.prefs.getIntPref(PREF_SLEEP, 0));
     const card = h("moz-card", { id: "tabora-sleeping-tabs", heading: "Спящие вкладки", class: "tabora-card" });
@@ -215,6 +276,7 @@
     } else {
       section.append(card);
     }
+    card.before(shieldCard());
   }
 
   /* Ссылки поддержки ведут в обращения Tabora (Аккаунт → Поддержка), а не на сайты Mozilla.

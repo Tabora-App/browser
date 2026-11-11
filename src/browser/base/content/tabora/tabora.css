@@ -1714,6 +1714,11 @@ sidebar-main {
   box-shadow: 0 0 0 1px var(--tabora-accent);
 }
 
+/* на этом сайте блокировка выключена пользователем */
+#tabora-topbar .chip[data-paused] {
+  color: var(--tabora-text-4);
+}
+
 #tabora-topbar .icon-btn {
   width: 36px;
   height: 36px;

@@ -49,7 +49,7 @@ var Tabora = {
     Services.scriptloader.loadSubScript("chrome://tabora/content/update/update.js", window);
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
-      "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initWalletProvider", "initVaultActor", "initAccount", "initUpdates", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "initLegacyShellUrls", "initMailToggle", "initMailBackground", "startTimers", "updateTitle", "localizeUrlbar",
+      "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initShield", "initWalletProvider", "initVaultActor", "initAccount", "initUpdates", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "initLegacyShellUrls", "initMailToggle", "initMailBackground", "startTimers", "updateTitle", "localizeUrlbar",
       "routeUrlbarToCommandBar", "initTabMotion", "initMotion", "initBookmarkDefaults", "initTabsLayout", "initAddonsPage", "initAppMenu",
     ]) {
       try {
@@ -1188,6 +1188,20 @@ var Tabora = {
 
   /** Баннеры cookie: актор страницы нажимает «Отклонить» за пользователя (см. actors/TaboraCookiesChild).
    * Только обычные сайты в веб-процессах: внутренние страницы, file: и дополнения актор не видит. */
+  /* ---- Блокировщик рекламы (shield/Shield.sys.mjs): модуль один на процесс ---- */
+
+  shield() {
+    return ChromeUtils.importESModule("chrome://tabora/content/shield/Shield.sys.mjs").Shield;
+  },
+
+  initShield() {
+    const Shield = this.shield();
+    Shield.start();
+    const changed = () => this.updateBlocked();
+    Services.obs.addObserver(changed, Shield.TOPIC);
+    window.addEventListener("unload", () => Services.obs.removeObserver(changed, Shield.TOPIC), { once: true });
+  },
+
   initCookieBanners() {
     try {
       ChromeUtils.registerWindowActor("TaboraCookies", {
@@ -4048,11 +4062,37 @@ var Tabora = {
         }
       }
     } catch (e) {}
-    const groups = this.BLOCK_KINDS.map(k => {
-      const items = [...kinds.get(k.key)].map(([host, n]) => ({ host, n })).sort((a, b) => b.n - a.n || a.host.localeCompare(b.host));
-      return { key: k.key, title: k.title, items, count: items.reduce((sum, it) => sum + it.n, 0) };
-    }).filter(g => g.count);
-    return { groups, count: groups.reduce((sum, g) => sum + g.count, 0) };
+    // блокировщик рекламы: его трекеры идут в ту же группу, реклама — своей группой впереди
+    let shield = { off: false, ads: [], privacy: [], total: 0 };
+    try {
+      shield = this.shield().statsFor(browser);
+    } catch (e) {}
+    const trackers = kinds.get("tracker");
+    for (const [host, n] of shield.privacy) {
+      const name = host.replace(/^www\./, "");
+      trackers.set(name, (trackers.get(name) || 0) + n);
+    }
+    const group = (key, title, entries) => {
+      const items = entries.map(([host, n]) => ({ host, n })).sort((a, b) => b.n - a.n || a.host.localeCompare(b.host));
+      return { key, title, items, count: items.reduce((sum, it) => sum + it.n, 0) };
+    };
+    const groups = [group("ads", "Реклама", shield.ads.map(([host, n]) => [host.replace(/^www\./, ""), n])), ...this.BLOCK_KINDS.map(k => group(k.key, k.title, [...kinds.get(k.key)]))].filter(g => g.count);
+    return { groups, count: groups.reduce((sum, g) => sum + g.count, 0), ads: groups.find(g => g.key === "ads")?.count || 0 };
+  },
+
+  /** Сайт страницы для блокировщика: { host, off } или null (не страница сайта либо блокировщик выключен). */
+  shieldSite(browser) {
+    try {
+      const uri = browser.currentURI;
+      const Shield = this.shield();
+      if (!Shield.enabled || !/^https?$/.test(uri.scheme)) {
+        return null;
+      }
+      const host = uri.host.replace(/^www\./, "");
+      return { host, off: Shield.allowed(uri.host) };
+    } catch (e) {
+      return null;
+    }
   },
 
   buildBlockedChip() {
@@ -4078,19 +4118,34 @@ var Tabora = {
     const chip = document.getElementById("tabora-blocked");
     const browser = gBrowser.selectedBrowser;
     const { count, groups } = await this.blockedOnPage(browser);
-    if (!count || browser !== gBrowser.selectedBrowser) {
+    const site = this.shieldSite(browser);
+    if ((!count && !site?.off) || browser !== gBrowser.selectedBrowser) {
       return;
     }
-    let host = "";
+    let host = site?.host || "";
     try {
-      host = browser.currentURI.host.replace(/^www\./, "");
+      host ||= browser.currentURI.host.replace(/^www\./, "");
     } catch (e) {}
-    const items = [{ label: host ? `Заблокировано на ${host}` : "Заблокировано на странице", hint: String(count), caption: true }];
+    const items = [count
+      ? { label: host ? `Заблокировано на ${host}` : "Заблокировано на странице", hint: String(count), caption: true }
+      : { label: `На ${host} реклама не блокируется`, caption: true }];
     for (const g of groups) {
       items.push({ header: g.title });
       for (const it of g.items) {
         items.push({ label: it.host, hint: it.n > 1 ? `×${it.n}` : "", info: true });
       }
+    }
+    if (site) {
+      // сайт, где блокировка мешает, исключается одним нажатием; страница перезагружается
+      items.push({ separator: true }, {
+        label: site.off ? `Блокировать рекламу на ${site.host}` : `Не блокировать на ${site.host}`,
+        icon: site.off ? ["M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z", "M9 12l2 2 4-4"] : ["M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z", "M9.5 9.5l5 5M14.5 9.5l-5 5"],
+        run: () => {
+          this.shield().setAllowed(site.host, !site.off);
+          this.notice(site.off ? `Реклама на ${site.host} снова блокируется` : `На ${site.host} реклама больше не блокируется`);
+          browser.reload();
+        },
+      }, { label: "Настройки блокировки", icon: ["M4 7h10", "M18 7h2", "M4 17h2", "M10 17h10", "M16 5v4", "M8 15v4"], run: () => openPreferences("panePrivacy") });
     }
     const r = chip.getBoundingClientRect();
     this.showMenu(items, r.left, r.bottom + 6, { owner: "blocked" });
@@ -4102,16 +4157,26 @@ var Tabora = {
     if (!chip || !browser) {
       return;
     }
-    const { count } = await this.blockedOnPage(browser);
+    const { count, ads } = await this.blockedOnPage(browser);
     if (browser !== gBrowser.selectedBrowser) {
       return;
     }
-    chip.hidden = !count;
-    const text = count ? `${count} ${this.plural(count, "трекер заблокирован", "трекера заблокировано", "трекеров заблокировано")}` : "";
+    // на сайте из исключений фишка остаётся (даже без единой блокировки): по ней блокировку возвращают
+    const siteOff = !!this.shieldSite(browser)?.off;
+    const paused = !count && siteOff;
+    chip.hidden = !count && !paused;
+    chip.toggleAttribute("data-paused", siteOff);
+    const text = paused
+      ? "Реклама не блокируется"
+      : !count
+        ? ""
+        : ads
+          ? `${count} заблокировано`
+          : `${count} ${this.plural(count, "трекер заблокирован", "трекера заблокировано", "трекеров заблокировано")}`;
     document.getElementById("tabora-blocked-text").textContent = text;
     // в узком окне при вкладках сверху от фишки остаются значок и число (tabora.css)
     chip.dataset.count = count || "";
-    chip.title = text;
+    chip.title = siteOff && count ? `${text}; реклама на этом сайте не блокируется` : text;
     const readerBtn = document.getElementById("tabora-reader");
     if (readerBtn) {
       const native = document.getElementById("reader-mode-button");
