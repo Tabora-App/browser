@@ -10,6 +10,7 @@
 use crate::db::{self, Alias, DbError, Security, User};
 use crate::limit::Limiter;
 use crate::mail::{MailError, Stalwart};
+use crate::pgp;
 use crate::security;
 use crate::util::{clean_backup_code, clean_digits, clean_name, hmac256, is_hex, iso, now_ms, open, random, reserved_local, same, sha256, totp, totp_step, valid_local};
 use axum::body::Bytes;
@@ -37,6 +38,7 @@ pub struct App {
     pub pepper: [u8; 32],
     pub totp_key: [u8; 32],
     pub code_key: [u8; 32],
+    pub pgp_key: [u8; 32],
     pub mail_daily_cap: u32,
     pub signup_open: bool,
     pub signup_daily_cap: i64,
@@ -870,6 +872,9 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/v1/account/logout", post(logout))
         .route("/v1/account/devices", get(devices))
         .route("/v1/mail/password", post(mail_password))
+        .route("/v1/mail/pgp", get(pgp::keys_get).put(pgp::keys_put))
+        .route("/.well-known/openpgpkey/hu/:hash", get(pgp::wkd_key))
+        .route("/.well-known/openpgpkey/policy", get(pgp::wkd_policy))
         .route("/v1/mail/aliases", get(alias_list).post(alias_create))
         .route("/v1/mail/aliases/:id", patch(alias_update).delete(alias_delete))
         .fallback(not_found)

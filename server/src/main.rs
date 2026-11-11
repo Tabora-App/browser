@@ -25,6 +25,7 @@ mod api;
 mod db;
 mod limit;
 mod mail;
+mod pgp;
 mod security;
 mod util;
 
@@ -67,6 +68,8 @@ async fn main() {
     // секрет TOTP в базе зашифрован; от резервных кодов и кодов из писем там только HMAC
     let totp_key = util::hmac256(&master, &[b"tabora/totp-secret/v1"]);
     let code_key = util::hmac256(&master, &[b"tabora/short-codes/v1"]);
+    // копии ключей шифрования почты приходят уже зашифрованными браузером; этим ключом они запечатаны в базе
+    let pgp_key = util::hmac256(&master, &[b"tabora/mail-keys/v1"]);
 
     let pool = db::pool(&env("TABORA_DB")).unwrap_or_else(|e| fail(&e));
     // база может подняться позже сервера (загрузка системы): ждём до минуты
@@ -108,6 +111,7 @@ async fn main() {
         pepper,
         totp_key,
         code_key,
+        pgp_key,
         mail_daily_cap: env_num("TABORA_MAIL_DAILY_CAP", 500),
         signup_open: env("TABORA_SIGNUP") != "closed",
         signup_daily_cap: env_num("TABORA_SIGNUP_DAILY_CAP", 50),

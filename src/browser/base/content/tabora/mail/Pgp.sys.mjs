@@ -14,7 +14,14 @@
  *
  * Письмо шифруется всем получателям и себе (иначе не прочитать собственную копию в
  * «Отправленных») и всегда подписывается. Тема письма остаётся открытой: шифруется только
- * содержимое. */
+ * содержимое.
+ *
+ * Копия на сервере (sync). Чтобы ключ не пропал вместе с компьютером и появился на другом после
+ * входа, сервер аккаунтов хранит его копию: закрытый ключ зашифрован случайным ключом данных,
+ * ключ данных — ключом из пароля аккаунта (Account.loginHash выводит его тем же тяжёлым KDF,
+ * что и хеш входа, но с другой меткой) и, отдельно, ключом из ключа восстановления. Сервер не
+ * знает ни пароля, ни ключа восстановления и прочитать копию не может. Открытый ключ сервер
+ * публикует в каталоге (WKD): по нему письма между адресами Tabora шифруются с первого письма. */
 
 const { Vault, writeJsonVerified } = ChromeUtils.importESModule("chrome://tabora/content/vault/Vault.sys.mjs");
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
@@ -33,6 +40,9 @@ const HOST_IDLE_MS = 5 * 60000;
 const MAX_KEY_CHARS = 64 * 1024;
 const MAX_PEERS = 2000;
 const ARMOR_RE = /-----BEGIN PGP PUBLIC KEY BLOCK-----[\s\S]+?-----END PGP PUBLIC KEY BLOCK-----/;
+const DIRECTORY_FRESH_MS = 24 * 3600000; // как часто ключ адреса Tabora сверяется с каталогом
+const DIRECTORY_MISS_MS = 10 * 60000; // сколько помнить, что ключа в каталоге нет
+const MAX_RETIRED = 8;
 const ADDRESS_RE = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
 
 function fail(text, code = "pgp") {
@@ -78,6 +88,61 @@ function armorBody(armored) {
 
 function armorKey(base64) {
   return `-----BEGIN PGP PUBLIC KEY BLOCK-----\n\n${base64.replace(/(.{64})/g, "$1\n").trim()}\n-----END PGP PUBLIC KEY BLOCK-----\n`;
+}
+
+/** z-base-32 от SHA-1 имени ящика: имя записи в каталоге ключей (WKD). */
+async function directoryHash(local) {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-1", new TextEncoder().encode(local)));
+  const abc = "ybndrfg8ejkmcpqxot1uwisza345h769";
+  let out = "";
+  let acc = 0;
+  let bits = 0;
+  for (const b of digest) {
+    acc = (acc << 8) | b;
+    bits += 8;
+    while (bits >= 5) {
+      bits -= 5;
+      out += abc[(acc >> bits) & 31];
+    }
+    acc &= (1 << bits) - 1;
+  }
+  return bits ? out + abc[(acc << (5 - bits)) & 31] : out;
+}
+
+/** AES-256-GCM: nonce (12 байт) и шифртекст с меткой. label привязывает блок к назначению и
+ * адресу: блок, подставленный не на своё место, не расшифруется. */
+async function sealBytes(key, label, plain) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const k = await crypto.subtle.importKey("raw", key, "AES-GCM", false, ["encrypt"]);
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: new TextEncoder().encode(label) }, k, plain));
+  const out = new Uint8Array(12 + ct.length);
+  out.set(iv);
+  out.set(ct, 12);
+  return out;
+}
+
+async function openBytes(key, label, blob) {
+  if (!key || !blob || blob.length < 28) {
+    return null;
+  }
+  try {
+    const k = await crypto.subtle.importKey("raw", key, "AES-GCM", false, ["decrypt"]);
+    return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: blob.subarray(0, 12), additionalData: new TextEncoder().encode(label) }, k, blob.subarray(12)));
+  } catch (e) {
+    return null;
+  }
+}
+
+function fromBase64(text) {
+  try {
+    return typeof text === "string" && text ? base64ToBytes(text) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function sameBytes(a, b) {
+  return !!a && !!b && a.length === b.length && a.every((v, i) => v === b[i]);
 }
 
 export function formatFingerprint(fp) {
@@ -250,6 +315,8 @@ export const Pgp = {
   /** Выход из аккаунта или блокировка сейфа: ключей в памяти не остаётся. */
   forget() {
     this.data = null;
+    this._recoveryStash?.fill(0);
+    this._recoveryStash = null;
     this._closeHost();
   },
 
@@ -295,6 +362,30 @@ export const Pgp = {
         this._creating = null;
       });
       await this._creating;
+    }
+    return this.own(address);
+  },
+
+  /** Ключ аккаунта для работы с почтой: сначала сверка с сервером (у аккаунта уже может быть
+   * ключ, созданный на другом компьютере), и только если ключа нет нигде — новый. Возвращает
+   * сведения о ключе или null, когда ключ аккаунта есть на сервере, а открыть его здесь нечем. */
+  async accountKey() {
+    const d = await this.ready();
+    const address = clean(lazy.Account.email);
+    const b = d.backup || {};
+    const state = b.state || "unknown";
+    const age = Date.now() - (b.at || 0);
+    // не чаще раза в минуту: сервер может быть недоступен, а спрашивают ключ на каждое письмо.
+    // Сервер, который копий ещё не хранит, спрашиваем раз в час: после его обновления открытый
+    // ключ попадёт в каталог сам.
+    if (((!d.own[address] || ["unknown", "offline", "locked"].includes(state)) && age > 60000) || (state === "unsupported" && age > 3600000)) {
+      await this.sync().catch(() => null);
+    }
+    if (d.backup?.state === "locked") {
+      return null;
+    }
+    if (!d.own[address]) {
+      await this.ensureKey(); // сервер недоступен или не хранит копии: ключ живёт здесь
     }
     return this.own(address);
   },
@@ -386,15 +477,21 @@ export const Pgp = {
       throw fail("Это не открытый ключ OpenPGP");
     }
     const { keys } = await this._call("info", { armored: text.match(ARMOR_RE)[0] });
-    const info = this._usable(keys?.[0], source === "manual" ? a : "");
+    const info = this._usable(keys?.[0], source === "autocrypt" ? "" : a);
     const prior = d.peers[a];
     if (source !== "manual" && prior?.source === "manual" && prior.fingerprint !== info.fingerprint) {
       return { ...prior, address: a, kept: true }; // ключ, сверенный человеком, письмо не подменит
+    }
+    if (source === "autocrypt" && prior?.source === "directory" && prior.fingerprint !== info.fingerprint) {
+      return { ...prior, address: a, kept: true }; // для адресов Tabora верен каталог: письмо его не подменит
     }
     if (!prior && Object.keys(d.peers).length >= MAX_PEERS) {
       throw fail("Ключей собеседников слишком много: удалите ненужные");
     }
     d.peers[a] = { fingerprint: info.fingerprint, keyId: info.keyId, subkeyIds: info.subkeyIds, publicKey: info.armored, source, prefer: prefer === "mutual" ? "mutual" : "", seen, changed: prior && prior.fingerprint !== info.fingerprint ? Date.now() : prior?.changed || 0 };
+    if (source === "directory") {
+      d.peers[a].checked = Date.now();
+    }
     await this._save();
     this.notify("peers");
     return { ...d.peers[a], address: a };
@@ -406,6 +503,252 @@ export const Pgp = {
       await this._save();
       this.notify("peers");
     }
+  },
+
+  /* ---- каталог ключей: адреса своего домена --------------------------------------------------- */
+
+  _misses: new Map(),
+
+  /** Ключи адресов Tabora берутся из каталога сервера: письмо шифруется с первого раза, без
+   * обмена письмами. Спрашиваются адреса без ключа и те, чей ключ давно не сверяли; ключ,
+   * внесённый вручную, каталог не трогает. Ошибки сети не мешают: письмо уйдёт как раньше. */
+  async lookupMissing(addresses) {
+    const d = await this.ready();
+    const domain = lazy.Account.domain;
+    const own = clean(lazy.Account.email);
+    const now = Date.now();
+    const todo = [...new Set((addresses || []).map(clean))].filter(a => {
+      const [local, host, extra] = a.split("@");
+      const k = d.peers[a];
+      return local && host === domain && extra === undefined && a !== own && k?.source !== "manual" && now - (k?.checked || 0) > DIRECTORY_FRESH_MS && now - (this._misses.get(a) || 0) > DIRECTORY_MISS_MS;
+    });
+    await Promise.all(todo.slice(0, 20).map(async a => {
+      try {
+        const local = a.split("@")[0];
+        const bytes = await lazy.Account.backend.directoryKey({ local, hash: await directoryHash(local) });
+        if (!bytes) {
+          this._misses.set(a, now);
+          return;
+        }
+        await this.setPeer(a, armorKey(bytesToBase64(bytes)), { source: "directory", prefer: "mutual" });
+      } catch (e) {
+        this._misses.set(a, now); // сервер недоступен или ключ негоден: не спрашивать на каждое нажатие
+      }
+    }));
+  },
+
+  /* ---- копия ключа на сервере ------------------------------------------------------------------ */
+
+  _syncing: Promise.resolve(),
+
+  /** Состояние копии для экрана ключей: { state, at, canPassword, canRecovery }.
+   * state: "ok" — копия на сервере, новый компьютер получит ключ после входа; "no-password" —
+   * копия есть, но не привязана к паролю (пароль в этом профиле ещё не вводили); "locked" — у
+   * аккаунта на сервере другой ключ, а открыть его копию здесь нечем; "unsupported" — сервер ещё
+   * не умеет; "offline" — сервер недоступен; "local" — аккаунт не подключён к серверу. */
+  async backup() {
+    const d = await this.ready();
+    const b = d.backup || {};
+    return { state: b.state || "unknown", at: b.at || 0, canPassword: !!b.canPassword, canRecovery: !!b.canRecovery };
+  },
+
+  /** Сверить ключ аккаунта с сервером: забрать копию (новый компьютер), сохранить её (ключ создан
+   * здесь), обновить обёртки ключа данных. passwordKey и loginHash — ключ из пароля и хеш входа,
+   * когда пароль только что подтверждён; recoveryKey — ключ из ключа восстановления; recoveryGone —
+   * ключ восстановления отозван; strict — пароль ввёл пользователь, непригодность пароля должна
+   * стать ошибкой; replace — заменить ключ на сервере (прежний потерян). Возвращает backup(). */
+  sync(opts = {}) {
+    const run = this._syncing.then(() => this._sync(opts));
+    this._syncing = run.catch(() => {});
+    return run;
+  },
+
+  async _sync({ passwordKey = null, loginHash = "", recoveryKey = null, recoveryGone = false, strict = false, replace = false } = {}) {
+    const d = await this.ready();
+    const account = lazy.Account;
+    const address = clean(account.email);
+    const b = (d.backup ||= {});
+    const done = async state => {
+      b.state = state;
+      b.at = Date.now();
+      await this._save();
+      this.notify("backup");
+      return this.backup();
+    };
+    if (account.needsServerLink || account.isLocalMode) {
+      return done("local");
+    }
+    const session = account._session();
+    const labelPw = `tabora-mail-keys/wrap-password/v1|${address}`;
+    const labelRk = `tabora-mail-keys/wrap-recovery/v1|${address}`;
+    const labelBlob = fp => `tabora-mail-keys/blob/v1|${address}|${fp}`;
+    const scratch = []; // ключи, побывавшие в памяти за время сверки: стираются в конце
+    const keep = key => {
+      if (key) {
+        scratch.push(key);
+      }
+      return key;
+    };
+    try {
+      return await this._syncRounds({ d, b, done, account, address, session, labelPw, labelRk, labelBlob, keep, passwordKey, loginHash, recoveryKey, recoveryGone, strict, replace });
+    } finally {
+      scratch.forEach(key => key.fill(0));
+    }
+  },
+
+  async _syncRounds({ d, b, done, account, address, session, labelPw, labelRk, labelBlob, keep, passwordKey, loginHash, recoveryKey, recoveryGone, strict, replace }) {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      let remote;
+      try {
+        remote = await account.backend.mailKeys({ session });
+      } catch (e) {
+        const state = e.status === 404 || e.code === "no-server" ? "unsupported" : "offline";
+        if (strict) {
+          throw fail(state === "unsupported" ? "Сервер Tabora пока не хранит копии ключей: это появится после его обновления" : e.message, state);
+        }
+        return done(state);
+      }
+      if (!remote || typeof remote !== "object" || !Number.isInteger(remote.rev)) {
+        return done("offline");
+      }
+      const wrapPw = fromBase64(remote.wrapPassword);
+      const wrapRk = fromBase64(remote.wrapRecovery);
+      const blob = fromBase64(remote.blob);
+      const remoteFp = /^[0-9a-f]{40,64}$/.test(remote.fingerprint || "") ? remote.fingerprint : "";
+      // ключ данных: свой, из обёртки паролем или из обёртки ключом восстановления
+      const fromPw = keep(await openBytes(passwordKey, labelPw, wrapPw));
+      const fromRk = keep(await openBytes(recoveryKey, labelRk, wrapRk));
+      const local = keep(fromBase64(b.dataKey));
+      let own = d.own[address] || null;
+      let dataKey = null;
+      let via = "";
+      const put = { rev: remote.rev };
+
+      if (remoteFp && blob && !replace) {
+        // у аккаунта на сервере есть ключ
+        let secret = null;
+        for (const [how, key] of [["password", fromPw], ["recovery", fromRk], ["local", local]]) {
+          secret = await openBytes(key, labelBlob(remoteFp), blob);
+          if (secret) {
+            dataKey = key;
+            via = how;
+            break;
+          }
+        }
+        if (secret && own?.fingerprint !== remoteFp) {
+          // ключ создан на другом компьютере: берём его, прежний здешний остаётся для старых писем
+          const armored = new TextDecoder().decode(secret);
+          const { keys } = await this._call("info", { armored });
+          const info = this._usable(keys?.[0], address);
+          if (!info.private || info.fingerprint !== remoteFp) {
+            throw fail("Копия ключа на сервере повреждена");
+          }
+          if (own) {
+            d.retired = [own, ...(d.retired || [])].slice(0, MAX_RETIRED);
+          }
+          own = d.own[address] = { fingerprint: info.fingerprint, keyId: info.keyId, subkeyIds: info.subkeyIds, created: info.created, publicKey: info.armored, privateKey: armored };
+          await this._save();
+          this.notify("own");
+        }
+        secret?.fill(0);
+        if (!secret && own?.fingerprint === remoteFp && passwordKey) {
+          // ключ тот же, но копия завёрнута ключом данных, которого здесь нет: пересобираем её
+          dataKey = local || keep(crypto.getRandomValues(new Uint8Array(32)));
+          put.fingerprint = own.fingerprint;
+          put.publicKey = armorBody(own.publicKey);
+          put.blob = bytesToBase64(await sealBytes(dataKey, labelBlob(own.fingerprint), new TextEncoder().encode(own.privateKey)));
+        } else if (!secret && own?.fingerprint !== remoteFp) {
+          // открыть копию нечем, а ключ на сервере другой (или здесь ключа нет вовсе)
+          if (strict && passwordKey) {
+            if (!wrapPw) {
+              throw fail("Копия ключа на сервере ещё не привязана к паролю. Откройте Tabora на том компьютере, где ключ создан, и сохраните копию там", "no-wrap");
+            }
+            // пароль неверен или копия сохранена с прежним паролем: верен ли пароль, скажет сервер
+            await account.backend.mailKeysSave({ session, rev: remote.rev, wrapPassword: remote.wrapPassword, loginHash });
+            throw fail("Копия ключа сохранена с прежним паролем аккаунта: нынешним её не открыть", "wrong-wrap");
+          }
+          if (strict && recoveryKey) {
+            throw fail("Этот ключ восстановления к копии ключа не подходит", "wrong-wrap");
+          }
+          if (recoveryKey) {
+            // ключ восстановления этого компьютера создан, пока ключа почты здесь нет: обёртка им
+            // появится, как только ключ вернётся (в этом же сеансе)
+            this._recoveryStash?.fill(0);
+            this._recoveryStash = recoveryKey.slice();
+          }
+          b.canPassword = !!wrapPw;
+          b.canRecovery = !!wrapRk;
+          return done("locked");
+        }
+      } else {
+        // ключа на сервере нет (или его велено заменить): сохраняем свой, при надобности создав
+        if (replace && !(passwordKey && loginHash)) {
+          throw fail("Чтобы заменить ключ аккаунта, нужен пароль");
+        }
+        if (!own) {
+          await this.ensureKey();
+          own = d.own[address];
+        }
+        dataKey = (!replace && (fromPw || fromRk || local)) || keep(crypto.getRandomValues(new Uint8Array(32)));
+        put.fingerprint = own.fingerprint;
+        put.publicKey = armorBody(own.publicKey);
+        put.blob = bytesToBase64(await sealBytes(dataKey, labelBlob(own.fingerprint), new TextEncoder().encode(own.privateKey)));
+        if (replace) {
+          put.replace = true;
+          put.wrapRecovery = ""; // прежняя обёртка относится к прежнему ключу данных
+        }
+      }
+
+      // обёртки ключа данных
+      if (dataKey && passwordKey && !sameBytes(fromPw, dataKey)) {
+        put.wrapPassword = bytesToBase64(await sealBytes(passwordKey, labelPw, dataKey));
+      }
+      const stash = this._recoveryStash;
+      if (dataKey && stash && !sameBytes(stash, recoveryKey)) {
+        put.wrapRecovery = bytesToBase64(await sealBytes(stash, labelRk, dataKey));
+      } else if (dataKey && recoveryKey && !sameBytes(fromRk, dataKey)) {
+        put.wrapRecovery = bytesToBase64(await sealBytes(recoveryKey, labelRk, dataKey));
+      } else if (recoveryGone && wrapRk) {
+        put.wrapRecovery = "";
+      }
+      if (put.wrapPassword || put.replace) {
+        put.loginHash = loginHash;
+      }
+      let saved = remote;
+      if (Object.keys(put).length > 1) {
+        try {
+          saved = await account.backend.mailKeysSave({ session, ...put });
+        } catch (e) {
+          if (e.code === "pgp-conflict") {
+            continue; // запись изменили с другого устройства: читаем заново
+          }
+          if (strict || e.code === "bad-credentials") {
+            throw e;
+          }
+          return done("offline");
+        }
+      }
+      if (dataKey) {
+        b.dataKey = bytesToBase64(dataKey);
+      }
+      b.rev = saved.rev;
+      b.fingerprint = saved.fingerprint || "";
+      b.canPassword = !!saved.wrapPassword;
+      b.canRecovery = !!saved.wrapRecovery;
+      if (dataKey) {
+        this._recoveryStash?.fill(0);
+        this._recoveryStash = null;
+      }
+      // привязана ли копия к нынешнему паролю, точно известно только после сверки с паролем; ключ,
+      // возвращённый ключом восстановления, значит, что обёртка паролем устарела
+      if (dataKey && passwordKey) {
+        b.stalePassword = false;
+      } else if (via === "recovery") {
+        b.stalePassword = true;
+      }
+      return done(saved.wrapPassword && !b.stalePassword ? "ok" : "no-password");
+    }
+    return done("offline");
   },
 
   /** Можно ли зашифровать письмо этим получателям: { possible, missing, suggested }.
@@ -517,7 +860,8 @@ export const Pgp = {
    * кодом "no-key" (зашифровано не нам) или "pgp". */
   async decrypt(armored, { from = "" } = {}) {
     const d = await this.ready();
-    const keys = Object.values(d.own).map(k => k.privateKey);
+    // прежние ключи аккаунта остаются для писем, зашифрованных до замены ключа
+    const keys = [...Object.values(d.own), ...(d.retired || [])].map(k => k.privateKey);
     if (!keys.length) {
       throw fail("В этом профиле нет ключа, которым зашифровано письмо", "no-key");
     }

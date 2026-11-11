@@ -51,9 +51,22 @@
 | `POST /v1/account/reset/email { email }` | всегда `{}`; если у аккаунта есть резервный адрес, на него уходит код из восьми цифр |
 | `POST /v1/account/reset/email/confirm { email, code, newLoginHash, kdf, totp?, deviceId?, deviceName? }` | пароль сменён, все сессии завершены; устройству, назвавшему себя, сразу выдаётся сессия (`{ userId, session, kdf, mail }`) |
 | `POST /v1/account/reset` (ключ восстановления) | в ответе `twoFactorDisabled` |
+| `GET /v1/mail/pgp` (Bearer) | `{ rev, fingerprint, publicKey, blob, wrapPassword, wrapRecovery, updatedAt }` — ключ шифрования почты: открытый ключ, зашифрованная браузером копия закрытого и обёртки ключа данных (Base64, чего нет — `null`) |
+| `PUT /v1/mail/pgp { rev, fingerprint?, publicKey?, blob?, wrapPassword?, wrapRecovery?, replace?, loginHash? }` | то же после изменения; `409 pgp-conflict` — запись изменилась или у аккаунта уже другой ключ; `wrapPassword` и `replace` требуют `loginHash` |
+| `GET /.well-known/openpgpkey/hu/<хеш>?l=<имя>` | открытый ключ адреса двоичным (Web Key Directory) или 404; `…/policy` — пустой файл политики |
 
 `loginHash` в настройках входа — повторная проверка пароля; `code` — второй фактор, обязателен,
 если защита включена.
+
+Ключи почты (`src/pgp.rs`). Закрытый ключ приходит уже зашифрованным: браузер шифрует его случайным
+ключом данных, а ключ данных — ключом из пароля (тот же тяжёлый KDF, что у хеша входа, другая
+метка) и, отдельно, ключом из ключа восстановления. Сервер не может прочитать копию и не
+проверяет её содержимое; блоки дополнительно запечатаны ключом сервера, чтобы утечка одной базы
+не дала материала для подбора пароля. Открытый ключ проверяется (это пакет открытого ключа
+OpenPGP, отпечаток ключа версии 4 пересчитывается) и публикуется в каталоге. Первый ключ аккаунта
+создаётся по сессии; замена ключа и обёртка паролем — только с хешем входа. Каталог на
+основном домене отдаёт nginx (`infra/nginx/tabora.app.conf`), браузер ходит за ключами адресатов
+Tabora на тот же путь сервера аккаунтов.
 
 Ошибки — `{ code, message }`; `message` на русском и показывается пользователю как есть.
 Коды: `bad-credentials`, `session-expired`, `rate-limited`, `taken`, `bad-nonce`, `bad-proof`,
@@ -85,6 +98,7 @@ TABORA_DOMAIN=tabora.app TABORA_LISTEN=127.0.0.1:7711 TABORA_DB=postgres://… \
   APP_SIGNING_KEY=$(openssl rand -hex 32) TABORA_SIGNUP_PER_IP=6 TABORA_MAIL_OUTBOX=/tmp/tabora-outbox cargo run &
 node tests/contract.mjs http://127.0.0.1:7711 tabora.app /tmp/tabora-outbox
 infra/deploy.sh server                       # сборка под Linux (musl) с этой машины и установка
+infra/deploy.sh nginx                        # настройки nginx (каталог ключей на основном домене)
 ```
 
 Для сборки под сервер нужна цель `rustup target add x86_64-unknown-linux-musl`; зависимости

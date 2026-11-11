@@ -36,6 +36,9 @@ const { Vault, passwordStrength, checkNewPassword } = ChromeUtils.importESModule
 const { argon2idAsync } = ChromeUtils.importESModule("chrome://tabora/content/vault/Kdf.sys.mjs");
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 
+const lazy = {};
+ChromeUtils.defineESModuleGetters(lazy, { Pgp: "chrome://tabora/content/mail/Pgp.sys.mjs" });
+
 const FILE = () => PathUtils.join(PathUtils.profileDir, "tabora-account.json");
 const LOCAL_FILE = () => PathUtils.join(PathUtils.profileDir, "tabora-account-local.json");
 const DOMAIN_PREF = "tabora.account.domain";
@@ -354,6 +357,19 @@ class LocalBackend {
   async aliasDelete() {
     throw Object.assign(new Error("Алиасы работают после подключения аккаунта к серверу"), { code: "local-mode" });
   }
+
+  // копия ключей почты и каталог ключей есть только у сервера
+  async mailKeys() {
+    this._noServer();
+  }
+
+  async mailKeysSave() {
+    this._noServer();
+  }
+
+  async directoryKey() {
+    return null;
+  }
 }
 
 /** Сервер Tabora: JSON по HTTPS. Контракт:
@@ -384,6 +400,12 @@ class LocalBackend {
  *  POST   /v1/mail/aliases      { site?, space?, by? }      → алиас
  *  PATCH  /v1/mail/aliases/:id  { on?, site?, space? }      → алиас
  *  DELETE /v1/mail/aliases/:id                              → {}
+ * Ключи шифрования почты (mail/Pgp.sys.mjs, server/src/pgp.rs): копия закрытого ключа, зашифрованная
+ * браузером, и каталог открытых ключей;
+ *  GET /v1/mail/pgp  (Bearer) → { rev, fingerprint, publicKey, blob, wrapPassword, wrapRecovery, updatedAt }
+ *  PUT /v1/mail/pgp  { rev, fingerprint?, publicKey?, blob?, wrapPassword?, wrapRecovery?, replace?, loginHash? } → то же;
+ *       409 pgp-conflict — запись изменилась, читать заново; wrapPassword и replace требуют loginHash
+ *  GET /.well-known/openpgpkey/hu/<хеш имени>?l=<имя>   → двоичный открытый ключ | 404
  * Ответ 401 с кодом session-expired означает, что сервер сессию больше не признаёт. */
 class HttpBackend {
   constructor(base) {
@@ -543,6 +565,38 @@ class HttpBackend {
 
   aliasDelete({ session, id }) {
     return this._call("DELETE", `/v1/mail/aliases/${encodeURIComponent(id)}`, null, session?.token);
+  }
+
+  mailKeys({ session }) {
+    return this._call("GET", "/v1/mail/pgp", null, session?.token);
+  }
+
+  mailKeysSave({ session, ...body }) {
+    return this._call("PUT", "/v1/mail/pgp", body, session?.token);
+  }
+
+  /** Открытый ключ адреса этого домена из каталога: Uint8Array или null, если ключа нет. */
+  async directoryKey({ local, hash }) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10000);
+    try {
+      const res = await fetch(`${this.base}/.well-known/openpgpkey/hu/${hash}?l=${encodeURIComponent(local)}`, { credentials: "omit", redirect: "error", signal: ctrl.signal });
+      if (res.status === 404) {
+        return null;
+      }
+      if (!res.ok) {
+        throw Object.assign(new Error(`Каталог ключей: HTTP ${res.status}`), { code: `http-${res.status}` });
+      }
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      return bytes.length && bytes.length <= 16384 ? bytes : null;
+    } catch (e) {
+      if (e.name === "AbortError" || e.name === "TypeError") {
+        throw Object.assign(new Error("Сервер Tabora не отвечает"), { code: "offline" });
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
 
@@ -708,9 +762,85 @@ export const Account = {
     const salt = sha256(utf8ToBytes(`${AUTH_SALT[kdf]}${email}`)).slice(0, 16);
     const k = await argon2idAsync(utf8ToBytes(String(password).normalize("NFKC")), salt, params);
     try {
-      return bytesToHex(hmac(sha256, k, utf8ToBytes("login")));
+      const hash = bytesToHex(hmac(sha256, k, utf8ToBytes("login")));
+      this._keepMailKey(hash, hmac(sha256, k, utf8ToBytes("mail-keys-backup-v1")));
+      return hash;
     } finally {
       wipe(k);
+    }
+  },
+
+  /* Ключ копии ключей почты (mail/Pgp.sys.mjs) выводится из пароля тем же тяжёлым KDF, что и
+   * хеш входа, но с другой меткой: из хеша входа, известного серверу, его не получить. Ключ
+   * ждёт в памяти, пока сервер не подтвердит пароль (не дольше трёх минут), и после стирается. */
+  _mailKeys: new Map(),
+
+  _keepMailKey(hash, key) {
+    const now = Date.now();
+    for (const [h, e] of this._mailKeys) {
+      if (now - e.at > 180000 || this._mailKeys.size >= 6) {
+        wipe(e.key);
+        this._mailKeys.delete(h);
+      }
+    }
+    this._mailKeys.set(hash, { key, at: now });
+    // пароль не подошёл или вход не довели до конца: ключ не остаётся в памяти дольше срока
+    setTimeout(() => wipe(this._takeMailKey(hash)), 181000);
+  },
+
+  _takeMailKey(hash) {
+    const e = this._mailKeys.get(hash);
+    this._mailKeys.delete(hash);
+    if (e && Date.now() - e.at > 180000) {
+      wipe(e.key);
+      return null;
+    }
+    return e?.key || null;
+  },
+
+  /** Сервер только что подтвердил пароль: копия ключей почты сверяется с сервером. Входу и смене
+   * пароля сверка не мешает: идёт следом, ошибка остаётся в консоли и видна на экране ключей. */
+  _passwordConfirmed(loginHash, key = this._takeMailKey(loginHash)) {
+    if (!key) {
+      return;
+    }
+    if (!this.signedIn || this.needsServerLink) {
+      wipe(key);
+      return;
+    }
+    lazy.Pgp.sync({ passwordKey: key, loginHash })
+      .catch(e => console.error("Tabora account: ключи почты не сверены с сервером", e))
+      .finally(() => wipe(key));
+  },
+
+  /** Сохранить копию ключей почты на сервере или вернуть её оттуда: пароль вводит пользователь
+   * (экран «Шифрование»). replace — заменить ключ аккаунта на сервере ключом этого компьютера
+   * (новым, если ключа здесь нет): прежний ключ и письма, зашифрованные им, теряются. Неверный
+   * пароль — ошибка с кодом bad-credentials. */
+  async confirmMailKeys(password, { replace = false } = {}) {
+    await this.ready();
+    this._session();
+    if (!password) {
+      throw new Error("Введите пароль");
+    }
+    const loginHash = await this.loginHash(this.email, password, await this._kdfFor(this.email));
+    const key = this._takeMailKey(loginHash);
+    try {
+      return await lazy.Pgp.sync({ passwordKey: key, loginHash, strict: true, replace });
+    } finally {
+      wipe(key);
+    }
+  },
+
+  /** Вернуть ключ почты из копии на сервере ключом восстановления (пароль с тех пор сменили). */
+  async restoreMailKeys(recoveryText) {
+    await this.ready();
+    this._session();
+    const key = Vault.recoveryMailKey(recoveryText);
+    try {
+      return await lazy.Pgp.sync({ recoveryKey: key, strict: true });
+    } finally {
+      wipe(key);
     }
   },
 
@@ -881,6 +1011,7 @@ export const Account = {
     this.data = { version: 1, email, userId: r.userId, session: r.session, server: this.serverUrl || null, kdf: KDF_CURRENT, createdAt: new Date().toISOString(), lastLoginAt: new Date().toISOString() };
     await this._setMailAccess(r.mail);
     await this.save("signed-in");
+    this._passwordConfirmed(loginHash);
     this.markFirstRunDone();
     let recoveryKey = null;
     try {
@@ -926,6 +1057,13 @@ export const Account = {
       this.data.recoveryScheme = recoveryVerifier ? "ed25519" : null;
       delete this.data.recoveryOffServer;
       await this.save();
+      if (!this.needsServerLink) {
+        // копия ключей почты: обёртка ключом восстановления ставится или убирается вместе с ним
+        const recoveryKey = text ? Vault.recoveryMailKey(text) : null;
+        lazy.Pgp.sync({ recoveryKey, recoveryGone: !text })
+          .catch(e => console.error("Tabora account: ключи почты не сверены с сервером", e))
+          .finally(() => wipe(recoveryKey));
+      }
       return true;
     } catch (e) {
       console.error("Tabora account: ключ проверки не зарегистрирован", e);
@@ -1013,6 +1151,7 @@ export const Account = {
     }
     await this._setMailAccess(r.mail);
     await this.save("signed-in");
+    this._passwordConfirmed(loginHash);
     this.markFirstRunDone();
     return { email, created, mail: !!this.data.mailAccess, recoveryOffServer: !!this.data.recoveryOffServer };
   },
@@ -1131,18 +1270,23 @@ export const Account = {
       // Счётчик попыток здесь не сбрасывается: успешный вход в аккаунт на сервере ничего не
       // говорит о пароле сейфа этого компьютера. Сбросит его только пароль, подошедший к сейфу.
       let usedKdf = Math.max(Number(r.kdf) || kdf, kdf);
+      let confirmedHash = loginHash;
       if (usedKdf < KDF_CURRENT) {
         // аккаунт создан со слабым хешем входа: заменяем его сразу после успешного входа
         try {
           const newLoginHash = await this.loginHash(email, password, KDF_CURRENT);
           await this.backend.upgradeLogin({ email, session: r.session, oldLoginHash: loginHash, newLoginHash, kdf: KDF_CURRENT });
           usedKdf = KDF_CURRENT;
+          confirmedHash = newLoginHash;
         } catch (e) {
           console.error("Tabora account: хеш входа не обновлён, повторим при следующем входе", e);
         }
       }
       this._noteKdf(email, usedKdf);
-      pending = this._keepPending(email, password, r, usedKdf);
+      pending = this._keepPending(email, password, r, usedKdf, confirmedHash);
+      if (confirmedHash !== loginHash) {
+        wipe(this._takeMailKey(loginHash));
+      }
     }
     const { r, usedKdf } = pending;
     this._step("Открываем сейф");
@@ -1185,6 +1329,10 @@ export const Account = {
     }
     await this._setMailAccess(r.mail);
     await this.save("signed-in");
+    if (pending.mailKey) {
+      this._passwordConfirmed(pending.loginHash, pending.mailKey);
+      pending.mailKey = null;
+    }
     this._dropPending({ revoke: false }); // сессия стала сессией аккаунта
     this.markFirstRunDone();
     let recoveryKey = null;
@@ -1218,9 +1366,11 @@ export const Account = {
     return p && p.email === email && Date.now() - p.at < 10 * 60000 && sameHex(p.tag, this._passwordTag(email, password)) ? p : null;
   },
 
-  _keepPending(email, password, r, usedKdf) {
+  _keepPending(email, password, r, usedKdf, loginHash = "") {
     clearTimeout(this._pendingTimer);
-    this._pending = { email, tag: this._passwordTag(email, password), r, usedKdf, at: Date.now() };
+    wipe(this._pending?.mailKey);
+    // вместе с сессией ждёт и ключ копии ключей почты: пароль уже подтверждён сервером
+    this._pending = { email, tag: this._passwordTag(email, password), r, usedKdf, loginHash, mailKey: loginHash ? this._takeMailKey(loginHash) : null, at: Date.now() };
     this._pendingTimer = setTimeout(() => this._dropPending(), 10 * 60000);
     return this._pending;
   },
@@ -1230,6 +1380,7 @@ export const Account = {
     const p = this._pending;
     this._pending = null;
     clearTimeout(this._pendingTimer);
+    wipe(p?.mailKey);
     if (p && revoke) {
       try {
         await this.backend.logout({ session: p.r.session });
@@ -1331,6 +1482,8 @@ export const Account = {
     this.data.kdf = KDF_CURRENT;
     this.data.passwordChangedAt = new Date().toISOString();
     await this.save();
+    wipe(this._takeMailKey(oldLoginHash));
+    this._passwordConfirmed(newLoginHash); // копия ключей почты заворачивается новым паролем
     return result;
   },
 
@@ -1500,7 +1653,7 @@ export const Account = {
     await this._dropPending();
     if (r?.session) {
       // сервер сразу выдал сессию этому устройству: вход продолжится с неё (login)
-      this._keepPending(email, newPassword, r, KDF_CURRENT);
+      this._keepPending(email, newPassword, r, KDF_CURRENT, newLoginHash);
     }
     return { email };
   },

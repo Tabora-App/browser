@@ -103,6 +103,22 @@ CREATE TABLE IF NOT EXISTS settings (
   key    TEXT PRIMARY KEY,
   value  TEXT NOT NULL
 );
+-- Ключи шифрования почты (OpenPGP). Открытый ключ публикуется в каталоге (wkd_hash — имя записи).
+-- blob — закрытый ключ, зашифрованный браузером ключом данных; wrap_pw и wrap_rk — ключ данных,
+-- зашифрованный ключом из пароля и из ключа восстановления. Все три блока сверху запечатаны
+-- ключом сервера. rev растёт с каждым изменением: по нему отсекаются одновременные записи.
+CREATE TABLE IF NOT EXISTS mail_keys (
+  user_id      BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  rev          BIGINT NOT NULL DEFAULT 0,
+  fingerprint  TEXT,
+  public_key   BYTEA,
+  wkd_hash     TEXT,
+  blob         BYTEA,
+  wrap_pw      BYTEA,
+  wrap_rk      BYTEA,
+  updated_at   BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS mail_keys_wkd ON mail_keys (wkd_hash);
 "#;
 
 #[derive(Debug)]
@@ -521,6 +537,47 @@ pub async fn mail_code_attempt<C: GenericClient>(c: &C, user_id: i64, purpose: &
 pub async fn delete_mail_code<C: GenericClient>(c: &C, user_id: i64, purpose: &str) -> Result<(), DbError> {
     c.execute("DELETE FROM mail_codes WHERE user_id = $1 AND purpose = $2", &[&user_id, &purpose]).await?;
     Ok(())
+}
+
+/* ---- ключи шифрования почты ---- */
+
+#[derive(Clone, Debug, Default)]
+pub struct MailKeys {
+    pub rev: i64,
+    pub fingerprint: Option<String>,
+    pub public_key: Option<Vec<u8>>,
+    pub wkd_hash: Option<String>,
+    pub blob: Option<Vec<u8>>,
+    pub wrap_pw: Option<Vec<u8>>,
+    pub wrap_rk: Option<Vec<u8>>,
+    pub updated_at: i64,
+}
+
+pub async fn mail_keys<C: GenericClient>(c: &C, user_id: i64) -> Result<Option<MailKeys>, DbError> {
+    let row = c.query_opt("SELECT rev, fingerprint, public_key, wkd_hash, blob, wrap_pw, wrap_rk, updated_at FROM mail_keys WHERE user_id = $1", &[&user_id]).await?;
+    Ok(row.map(|r| MailKeys { rev: r.get(0), fingerprint: r.get(1), public_key: r.get(2), wkd_hash: r.get(3), blob: r.get(4), wrap_pw: r.get(5), wrap_rk: r.get(6), updated_at: r.get(7) }))
+}
+
+/// Запись ключей для изменения: строка пользователя блокируется до конца транзакции, поэтому
+/// два одновременных сохранения идут по очереди (в том числе самое первое, когда записи ещё нет).
+pub async fn mail_keys_for_update<C: GenericClient>(c: &C, user_id: i64) -> Result<Option<MailKeys>, DbError> {
+    c.query_opt("SELECT id FROM users WHERE id = $1 FOR UPDATE", &[&user_id]).await?;
+    mail_keys(c, user_id).await
+}
+
+pub async fn save_mail_keys<C: GenericClient>(c: &C, user_id: i64, k: &MailKeys) -> Result<(), DbError> {
+    c.execute(
+        "INSERT INTO mail_keys (user_id, rev, fingerprint, public_key, wkd_hash, blob, wrap_pw, wrap_rk, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) \
+         ON CONFLICT (user_id) DO UPDATE SET rev = EXCLUDED.rev, fingerprint = EXCLUDED.fingerprint, public_key = EXCLUDED.public_key, wkd_hash = EXCLUDED.wkd_hash, \
+         blob = EXCLUDED.blob, wrap_pw = EXCLUDED.wrap_pw, wrap_rk = EXCLUDED.wrap_rk, updated_at = EXCLUDED.updated_at",
+        &[&user_id, &k.rev, &k.fingerprint, &k.public_key, &k.wkd_hash, &k.blob, &k.wrap_pw, &k.wrap_rk, &k.updated_at],
+    )
+    .await?;
+    Ok(())
+}
+
+pub async fn public_key_by_wkd<C: GenericClient>(c: &C, hash: &str) -> Result<Option<Vec<u8>>, DbError> {
+    Ok(c.query_opt("SELECT public_key FROM mail_keys WHERE wkd_hash = $1 AND public_key IS NOT NULL", &[&hash]).await?.map(|r| r.get(0)))
 }
 
 pub async fn setting<C: GenericClient>(c: &C, key: &str) -> Result<Option<String>, DbError> {

@@ -169,6 +169,23 @@
       </div>
     </div>
 
+    <!-- Пароль аккаунта или ключ восстановления для копии ключа шифрования -->
+    <div class="modal-backdrop" id="secret-modal" hidden>
+      <div class="modal" role="dialog" aria-labelledby="secret-title">
+        <h2 id="secret-title"></h2>
+        <p class="modal-sub" id="secret-sub"></p>
+        <label class="modal-field">
+          <span id="secret-label"></span>
+          <input id="secret-input" type="password" autocomplete="off" spellcheck="false" />
+        </label>
+        <p class="modal-error" id="secret-error" role="alert" hidden></p>
+        <div class="modal-actions">
+          <button class="ghost" id="secret-cancel" type="button">Отмена</button>
+          <button class="primary" id="secret-ok" type="button"></button>
+        </div>
+      </div>
+    </div>
+
     <!-- Новый алиас -->
     <div class="modal-backdrop" id="alias-modal" hidden>
       <div class="modal" role="dialog" aria-labelledby="alias-modal-title">

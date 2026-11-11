@@ -30,6 +30,10 @@ pub fn sha256(data: &[u8]) -> [u8; 32] {
     Sha256::digest(data).into()
 }
 
+pub fn sha1(data: &[u8]) -> [u8; 20] {
+    Sha1::digest(data).into()
+}
+
 pub fn hmac256(key: &[u8], parts: &[&[u8]]) -> [u8; 32] {
     let mut m = <HmacSha256 as Mac>::new_from_slice(key).expect("HMAC принимает ключ любой длины");
     for p in parts {

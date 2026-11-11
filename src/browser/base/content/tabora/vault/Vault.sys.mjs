@@ -34,6 +34,7 @@ const MIN_PASSWORD = 6;
 const RK_INFO = "tabora-vault-recovery-v1";
 const RK_ACCOUNT_INFO = "tabora-account-recovery-v1"; // прежняя схема: общий ключ HMAC (только для миграции)
 const RK_ACCOUNT_SIGN_INFO = "tabora-account-recovery-ed25519-v1"; // зерно пары Ed25519 для подписи сброса
+const RK_MAIL_KEYS_INFO = "tabora-mail-keys-recovery-v1"; // ключ, которым завёрнута копия ключей почты на сервере
 const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 // Модули, чьи данные зашифрованы подключами сейфа. Перед сменой ключа они загружаются,
 // чтобы успеть подписаться на перешифровку (см. registerRekey).
@@ -1504,6 +1505,18 @@ export const Vault = {
     try {
       const seed = hmac(sha256, rk, utf8ToBytes(RK_ACCOUNT_SIGN_INFO));
       return { seed, publicKey: ed25519.getPublicKey(seed), sign: message => ed25519.sign(message, seed) };
+    } finally {
+      wipe(rk);
+    }
+  },
+
+  /** Ключ из ключа восстановления для копии ключей почты на сервере (mail/Pgp.sys.mjs): им
+   * завёрнут ключ данных копии. С обёрткой сейфа и с подписью сброса он не связан. Затереть
+   * после использования. */
+  recoveryMailKey(text) {
+    const rk = rkParse(text);
+    try {
+      return hmac(sha256, rk, utf8ToBytes(RK_MAIL_KEYS_INFO));
     } finally {
       wipe(rk);
     }

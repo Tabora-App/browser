@@ -16,7 +16,8 @@ API аккаунтов и синхронизации (`tabora-server`, PostgreSQ
 
 | Что | Где |
 |---|---|
-| Развёртывание с ноутбука | `infra/deploy.sh setup` (идемпотентно, можно в любой момент), `site`, `tunnel`, `tls`, `dns` |
+| Развёртывание с ноутбука | `infra/deploy.sh setup` (идемпотентно, можно в любой момент), `site`, `server`, `nginx` (только настройки nginx), `tunnel`, `tls`, `dns` |
+| Каталог ключей почты (WKD) | `https://tabora.app/.well-known/openpgpkey/…` → `tabora-server`; записи `openpgpkey` в DNS быть не должно: с ней программы ищут ключ на поддомене и на основной домен не возвращаются |
 | Скрипты на сервере | `/usr/local/lib/tabora` (копия `infra/`, из неё работают хук certbot и таймеры) |
 | Stalwart | `/opt/stalwart`: `bin/` (root, sha256 сверяется), `etc/config.json` (только хранилище RocksDB), `data/`; служба `stalwart`, журнал `journalctl -u stalwart` |
 | Настройки Stalwart | JMAP-объекты `x:*` через `infra/stalwart/configure.py` |

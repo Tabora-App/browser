@@ -126,6 +126,32 @@ export const MailStore = {
         this.forget();
       }
     }, Vault.TOPIC);
+    Services.obs.addObserver((s, t, what) => {
+      if (what === "own" && this.data) {
+        this._retryDecrypt(); // ключ аккаунта появился или сменился: не открывшиеся письма пробуем снова
+      }
+    }, "tabora-pgp-changed");
+  },
+
+  /** Письма, которые не удалось расшифровать, расшифровываются заново (не больше сорока самых
+   * свежих за раз, по очереди). */
+  _retryDecrypt() {
+    const list = this.data.messages.filter(m => m.pgp?.error && m.at?.uid).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 40);
+    this._pgpQueue = (this._pgpQueue || Promise.resolve()).then(async () => {
+      for (const rec of list) {
+        if (!this.data || !this.data.messages.includes(rec)) {
+          return;
+        }
+        try {
+          await this._decryptFull(rec);
+        } catch (e) {
+          this._pgpFailed(rec, e);
+        }
+      }
+      if (this.data && list.length) {
+        this.save();
+      }
+    });
   },
 
   /** Загружает данные один раз. Без входа в аккаунт или с заблокированным сейфом отклоняется
@@ -530,10 +556,11 @@ export const MailStore = {
         const rec = this._record(acc, role, path, box.uidValidity, item);
         if (rec) {
           this._adopt(rec);
-          this._openPgp(rec);
           if (rec._autocrypt) {
-            lazy.Pgp.noteAutocrypt(rec.from.email, rec._autocrypt, rec.date);
+            // сначала ключ отправителя из заголовка: им же проверяется подпись этого письма
+            await lazy.Pgp.noteAutocrypt(rec.from.email, rec._autocrypt, rec.date);
           }
+          this._openPgp(rec);
         }
       }
       if (this.data && need.length > 12) {
@@ -739,7 +766,10 @@ export const MailStore = {
       if (String(from || "").toLowerCase() !== Account.email) {
         return none;
       }
-      await lazy.Pgp.ensureKey();
+      if (!(await lazy.Pgp.accountKey())) {
+        return none; // ключ аккаунта есть на сервере, но здесь его не открыть (экран «Шифрование»)
+      }
+      await lazy.Pgp.lookupMissing(recipients);
       return { available: true, ...(await lazy.Pgp.plan(recipients)) };
     } catch (e) {
       return none;
@@ -928,10 +958,11 @@ export const MailStore = {
     const extraHeaders = [];
     if (keyed) {
       try {
-        await lazy.Pgp.ensureKey();
-        const autocrypt = await lazy.Pgp.autocryptHeader(from);
+        const autocrypt = (await lazy.Pgp.accountKey()) ? await lazy.Pgp.autocryptHeader(from) : "";
         if (autocrypt) {
           extraHeaders.push(lazy.Mime.foldHeader("Autocrypt", autocrypt));
+        } else if (message.encrypt) {
+          throw new Error("Ключ шифрования аккаунта на этом компьютере недоступен: откройте в почте раздел «Шифрование»");
         }
       } catch (e) {
         if (message.encrypt) {

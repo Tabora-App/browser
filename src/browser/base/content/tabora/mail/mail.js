@@ -513,6 +513,10 @@ const App = {
     const hash = location.hash.replace(/^#/, "");
     const [kind, arg] = hash.split("/");
     if (kind === "aliases" || kind === "keys") {
+      if (kind === "keys" && this.view !== "keys") {
+        // при открытии раздела состояние копии сверяется с сервером; экран обновится по уведомлению
+        lazy.Pgp.sync().catch(() => {});
+      }
       this.view = kind;
     } else {
       this.view = "mail";
@@ -1204,10 +1208,13 @@ const App = {
     const turn = (this._keysTurn = (this._keysTurn || 0) + 1);
     let own = null;
     let peers = [];
+    let backup = { state: "local" };
     let failed = "";
     try {
-      // ключ аккаунта появляется при первом обращении: создание занимает меньше секунды
-      own = MailStore.accounts.some(a => a.kind === "tabora") ? await lazy.Pgp.ensureKey() : await lazy.Pgp.own();
+      // ключ аккаунта появляется при первом обращении: сначала сверка с сервером (ключ мог быть
+      // создан на другом компьютере), потом, если его нет нигде, создание
+      own = MailStore.accounts.some(a => a.kind === "tabora") ? await lazy.Pgp.accountKey() : await lazy.Pgp.own();
+      backup = await lazy.Pgp.backup();
       peers = await lazy.Pgp.peers();
     } catch (e) {
       failed = e.message || String(e);
@@ -1224,20 +1231,50 @@ const App = {
       const d = new Date(iso);
       return Number.isNaN(d.getTime()) ? "" : `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
     };
-    box.append(el("section", { class: "key-card" }, own ? [
-      el("div", { class: "key-card-head" }, [
-        el("span", { class: "pgp-mark", "aria-hidden": "true" }, icon("lock", 16, 1.9)),
-        el("div", { class: "key-card-title" }, [el("b", { text: "Ваш ключ" }), el("span", { text: `${own.address}${date(own.created) ? `, создан ${date(own.created)}` : ""}` })]),
-        el("button", { class: "btn", type: "button", onclick: () => this.copy(own.publicKey, "Открытый ключ скопирован: его можно отправить собеседнику") }, [icon("copy", 14), "Скопировать открытый ключ"]),
-      ]),
-      el("div", { class: "key-print", title: "Отпечаток ключа", text: fingerprintText(own.fingerprint) }),
-      el("p", { class: "key-hint", text: "Отпечаток — короткое имя ключа. Чтобы убедиться, что ключ не подменили по дороге, сверьте его с собеседником голосом или при встрече. Открытый ключ уходит с каждым вашим письмом, закрытый не покидает сейф." }),
-    ] : [
-      el("div", { class: "key-card-head" }, [
-        el("span", { class: "pgp-mark", "aria-hidden": "true" }, icon("lock", 16, 1.9)),
-        el("div", { class: "key-card-title" }, [el("b", { text: "Ключа пока нет" }), el("span", { text: "Он появится, когда у аккаунта будет ящик Tabora: подключите аккаунт к серверу." })]),
-      ]),
-    ]));
+    if (backup.state === "locked") {
+      // у аккаунта на сервере есть ключ, а здесь его нет: ключ возвращают, новый создают только осознанно
+      box.append(el("section", { class: "key-card", dataset: { tone: "warn" } }, [
+        el("div", { class: "key-card-head" }, [
+          el("span", { class: "pgp-mark", "aria-hidden": "true" }, icon("lock", 16, 1.9)),
+          el("div", { class: "key-card-title" }, [el("b", { text: "Ключа аккаунта на этом компьютере нет" }), el("span", { text: "Он создан на другом компьютере. Пока ключ не вернётся, зашифрованные письма здесь не открыть и не отправить." })]),
+        ]),
+        el("div", { class: "key-actions" }, [
+          backup.canPassword ? el("button", { class: "primary", type: "button", text: "Вернуть паролем аккаунта", onclick: () => this.askKeySecret("unlock") }) : null,
+          backup.canRecovery ? el("button", { class: backup.canPassword ? "btn" : "primary", type: "button", text: "Вернуть ключом восстановления", onclick: () => this.askKeySecret("recovery") }) : null,
+          el("button", { class: "btn", type: "button", text: "Создать новый ключ", onclick: () => this.askKeySecret("replace") }),
+        ]),
+        el("p", { class: "key-hint", text: backup.canPassword || backup.canRecovery
+          ? "Копия ключа лежит на сервере Tabora зашифрованной: её открывает пароль, с которым она была сохранена, или ключ восстановления. Новый ключ заменит прежний, и письма, зашифрованные прежним, прочитать будет нельзя."
+          : "Копию ключа ещё не сохранили на сервере. Откройте Tabora на том компьютере, где ключ создан, и в этом разделе сохраните копию. Новый ключ заменит прежний, и письма, зашифрованные прежним, прочитать будет нельзя." }),
+      ]));
+    } else {
+      const status = {
+        ok: ["ok", "seal", "Копия ключа сохранена на сервере Tabora. Она зашифрована вашим паролем: сервер прочитать её не может, а новый компьютер получит ключ после входа.", null],
+        "no-password": ["warn", "alert", "Копия ключа ещё не привязана к паролю: на другом компьютере ключ не появится, а с потерей этого пропадёт. Введите пароль аккаунта, чтобы сохранить копию.", ["Сохранить копию", () => this.askKeySecret("password")]],
+        unsupported: ["info", "seal", "Ключ хранится только на этом компьютере. Копия на сервере появится после обновления сервера Tabora.", null],
+        offline: ["info", "seal", "Сервер Tabora недоступен: копия ключа не проверена.", ["Проверить", () => lazy.Pgp.sync().catch(() => {})]],
+        local: ["info", "seal", "Аккаунт не подключён к серверу Tabora: ключ хранится только на этом компьютере.", null],
+      }[backup.state];
+      box.append(el("section", { class: "key-card" }, own ? [
+        el("div", { class: "key-card-head" }, [
+          el("span", { class: "pgp-mark", "aria-hidden": "true" }, icon("lock", 16, 1.9)),
+          el("div", { class: "key-card-title" }, [el("b", { text: "Ваш ключ" }), el("span", { text: `${own.address}${date(own.created) ? `, создан ${date(own.created)}` : ""}` })]),
+          el("button", { class: "btn", type: "button", onclick: () => this.copy(own.publicKey, "Открытый ключ скопирован: его можно отправить собеседнику") }, [icon("copy", 14), "Скопировать открытый ключ"]),
+        ]),
+        el("div", { class: "key-print", title: "Отпечаток ключа", text: fingerprintText(own.fingerprint) }),
+        el("p", { class: "key-hint", text: "Отпечаток — короткое имя ключа. Чтобы убедиться, что ключ не подменили по дороге, сверьте его с собеседником голосом или при встрече. Открытый ключ уходит с каждым вашим письмом, закрытый не покидает сейф." }),
+        status ? el("div", { class: "key-backup", dataset: { tone: status[0] } }, [
+          el("span", { class: "pgp-mark", "aria-hidden": "true" }, icon(status[1], 14, 1.9)),
+          el("span", { class: "key-backup-text", text: status[2] }),
+          status[3] ? el("button", { class: "btn", type: "button", text: status[3][0], onclick: status[3][1] }) : null,
+        ]) : null,
+      ] : [
+        el("div", { class: "key-card-head" }, [
+          el("span", { class: "pgp-mark", "aria-hidden": "true" }, icon("lock", 16, 1.9)),
+          el("div", { class: "key-card-title" }, [el("b", { text: "Ключа пока нет" }), el("span", { text: "Он появится, когда у аккаунта будет ящик Tabora: подключите аккаунт к серверу." })]),
+        ]),
+      ]));
+    }
 
     box.append(el("div", { class: "keys-list-head" }, [
       el("h2", { text: "Ключи собеседников" }),
@@ -1279,6 +1316,56 @@ const App = {
           },
         }, icon("close", 12, 2.4)),
       ]));
+    }
+  },
+
+  /** Пароль аккаунта или ключ восстановления для копии ключа: сохранить копию, вернуть ключ или
+   * заменить его новым. */
+  askKeySecret(kind) {
+    const texts = {
+      password: ["Пароль аккаунта", "Пароль нужен, чтобы зашифровать копию ключа: на сервер попадает только зашифрованная копия, пароль остаётся на этом компьютере.", "Пароль", "Сохранить копию"],
+      unlock: ["Пароль аккаунта", "Пароль открывает копию ключа шифрования, сохранённую на сервере. Сам пароль остаётся на этом компьютере.", "Пароль", "Вернуть ключ"],
+      recovery: ["Ключ восстановления", "Введите ключ восстановления аккаунта: им открывается копия ключа шифрования, сохранённая на сервере.", "Ключ восстановления", "Вернуть ключ"],
+      replace: ["Новый ключ шифрования", "Прежний ключ аккаунта будет заменён. Письма, зашифрованные прежним ключом, прочитать больше не получится, а собеседники получат новый ключ с вашим следующим письмом. Чтобы подтвердить, введите пароль аккаунта.", "Пароль", "Заменить ключ"],
+    }[kind];
+    $("secret-title").textContent = texts[0];
+    $("secret-sub").textContent = texts[1];
+    $("secret-label").textContent = texts[2];
+    $("secret-ok").textContent = texts[3];
+    $("secret-input").type = kind === "recovery" ? "text" : "password";
+    $("secret-input").value = "";
+    $("secret-error").hidden = true;
+    $("secret-modal").dataset.kind = kind;
+    $("secret-modal").hidden = false;
+    setTimeout(() => $("secret-input").focus(), 20);
+  },
+
+  async submitKeySecret() {
+    const button = $("secret-ok");
+    const kind = $("secret-modal").dataset.kind;
+    const value = $("secret-input").value;
+    if (button.disabled || !value.trim()) {
+      $("secret-input").focus();
+      return;
+    }
+    const error = $("secret-error");
+    error.hidden = true;
+    button.disabled = true;
+    try {
+      const b = kind === "recovery" ? await Account.restoreMailKeys(value) : await Account.confirmMailKeys(value, { replace: kind === "replace" });
+      $("secret-input").value = "";
+      $("secret-modal").hidden = true;
+      this.toast(b.state === "ok" ? (kind === "replace" ? "Ключ заменён, копия сохранена на сервере" : "Ключ на месте, копия сохранена на сервере") : "Ключ возвращён. Осталось сохранить копию с нынешним паролем");
+      if (kind !== "password") {
+        // ключ появился или сменился: письма, которые не открылись, расшифруются при открытии
+        this.renderAll();
+      }
+    } catch (e) {
+      error.textContent = e.code === "bad-credentials" ? "Неверный пароль" : e.message || "Не получилось";
+      error.hidden = false;
+      $("secret-input").select();
+    } finally {
+      button.disabled = false;
     }
   },
 
@@ -1493,6 +1580,9 @@ const App = {
         $("alias-modal").hidden = true;
       } else if (!$("key-modal").hidden) {
         $("key-modal").hidden = true;
+      } else if (!$("secret-modal").hidden) {
+        $("secret-modal").hidden = true;
+        $("secret-input").value = "";
       } else if (!$("box-modal").hidden) {
         $("box-modal").hidden = true;
       } else if (this.checked.size) {
@@ -1604,6 +1694,14 @@ const App = {
       }
     });
     $("key-add").addEventListener("click", () => this.addKey());
+    const closeSecret = () => {
+      $("secret-modal").hidden = true;
+      $("secret-input").value = "";
+    };
+    $("secret-cancel").addEventListener("click", closeSecret);
+    $("secret-modal").addEventListener("click", e => e.target === $("secret-modal") && closeSecret());
+    $("secret-ok").addEventListener("click", () => this.submitKeySecret());
+    $("secret-input").addEventListener("keydown", e => e.key === "Enter" && this.submitKeySecret());
     $("key-address").addEventListener("keydown", e => e.key === "Enter" && $("key-armored").focus());
 
     $("box-cancel").addEventListener("click", () => ($("box-modal").hidden = true));

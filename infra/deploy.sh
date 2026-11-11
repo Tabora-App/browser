@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Развёртывание с ноутбука: копирует infra/ и site/ на сервер (/root/tabora-infra) и запускает
-# нужный скрипт. Использование: infra/deploy.sh [setup|site|downloads|server|tls|tunnel|dns]
+# нужный скрипт. Использование: infra/deploy.sh [setup|site|downloads|server|nginx|tls|tunnel|dns]
 set -euo pipefail
 HOST=${HOST:-tabora}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -45,6 +45,14 @@ case "$what" in
       done
       journalctl -u tabora-server -n 20 --no-pager
       exit 1'
+    ;;
+  nginx)
+    # только настройки nginx (после правки infra/nginx): проверка nginx -t и перечитывание без простоя
+    ssh "$HOST" 'set -euo pipefail
+      DOMAIN=${DOMAIN:-tabora.app}; MAIL_HOST=${MAIL_HOST:-mx.$DOMAIN}; API_HOST=${API_HOST:-api.$DOMAIN}
+      . /root/tabora-infra/infra/lib.sh
+      install_nginx /root/tabora-infra/infra/nginx
+      echo "nginx: настройки обновлены"'
     ;;
   tls)    ssh "$HOST" 'bash /root/tabora-infra/infra/enable-tls.sh' ;;
   tunnel) ssh "$HOST" 'bash /root/tabora-infra/infra/cloudflare/setup-tunnel.sh' ;;

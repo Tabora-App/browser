@@ -390,6 +390,101 @@ check("во время паузы не проходит и верный резе
 r = await call("POST", "/v1/account/2fa/disable", { token: D.s, body: { loginHash: D.pw, code: D.codes[0] }, ip: D.ip });
 check("выключить защиту во время паузы тоже нельзя", r.status === 429, r.text);
 
+// ---- ключи шифрования почты: копия закрытого ключа и каталог открытых ключей ----
+/** Открытый ключ OpenPGP версии 4 (пакет ключа и пакет имени) и его отпечаток: seed делает ключи разными. */
+function pgpKey(seed) {
+  const body = Buffer.concat([Buffer.from([4, 0x5f, 0, 0, 0, 22, 9, 0x2b, 0x06, 0x01, 0x04, 0x01, 0xda, 0x47, 0x0f, 0x01, 0x01, 0x07, 0x40]), crypto.createHash("sha256").update(seed).digest()]);
+  const fingerprint = crypto.createHash("sha1").update(Buffer.concat([Buffer.from([0x99, 0, body.length]), body])).digest("hex");
+  return { fingerprint, bin: Buffer.concat([Buffer.from([0x98, body.length]), body, Buffer.from([0xb4, 3, 0x61, 0x40, 0x62])]) };
+}
+const zb32 = buf => {
+  const abc = "ybndrfg8ejkmcpqxot1uwisza345h769";
+  let out = "";
+  let acc = 0;
+  let bits = 0;
+  for (const b of buf) {
+    acc = (acc << 8) | b;
+    bits += 8;
+    while (bits >= 5) {
+      bits -= 5;
+      out += abc[(acc >> bits) & 31];
+    }
+    acc &= (1 << bits) - 1;
+  }
+  return bits ? out + abc[(acc << (5 - bits)) & 31] : out;
+};
+const wkd = local => zb32(crypto.createHash("sha1").update(local.toLowerCase()).digest());
+const b64 = n => crypto.randomBytes(n).toString("base64");
+const K = { email: mail("k"), pw: hash("k-pass"), ip: "198.51.100.61", local: name("k") };
+r = await call("POST", "/v1/account/register", { body: { email: K.email, loginHash: K.pw, kdf: 2, deviceId: device(60), deviceName: "Мак" }, ip: K.ip });
+K.s = r.json?.session?.token;
+r = await call("GET", "/v1/mail/pgp", { ip: K.ip });
+check("ключи почты без сессии не отдаются", r.status === 401 && r.json.code === "session-expired", r.text);
+r = await call("GET", "/v1/mail/pgp", { token: K.s, ip: K.ip });
+check("у нового аккаунта ключей нет", r.status === 200 && r.json.rev === 0 && r.json.fingerprint === null && r.json.publicKey === null && r.json.blob === null && r.json.wrapPassword === null && r.json.wrapRecovery === null, r.text);
+const key1 = pgpKey("k1");
+const key2 = pgpKey("k2");
+const wrap1 = b64(60);
+r = await call("PUT", "/v1/mail/pgp", { token: K.s, ip: K.ip, body: { rev: 0, wrapPassword: wrap1 } });
+check("обёртка паролем без хеша входа отклоняется", r.status === 401 && r.json.code === "bad-credentials", r.text);
+r = await call("PUT", "/v1/mail/pgp", { token: K.s, ip: K.ip, body: { rev: 0, wrapPassword: wrap1, loginHash: hash("не тот пароль") } });
+check("обёртка паролем с неверным хешем входа отклоняется", r.status === 401 && r.json.code === "bad-credentials" && r.json.message === "Неверный пароль", r.text);
+r = await call("PUT", "/v1/mail/pgp", { token: K.s, ip: K.ip, body: { rev: 0, wrapPassword: wrap1, loginHash: K.pw } });
+check("обёртка ключа данных сохраняется отдельно от ключа", r.status === 200 && r.json.rev === 1 && r.json.wrapPassword === wrap1 && r.json.fingerprint === null, r.text);
+r = await call("PUT", "/v1/mail/pgp", { token: K.s, ip: K.ip, body: { rev: 0, wrapPassword: b64(60), loginHash: K.pw } });
+check("запись с устаревшим номером версии отклоняется", r.status === 409 && r.json.code === "pgp-conflict", r.text);
+const blob1 = b64(700);
+for (const [what, body] of [
+  ["ключ без копии", { rev: 1, fingerprint: key1.fingerprint, publicKey: key1.bin.toString("base64") }],
+  ["чужой отпечаток", { rev: 1, fingerprint: key2.fingerprint, publicKey: key1.bin.toString("base64"), blob: blob1 }],
+  ["не ключ", { rev: 1, fingerprint: key1.fingerprint, publicKey: Buffer.from("-----BEGIN PGP PUBLIC KEY BLOCK-----").toString("base64"), blob: blob1 }],
+  ["закрытый ключ вместо открытого", { rev: 1, fingerprint: key1.fingerprint, publicKey: Buffer.concat([Buffer.from([0x94]), key1.bin.subarray(1)]).toString("base64"), blob: blob1 }],
+  ["не Base64", { rev: 1, fingerprint: key1.fingerprint, publicKey: "@@@", blob: blob1 }],
+  ["слишком короткая обёртка", { rev: 1, wrapPassword: b64(8), loginHash: K.pw }],
+  ["слишком большая копия", { rev: 1, fingerprint: key1.fingerprint, publicKey: key1.bin.toString("base64"), blob: b64(30000) }],
+]) {
+  r = await call("PUT", "/v1/mail/pgp", { token: K.s, ip: K.ip, body });
+  check(`ключи почты: ${what} → отказ`, r.status === 400 && r.json.code === "pgp-invalid", r.text);
+}
+r = await call("PUT", "/v1/mail/pgp", { token: K.s, ip: K.ip, body: { rev: 1, fingerprint: key1.fingerprint.toUpperCase(), publicKey: key1.bin.toString("base64"), blob: blob1 } });
+check("ключ и его зашифрованная копия сохранены", r.status === 200 && r.json.rev === 2 && r.json.fingerprint === key1.fingerprint && r.json.publicKey === key1.bin.toString("base64") && r.json.blob === blob1 && r.json.wrapPassword === wrap1 && /^\d{4}-/.test(r.json.updatedAt), r.text);
+r = await call("PUT", "/v1/mail/pgp", { token: K.s, ip: K.ip, body: { rev: 2, fingerprint: key2.fingerprint, publicKey: key2.bin.toString("base64"), blob: b64(700) } });
+check("другой ключ поверх существующего без явной замены отклоняется", r.status === 409 && r.json.code === "pgp-conflict", r.text);
+const wrapR = b64(60);
+r = await call("PUT", "/v1/mail/pgp", { token: K.s, ip: K.ip, body: { rev: 2, wrapRecovery: wrapR } });
+check("обёртка ключом восстановления добавляется, остальное не меняется", r.status === 200 && r.json.rev === 3 && r.json.wrapRecovery === wrapR && r.json.wrapPassword === wrap1 && r.json.blob === blob1, r.text);
+r = await call("PUT", "/v1/mail/pgp", { token: K.s, ip: K.ip, body: { rev: 3, wrapRecovery: "" } });
+check("пустая обёртка ключом восстановления убирает её", r.status === 200 && r.json.wrapRecovery === null && r.json.wrapPassword === wrap1, r.text);
+const blob2 = b64(700);
+r = await call("PUT", "/v1/mail/pgp", { token: K.s, ip: K.ip, body: { rev: 4, fingerprint: key2.fingerprint, publicKey: key2.bin.toString("base64"), blob: blob2, replace: true } });
+check("замена ключа по одной лишь сессии отклоняется", r.status === 401 && r.json.code === "bad-credentials", r.text);
+r = await call("PUT", "/v1/mail/pgp", { token: K.s, ip: K.ip, body: { rev: 4, fingerprint: key2.fingerprint, publicKey: key2.bin.toString("base64"), blob: blob2, wrapPassword: b64(60), replace: true, loginHash: K.pw } });
+check("явная замена ключа с паролем проходит", r.status === 200 && r.json.rev === 5 && r.json.fingerprint === key2.fingerprint && r.json.blob === blob2, r.text);
+r = await call("POST", "/v1/account/login", { body: { email: K.email, loginHash: K.pw, deviceId: device(61), deviceName: "Второй" }, ip: K.ip });
+r = await call("GET", "/v1/mail/pgp", { token: r.json?.session?.token, ip: K.ip });
+check("второе устройство после входа получает ту же копию", r.status === 200 && r.json.rev === 5 && r.json.blob === blob2 && r.json.fingerprint === key2.fingerprint, r.text);
+r = await call("GET", "/v1/mail/pgp", { token: A.s1, ip: K.ip });
+check("чужая сессия чужих ключей не видит", r.status !== 200 || r.json.fingerprint !== key2.fingerprint, r.text);
+// каталог открытых ключей (WKD)
+let res = await fetch(`${BASE}/.well-known/openpgpkey/hu/${wkd(K.local)}?l=${K.local}`, { headers: { "X-Forwarded-For": "198.51.100.62" } });
+let got = Buffer.from(await res.arrayBuffer());
+check("каталог отдаёт открытый ключ двоичным", res.status === 200 && res.headers.get("content-type") === "application/octet-stream" && got.equals(key2.bin), `${res.status} ${got.length}`);
+res = await fetch(`${BASE}/.well-known/openpgpkey/hu/${wkd(K.local)}`, { headers: { "X-Forwarded-For": "198.51.100.62" } });
+check("каталог отвечает и без имени в запросе", res.status === 200 && Buffer.from(await res.arrayBuffer()).equals(key2.bin));
+res = await fetch(`${BASE}/.well-known/openpgpkey/hu/${wkd(K.local).toUpperCase()}?l=${K.local.toUpperCase()}`, { headers: { "X-Forwarded-For": "198.51.100.62" } });
+check("регистр имени и хеша не важен", res.status === 200);
+for (const [what, url] of [
+  ["имя не соответствует хешу", `/.well-known/openpgpkey/hu/${wkd(K.local)}?l=${name("a")}`],
+  ["аккаунт без ключа", `/.well-known/openpgpkey/hu/${wkd(name("a"))}?l=${name("a")}`],
+  ["несуществующий адрес", `/.well-known/openpgpkey/hu/${wkd("nobody-here")}?l=nobody-here`],
+  ["мусор вместо хеша", "/.well-known/openpgpkey/hu/..%2F..%2Fetc"],
+]) {
+  res = await fetch(BASE + url, { headers: { "X-Forwarded-For": "198.51.100.62" } });
+  check(`каталог: ${what} → 404`, res.status === 404, String(res.status));
+}
+res = await fetch(`${BASE}/.well-known/openpgpkey/policy`);
+check("файл политики каталога есть", res.status === 200 && (await res.text()) === "");
+
 // пределы регистрации с одного адреса и прочее
 codes = [];
 for (let i = 0; i < 7; i++) {
