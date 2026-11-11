@@ -366,11 +366,21 @@
     min-height: 420px;
     /* сцена тянется до правого края окна, чтобы тень не обрезалась рамкой холста */
     margin-right: calc(-1 * (var(--gutter) + max(0px, (100vw - var(--page)) / 2)));
-    /* края сцены растворяются, чтобы тень нигде не обрывалась о рамку холста */
-    mask-image: linear-gradient(to right, transparent, #000 8%, #000 90%, transparent), linear-gradient(to bottom, #000 88%, transparent);
-    mask-composite: intersect;
     touch-action: pan-y;
     cursor: pointer;
+
+    /* Края сцены растворяются в фоне страницы, чтобы тень нигде не обрывалась о рамку холста.
+       Это накладка цветом фона, а не маска: под маской холст WebGL в части браузеров рисуется
+       со сдвигом, и знак оказывается обрезанным. */
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(to right, var(--stone), transparent 8%, transparent 90%, var(--stone)),
+        linear-gradient(to top, var(--stone), transparent 12%);
+    }
 
     & canvas {
       position: absolute;
@@ -1192,6 +1202,72 @@
     margin-top: 4px;
     font-size: 0.8125rem;
     color: var(--ink-2);
+  }
+
+  /* Без рекламы: счётчик и список заблокированного под ним */
+  .blocked {
+    padding-bottom: 6px;
+
+    & .mock-head svg {
+      width: 16px;
+      height: 16px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linejoin: round;
+    }
+
+    & .blocked-group {
+      margin-top: 14px;
+      font-size: 0.8125rem;
+      font-weight: 700;
+      color: var(--ink-2);
+    }
+
+    & ul {
+      display: grid;
+      margin-top: 4px;
+    }
+
+    & li {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding-block: 5px;
+      overflow-wrap: anywhere;
+    }
+
+    & li .num {
+      flex: none;
+      color: var(--ink-2);
+      font-variant-numeric: tabular-nums;
+    }
+
+    & .mock-actions {
+      justify-content: flex-start;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+  }
+
+  /* Синхронизация: что переносится между компьютерами */
+  .sync {
+    padding-bottom: 6px;
+
+    & ul {
+      display: grid;
+    }
+
+    & .alias b {
+      font-weight: 650;
+    }
+
+    & .never {
+      flex: none;
+      font-size: 0.8125rem;
+      font-weight: 650;
+      color: var(--ink-2);
+    }
   }
 
   /* Открытый код: документы репозитория и команды сборки */

@@ -221,8 +221,10 @@ export function mountHero(host, { reducedMotion = false } = {}) {
     }
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
-    // на узком экране отодвигаем камеру, чтобы знак целиком помещался
-    camera.position.z = w / h < 0.9 ? 13.5 : 9.6;
+    // Знак должен помещаться целиком при любой форме сцены. Высоту кадра задаёт угол камеры, ширина
+    // получается из пропорций сцены: чем сцена уже (длинный заголовок рядом, узкий экран), тем
+    // дальше камера. Раньше камера отодвигалась одним скачком, и между порогами знак обрезался.
+    camera.position.z = Math.min(16, 9.6 * Math.max(1, 1.3 / (w / h)));
     camera.updateProjectionMatrix();
     place();
     renderer.render(scene, camera);
