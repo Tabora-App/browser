@@ -187,15 +187,24 @@
 
 /* ---- Окно и оболочка ------------------------------------------------- */
 
+/* Приложение без рамки: оболочка занимает окно целиком, поля вокруг неё нет (оно отнимало
+   место у страницы). Углы окна скругляет система. */
 #browser {
   position: relative;
-  margin: 14px;
+  margin: 0;
   padding: 10px;
   gap: 10px;
   background: var(--tabora-shell);
-  border: 1px solid var(--tabora-shell-border);
-  border-radius: 18px;
+  border: 0;
+  border-radius: 0;
   overflow: clip;
+}
+
+/* фон окна под оболочкой — того же цвета, без градиента темы по умолчанию */
+:root,
+body {
+  background-image: none !important;
+  background-color: var(--tabora-shell) !important;
 }
 
 :root[inFullscreen] #browser,
