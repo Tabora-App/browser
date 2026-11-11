@@ -622,6 +622,9 @@ kbd {
   background: var(--field);
   display: flex;
   flex-direction: column;
+  /* рамка редактора прямоугольная и со своим фоном: без обрезки она закрывала скруглённые углы
+     блока и его обводку */
+  overflow: clip;
   transition: border-color var(--ease);
 }
 .quick-reply:focus-within, .quick-reply:has(.tb-editor[data-focus]) { border-color: var(--accent); }
