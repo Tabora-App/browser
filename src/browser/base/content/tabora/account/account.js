@@ -37,6 +37,7 @@ Object.assign(Tabora, {
   initAccount() {
     const { Profiles } = this.profilesMod();
     Profiles.start();
+    this.initSync();
     setTimeout(async () => {
       try {
         const { Account } = this.accountMod();
@@ -49,6 +50,29 @@ Object.assign(Tabora, {
         console.error("Tabora account init", e);
       }
     }, 1500);
+  },
+
+  /** Синхронизация: модуль один на процесс. Окно обновляет своё, когда сверка принесла
+   * пространства или ярлыки стартовой страницы с другого компьютера. */
+  initSync() {
+    try {
+      ChromeUtils.importESModule("chrome://tabora/content/sync/Sync.sys.mjs").Sync.start();
+      const applied = (subject, topic, what) => {
+        if (what === "spaces") {
+          this.syncSpaces();
+        } else if (what === "start") {
+          const dial = document.getElementById("tabora-start-dial");
+          if (dial) {
+            dial.dataset.filledAt = "0";
+            this.fillDial();
+          }
+        }
+      };
+      Services.obs.addObserver(applied, "tabora-sync-applied");
+      window.addEventListener("unload", () => Services.obs.removeObserver(applied, "tabora-sync-applied"), { once: true });
+    } catch (e) {
+      console.error("Tabora sync init", e);
+    }
   },
 
   /* ---- Диалог ------------------------------------------------------------ */

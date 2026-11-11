@@ -751,7 +751,10 @@ export const Otp = {
     if (!issuer && !account) {
       throw new Error("Укажите сервис или аккаунт");
     }
-    const id = `o${Date.now().toString(36)}${Array.from(crypto.getRandomValues(new Uint8Array(5)), b => (b % 36).toString(36)).join("")}`;
+    // номер и время создания задаёт синхронизация: запись с другого компьютера сохраняет свои
+    const given = typeof fields.id === "string" && /^[a-z0-9]{6,40}$/.test(fields.id) && !this.entries.some(e => e.id === fields.id) ? fields.id : "";
+    const id = given || `o${Date.now().toString(36)}${Array.from(crypto.getRandomValues(new Uint8Array(5)), b => (b % 36).toString(36)).join("")}`;
+    const created = given && !Number.isNaN(Date.parse(fields.createdAt)) ? new Date(Date.parse(fields.createdAt)).toISOString() : new Date().toISOString();
     const entry = {
       id,
       issuer,
@@ -760,7 +763,7 @@ export const Otp = {
       digits,
       period,
       sites: this.normalizeSites(fields.sites || []),
-      createdAt: new Date().toISOString(),
+      createdAt: created,
       secret: await Vault.encrypt("otp", secret),
     };
     this._sign(entry);

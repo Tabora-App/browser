@@ -552,6 +552,18 @@ export const Pgp = {
     return { state: b.state || "unknown", at: b.at || 0, canPassword: !!b.canPassword, canRecovery: !!b.canRecovery };
   },
 
+  /** Ключ данных аккаунта (32 байта, копия): один на все компьютеры аккаунта, на новый приходит
+   * после входа с паролем (см. sync). Из него выводится ключ синхронизации (sync/Sync.sys.mjs).
+   * null, пока копия ключа не сохранена на сервере или открыть её на этом компьютере нечем. */
+  async accountDataKey() {
+    const d = await this.ready();
+    const b = d.backup || {};
+    if (!b.dataKey || !(b.rev > 0) || ["locked", "local", "unknown"].includes(b.state || "unknown")) {
+      return null;
+    }
+    return fromBase64(b.dataKey);
+  },
+
   /** Сверить ключ аккаунта с сервером: забрать копию (новый компьютер), сохранить её (ключ создан
    * здесь), обновить обёртки ключа данных. passwordKey и loginHash — ключ из пароля и хеш входа,
    * когда пароль только что подтверждён; recoveryKey — ключ из ключа восстановления; recoveryGone —

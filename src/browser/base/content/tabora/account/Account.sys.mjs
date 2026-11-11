@@ -337,6 +337,23 @@ class LocalBackend {
     return Object.entries(d.users[email]?.devices || {}).map(([id, v]) => ({ id, ...v }));
   }
 
+  // синхронизация между компьютерами идёт только через сервер
+  async syncPull() {
+    this._noServer();
+  }
+
+  async syncPush() {
+    this._noServer();
+  }
+
+  async syncReset() {
+    this._noServer();
+  }
+
+  async syncErase() {
+    this._noServer();
+  }
+
   // ящик и алиасы выдаёт только сервер
   async mailPassword() {
     throw Object.assign(new Error("Почта работает после подключения аккаунта к серверу"), { code: "local-mode" });
@@ -416,9 +433,9 @@ class HttpBackend {
     return "http";
   }
 
-  async _call(method, path, body, token) {
+  async _call(method, path, body, token, timeout = 15000) {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 15000);
+    const timer = setTimeout(() => ctrl.abort(), timeout);
     try {
       const res = await fetch(this.base + path, {
         method,
@@ -431,7 +448,7 @@ class HttpBackend {
       const text = await res.text();
       const json = text ? JSON.parse(text) : {};
       if (!res.ok) {
-        const error = Object.assign(new Error(json.message || `Сервер: HTTP ${res.status}`), { code: json.code || (res.status === 401 ? "bad-credentials" : `http-${res.status}`), status: res.status });
+        const error = Object.assign(new Error(json.message || `Сервер: HTTP ${res.status}`), { code: json.code || (res.status === 401 ? "bad-credentials" : `http-${res.status}`), status: res.status, data: json });
         if (error.code === "session-expired" && token) {
           Account._sessionExpired(token).catch(() => {});
         }
@@ -565,6 +582,25 @@ class HttpBackend {
 
   aliasDelete({ session, id }) {
     return this._call("DELETE", `/v1/mail/aliases/${encodeURIComponent(id)}`, null, session?.token);
+  }
+
+  /* Синхронизация (sync/Sync.sys.mjs, server/src/sync.rs): сервер хранит записи, зашифрованные
+   * браузером, и различает их только по набору, номеру и версии. */
+
+  syncPull({ session, since, limit }) {
+    return this._call("GET", `/v1/sync?since=${Number(since) || 0}&limit=${Number(limit) || 500}`, null, session?.token, 60000);
+  }
+
+  syncPush({ session, gen, keyId, items }) {
+    return this._call("POST", "/v1/sync", { gen, keyId, items }, session?.token, 90000);
+  }
+
+  syncReset({ session, keyId }) {
+    return this._call("POST", "/v1/sync/reset", { keyId }, session?.token);
+  }
+
+  syncErase({ session }) {
+    return this._call("DELETE", "/v1/sync", null, session?.token);
   }
 
   mailKeys({ session }) {

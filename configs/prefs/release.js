@@ -208,6 +208,14 @@ pref("tabora.mail.notify", true);
 // Почта: в пустом поле адреса на сайте предлагать алиас для этого сайта и основной адрес.
 pref("tabora.mail.suggest", true);
 
+// Синхронизация между компьютерами аккаунта (sync/Sync.sys.mjs): включает пользователь в
+// настройках аккаунта; наборы включены все, каждый можно выключить отдельно.
+pref("tabora.sync.enabled", false);
+pref("tabora.sync.passwords", true);
+pref("tabora.sync.codes", true);
+pref("tabora.sync.bookmarks", true);
+pref("tabora.sync.tabs", true);
+
 // Обновления: подписанный манифест цели и update.xml лежат в репозитории GitHub, пакеты —
 // в GitHub Releases. Адреса читаются только из настроек по умолчанию (значение пользователя
 // не действует) и только https; формат и подпись — docs/UPDATES.md.

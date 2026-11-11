@@ -22,6 +22,7 @@ window.TaboraAccountPane = (function () {
   const { Account } = ChromeUtils.importESModule("chrome://tabora/content/account/Account.sys.mjs");
   const { Vault } = ChromeUtils.importESModule("chrome://tabora/content/vault/Vault.sys.mjs");
   const { Profiles } = ChromeUtils.importESModule("chrome://tabora/content/account/Profiles.sys.mjs");
+  const { Sync } = ChromeUtils.importESModule("chrome://tabora/content/sync/Sync.sys.mjs");
   const Shell = window.browsingContext?.topChromeWindow?.Tabora || null;
   const HTML = "http://www.w3.org/1999/xhtml";
   const LATER = "появится в одной из следующих версий";
@@ -193,24 +194,105 @@ window.TaboraAccountPane = (function () {
       const devices = list.length
         ? list.map(dev => item(dev.name || "Устройство", dev.id === here ? "Этот компьютер" : "", [value(dev.at ? `вход ${date(dev.at)}` : "")]))
         : [item(Account.deviceName(), "Этот компьютер")];
-      const what = [
-        ["Пароли сайтов", "Логины и пароли из сейфа."],
-        ["Коды входа", "Одноразовые коды двухфакторной защиты."],
-        ["Закладки", "Папки и ссылки из раздела «Закладки»."],
-        ["Вкладки и пространства", "Открытые вкладки, закреплённые сайты и пространства."],
-      ];
       const offline = local || Account.needsServerLink;
+      const st = Sync.status();
+      const on = st.enabled && !offline;
+      const when = st.at ? new Date(st.at).toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }) : "";
+      // что сейчас происходит и что с этим можно сделать
+      const now = offline
+        ? ["Аккаунт есть только на этом компьютере: синхронизировать не с чем. Подключите его к серверу на вкладке «Профиль».", null]
+        : !st.enabled
+          ? ["Выключена: пароли, коды, закладки и вкладки остаются на каждом компьютере свои.", null]
+          : st.busy
+            ? ["Идёт сверка…", null]
+            : {
+                ok: [when ? `Данные сверены ${when}.` : "Данные сверены.", ["Сверить сейчас", () => Sync.syncNow()]],
+                unknown: ["Первая сверка начнётся через несколько секунд.", ["Сверить сейчас", () => Sync.syncNow()]],
+                locked: ["Сейф закрыт: сверка продолжится, когда он откроется.", ["Разблокировать", shell(s => s.vaultUnlockByUser())]],
+                key: ["Ключа аккаунта на этом компьютере пока нет. Верните его паролем аккаунта в разделе «Почта → Ключи шифрования»: этим же ключом зашифрованы данные синхронизации.", ["Открыть ключи", shell(s => s.openMail("keys"))]],
+                unsupported: ["Сервер Tabora пока не принимает данные синхронизации: это появится после его обновления. Настройка сохранена, сверка начнётся сама.", null],
+                offline: ["Сервер не отвечает. Сверка повторится сама, когда соединение вернётся.", ["Повторить", () => Sync.syncNow()]],
+                "signed-out": ["Вход в аккаунт не выполнен.", null],
+                error: [`Сверка не удалась: ${st.error || "неизвестная ошибка"}`, ["Повторить", () => Sync.syncNow()]],
+              }[st.state] || ["", null];
+      const master = el("moz-toggle", { slot: "actions", "aria-label": "Синхронизация" });
+      master.pressed = on;
+      master.disabled = offline;
+      master.addEventListener("toggle", () => Sync.setEnabled(master.pressed));
+      const what = [
+        ["passwords", "Пароли сайтов", "Логины и пароли из сейфа.", ["пароль", "пароля", "паролей"]],
+        ["codes", "Коды входа", "Одноразовые коды двухфакторной защиты.", ["код", "кода", "кодов"]],
+        ["bookmarks", "Закладки", "Папки и ссылки из раздела «Закладки».", ["запись", "записи", "записей"]],
+        ["tabs", "Вкладки и пространства", "Список открытых вкладок, ярлыки стартовой страницы и пространства.", null],
+      ];
+      const rows = [];
+      for (const [id, label, text, words] of what) {
+        const g = st.groups[id];
+        const toggle = el("moz-toggle", { slot: "actions", "aria-label": label });
+        toggle.pressed = on && g.on;
+        toggle.disabled = !on;
+        toggle.addEventListener("toggle", () => Sync.setGroup(id, toggle.pressed));
+        const count = on && g.on && words && g.count ? ` На сервере ${g.count} ${plural(g.count, ...words)}.` : "";
+        rows.push(item(label, text + count, [toggle]));
+        if (on && g.hold) {
+          // с этого компьютера разом пропала заметная часть записей: удаления не отправлены, решает пользователь
+          rows.push(item(
+            `«${label}»: здесь пропало ${g.hold.missing} из ${g.hold.of} ${plural(g.hold.of, "записи", "записей", "записей")}`,
+            "На другие компьютеры эти удаления не отправлены. Если вы удаляли записи сами — подтвердите; если они пропали — верните их с сервера.",
+            [button("Вернуть с сервера", () => Sync.resolveHold(g.hold.name, "restore"), { type: "primary" }), button("Удалить везде", () => Sync.resolveHold(g.hold.name, "delete"))]
+          ));
+        }
+      }
+      const tabsOf = on && st.groups.tabs.on ? Sync.devicesTabs() : [];
+      const tabsMenu = dev => e => {
+        const r = e.currentTarget.getBoundingClientRect();
+        // меню рисует окно браузера: координаты кнопки переводятся из страницы настроек в окно
+        const frame = window.browsingContext?.embedderElement?.getBoundingClientRect() || { left: 0, top: 0 };
+        shell(s => s.showMenu(dev.tabs.map(t => {
+          let host = "";
+          try {
+            host = new URL(t.u).hostname.replace(/^www\./, "");
+          } catch (err) {}
+          return { label: t.t || host || t.u, hint: host, run: () => s.openUrl(t.u) };
+        }), frame.left + r.right, frame.top + r.bottom + 6, { end: true }))();
+      };
       return [
-        group("Синхронизация", "Перенос данных между вашими компьютерами. Всё будет шифроваться на устройстве: сервер получит только шифрованные копии.", [
-          item(
-            "Состояние",
-            offline ? "Аккаунт есть только на этом компьютере." : `Аккаунт хранится на сервере Tabora: вход и почта работают с любого компьютера. Пароли, коды, закладки и вкладки пока остаются на каждом компьютере свои.`,
-            [value(offline ? "только здесь" : "вход и почта", true)]
-          ),
-          ...what.map(([label, text]) => item(label, text, [value("позже", true)])),
+        group("Синхронизация", "Пароли, коды, закладки и вкладки переносятся между вашими компьютерами. Всё шифруется на этом компьютере ключом аккаунта: сервер хранит только зашифрованные копии и прочитать их не может.", [
+          item("Синхронизировать этот компьютер", now[0], [now[1] ? button(now[1][0], now[1][1]) : null, master]),
+          ...rows,
           item("Фраза восстановления кошелька", "Не синхронизируется никогда: остаётся только на том компьютере, где её ввели.", [value("никогда", true)]),
         ]),
+        tabsOf.length
+          ? group("Вкладки на других компьютерах", "Что открыто на остальных компьютерах аккаунта. Вкладка открывается здесь по нажатию.", tabsOf.map(dev => item(
+              dev.name,
+              `${dev.tabs.length} ${plural(dev.tabs.length, "вкладка", "вкладки", "вкладок")}${dev.at ? `, список от ${date(dev.at)}` : ""}`,
+              [button("Показать", tabsMenu(dev))]
+            )))
+          : null,
         group("Устройства", offline ? "Список появится, когда аккаунт подключат к серверу." : "Компьютеры, на которых выполнен вход в этот аккаунт.", devices),
+        on || st.at
+          ? group("Данные на сервере", "", [
+              item("Стереть данные синхронизации с сервера", "Синхронизация выключится, зашифрованные копии на сервере будут удалены. Данные на компьютерах останутся.", [button("Стереть", async e => {
+                const b = e.currentTarget;
+                if (b.dataset.sure !== "1") {
+                  // второе нажатие подтверждает: окна подтверждения у страницы настроек нет
+                  b.dataset.sure = "1";
+                  b.label = "Точно стереть";
+                  setTimeout(() => {
+                    b.dataset.sure = "";
+                    b.label = "Стереть";
+                  }, 5000);
+                  return;
+                }
+                try {
+                  await Sync.erase();
+                  shell(s => s.notice("Данные синхронизации стёрты с сервера"))();
+                } catch (err) {
+                  shell(s => s.notice(`Не удалось стереть: ${err.message}`))();
+                }
+              })]),
+            ])
+          : null,
       ];
     },
 
@@ -408,6 +490,11 @@ window.TaboraAccountPane = (function () {
     root.replaceChildren(who(), tabs(), panel);
     if (state.tab === "sync") {
       loadDevices();
+      if (!state.syncSeen) {
+        // состояние сверки читается с диска один раз: до первой сверки счётчики иначе пусты
+        state.syncSeen = true;
+        Sync.overview().then(() => state.tab === "sync" && render());
+      }
     }
     if (state.tab === "security" && !state.security) {
       loadSecurity();
@@ -532,11 +619,15 @@ window.TaboraAccountPane = (function () {
   };
   Services.obs.addObserver(refresh, Account.TOPIC);
   Services.obs.addObserver(refresh, Vault.TOPIC);
+  // ход сверки и её итог видны на вкладке «Синхронизация» сразу
+  const syncRefresh = () => state.tab === "sync" && refresh();
+  Services.obs.addObserver(syncRefresh, Sync.TOPIC);
   Services.obs.addObserver(loadProfiles, Profiles.TOPIC);
   window.addEventListener("focus", loadProfiles);
   window.addEventListener("unload", () => {
     Services.obs.removeObserver(refresh, Account.TOPIC);
     Services.obs.removeObserver(refresh, Vault.TOPIC);
+    Services.obs.removeObserver(syncRefresh, Sync.TOPIC);
     Services.obs.removeObserver(loadProfiles, Profiles.TOPIC);
   }, { once: true });
 
