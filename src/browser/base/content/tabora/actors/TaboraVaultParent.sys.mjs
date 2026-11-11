@@ -3,8 +3,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* Родительская часть актора сейфа. Сообщениям страницы не доверяет: хост для подбора
- * кодов берётся из принципала документа (только https, тот же сайт, что и вкладка), а
- * не из данных сообщения. Ссылки otpauth:// со страницы передаются в оболочку окна
+ * кодов и адреса почты берётся из принципала документа (только https, тот же сайт, что и
+ * вкладка), а не из данных сообщения. Ссылки otpauth:// со страницы передаются в оболочку окна
  * (Tabora.otpAddFromUrl), которая показывает лист добавления только для активной вкладки. */
 
 function num(v, min, max, dflt = 0) {
@@ -55,6 +55,34 @@ export class TaboraVaultParent extends JSWindowActorParent {
       }
       case "TaboraVault:OtpFieldBlur":
         win.Tabora.otpFieldBlurred(this);
+        return;
+      case "TaboraVault:MailField": {
+        const host = this.otpHost();
+        if (!host) {
+          return;
+        }
+        const r = data.rect || {};
+        win.Tabora.mailFieldFocused({
+          host,
+          // сайт для алиаса — регистрируемый домен: account.booking.com → booking.com
+          site: String(this.manager.documentPrincipal.baseDomain || host).toLowerCase(),
+          rect: { x: num(r.x, -1e5, 1e5), y: num(r.y, -1e5, 1e5), w: num(r.w, 0, 1e4), h: num(r.h, 0, 1e4) },
+          zoom: num(data.zoom, 0.1, 10, 1),
+        }, this);
+        return;
+      }
+      case "TaboraVault:MailFieldBlur":
+        win.Tabora.mailFieldBlurred(this);
+        return;
+      case "TaboraVault:MailAccept":
+        // само сообщение ничего не вставляет: оболочка проверит, что окно видело настоящий Enter
+        win.Tabora.mailPopAccept(this);
+        return;
+      case "TaboraVault:MailMove":
+        win.Tabora.mailPopMove(this, Number(data.delta) > 0 ? 1 : -1);
+        return;
+      case "TaboraVault:MailDismiss":
+        win.Tabora.mailPopHide(this);
         return;
       case "TaboraVault:OtpAccept":
         // само сообщение ничего не вставляет: оболочка проверит, что окно видело настоящий Enter

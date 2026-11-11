@@ -116,7 +116,10 @@ Object.assign(Tabora, {
     });
     // окно браузера видит нажатия клавиш до страницы: так родитель отличает настоящий Enter
     // пользователя от сообщения, которое мог прислать взломанный процесс страницы
-    window.addEventListener("keydown", e => this.otpChromeKey(e), true);
+    window.addEventListener("keydown", e => {
+      this.otpChromeKey(e);
+      this.mailChromeKey(e);
+    }, true);
   },
 
   /** Разблокировать действием пользователя: Touch ID или пароль macOS, а без связки ключей —
@@ -342,7 +345,7 @@ Object.assign(Tabora, {
         parent: { esModuleURI: "chrome://tabora/content/actors/TaboraVaultParent.sys.mjs" },
         child: {
           esModuleURI: "chrome://tabora/content/actors/TaboraVaultChild.sys.mjs",
-          events: { click: { capture: true }, focusin: { capture: true }, focusout: { capture: true }, keydown: { capture: true } },
+          events: { click: { capture: true }, focusin: { capture: true }, focusout: { capture: true }, keydown: { capture: true }, input: { capture: true } },
         },
         matches: ["https://*/*", "http://*/*"],
         allFrames: true,
@@ -902,6 +905,7 @@ Object.assign(Tabora, {
     if (!browser || browser !== gBrowser.selectedBrowser || !data?.host) {
       return;
     }
+    this.mailPopHide();
     const { Vault } = this.vaultMod();
     const { Otp } = this.otpMod();
     await Vault.ready();
@@ -1183,6 +1187,261 @@ Object.assign(Tabora, {
     pop.data = null;
     pop.entries = [];
     pop.key = null;
+  },
+
+  /* ---- Подсказка в поле адреса почты ----------------------------------------------
+   * На пустом поле почты сайта (https, документ того же сайта, что и вкладка) предлагаются
+   * алиас для этого сайта — уже созданный или новый — и основной адрес аккаунта. Странице
+   * ничего не сообщается, пока пользователь не выбрал строку: вставка и создание алиаса идут
+   * только по настоящему клику или по Enter, который увидело окно браузера, и не раньше чем
+   * через OTP_POP_ARM_MS после показа. Без входа в аккаунт подсказки нет: почта принадлежит
+   * аккаунту. Фокус на поле сейф не открывает: при закрытом сейфе список алиасов неизвестен,
+   * и он откроется только по нажатию «Создать алиас». Выключается tabora.mail.suggest. */
+
+  mailPop: { el: null, actor: null, browser: null, data: null, rows: [], active: -1, host: "", site: "", shownAt: 0, downAt: 0, key: null, busy: false },
+
+  /** Включённые алиасы сайта: по регистрируемому домену и по точному адресу страницы. */
+  mailSiteAliases(site, host) {
+    return this.mail().MailStore.aliases.filter(a => a.on && (a.site === site || a.site === host));
+  },
+
+  async mailFieldFocused(data, actor) {
+    const browser = actor.browsingContext?.top?.embedderElement;
+    if (!browser || browser !== gBrowser.selectedBrowser || !data?.host || !Services.prefs.getBoolPref("tabora.mail.suggest", true)) {
+      return;
+    }
+    if (this.otpPop.el && !this.otpPop.el.hidden) {
+      return; // подсказка кода важнее
+    }
+    const { Account } = this.accountMod();
+    const { Vault } = this.vaultMod();
+    await Promise.all([Account.ready(), Vault.ready()]);
+    if (!Account.signedIn || !Account.email) {
+      return;
+    }
+    const site = data.site || data.host;
+    const rows = [];
+    let known = false;
+    if (Vault.unlocked) {
+      try {
+        await this.mail().MailStore.ready();
+        known = true;
+        this.mailSiteAliases(site, data.host).slice(0, 3).forEach(a => rows.push({ kind: "alias", address: a.address, title: a.address, note: `Алиас для ${a.site}` }));
+      } catch (e) {}
+    }
+    if (!rows.length) {
+      rows.push({ kind: "create", title: `Создать алиас для ${site}`, note: known ? "Отдельный адрес, письма придут во входящие" : "Отдельный адрес. Понадобится открыть сейф" });
+    }
+    rows.push({ kind: "main", address: Account.email, title: Account.email, note: "Основной адрес" });
+    if (browser !== gBrowser.selectedBrowser) {
+      return;
+    }
+    const pop = this.mailPop;
+    Object.assign(pop, { actor, browser, data, rows, active: -1, host: data.host, site, busy: false });
+    this.mailPopRender();
+    actor.sendAsyncMessage("TaboraVault:ArmMail", { armed: true });
+  },
+
+  mailFieldBlurred(actor) {
+    // пока создаётся алиас, подсказка остаётся: поле могло потерять фокус из-за запроса Touch ID
+    if (this.mailPop.actor === actor && !this.mailPop.busy) {
+      this.mailPopHide();
+    }
+  },
+
+  mailPopEl() {
+    let el = this.mailPop.el;
+    if (!el) {
+      el = this.html("div", { id: "tabora-mail-pop", role: "listbox", hidden: "true" });
+      document.getElementById("browser").append(el);
+      el.addEventListener("pointerdown", e => {
+        e.preventDefault(); // не отбираем фокус у поля
+        if (e.isTrusted) {
+          this.mailPop.downAt = performance.now();
+        }
+      });
+      window.addEventListener("pointerdown", e => {
+        if (!el.hidden && !el.contains(e.target)) {
+          this.mailPopHide();
+        }
+      }, true);
+      gBrowser.tabContainer.addEventListener("TabSelect", () => this.mailPopHide());
+      window.addEventListener("blur", () => {
+        if (!this.mailPop.busy) {
+          this.mailPopHide();
+        }
+      });
+      this.mailPop.el = el;
+    }
+    return el;
+  },
+
+  mailPopRender() {
+    const h = (t, a, x, c) => this.html(t, a, x, c);
+    const pop = this.mailPop;
+    const el = this.mailPopEl();
+    const ICON = {
+      alias: ["M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z", "M9 12l2 2 4-4"],
+      create: ["M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z", "M12 9v6M9 12h6"],
+      main: ["M3 6h18v12H3z", "m3 7 9 6 9-6"],
+    };
+    el.replaceChildren(h("div", { class: "otp-pop-head" }, null, [h("span", {}, "Адрес почты для "), h("b", {}, pop.site)]));
+    pop.rows.forEach((row, i) => {
+      const node = h("div", { class: `otp-pop-row${i === pop.active ? " active" : ""}${pop.busy ? " busy" : ""}`, role: "option", "aria-selected": String(i === pop.active), "data-kind": row.kind }, null, [
+        h("span", { class: "otp-icon" }, null, [this.wIcon(ICON[row.kind], 15, 1.8)]),
+        h("div", { class: "otp-text" }, null, [h("b", {}, pop.busy && row.kind === "create" ? "Создаю алиас…" : row.title), h("span", {}, row.note)]),
+      ]);
+      node.addEventListener("click", ev => {
+        // клик засчитывается, только если нажатие началось после взвода подсказки
+        if (ev.isTrusted && pop.downAt - pop.shownAt >= OTP_POP_ARM_MS) {
+          this.mailPopRun(i);
+        }
+      });
+      node.addEventListener("mouseenter", () => this.mailPopSetActive(i));
+      el.append(node);
+    });
+    el.append(h("div", { class: "otp-pop-hint" }, "↓ ↑ — выбрать · Enter — вставить · Esc — закрыть"));
+    const fresh = el.hidden;
+    el.hidden = false;
+    if (fresh) {
+      pop.shownAt = performance.now();
+      pop.downAt = 0;
+      pop.key = null;
+    }
+    // координаты поля страницы → координаты окна: масштаб страницы и смещение области браузера
+    const { rect, zoom = 1 } = pop.data;
+    const b = pop.browser.getBoundingClientRect();
+    const root = document.getElementById("browser").getBoundingClientRect();
+    const x = b.left - root.left + rect.x * zoom;
+    const yTop = b.top - root.top + rect.y * zoom;
+    const below = yTop + rect.h * zoom + 6;
+    el.style.left = `${Math.max(8, Math.min(x, root.width - el.offsetWidth - 8))}px`;
+    el.style.top = `${below + el.offsetHeight <= root.height - 8 ? below : Math.max(8, yTop - el.offsetHeight - 6)}px`;
+  },
+
+  /** Документ подсказки всё ещё текущий, https и тот же хост. */
+  mailPopDocOk() {
+    const pop = this.mailPop;
+    try {
+      const wg = pop.actor.manager;
+      if (pop.actor.browsingContext.currentWindowGlobal !== wg) {
+        return false;
+      }
+      const p = wg.documentPrincipal;
+      return !!p?.isContentPrincipal && p.schemeIs("https") && p.asciiHost.toLowerCase() === pop.host && pop.actor.browsingContext.top.embedderElement === gBrowser.selectedBrowser;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  /** Нажатие в окне браузера, адресованное странице с подсказкой (см. otpChromeKey). */
+  mailChromeKey(e) {
+    const pop = this.mailPop;
+    if (!pop.el || pop.el.hidden || !e.isTrusted || e.isReplyEventFromRemoteContent || !pop.browser || document.activeElement !== pop.browser) {
+      return;
+    }
+    if (["Enter", "ArrowDown", "ArrowUp"].includes(e.key) && !e.repeat) {
+      pop.key = { key: e.key, at: performance.now() };
+    }
+  },
+
+  mailPopTakeKey(keys) {
+    const pop = this.mailPop;
+    const k = pop.key;
+    if (!k || !keys.includes(k.key) || performance.now() - k.at > OTP_KEY_FRESH_MS || k.at - pop.shownAt < OTP_POP_ARM_MS) {
+      return false;
+    }
+    pop.key = null;
+    return true;
+  },
+
+  mailPopSetActive(i) {
+    const pop = this.mailPop;
+    if (!pop.rows.length || pop.busy) {
+      return;
+    }
+    pop.active = (i + pop.rows.length) % pop.rows.length;
+    pop.el?.querySelectorAll(".otp-pop-row").forEach((r, k) => {
+      r.classList.toggle("active", k === pop.active);
+      r.setAttribute("aria-selected", String(k === pop.active));
+    });
+  },
+
+  mailPopMove(actor, delta) {
+    const pop = this.mailPop;
+    if (pop.actor === actor && pop.rows.length && this.mailPopTakeKey(["ArrowDown", "ArrowUp"])) {
+      this.mailPopSetActive(pop.active < 0 ? (delta > 0 ? 0 : pop.rows.length - 1) : pop.active + delta);
+    }
+  },
+
+  /** Enter в поле (сообщение страницы): вставляем, только если окно браузера видело этот Enter. */
+  mailPopAccept(actor) {
+    const pop = this.mailPop;
+    if (!pop.el || pop.el.hidden || pop.actor !== actor || pop.active < 0 || !this.mailPopTakeKey(["Enter"])) {
+      return;
+    }
+    this.mailPopRun(pop.active);
+  },
+
+  /** Выбрана строка: вставить адрес; для «Создать алиас» сначала создать его (или взять уже
+   * существующий алиас сайта, если при закрытом сейфе о нём не было известно). */
+  async mailPopRun(i) {
+    const pop = this.mailPop;
+    const row = pop.rows[i];
+    const actor = pop.actor;
+    if (!row || !actor || pop.busy || !this.mailPopDocOk()) {
+      this.mailPopHide();
+      return;
+    }
+    let address = row.address;
+    if (row.kind === "create") {
+      pop.busy = true;
+      pop.active = i;
+      this.mailPopRender();
+      try {
+        const { MailStore } = this.mail();
+        await MailStore.ready();
+        const existing = this.mailSiteAliases(pop.site, pop.host)[0];
+        address = (existing || (await MailStore.aliasCreate({ site: pop.site, space: this.activeSpace()?.name || "Личное", by: "manual" }))).address;
+      } catch (e) {
+        pop.busy = false;
+        this.mailPopHide();
+        this.notice(e.code === "vault-locked" ? "Алиас не создан: сейф закрыт" : `Алиас не создан: ${e.message}`);
+        return;
+      }
+      pop.busy = false;
+      if (pop.actor !== actor || !this.mailPopDocOk()) {
+        this.mailPopHide();
+        this.notice(`Алиас ${address} создан, но страница уже сменилась`);
+        return;
+      }
+    }
+    try {
+      const ok = await actor.sendQuery("TaboraVault:FillMail", { address });
+      this.mailPopHide();
+      if (!ok) {
+        this.notice(row.kind === "create" ? `Алиас ${address} создан, но поле больше недоступно` : "Поле почты больше недоступно");
+      } else if (row.kind === "create") {
+        this.notice(`Алиас ${address} создан для ${pop.site || "сайта"}`);
+      }
+    } catch (e) {
+      this.mailPopHide();
+    }
+  },
+
+  mailPopHide(actor) {
+    const pop = this.mailPop;
+    if (actor && pop.actor !== actor) {
+      return;
+    }
+    if (pop.el) {
+      pop.el.hidden = true;
+      pop.el.replaceChildren();
+    }
+    try {
+      pop.actor?.sendAsyncMessage("TaboraVault:ArmMail", { armed: false });
+    } catch (e) {}
+    Object.assign(pop, { actor: null, browser: null, data: null, rows: [], active: -1, key: null, busy: false });
   },
 
   /* ---- Меню записи ------------------------------------------------------------ */

@@ -3858,7 +3858,7 @@ toolbarseparator {
   /* у курсора или поля: меню, подсказка кода */
   #tabora-menu,
   #tabora-submenu,
-  #tabora-otp-pop {
+  :is(#tabora-otp-pop, #tabora-mail-pop) {
     animation: tb-in-pop var(--tabora-t) var(--tabora-curve);
   }
 

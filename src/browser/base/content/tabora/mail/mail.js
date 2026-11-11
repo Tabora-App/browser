@@ -416,6 +416,16 @@ const App = {
       notify.setAttribute("aria-checked", String(on));
       this.toast(on ? "О новых письмах будет сообщать уведомление" : "Уведомления о новых письмах выключены");
     });
+    // подсказка адреса в полях почты на сайтах (её показывает оболочка, см. vault.js)
+    const suggest = document.getElementById("account-suggest");
+    const suggestOn = () => Services.prefs.getBoolPref("tabora.mail.suggest", true);
+    suggest.setAttribute("aria-checked", String(suggestOn()));
+    suggest.addEventListener("click", () => {
+      const on = !suggestOn();
+      Services.prefs.setBoolPref("tabora.mail.suggest", on);
+      suggest.setAttribute("aria-checked", String(on));
+      this.toast(on ? "В полях почты на сайтах будут предлагаться алиас и основной адрес" : "Адрес в полях почты на сайтах больше не предлагается");
+    });
     document.getElementById("account-change").addEventListener("click", () => shell()?.accountDialog("change"));
     document.getElementById("account-switch").addEventListener("click", () => shell()?.accountShowAccounts());
     document.getElementById("account-logout").addEventListener("click", () => shell()?.accountLogout({ thenLogin: false }));

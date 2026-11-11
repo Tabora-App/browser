@@ -3,8 +3,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* Актор страницы для сейфа: перехватывает ссылки otpauth:// (добавление кода в
- * аутентификатор), сообщает о фокусе на поле одноразового кода и отдаёт родителю пиксели
- * картинок для распознавания QR. Картинки, canvas и SVG страницы растеризуются здесь, в
+ * аутентификатор), сообщает о фокусе на поле одноразового кода и на пустом поле адреса почты
+ * и отдаёт родителю пиксели картинок для распознавания QR. Картинки, canvas и SVG страницы растеризуются здесь, в
  * процессе страницы: родитель получает только ограниченные по размеру пиксели в оттенках
  * серого и никогда не декодирует разметку страницы. Секретов у актора нет. Сообщениям
  * отсюда родитель не доверяет: хост он берёт из принципала документа, а вставку кода
@@ -26,12 +26,20 @@ const PAGE_BUDGET = 16 * 1024 * 1024; // байт пикселей на весь
 const OTP_NAME = /(^|[^a-z])(otp|totp|2fa|mfa|one.?time|verif|auth(enticat(or|ion))?.?code|security.?code|passcode|token|код)([^a-z]|$)/i;
 const NOT_OTP = /zip|postal|phone|tel\b|cvv|cvc|card|ccn|expir|captcha|search|price|amount|qty|quantity|year|month|day|age/i;
 
+/* Поле адреса почты: type=email, autocomplete=email или «почта» в имени и подписи. Поля поиска,
+ * подтверждения кода из письма и рассылки чужих адресов («пригласить друга») не считаются. */
+const MAIL_NAME = /e-?mail|почт/i;
+const NOT_MAIL = /search|поиск|friend|друг|invite|приглас|recipient|получател|share|подел|code|код|subject|тема/i;
+
 export class TaboraVaultChild extends JSWindowActorChild {
   _otpTarget = null; // поле (или первое поле группы), для которого показана подсказка
   _otpGroup = null;
   _armed = false;
   _filling = false; // идёт вставка: собственные переводы фокуса подсказку не вызывают
   _scrollHandler = null;
+  _mailTarget = null; // пустое поле адреса почты, для которого показана подсказка
+  _mailArmed = false;
+  _mailPicked = false; // строка подсказки выбрана стрелками: Enter вставит её, а не отправит форму
 
   handleEvent(event) {
     switch (event.type) {
@@ -46,6 +54,9 @@ export class TaboraVaultChild extends JSWindowActorChild {
         break;
       case "keydown":
         this.onKeyDown(event);
+        break;
+      case "input":
+        this.onInput(event);
         break;
     }
   }
@@ -163,6 +174,26 @@ export class TaboraVaultChild extends JSWindowActorChild {
     }
   }
 
+  /** Пустое поле адреса почты или null. Заполненное поле подсказку не получает. */
+  mailKind(el) {
+    const win = this.contentWindow;
+    if (!win.HTMLInputElement.isInstance(el) || el.disabled || el.readOnly || !["email", "text", ""].includes(el.type) || el.value) {
+      return null;
+    }
+    const auto = (el.getAttribute("autocomplete") || "").toLowerCase();
+    const text = this.labelText(el);
+    if (NOT_MAIL.test(text)) {
+      return null;
+    }
+    if (el.type === "email") {
+      return "type";
+    }
+    if (/(^|\s)email(\s|$)/.test(auto)) {
+      return "explicit";
+    }
+    return MAIL_NAME.test(text) ? "named" : null;
+  }
+
   onFocusIn(event) {
     const el = event.composedTarget || event.target;
     if (!event.isTrusted || this._filling || !this.secure || !el || el === this._otpTarget) {
@@ -170,6 +201,12 @@ export class TaboraVaultChild extends JSWindowActorChild {
     }
     const kind = this.otpKind(el);
     if (!kind) {
+      if (el !== this._mailTarget && this.mailKind(el)) {
+        this._mailTarget = el;
+        this._mailPicked = false;
+        // хост и сайт не передаём: родитель берёт их из принципала документа
+        this.sendAsyncMessage("TaboraVault:MailField", { rect: this.rectOf(el), zoom: this.contentWindow.windowUtils?.fullZoom || 1 });
+      }
       return;
     }
     const group = kind === "group" ? this.digitGroup(el) : null;
@@ -186,6 +223,11 @@ export class TaboraVaultChild extends JSWindowActorChild {
 
   onFocusOut(event) {
     const el = event.composedTarget || event.target;
+    if (this._mailTarget && el === this._mailTarget) {
+      this.resetMail();
+      this.sendAsyncMessage("TaboraVault:MailFieldBlur", {});
+      return;
+    }
     if (!this._otpTarget) {
       return;
     }
@@ -204,7 +246,62 @@ export class TaboraVaultChild extends JSWindowActorChild {
     }, 0);
   }
 
+  /** Пользователь начал печатать адрес сам: подсказка больше не нужна. */
+  onInput(event) {
+    if (event.isTrusted && this._mailTarget && !this._filling && (event.composedTarget || event.target) === this._mailTarget) {
+      this.resetMail();
+      this.sendAsyncMessage("TaboraVault:MailFieldBlur", {});
+    }
+  }
+
+  resetMail() {
+    this._mailTarget = null;
+    this._mailArmed = false;
+    this._mailPicked = false;
+    this.detachScroll();
+  }
+
+  /** Клавиши в поле почты с подсказкой. Enter вставляет адрес, только если строка выбрана
+   * стрелками: иначе он, как обычно, отправляет форму. */
+  onMailKeyDown(event) {
+    if ((event.composedTarget || event.target) !== this._mailTarget) {
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      this._mailPicked = true;
+      this.sendAsyncMessage("TaboraVault:MailMove", { delta: event.key === "ArrowDown" ? 1 : -1 });
+    } else if (event.key === "Enter" && this._mailPicked) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      this.sendAsyncMessage("TaboraVault:MailAccept", {});
+    } else if (event.key === "Escape") {
+      this.sendAsyncMessage("TaboraVault:MailDismiss", {});
+    }
+  }
+
+  /** Адрес в поле почты. Форму не отправляем. */
+  fillMail(address) {
+    const target = this._mailTarget;
+    this.resetMail();
+    if (!target || !target.isConnected || target.disabled || target.readOnly) {
+      return false;
+    }
+    this._filling = true;
+    try {
+      target.focus();
+      this.setValue(target, String(address || "").slice(0, 254));
+    } finally {
+      this._filling = false;
+    }
+    return true;
+  }
+
   onKeyDown(event) {
+    if (event.isTrusted && this._mailArmed && this._mailTarget) {
+      this.onMailKeyDown(event);
+      return;
+    }
     if (!event.isTrusted || !this._armed || !this._otpTarget) {
       return;
     }
@@ -249,8 +346,11 @@ export class TaboraVaultChild extends JSWindowActorChild {
       return;
     }
     this._scrollHandler = () => {
-      this.sendAsyncMessage("TaboraVault:OtpFieldBlur", {});
+      this.sendAsyncMessage(this._mailArmed ? "TaboraVault:MailFieldBlur" : "TaboraVault:OtpFieldBlur", {});
       this._armed = false;
+      if (this._mailArmed) {
+        this.resetMail();
+      }
       this.detachScroll();
     };
     this.contentWindow.addEventListener("scroll", this._scrollHandler, { capture: true, passive: true });
@@ -436,6 +536,16 @@ export class TaboraVaultChild extends JSWindowActorChild {
         return this._armed;
       case "TaboraVault:FillOtp":
         return this.fillOtp(message.data?.code);
+      case "TaboraVault:ArmMail":
+        if (message.data?.armed && this._mailTarget) {
+          this._mailArmed = true;
+          this.attachScroll();
+        } else {
+          this.resetMail(); // подсказка скрыта: следующий фокус на поле снова покажет её
+        }
+        return this._mailArmed;
+      case "TaboraVault:FillMail":
+        return this.fillMail(message.data?.address);
       case "TaboraVault:ImageData":
         return this.imageData(lazy.ContentDOMReference.resolve(message.data?.targetIdentifier), MAX_SIDE);
       case "TaboraVault:PageImages":
