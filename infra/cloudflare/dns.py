@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Синхронизация почтовых DNS-записей с Cloudflare (вызывается cloudflare/dns.sh).
 
-Записи: A/AAAA почтового хоста (адреса с интерфейса) и зона Stalwart. Правила:
+Записи: A/AAAA почтового хоста (адреса с интерфейса), зона Stalwart и, если задан $EXTRA_ZONE,
+записи из него (подтверждения владения доменом и подобное, infra/dns/extra.zone). Правила:
   A, AAAA, CNAME — одна запись на имя (обновляется, лишние того же типа удаляются);
   MX у домена и все SRV (_*._tcp.<домен>) — ровно как в зоне, лишние удаляются;
   TXT — заменяется запись с тем же префиксом (v=spf1, v=DMARC1, v=STSv1, v=TLSRPTv1, v=DKIM1…),
         одна на имя; TXT с другим содержимым (например, проверки владения) не трогаются;
   TLSA (DANE) и CAA не публикуются: ключ сертификата меняется при каждом продлении.
 Токен Cloudflare читается из файла заголовков $CF_HDR (создаёт dns.sh), в аргументах его нет.
+С DNS_DRY=1 записи только читаются: печатается, что было бы добавлено, изменено и удалено.
 """
 import json
 import os
@@ -18,6 +20,7 @@ import urllib.request
 
 API = "https://api.cloudflare.com/client/v4"
 TTL = 3600
+DRY = os.environ.get("DNS_DRY") == "1"
 
 
 def parse_zone(path):
@@ -78,15 +81,18 @@ class Cloudflare:
         return self.req("GET", q)["result"]
 
     def create(self, rec):
-        self.req("POST", "", {**rec, "proxied": False, "ttl": TTL} if rec["type"] != "SRV" else {**rec, "ttl": TTL})
+        if not DRY:
+            self.req("POST", "", {**rec, "proxied": False, "ttl": TTL} if rec["type"] != "SRV" else {**rec, "ttl": TTL})
         print(f"  + {rec['type']} {rec['name']} {rec.get('content') or rec.get('data')}")
 
     def update(self, rid, rec):
-        self.req("PUT", f"/{rid}", {**rec, "proxied": False, "ttl": TTL} if rec["type"] != "SRV" else {**rec, "ttl": TTL})
+        if not DRY:
+            self.req("PUT", f"/{rid}", {**rec, "proxied": False, "ttl": TTL} if rec["type"] != "SRV" else {**rec, "ttl": TTL})
         print(f"  ~ {rec['type']} {rec['name']} {rec.get('content') or rec.get('data')}")
 
     def delete(self, rec):
-        self.req("DELETE", f"/{rec['id']}")
+        if not DRY:
+            self.req("DELETE", f"/{rec['id']}")
         print(f"  - {rec['type']} {rec['name']} {rec.get('content')}")
 
 
@@ -170,13 +176,18 @@ def main():
     if os.environ.get("IP6"):
         records.append({"type": "AAAA", "name": mail_host, "content": os.environ["IP6"]})
     records += parse_zone(zone_path)
+    extra = os.environ.get("EXTRA_ZONE", "")
+    if extra and os.path.exists(extra):
+        records += parse_zone(extra)
     if dry:
         for r in records:
             print(r["type"], r["name"], r.get("priority", ""), r.get("content") or r.get("data"))
         return
     cf = Cloudflare(os.environ["CF_HDR"], os.environ["CF_ZONE_ID"])
+    if DRY:
+        print("план (ничего не меняется): + добавить, ~ изменить, - удалить")
     sync(cf, records, domain)
-    print(f"записей в зоне Stalwart и адресных: {len(records)}")
+    print(f"записей к публикации: {len(records)}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,5 @@
+; Записи tabora.app, которых нет в зоне Stalwart: подтверждения владения доменом и подобное.
+; Публикует их cloudflare/dns.sh вместе с почтовыми. Значения здесь не секретны: они видны в DNS.
+
+; Google: подтверждение владения доменом (добавлено 11 ноября 2026)
+tabora.app. IN TXT "google-site-verification=r-AdBqqC_oQMgWpKhR1yZGHYZlFiRjw5cETqUtTXcxg"

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Развёртывание с ноутбука: копирует infra/ и site/ на сервер (/root/tabora-infra) и запускает
 # нужный скрипт. Использование: infra/deploy.sh [setup|site|downloads|server|nginx|tls|tunnel|dns]
+# `infra/deploy.sh dns --plan` показывает, какие записи DNS изменились бы, ничего не меняя.
 set -euo pipefail
 HOST=${HOST:-tabora}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -77,6 +78,6 @@ case "$what" in
     ;;
   tls)    ssh "$HOST" 'bash /root/tabora-infra/infra/enable-tls.sh' ;;
   tunnel) ssh "$HOST" 'bash /root/tabora-infra/infra/cloudflare/setup-tunnel.sh' ;;
-  dns)    ssh "$HOST" 'bash /root/tabora-infra/infra/cloudflare/dns.sh' ;;
+  dns)    if [ "${2:-}" = "--plan" ]; then ssh "$HOST" 'bash /root/tabora-infra/infra/cloudflare/dns.sh --plan'; else ssh "$HOST" 'bash /root/tabora-infra/infra/cloudflare/dns.sh'; fi ;;
   *) echo "setup | site | downloads | server | tls | tunnel | dns"; exit 1 ;;
 esac
