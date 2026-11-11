@@ -337,6 +337,35 @@ class LocalBackend {
     return Object.entries(d.users[email]?.devices || {}).map(([id, v]) => ({ id, ...v }));
   }
 
+  // обращения в поддержку принимает сервер
+  async supportTickets() {
+    this._noServer();
+  }
+
+  async supportCreate() {
+    this._noServer();
+  }
+
+  async supportTicket() {
+    this._noServer();
+  }
+
+  async supportReply() {
+    this._noServer();
+  }
+
+  async supportStatus() {
+    this._noServer();
+  }
+
+  async supportUnread() {
+    this._noServer();
+  }
+
+  async supportFile() {
+    this._noServer();
+  }
+
   // синхронизация между компьютерами идёт только через сервер
   async syncPull() {
     this._noServer();
@@ -601,6 +630,52 @@ class HttpBackend {
 
   syncErase({ session }) {
     return this._call("DELETE", "/v1/sync", null, session?.token);
+  }
+
+  /* Обращения в поддержку (server/src/support.rs). Переписку читает поддержка: это не сквозное
+   * шифрование. Вложение отдаётся байтами, тип — из ответа сервера. */
+
+  supportTickets({ session, scope = "mine", status = "" }) {
+    return this._call("GET", `/v1/support/tickets?scope=${scope === "all" ? "all" : "mine"}${status ? `&status=${encodeURIComponent(status)}` : ""}`, null, session?.token);
+  }
+
+  supportCreate({ session, subject, text, meta, files }) {
+    return this._call("POST", "/v1/support/tickets", { subject, text, ...(meta ? { meta } : {}), ...(files?.length ? { files } : {}) }, session?.token, 120000);
+  }
+
+  supportTicket({ session, id }) {
+    return this._call("GET", `/v1/support/tickets/${Number(id)}`, null, session?.token);
+  }
+
+  supportReply({ session, id, text, files }) {
+    return this._call("POST", `/v1/support/tickets/${Number(id)}/messages`, { text, ...(files?.length ? { files } : {}) }, session?.token, 120000);
+  }
+
+  supportStatus({ session, id, status }) {
+    return this._call("POST", `/v1/support/tickets/${Number(id)}/status`, { status }, session?.token);
+  }
+
+  supportUnread({ session }) {
+    return this._call("GET", "/v1/support/unread", null, session?.token);
+  }
+
+  async supportFile({ session, id }) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 60000);
+    try {
+      const res = await fetch(`${this.base}/v1/support/files/${Number(id)}`, { headers: { Authorization: `Bearer ${session?.token}` }, credentials: "omit", redirect: "error", signal: ctrl.signal });
+      if (!res.ok) {
+        throw Object.assign(new Error("Вложение недоступно"), { code: `http-${res.status}`, status: res.status });
+      }
+      return { bytes: new Uint8Array(await res.arrayBuffer()), type: (res.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase() };
+    } catch (e) {
+      if (e.name === "AbortError" || e.name === "TypeError") {
+        throw Object.assign(new Error("Сервер Tabora не отвечает. Проверьте соединение и повторите"), { code: "offline" });
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   mailKeys({ session }) {
@@ -1717,6 +1792,45 @@ export const Account = {
       return [];
     }
     return this.backend.devices({ email: this.email, session: this.data.session });
+  },
+
+  /* ---- обращения в поддержку (хранит сервер) ---------------------------------------------- */
+
+  /** Запрос к поддержке от имени вошедшего аккаунта; без сервера обращений нет. */
+  async _support(method, args = {}) {
+    await this.ready();
+    if (this.needsServerLink) {
+      throw Object.assign(new Error("Обращения появятся, когда аккаунт подключат к серверу Tabora"), { code: "no-server" });
+    }
+    return this.backend[method]({ session: this._session(), ...args });
+  },
+
+  supportTickets(opts = {}) {
+    return this._support("supportTickets", opts);
+  },
+
+  supportCreate(fields) {
+    return this._support("supportCreate", fields);
+  },
+
+  supportTicket(id) {
+    return this._support("supportTicket", { id });
+  },
+
+  supportReply(id, fields) {
+    return this._support("supportReply", { id, ...fields });
+  },
+
+  supportStatus(id, status) {
+    return this._support("supportStatus", { id, status });
+  },
+
+  supportUnread() {
+    return this._support("supportUnread");
+  },
+
+  supportFile(id) {
+    return this._support("supportFile", { id });
   },
 
   /* ---- алиасы (хранит сервер) ---------------------------------------------------------- */

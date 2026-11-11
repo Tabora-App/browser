@@ -38,6 +38,9 @@ Object.assign(Tabora, {
     const { Profiles } = this.profilesMod();
     Profiles.start();
     this.initSync();
+    // ответы поддержки: счётчик в меню аккаунта, сверка раз в несколько минут
+    setTimeout(() => this.supportPoll(), 12000);
+    setInterval(() => this.supportPoll(), 5 * 60 * 1000);
     setTimeout(async () => {
       try {
         const { Account } = this.accountMod();
@@ -50,6 +53,31 @@ Object.assign(Tabora, {
         console.error("Tabora account init", e);
       }
     }, 1500);
+  },
+
+  /** Есть ли ответы поддержки: { count, staff, queue }. Новый ответ — уведомление в окне. */
+  async supportPoll() {
+    const { Account } = this.accountMod();
+    try {
+      await Account.ready();
+      if (!Account.signedIn || Account.isLocalMode || Account.needsServerLink) {
+        this.account.support = null;
+        return;
+      }
+      const r = await Account.supportUnread();
+      const before = this.account.support;
+      this.account.support = { count: Number(r.count) || 0, staff: !!r.staff, queue: Number(r.queue) || 0 };
+      if (before && window === Services.wm.getMostRecentBrowserWindow()) {
+        if (this.account.support.count > before.count) {
+          this.notice("Поддержка Tabora ответила на ваше обращение");
+        } else if (this.account.support.staff && this.account.support.queue > before.queue) {
+          this.notice("Новое обращение в очереди поддержки");
+        }
+      }
+      this.renderAccountButton?.();
+    } catch (e) {
+      // сервер ещё не знает об обращениях или недоступен: счётчика просто нет
+    }
   },
 
   /** Синхронизация: модуль один на процесс. Окно обновляет своё, когда сверка принесла
@@ -1239,6 +1267,16 @@ Object.assign(Tabora, {
       items.push(
         { label: Account.email, avatar: { email: Account.email }, caption: true },
         { label: "Настройки аккаунта", icon: ["M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z", "M4.5 20c1.4-3.3 4.2-5 7.5-5s6.1 1.7 7.5 5"], run: () => this.openAccountPage() },
+        {
+          label: "Поддержка",
+          icon: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", "M9.5 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-.9.8-.9 1.4v.3", "M12 16.5h.01"],
+          note: this.account.support?.count
+            ? `${this.account.support.count} ${this.plural(this.account.support.count, "ответ", "ответа", "ответов")}`
+            : this.account.support?.staff && this.account.support.queue
+              ? `в очереди ${this.account.support.queue}`
+              : "",
+          run: () => this.openAccountPage("support"),
+        },
         Vault.unlocked
           ? { label: "Заблокировать сейф", icon: ["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], run: () => this.accountLockVault() }
           : { label: "Разблокировать сейф", icon: ["M7 11V8a5 5 0 0 1 9.6-2", "M5 11h14v10H5z"], run: () => this.vaultUnlockByUser() },

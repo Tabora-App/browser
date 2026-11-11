@@ -217,14 +217,14 @@
     }
   }
 
-  /* Ссылки поддержки ведут в репозиторий Tabora, а не на сайты Mozilla. Щелчок перехватывается
-   * на подъёме: адрес этим элементам задаёт сама страница настроек (support-page), и при
-   * перерисовке она вернула бы его обратно. */
-  const REPO = "https://github.com/Tabora-App/browser";
+  /* Ссылки поддержки ведут в обращения Tabora (Аккаунт → Поддержка), а не на сайты Mozilla.
+   * Щелчок перехватывается на подъёме: адрес этим элементам задаёт сама страница настроек
+   * (support-page), и при перерисовке она вернула бы его обратно. */
+  const SUPPORT = "about:preferences#sync-support";
   const SUPPORT_LINKS = {
-    supportGetHelp: `${REPO}/issues`,
-    supportShareIdeas: `${REPO}/issues/new`,
-    helpButton: `${REPO}/issues`,
+    supportGetHelp: SUPPORT,
+    supportShareIdeas: SUPPORT,
+    helpButton: SUPPORT,
   };
 
   function supportLinks() {
@@ -237,7 +237,8 @@
         if (url) {
           e.preventDefault();
           e.stopImmediatePropagation();
-          window.browsingContext.topChromeWindow.openTrustedLinkIn(url, "tab");
+          // раздел открывается в этой же вкладке настроек
+          window.browsingContext.topChromeWindow.Tabora?.openAccountPage("support");
           return;
         }
       }

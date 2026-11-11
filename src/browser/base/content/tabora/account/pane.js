@@ -33,6 +33,7 @@ window.TaboraAccountPane = (function () {
     ["sync", "Синхронизация"],
     ["data", "Данные"],
     ["accounts", "Аккаунты"],
+    ["support", "Поддержка"],
     ["exit", "Выход"],
   ];
 
@@ -93,9 +94,427 @@ window.TaboraAccountPane = (function () {
   /** Действие оболочки; если страницу открыли вне окна браузера, ничего не делаем. */
   const shell = fn => () => Shell && fn(Shell);
 
+
+  /* ---- Поддержка: обращения ---------------------------------------------------------------
+   * Своя переписка с поддержкой вместо внешнего трекера. Обращения хранит сервер аккаунтов
+   * (server/src/support.rs); читает их поддержка, поэтому это не сквозное шифрование — так и
+   * написано над формой. Сотрудник поддержки (его аккаунт назван в настройках сервера) видит
+   * здесь же очередь всех обращений. */
+
+  const SUP_FILE_MAX = 2 * 1024 * 1024;
+  const SUP_FILES_MAX = 4;
+  const SUP_TYPES = ["image/png", "image/jpeg", "image/webp", "text/plain"];
+  const sup = {
+    view: "list", scope: "mine", list: null, staff: false, error: "", unsupported: false, ticket: null, busy: false, loading: false,
+    draft: { subject: "", text: "", meta: true, files: [] }, reply: { text: "", files: [] }, images: new Map(), timer: null,
+  };
+
+  const supStatus = (status, staffView) => ({
+    open: staffView ? "ждёт ответа" : "ждёт ответа поддержки",
+    answered: staffView ? "отвечено" : "поддержка ответила",
+    closed: "закрыто",
+  }[status] || status);
+
+  const supWhen = iso => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+  };
+
+  function supFail(e) {
+    if (e.status === 404 && e.code !== "not-found-ticket" && !sup.ticket) {
+      sup.unsupported = true; // сервер ещё не знает об обращениях
+      return "";
+    }
+    return e.code === "no-server" ? "Обращения появятся, когда аккаунт подключат к серверу Tabora." : e.message || String(e);
+  }
+
+  async function supLoadList() {
+    if (sup.loading) {
+      return;
+    }
+    sup.loading = true;
+    try {
+      const r = await Account.supportTickets({ scope: sup.scope });
+      sup.list = Array.isArray(r.tickets) ? r.tickets : [];
+      sup.staff = !!r.staff;
+      sup.error = "";
+      sup.unsupported = false;
+    } catch (e) {
+      sup.error = supFail(e);
+      sup.list ||= [];
+    }
+    sup.loading = false;
+    Shell?.supportPoll?.();
+    if (state.tab === "support" && sup.view === "list") {
+      render();
+    }
+  }
+
+  async function supOpen(id, { quiet = false } = {}) {
+    try {
+      const t = await Account.supportTicket(id);
+      const changed = !sup.ticket || sup.ticket.id !== t.id || JSON.stringify(sup.ticket) !== JSON.stringify(t);
+      if (!quiet) {
+        sup.reply = { text: "", files: [] };
+        sup.view = "ticket";
+      }
+      sup.ticket = t;
+      sup.error = "";
+      if ((changed || !quiet) && state.tab === "support" && sup.view === "ticket") {
+        render();
+      }
+      Shell?.supportPoll?.();
+    } catch (e) {
+      if (!quiet) {
+        sup.error = e.message || String(e);
+        render();
+      }
+    }
+  }
+
+  /** Открытая переписка обновляется сама: ответ поддержки появляется без перезагрузки. */
+  function supWatch() {
+    clearInterval(sup.timer);
+    sup.timer = setInterval(() => {
+      if (state.tab === "support" && sup.view === "ticket" && sup.ticket && !sup.busy && !document.hidden && Account.signedIn) {
+        supOpen(sup.ticket.id, { quiet: true });
+      } else if (state.tab !== "support") {
+        clearInterval(sup.timer);
+      }
+    }, 30000);
+  }
+
+  /** Большой снимок экрана ужимается до предела сервера, а не отвергается. */
+  async function supFit(file) {
+    if (file.size <= SUP_FILE_MAX || !/^image\//.test(file.type)) {
+      return file;
+    }
+    const bmp = await createImageBitmap(file);
+    let scale = Math.min(1, 2400 / Math.max(bmp.width, bmp.height));
+    for (let i = 0; i < 5; i++) {
+      const canvas = document.createElementNS(HTML, "canvas");
+      canvas.width = Math.max(1, Math.round(bmp.width * scale));
+      canvas.height = Math.max(1, Math.round(bmp.height * scale));
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.85));
+      if (blob && blob.size <= SUP_FILE_MAX) {
+        return new File([blob], `${file.name.replace(/\.[a-z0-9]+$/i, "") || "снимок"}.jpg`, { type: "image/jpeg" });
+      }
+      scale *= 0.7;
+    }
+    throw new Error(`«${file.name}» не удалось уменьшить до 2 МБ`);
+  }
+
+  async function supAttach(target, files) {
+    for (const raw of files) {
+      if (target.files.length >= SUP_FILES_MAX) {
+        shell(s => s.notice(`К сообщению можно приложить не больше ${SUP_FILES_MAX} файлов`))();
+        break;
+      }
+      try {
+        if (!SUP_TYPES.includes(raw.type)) {
+          throw new Error(`«${raw.name}»: прикладывать можно снимки (PNG, JPEG, WebP) и текстовые файлы`);
+        }
+        const file = await supFit(raw);
+        if (file.size > SUP_FILE_MAX) {
+          throw new Error(`«${file.name}» больше 2 МБ`);
+        }
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        target.files.push({ name: file.name || "снимок.png", type: file.type, size: file.size, data: bytes.toBase64(), url: /^image\//.test(file.type) ? URL.createObjectURL(file) : "" });
+      } catch (e) {
+        shell(s => s.notice(e.message || String(e)))();
+      }
+    }
+    render();
+  }
+
+  const supSize = n => (n >= 1048576 ? `${(n / 1048576).toFixed(1).replace(".", ",")} МБ` : `${Math.max(1, Math.round(n / 1024))} КБ`);
+
+  /** Поле сообщения с вложениями: кнопка выбора файлов, вставка снимка из буфера, список приложенного. */
+  function supComposer(target, { placeholder, rows }) {
+    const area = el("textarea", { class: "tabora-sup-area", rows: String(rows), maxlength: "8000", placeholder, "aria-label": placeholder });
+    area.value = target.text;
+    area.addEventListener("input", () => {
+      target.text = area.value;
+    });
+    area.addEventListener("paste", e => {
+      const files = [...(e.clipboardData?.files || [])];
+      if (files.length) {
+        e.preventDefault();
+        supAttach(target, files);
+      }
+    });
+    const input = el("input", { type: "file", multiple: true, accept: SUP_TYPES.join(","), hidden: true });
+    input.addEventListener("change", () => supAttach(target, [...input.files]));
+    const pick = el("moz-button", { label: "Прикрепить файл" });
+    pick.addEventListener("click", () => input.click());
+    const list = el("div", { class: "tabora-sup-attached" }, target.files.map((f, i) => {
+      const remove = el("button", { class: "tabora-sup-remove", type: "button", "aria-label": `Убрать ${f.name}`, title: "Убрать" }, "×");
+      remove.addEventListener("click", () => {
+        if (f.url) {
+          URL.revokeObjectURL(f.url);
+        }
+        target.files.splice(i, 1);
+        render();
+      });
+      return el("span", { class: "tabora-sup-chip" }, [f.url ? el("img", { src: f.url, alt: "" }) : null, el("span", {}, `${f.name}, ${supSize(f.size)}`), remove]);
+    }));
+    return { area, node: el("div", { class: "tabora-sup-composer" }, [area, list, input]), pick };
+  }
+
+  function supMeta() {
+    try {
+      const os = Services.sysinfo;
+      return {
+        browser: `Tabora ${Services.prefs.getStringPref("tabora.version", "") || Services.appinfo.version}`.trim(),
+        engine: Services.appinfo.version,
+        system: `${os.getProperty("name")} ${os.getProperty("version")}`.slice(0, 80),
+        arch: Services.appinfo.XPCOMABI.split("-")[0],
+        locale: Services.locale.appLocaleAsBCP47,
+        window: `${window.browsingContext.topChromeWindow.innerWidth}×${window.browsingContext.topChromeWindow.innerHeight}`,
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  const supWire = files => files.map(f => ({ name: f.name, type: f.type, data: f.data }));
+
+  async function supCreate() {
+    const d = sup.draft;
+    if (sup.busy) {
+      return;
+    }
+    if (d.subject.trim().length < 3 || !d.text.trim()) {
+      shell(s => s.notice(d.subject.trim().length < 3 ? "Коротко назовите тему обращения" : "Опишите, что случилось"))();
+      return;
+    }
+    sup.busy = true;
+    render();
+    try {
+      const t = await Account.supportCreate({ subject: d.subject.trim(), text: d.text, meta: d.meta ? supMeta() : null, files: supWire(d.files) });
+      d.files.forEach(f => f.url && URL.revokeObjectURL(f.url));
+      sup.draft = { subject: "", text: "", meta: true, files: [] };
+      sup.ticket = t;
+      sup.reply = { text: "", files: [] };
+      sup.view = "ticket";
+      sup.list = null;
+      shell(s => s.notice(`Обращение № ${t.id} отправлено`))();
+    } catch (e) {
+      shell(s => s.notice(e.message || String(e)))();
+    }
+    sup.busy = false;
+    render();
+  }
+
+  async function supSendReply() {
+    const r = sup.reply;
+    if (sup.busy || !sup.ticket || !r.text.trim()) {
+      return;
+    }
+    sup.busy = true;
+    render();
+    try {
+      sup.ticket = await Account.supportReply(sup.ticket.id, { text: r.text, files: supWire(r.files) });
+      r.files.forEach(f => f.url && URL.revokeObjectURL(f.url));
+      sup.reply = { text: "", files: [] };
+      sup.list = null;
+    } catch (e) {
+      shell(s => s.notice(e.message || String(e)))();
+    }
+    sup.busy = false;
+    render();
+  }
+
+  async function supSetStatus(status) {
+    if (sup.busy || !sup.ticket) {
+      return;
+    }
+    sup.busy = true;
+    try {
+      sup.ticket = await Account.supportStatus(sup.ticket.id, status);
+      sup.list = null;
+    } catch (e) {
+      shell(s => s.notice(e.message || String(e)))();
+    }
+    sup.busy = false;
+    render();
+  }
+
+  /** Вложение сообщения: снимок показывается картинкой, текстовый файл сохраняется по нажатию. */
+  function supFile(f) {
+    const isImage = /^image\/(png|jpeg|webp)$/.test(f.type);
+    const load = async () => {
+      if (!sup.images.has(f.id)) {
+        const { bytes, type } = await Account.supportFile(f.id);
+        // тип берётся из ответа сервера: в картинку попадает только то, что сервер назвал картинкой
+        sup.images.set(f.id, { url: URL.createObjectURL(new Blob([bytes], { type: SUP_TYPES.includes(type) ? type : "application/octet-stream" })), type });
+      }
+      return sup.images.get(f.id);
+    };
+    if (isImage) {
+      const img = el("img", { class: "tabora-sup-image", alt: f.name, title: `${f.name}, ${supSize(f.size)}` });
+      load().then(got => {
+        if (/^image\/(png|jpeg|webp)$/.test(got.type)) {
+          img.src = got.url;
+        }
+      }).catch(() => img.replaceWith(el("span", { class: "tabora-sup-chip" }, `${f.name}: не загрузилось`)));
+      img.addEventListener("click", () => img.classList.toggle("wide"));
+      return img;
+    }
+    const link = el("button", { class: "tabora-sup-chip link", type: "button", title: "Сохранить файл" }, `${f.name}, ${supSize(f.size)}`);
+    link.addEventListener("click", async () => {
+      try {
+        const got = await load();
+        const a = el("a", { href: got.url, download: f.name });
+        document.body.append(a);
+        a.click();
+        a.remove();
+      } catch (e) {
+        shell(s => s.notice(e.message || String(e)))();
+      }
+    });
+    return link;
+  }
+
+  function supportPanel() {
+    if (sup.unsupported) {
+      return [group("Поддержка", "", [item("Обращения из браузера скоро заработают", "Сервер Tabora ещё не обновлён. Пока напишите нам на hello@tabora.app — ответим письмом.", [button("Проверить снова", () => {
+        sup.unsupported = false;
+        sup.list = null;
+        render();
+      })])])];
+    }
+    const head = "Напишите нам о проблеме или идее — ответим здесь же. Переписку читают сотрудники поддержки Tabora: она не зашифрована от них, поэтому не присылайте пароли, коды и фразу восстановления кошелька.";
+
+    if (sup.view === "new") {
+      const d = sup.draft;
+      const subject = el("input", { class: "tabora-sup-input", type: "text", maxlength: "140", placeholder: "Тема: что случилось, в двух словах", "aria-label": "Тема обращения" });
+      subject.value = d.subject;
+      subject.addEventListener("input", () => {
+        d.subject = subject.value;
+      });
+      const c = supComposer(d, { placeholder: "Что вы делали, что ожидали увидеть и что получилось. Снимок экрана можно вставить из буфера.", rows: 8 });
+      const meta = el("moz-checkbox", { label: "Приложить сведения о браузере", description: "Версия Tabora, система, язык и размер окна. Помогают повторить проблему." });
+      meta.checked = d.meta;
+      meta.addEventListener("change", () => {
+        d.meta = meta.checked;
+      });
+      const send = el("moz-button", { label: sup.busy ? "Отправляю…" : "Отправить", type: "primary" });
+      send.disabled = sup.busy;
+      send.addEventListener("click", supCreate);
+      const cancel = el("moz-button", { label: "Отмена" });
+      cancel.addEventListener("click", () => {
+        sup.view = "list";
+        render();
+      });
+      queueMicrotask(() => !d.subject && subject.focus());
+      return [el("moz-card", { role: "presentation", class: "tabora-acc-group tabora-sup-card" }, [
+        el("moz-fieldset", { label: "Новое обращение", description: head, headinglevel: "2" }, [
+          el("div", { class: "tabora-sup-form" }, [subject, c.node, meta, el("div", { class: "tabora-sup-buttons" }, [send, c.pick, cancel])]),
+        ]),
+      ])];
+    }
+
+    if (sup.view === "ticket" && sup.ticket) {
+      const t = sup.ticket;
+      const staffView = !!t.staff;
+      const back = el("moz-button", { label: "Все обращения" });
+      back.addEventListener("click", () => {
+        sup.view = "list";
+        sup.ticket = null;
+        render();
+      });
+      const toggle = el("moz-button", { label: t.status === "closed" ? "Открыть снова" : "Закрыть обращение" });
+      toggle.disabled = sup.busy;
+      toggle.addEventListener("click", () => supSetStatus(t.status === "closed" ? "open" : "closed"));
+      const thread = el("div", { class: "tabora-sup-thread", role: "log", "aria-label": "Переписка" }, (t.messages || []).map(m => {
+        const mine = m.from === (staffView ? "staff" : "user");
+        const who = mine ? "Вы" : m.from === "staff" ? "Поддержка Tabora" : t.author || "Автор обращения";
+        return el("div", { class: `tabora-sup-msg${mine ? " mine" : ""}` }, [
+          el("div", { class: "tabora-sup-meta" }, [el("b", {}, who), el("time", {}, supWhen(m.at))]),
+          el("div", { class: "tabora-sup-text" }, m.text),
+          (m.files || []).length ? el("div", { class: "tabora-sup-files" }, m.files.map(supFile)) : null,
+        ]);
+      }));
+      const c = supComposer(sup.reply, { placeholder: t.status === "closed" ? "Сообщение откроет обращение снова" : "Ваш ответ", rows: 3 });
+      const send = el("moz-button", { label: sup.busy ? "Отправляю…" : "Ответить", type: "primary" });
+      send.disabled = sup.busy;
+      send.addEventListener("click", supSendReply);
+      c.area.addEventListener("keydown", e => {
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+          e.preventDefault();
+          supSendReply();
+        }
+      });
+      const info = staffView && t.meta ? el("div", { class: "tabora-sup-info" }, Object.entries(t.meta).map(([k, v]) => `${k}: ${String(v).slice(0, 120)}`).join(" · ")) : null;
+      supWatch();
+      queueMicrotask(() => {
+        thread.scrollTop = thread.scrollHeight;
+      });
+      return [el("moz-card", { role: "presentation", class: "tabora-acc-group tabora-sup-card" }, [
+        el("moz-fieldset", { label: t.subject, description: `Обращение № ${t.id} · ${supStatus(t.status, staffView)}${staffView && t.author ? ` · ${t.author}` : ""}`, headinglevel: "2" }, [
+          el("div", { class: "tabora-sup-form" }, [el("div", { class: "tabora-sup-buttons" }, [back, toggle]), info, thread, c.node, el("div", { class: "tabora-sup-buttons" }, [send, c.pick])]),
+        ]),
+      ])];
+    }
+
+    // список
+    if (sup.list === null) {
+      supLoadList();
+    }
+    const create = button("Новое обращение", () => {
+      sup.view = "new";
+      render();
+    }, { type: "primary" });
+    const list = sup.list || [];
+    const row = t => {
+      const staffView = sup.scope === "all" && sup.staff;
+      const b = button("Открыть", () => supOpen(t.id), { type: t.unread ? "primary" : "default" });
+      return item(
+        `${t.unread ? "● " : ""}${t.subject}`,
+        `№ ${t.id} · ${supStatus(t.status, staffView)}${staffView && t.author ? ` · ${t.author}` : ""} · ${supWhen(t.updatedAt)}`,
+        [b]
+      );
+    };
+    const scope = sup.staff
+      ? (() => {
+          const seg = el("div", { class: "tabora-acc-tabs tabora-sup-scope", role: "tablist", "aria-label": "Какие обращения показывать" }, [["mine", "Мои обращения"], ["all", "Очередь поддержки"]].map(([id, label]) => {
+            const b = el("button", { class: "tabora-acc-tab", type: "button", role: "tab", "aria-selected": String(sup.scope === id) }, label);
+            b.addEventListener("click", () => {
+              sup.scope = id;
+              sup.list = null;
+              render();
+            });
+            return b;
+          }));
+          return seg;
+        })()
+      : null;
+    return [
+      scope,
+      group(sup.scope === "all" && sup.staff ? "Очередь поддержки" : "Поддержка", sup.scope === "all" && sup.staff ? "Обращения всех пользователей: сначала те, что изменились последними." : head, [
+        sup.scope === "all" && sup.staff ? null : item("Что-то не работает или есть идея?", "Опишите, приложите снимок экрана — и следите за ответом здесь.", [create]),
+        sup.error ? item("Обращения не загрузились", sup.error, [button("Повторить", () => {
+          sup.list = null;
+          render();
+        })]) : null,
+        ...(sup.list === null && !sup.error ? [item("Загружаю обращения…", "")] : list.map(row)),
+        sup.list && !list.length && !sup.error && sup.scope === "all" ? item("Очередь пуста", "Новых обращений нет.") : null,
+      ]),
+    ];
+  }
+
   /* ---- Вкладки ------------------------------------------------------------- */
 
   const PANELS = {
+    support() {
+      return supportPanel();
+    },
+
     profile() {
       const colors = Shell?.AVATAR_COLORS || [];
       const current = Shell?.accountAvatarColor();
@@ -447,6 +866,7 @@ window.TaboraAccountPane = (function () {
       const b = el("button", { class: "tabora-acc-tab", type: "button", role: "tab", id: `tabora-acc-tab-${id}`, "aria-selected": String(selected), tabindex: selected ? "0" : "-1" }, [
         label,
         id === where && attention ? el("span", { class: "tabora-acc-badge", "aria-label": "нужно действие" }, "1") : null,
+        id === "support" && Shell?.account?.support?.count ? el("span", { class: "tabora-acc-badge", "aria-label": "есть ответ поддержки" }, String(Shell.account.support.count)) : null,
       ]);
       b.addEventListener("click", () => select(id));
       return b;
@@ -483,7 +903,7 @@ window.TaboraAccountPane = (function () {
     // под нашими группами показывается штатный «Импорт данных браузера»
     state.pane?.setAttribute("data-acc-tab", signedIn ? state.tab : "out");
     if (!signedIn) {
-      root.replaceChildren(who());
+      root.replaceChildren(who(), el("p", { class: "tabora-acc-contact" }, "Не получается войти? Напишите нам на hello@tabora.app."));
       return;
     }
     const panel = el("div", { class: "tabora-acc-panel", role: "tabpanel", "aria-labelledby": `tabora-acc-tab-${state.tab}` }, PANELS[state.tab]());
