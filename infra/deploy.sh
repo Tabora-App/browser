@@ -27,23 +27,44 @@ case "$what" in
     # tabora-server: сборка на этой машине под сервер (Linux x86_64, статически; нужна цель Rust
     # x86_64-unknown-linux-musl), установка в /opt/tabora/bin с заменой одним переименованием,
     # перезапуск службы и проверка, что она отвечает. Настройки — /etc/tabora/server.env.
+    # Перед заменой: копия базы в /var/backups/tabora (схему меняет сама служба при запуске) и
+    # прежняя сборка рядом как tabora-server.prev. Если новая не ответила, прежняя возвращается
+    # сама; изменения схемы только добавляют таблицы и столбцы, прежней сборке они не мешают.
     (cd "$ROOT/server" && cargo build --release --target x86_64-unknown-linux-musl)
     bin="$ROOT/server/target/x86_64-unknown-linux-musl/release/tabora-server"
     echo "локально: $(shasum -a 256 "$bin" | cut -d' ' -f1)"
     rsync -az "$bin" "$HOST:/root/tabora-infra/tabora-server.new"
     ssh "$HOST" 'set -e
-      install -m 755 -o root -g root /root/tabora-infra/tabora-server.new /opt/tabora/bin/tabora-server.new
-      mv -f /opt/tabora/bin/tabora-server.new /opt/tabora/bin/tabora-server
+      umask 077
+      bin=/opt/tabora/bin/tabora-server
+      alive() {
+        for i in 1 2 3 4 5 6 7 8 9 10; do
+          if curl -fsS -m 3 http://127.0.0.1:7700/v1/health; then echo; return 0; fi
+          sleep 1
+        done
+        return 1
+      }
+      install -d -m 700 -o root -g root /var/backups/tabora
+      dump=/var/backups/tabora/before-deploy.pgdump
+      runuser -u postgres -- pg_dump -Fc tabora > $dump.new
+      mv -f $dump.new $dump
+      echo "копия базы: $dump ($(stat -c %s $dump) байт)"
+      install -m 755 -o root -g root /root/tabora-infra/tabora-server.new $bin.new
       rm -f /root/tabora-infra/tabora-server.new
-      echo "на сервере: $(sha256sum /opt/tabora/bin/tabora-server | cut -d" " -f1)"
+      [ ! -f $bin ] || cp -pf $bin $bin.prev
+      mv -f $bin.new $bin
+      echo "на сервере: $(sha256sum $bin | cut -d" " -f1)"
       systemctl daemon-reload
       systemctl enable tabora-server >/dev/null 2>&1
       systemctl restart tabora-server
-      for i in 1 2 3 4 5 6 7 8 9 10; do
-        if curl -fsS -m 3 http://127.0.0.1:7700/v1/health; then echo; echo "tabora-server работает"; exit 0; fi
-        sleep 1
-      done
-      journalctl -u tabora-server -n 20 --no-pager
+      if alive; then echo "tabora-server работает"; exit 0; fi
+      journalctl -u tabora-server -n 30 --no-pager
+      if [ -f $bin.prev ]; then
+        echo "новая сборка не отвечает — возвращаю прежнюю"
+        cp -pf $bin.prev $bin.new && mv -f $bin.new $bin
+        systemctl restart tabora-server
+        if alive; then echo "прежняя сборка работает"; else echo "прежняя сборка тоже не отвечает"; fi
+      fi
       exit 1'
     ;;
   nginx)
