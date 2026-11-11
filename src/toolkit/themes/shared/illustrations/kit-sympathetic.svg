@@ -1,7 +1,7 @@
-<!-- Tabora: нейтральная иллюстрация вместо лисы Firefox. -->
+<!-- Tabora: знак Tabora вместо лисы Firefox (тот же рисунок, что в content/tabora/logo.svg). -->
 <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
-  <rect x="8" y="8" width="64" height="64" rx="18" fill="#1b1d22"/>
-  <rect x="8.5" y="8.5" width="63" height="63" rx="17.5" fill="none" stroke="#2a2d34"/>
-  <circle cx="40" cy="40" r="22" fill="#c8f25a"/>
-  <circle cx="40" cy="40" r="8" fill="#0b0c0e"/>
+  <rect x="8" y="8" width="64" height="64" rx="14.5" fill="#c8f25a"/>
+  <rect x="22" y="24.5" width="36" height="9.5" rx="4.75" fill="#0b0c0e"/>
+  <rect x="35.25" y="24.5" width="9.5" height="33.5" rx="4.75" fill="#0b0c0e"/>
+  <circle cx="53.25" cy="29.25" r="2.75" fill="#c8f25a"/>
 </svg>
