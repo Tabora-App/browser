@@ -49,7 +49,7 @@ var Tabora = {
     Services.scriptloader.loadSubScript("chrome://tabora/content/update/update.js", window);
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
-      "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initWalletProvider", "initVaultActor", "initAccount", "initUpdates", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "initLegacyShellUrls", "initMailToggle", "startTimers", "updateTitle", "localizeUrlbar",
+      "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initWalletProvider", "initVaultActor", "initAccount", "initUpdates", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "initLegacyShellUrls", "initMailToggle", "initMailBackground", "startTimers", "updateTitle", "localizeUrlbar",
       "routeUrlbarToCommandBar", "initTabMotion", "initMotion", "initBookmarkDefaults", "initTabsLayout", "initAddonsPage", "initAppMenu",
     ]) {
       try {
@@ -1995,6 +1995,7 @@ var Tabora = {
     const mail = this.html("button", { id: "tabora-mail", title: "Почта и алиасы (⌘⇧M)" }, null, [
       this.svg(["M3.5 6.5h17v11h-17z", "M3.5 7l8.5 6 8.5-6"], 16, 1.8),
       this.html("span", {}, "Почта и алиасы"),
+      this.html("span", { class: "pill", id: "tabora-mail-unread", hidden: "true" }),
       this.html("span", { class: "kbd" }, "⌘⇧M"),
     ]);
     mail.addEventListener("click", () => this.toggleMail());
@@ -2584,6 +2585,28 @@ var Tabora = {
       return;
     }
     this.openMailTab(hash);
+  },
+
+  /** Почта работает с открытия окна: письма сверяются в фоне, о новых сообщает уведомление
+   * (MailStore.start), а на кнопке «Почта и алиасы» стоит число непрочитанных во «Входящих». */
+  initMailBackground() {
+    const { MailStore } = this.mail();
+    const update = () => {
+      const pill = document.getElementById("tabora-mail-unread");
+      if (!pill) {
+        return;
+      }
+      const n = MailStore.available ? MailStore.unreadInbox() : 0;
+      pill.textContent = n > 99 ? "99+" : String(n);
+      pill.hidden = !n;
+      const button = document.getElementById("tabora-mail");
+      button.title = n ? `Почта и алиасы: ${n} ${this.plural(n, "новое письмо", "новых письма", "новых писем")} (⌘⇧M)` : "Почта и алиасы (⌘⇧M)";
+    };
+    const observer = { observe: () => update() };
+    Services.obs.addObserver(observer, MailStore.TOPIC);
+    window.addEventListener("unload", () => Services.obs.removeObserver(observer, MailStore.TOPIC), { once: true });
+    update();
+    MailStore.start();
   },
 
   /** Кнопка «Почта и алиасы» и ⌘⇧M работают как кошелёк: открывают почту, а если она уже

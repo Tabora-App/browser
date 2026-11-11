@@ -875,8 +875,16 @@ sidebar-main {
   margin-inline-end: 4px;
 }
 
-#tabora-wallet-card .pill[hidden] {
+#tabora-wallet-card .pill[hidden],
+#tabora-mail .pill[hidden] {
   display: none;
+}
+
+/* число непрочитанных писем: в строке — перед сочетанием клавиш, на плитке и значке — на углу */
+#tabora-mail .pill {
+  margin-inline-end: 4px;
+  padding: 3px 7px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---- Карточка загрузок ------------------------------------------------- */
@@ -1394,14 +1402,15 @@ sidebar-main {
   display: none;
 }
 
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads {
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) :is(#tabora-downloads, #tabora-mail) {
   position: relative;
 }
 
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads .pill {
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) :is(#tabora-downloads, #tabora-mail) .pill {
   position: absolute;
   top: 6px;
   right: 6px;
+  margin: 0;
   padding: 2px 5px;
   font-size: 10px;
 }
@@ -1504,7 +1513,7 @@ sidebar-main {
   height: 3px;
 }
 
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads .pill {
+:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) :is(#tabora-downloads, #tabora-mail) .pill {
   top: -5px;
   right: -5px;
 }
@@ -4219,10 +4228,11 @@ toolbarseparator {
 }
 
 /* число загрузок — значком на углу, ход загрузки — полоской под значком */
-:root[tabora-tabs="horizontal"] #tabora-dock #tabora-downloads .pill {
+:root[tabora-tabs="horizontal"] #tabora-dock :is(#tabora-downloads, #tabora-mail) .pill {
   position: absolute;
   top: -5px;
   right: -5px;
+  margin: 0;
   padding: 2px 5px;
   font-size: 10px;
 }

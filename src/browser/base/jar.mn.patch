@@ -1,8 +1,8 @@
 diff --git a/browser/base/jar.mn b/browser/base/jar.mn
-index b2b5db6040..e6f890b788 100644
+index b2b5db6040..fa56c9f519 100644
 --- a/browser/base/jar.mn
 +++ b/browser/base/jar.mn
-@@ -33,6 +33,88 @@ browser.jar:
+@@ -33,6 +33,91 @@ browser.jar:
          content/browser/aboutTabCrashed.xhtml         (content/aboutTabCrashed.xhtml)
          content/browser/blanktab.html                 (content/blanktab.html)
          content/browser/browser.js                    (content/browser.js)
@@ -19,6 +19,7 @@ index b2b5db6040..e6f890b788 100644
 +        content/tabora/mail/net/Smtp.sys.mjs  (content/tabora/mail/net/Smtp.sys.mjs)
 +        content/tabora/mail/net/Mime.sys.mjs  (content/tabora/mail/net/Mime.sys.mjs)
 +        content/tabora/mail/Pgp.sys.mjs  (content/tabora/mail/Pgp.sys.mjs)
++        content/tabora/mail/MailView.sys.mjs  (content/tabora/mail/MailView.sys.mjs)
 +        content/tabora/mail/pgp/host.html  (content/tabora/mail/pgp/host.html)
 +        content/tabora/mail/pgp/host.mjs  (content/tabora/mail/pgp/host.mjs)
 +        content/tabora/mail/pgp/openpgp.mjs  (content/tabora/mail/pgp/openpgp.mjs)
@@ -77,6 +78,8 @@ index b2b5db6040..e6f890b788 100644
 +        content/tabora/drawer.css  (content/tabora/drawer.css)
 +        content/tabora/actors/TaboraMediaChild.sys.mjs  (content/tabora/actors/TaboraMediaChild.sys.mjs)
 +        content/tabora/actors/TaboraMediaParent.sys.mjs  (content/tabora/actors/TaboraMediaParent.sys.mjs)
++        content/tabora/actors/TaboraMailViewChild.sys.mjs  (content/tabora/actors/TaboraMailViewChild.sys.mjs)
++        content/tabora/actors/TaboraMailViewParent.sys.mjs  (content/tabora/actors/TaboraMailViewParent.sys.mjs)
 +        content/tabora/select.css  (content/tabora/select.css)
 +        content/tabora/tabora.js  (content/tabora/tabora.js)
 +        content/browser/tabora/fonts.css  (content/tabora/fonts.css)

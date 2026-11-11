@@ -8,7 +8,8 @@
   <meta name="color-scheme" content="light dark" />
   <!-- У страницы системные права: только свои скрипты, стили, шрифты и картинки из chrome://,
        никаких встроенных скриптов и стилей (стили из кода — только через CSSOM), никакой сети,
-       рамок и объектов. Тело письма выводится только текстом (см. правило в mail.js). -->
+       рамок и объектов. Разметка письма в саму страницу не попадает: простое письмо выводится
+       текстом, письмо с вёрсткой — в отдельном процессе (см. правило в mail.js). -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src chrome:; style-src chrome:; img-src chrome:; font-src chrome:; connect-src 'none'; media-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
   <title>Почта · Tabora</title>
   <link rel="icon" href="chrome://tabora/content/mail/icon.svg" />
@@ -48,6 +49,7 @@
           <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </summary>
         <div class="account-actions">
+          <button type="button" id="account-notify" role="switch" aria-checked="true"><span>Уведомления о письмах</span><span class="mini-switch" aria-hidden="true"></span></button>
           <button type="button" id="account-change">Сменить пароль</button>
           <button type="button" id="account-switch">Другие аккаунты</button>
           <button type="button" id="account-logout" class="danger">Выйти</button>

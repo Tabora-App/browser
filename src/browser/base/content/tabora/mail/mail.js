@@ -2,21 +2,21 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* Почта Tabora. Интерфейс готов, данные пока демонстрационные: модуль MailStore
- * держит их в профиле (кэш зашифрован ключом сейфа). Когда появится почтовый
- * сервер на домене, MailStore заменится на настоящий источник, остальной
- * код не меняется.
+/* Почта Tabora: страница tabora://mail. Данные и работу с серверами держит MailStore
+ * (mail/MailStore.sys.mjs): ящик аккаунта и внешние ящики по IMAP и SMTP, кэш в профиле
+ * зашифрован ключом сейфа.
  *
  * Почта — часть аккаунта: без входа (или с заблокированным сейфом) страница показывает
  * экран входа, а любое обращение к данным проходит через App.access().
  *
- * ПРАВИЛО для тела письма. Сейчас тело — список блоков, каждый выводится через textContent;
- * innerHTML на странице не используется вовсе. Когда появятся настоящие письма с HTML,
- * их можно показывать только в <iframe sandbox=""> (без allow-scripts, allow-same-origin,
- * allow-forms, allow-popups) со строгим CSP внутри (default-src 'none'; style-src
- * 'unsafe-inline'; img-src data:) — без скриптов и без загрузки внешних ресурсов
- * (картинки-маячки только по явному действию пользователя через прокси). Никогда не
- * вставлять HTML письма в DOM этой страницы: у неё системные права. */
+ * ПРАВИЛО для тела письма. У этой страницы системные права, поэтому разметка письма в её DOM
+ * не попадает никогда и innerHTML на странице не используется вовсе. Простое письмо — список
+ * блоков, каждый выводится через textContent. Письмо с вёрсткой показывается в отдельном
+ * процессе содержимого: элемент browser (группа сообщений "tabora-mail", JavaScript выключен)
+ * с документом data:, который собирает MailView — очищенная разметка под политикой
+ * содержимого default-src 'none'. Картинки с чужих серверов грузятся только по явному
+ * действию пользователя. Из того процесса сюда приходят лишь высота содержимого и адреса
+ * ссылок (актор TaboraMailView), и они проверяются. */
 
 "use strict";
 
@@ -83,6 +83,7 @@ const ICONS = {
   lock: "M7 11V8a5 5 0 0 1 10 0v3M6 11h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z",
   seal: "M12 3 5 6v5c0 4.6 2.9 8.2 7 10 4.1-1.8 7-5.4 7-10V6zM9 12l2 2 4-4",
   back: "M15 5l-7 7 7 7",
+  image: "M4 5h16v14H4zM4 16l4.5-4.5 3.5 3.5 3-3 5 5M9 9.5h.01",
   alert: "M12 3 5 6v5c0 4.6 2.9 8.2 7 10 4.1-1.8 7-5.4 7-10V6zM12 8v5M12 16.5v.5",
 };
 
@@ -263,21 +264,77 @@ function snippetOf(m) {
   return first ? first.p || first.h : "";
 }
 
-/** Ссылка из письма: открывается новой вкладкой в браузере, сама страница почты никуда не уходит. */
+/** Адрес из письма: сайт открывается новой вкладкой, почтовый адрес — окном нового письма.
+ * Страница почты при этом никуда не уходит. */
+function openMailHref(href) {
+  const shell = window.browsingContext?.topChromeWindow;
+  if (/^mailto:/i.test(href)) {
+    let to = href.slice(7).split("?")[0];
+    try {
+      to = decodeURIComponent(to);
+    } catch (e) {}
+    shell?.Tabora?.openCompose({ to });
+  } else if (/^https?:\/\//i.test(href)) {
+    // адрес пришёл из письма: открываем как ссылку с веб-страницы, без прав браузера
+    shell?.openWebLinkIn(href, "tab");
+  }
+}
+
+/** Ссылка из письма в блоках страницы почты. */
 function mailLink(text, href, cls = "") {
   const a = el("a", { class: cls || null, href, title: href, rel: "noopener noreferrer", text });
   a.addEventListener("click", e => {
     e.preventDefault();
     e.stopPropagation();
-    const shell = window.browsingContext?.topChromeWindow;
-    if (/^mailto:/i.test(href)) {
-      shell?.Tabora?.openCompose({ to: decodeURIComponent(href.slice(7).split("?")[0]) });
-    } else if (/^https?:\/\//i.test(href)) {
-      // адрес пришёл из письма: открываем как ссылку с веб-страницы, без прав браузера
-      shell?.openWebLinkIn(href, "tab");
-    }
+    openMailHref(href);
   });
   return a;
+}
+
+/* ---- Письмо с вёрсткой: элемент browser в отдельном процессе (см. mail/MailView.sys.mjs) ---- */
+
+try {
+  ChromeUtils.registerWindowActor("TaboraMailView", {
+    parent: { esModuleURI: "chrome://tabora/content/actors/TaboraMailViewParent.sys.mjs" },
+    child: {
+      esModuleURI: "chrome://tabora/content/actors/TaboraMailViewChild.sys.mjs",
+      events: {
+        DOMContentLoaded: {},
+        click: { capture: true },
+        auxclick: { capture: true },
+        dragover: { capture: true },
+        drop: { capture: true },
+        submit: { capture: true },
+        mouseover: {},
+        mouseout: {},
+      },
+    },
+    // только элементы просмотра письма: у вкладок с сайтами другая группа сообщений
+    messageManagerGroups: ["tabora-mail"],
+    allFrames: false,
+    // письмо живёт в обычном процессе содержимого; всё, что актор оттуда присылает, проверяется
+    safeForUntrustedWebProcess: true,
+  });
+} catch (e) {
+  // уже зарегистрирован: страницу почты открывали раньше
+}
+
+/** Процесс содержимого для элемента просмотра письма готов принять документ. */
+function frameReady(browser) {
+  return new Promise((resolve, reject) => {
+    const started = Date.now();
+    const tick = () => {
+      if (browser.frameLoader?.remoteTab) {
+        resolve();
+      } else if (!browser.isConnected || Date.now() - started > 2500) {
+        // процесс для письма создаётся сразу; если его нет, движок не дал встроить просмотр
+        reject(new Error("Просмотр письма не запустился"));
+      } else {
+        setTimeout(tick, 30);
+      }
+    };
+    tick();
+  });
 }
 
 /** Код подтверждения письма: его находит разбор письма (Mime.findCode), здесь догадок нет. */
@@ -323,6 +380,8 @@ const App = {
   replyTexts: new Map(), // набранный быстрый ответ по цепочкам: переживает перерисовку письма
   sendingReply: null, // цепочка, ответ на которую сейчас отправляется
   expanded: new Set(), // письма открытой цепочки, развёрнутые вручную
+  htmlHeights: new Map(), // высота писем с вёрсткой: при повторном показе место отводится сразу
+  htmlImages: new Set(), // письма, которым разрешили загрузить картинки с чужих серверов
 
   started: false,
   gate: null,
@@ -345,6 +404,16 @@ const App = {
     const shell = () => window.browsingContext?.topChromeWindow?.Tabora;
     $("add-box-btn").addEventListener("click", () => this.openBoxModal());
     $("refresh-btn").addEventListener("click", () => this.refresh());
+    // системные уведомления о новых письмах: настройка читается хранилищем почты при каждой сверке
+    const notify = document.getElementById("account-notify");
+    const notifyOn = () => Services.prefs.getBoolPref("tabora.mail.notify", true);
+    notify.setAttribute("aria-checked", String(notifyOn()));
+    notify.addEventListener("click", () => {
+      const on = !notifyOn();
+      Services.prefs.setBoolPref("tabora.mail.notify", on);
+      notify.setAttribute("aria-checked", String(on));
+      this.toast(on ? "О новых письмах будет сообщать уведомление" : "Уведомления о новых письмах выключены");
+    });
     document.getElementById("account-change").addEventListener("click", () => shell()?.accountDialog("change"));
     document.getElementById("account-switch").addEventListener("click", () => shell()?.accountShowAccounts());
     document.getElementById("account-logout").addEventListener("click", () => shell()?.accountLogout({ thenLogin: false }));
@@ -591,12 +660,21 @@ const App = {
       this.view = kind;
     } else {
       this.view = "mail";
+      // В узком окне письмо занимает место списка: выбрав папку или ярлык, человек ждёт список,
+      // а не письмо, открытое раньше.
+      const single = window.matchMedia("(max-width: 980px)").matches;
       if (kind === "folder" && FOLDERS.some(f => f.id === arg)) {
         this.folder = arg;
         this.label = null;
+        if (single) {
+          this.selectedThread = null;
+        }
       } else if (kind === "label" && LABELS.some(l => l.id === arg)) {
         this.label = arg;
         this.folder = null;
+        if (single) {
+          this.selectedThread = null;
+        }
       } else if (kind === "msg" && arg) {
         this.selectedThread = arg;
       } else if (kind === "compose") {
@@ -1010,11 +1088,19 @@ const App = {
     $("app").dataset.open = String(thread.length > 0); // в узком окне письмо занимает место списка
     const same = this._readerThread === this.selectedThread;
     const aliases = new Set(Store.aliases.map(a => a.address));
+    // шапка (тема, звезда, ярлыки) и тело (письма, ответ) перестраиваются по отдельности: звезда
+    // не должна перезагружать письмо с вёрсткой
+    const last = thread[thread.length - 1];
+    const headSig = JSON.stringify(last ? [this.folder, this.label, last.id, last.subject, last.starred, last.folder, [...new Set(thread.flatMap(m => m.labels))]] : []);
     const sig = JSON.stringify([
       this.folder, this.label, this.sendingReply === this.selectedThread, new Date().toDateString(),
-      thread.map(m => [m.id, m.folder, m.starred, m.draft, m.subject, m.date, m.from, m.to, m.alias, aliases.has(m.alias), m.labels, m.pgp, m.code, m.images, m.agent, m.partial, (m.attachments || []).map(a => a.name), JSON.stringify(m.body || []).length]),
+      thread.map(m => [m.id, m.folder, m.draft, m.subject, m.date, m.from, m.to, m.alias, aliases.has(m.alias), m.pgp, m.code, m.images, m.agent, m.partial, m.html, m.noHtml, (m.attachments || []).map(a => a.name), JSON.stringify(m.body || []).length]),
     ]);
     if (same && sig === this._readerSig && (box.childElementCount || !thread.length)) {
+      if (headSig !== this._readerHeadSig && thread.length) {
+        this._readerHeadSig = headSig;
+        box.querySelector(".thread-head")?.replaceWith(this.renderThreadHead(thread));
+      }
       return;
     }
     const oldReply = box.querySelector(".quick-reply textarea");
@@ -1026,12 +1112,43 @@ const App = {
     }
     this._readerThread = this.selectedThread;
     this._readerSig = sig;
+    this._readerHeadSig = headSig;
     $("reader-empty").hidden = thread.length > 0;
     box.hidden = !thread.length;
     box.replaceChildren();
     if (!thread.length) {
       return;
     }
+    const latest = thread[thread.length - 1];
+    const head = this.renderThreadHead(thread);
+    const body = el("div", { class: "thread-body" });
+    // элемент просмотра письма живёт в другом процессе: после прокрутки ему сообщается новое место
+    body.addEventListener("scroll", () => {
+      clearTimeout(this._viewNudge);
+      this._viewNudge = setTimeout(() => {
+        for (const b of body.querySelectorAll("browser")) {
+          b.frameLoader?.requestUpdatePosition?.();
+        }
+      }, 120);
+    }, { passive: true });
+    this.fillThreadBody(thread, body);
+    box.append(head, body);
+    const ta = body.querySelector(".quick-reply textarea");
+    if (ta?.value) {
+      ta.style.height = "auto";
+      ta.style.height = `${Math.min(240, ta.scrollHeight)}px`;
+    }
+    if (kept) {
+      body.scrollTop = kept.scroll;
+      if (kept.caret && ta) {
+        ta.focus({ preventScroll: true });
+        ta.setSelectionRange(...kept.caret);
+      }
+    }
+  },
+
+  /** Шапка открытого письма: «Назад», тема, действия, ярлыки. */
+  renderThreadHead(thread) {
     const latest = thread[thread.length - 1];
     const labels = [...new Set(thread.flatMap(m => m.labels))].map(id => LABELS.find(l => l.id === id)).filter(Boolean);
     const inTrash = latest.folder === "trash";
@@ -1050,8 +1167,12 @@ const App = {
     if (latest.starred) {
       head.querySelector('[aria-label="Звезда"] svg').setAttribute("fill", "currentColor");
     }
+    return head;
+  },
 
-    const body = el("div", { class: "thread-body" });
+  /** Тело открытого письма: карточка кода, письма цепочки, быстрый ответ. */
+  fillThreadBody(thread, body) {
+    const latest = thread[thread.length - 1];
     const code = codeOf(latest);
     if (latest.agent) {
       body.append(el("div", { class: "agent-card" }, [
@@ -1071,7 +1192,15 @@ const App = {
       ]));
     }
 
-    thread.forEach((m, i) => body.append(this.renderMessage(m, i < thread.length - 1 && !this.expanded.has(m.id))));
+    thread.forEach((m, i) => {
+      try {
+        body.append(this.renderMessage(m, i < thread.length - 1 && !this.expanded.has(m.id)));
+      } catch (e) {
+        // одно письмо, которое не удалось показать, не должно оставлять пустой всю переписку
+        console.error("Tabora mail: письмо не показано", e);
+        body.append(el("div", { class: "mail-item" }, el("div", { class: "paper" }, el("div", { class: "fine", text: "Это письмо не удалось показать." }))));
+      }
+    });
 
     let ta = null;
     let fit = () => {};
@@ -1117,18 +1246,6 @@ const App = {
         ]),
       ]));
     }
-
-    box.append(head, body);
-    if (ta?.value) {
-      fit();
-    }
-    if (kept) {
-      body.scrollTop = kept.scroll;
-      if (kept.caret && ta) {
-        ta.focus({ preventScroll: true });
-        ta.setSelectionRange(...kept.caret);
-      }
-    }
   },
 
   renderMessage(m, collapsed) {
@@ -1148,6 +1265,7 @@ const App = {
       if (item.classList.contains("collapsed")) {
         item.classList.remove("collapsed");
         this.expanded.add(m.id);
+        showBody();
       }
     });
     const paper = el("div", { class: "paper" });
@@ -1185,8 +1303,27 @@ const App = {
         m.pgp.error && m.at?.uid ? el("button", { class: "btn", type: "button", text: "Повторить", onclick: e => this.decryptAgain(m, e.currentTarget) }) : null,
       ]));
     }
+    // Письмо с вёрсткой показывается в отдельном процессе (htmlView), простое — блоками страницы.
+    // Свёрнутому письму просмотр не создаётся, пока его не развернут.
+    let shown = false;
+    const showBody = () => {
+      if (shown || sealed) {
+        return;
+      }
+      shown = true;
+      if (m.html) {
+        paper.replaceWith(this.htmlView(m, paper));
+      } else if (!m.noHtml && !m.local && m.at?.uid) {
+        // письмо получено до появления показа с вёрсткой: разметка подгрузится с сервера, и если
+        // она есть, письмо перерисуется (запись получит html)
+        MailStore.loadHtml(m.id).catch(() => {});
+      }
+    };
     if (!sealed) {
       item.append(paper);
+      if (!collapsed) {
+        showBody();
+      }
     }
     if (m.attachments?.length && !sealed) {
       item.append(el("div", { class: "attachments" }, m.attachments.map((a, index) => el("button", {
@@ -1198,6 +1335,113 @@ const App = {
       ]))));
     }
     return item;
+  },
+
+  /** Письмо с вёрсткой. Разметку чистит и оборачивает MailView (скрипты, формы и рамки
+   * удалены, политика содержимого запрещает загрузки), показывает её элемент browser в отдельном
+   * процессе содержимого с выключенным JavaScript. Сюда из того процесса приходят только высота
+   * содержимого, адрес ссылки под курсором и щелчок по ссылке (актор TaboraMailView). Если
+   * показать не получилось, остаётся текст письма блоками (fallback). */
+  htmlView(m, fallback) {
+    const wrap = el("div", { class: "html-wrap" });
+    const host = el("div", { class: "html-view", dataset: { state: "loading" } });
+    host.style.height = `${this.htmlHeights.get(m.id) || 200}px`;
+    const status = el("div", { class: "html-status", hidden: true });
+    const browser = document.createXULElement("browser");
+    for (const [name, value] of Object.entries({ type: "content", remote: "true", remoteType: "web", disableglobalhistory: "true", messagemanagergroup: "tabora-mail" })) {
+      browser.setAttribute(name, value);
+    }
+    host.append(browser, status);
+    const note = el("div", { class: "html-note", hidden: true }, [
+      el("span", { class: "pgp-mark", "aria-hidden": "true" }, icon("image", 14, 1.9)),
+      el("span", { class: "html-note-text", text: "Картинки с чужих серверов не загружены: так отправитель не узнаёт, что письмо открыли." }),
+      el("button", { class: "btn", type: "button", text: "Показать картинки", onclick: e => {
+        this.htmlImages.add(m.id);
+        setBusy(e.currentTarget, true);
+        load();
+      } }),
+    ]);
+    wrap.append(note, host);
+
+    let url = "";
+    let reloads = 0;
+    let guarded = false;
+    // Документ письма не должен смениться другим: щелчки по ссылкам перехватывает актор, а если
+    // переход всё же начался, он останавливается и письмо загружается заново.
+    const guard = {
+      QueryInterface: ChromeUtils.generateQI(["nsIWebProgressListener", "nsISupportsWeakReference"]),
+      onLocationChange: (progress, request, location) => {
+        if (progress.isTopLevel && url && location.spec !== url && location.spec !== "about:blank" && reloads++ < 3) {
+          browser.stop();
+          load();
+        }
+      },
+    };
+    host._guard = guard; // слушатель хранится слабой ссылкой: держим его, пока жив элемент
+    const fail = () => {
+      if (wrap.isConnected) {
+        wrap.replaceWith(fallback);
+      }
+    };
+    const load = async () => {
+      const images = this.htmlImages.has(m.id);
+      const doc = await MailStore.htmlDocument(m.id, { images }).catch(() => null);
+      if (!wrap.isConnected) {
+        return;
+      }
+      if (!doc) {
+        fail();
+        return;
+      }
+      note.hidden = !doc.remote || images;
+      try {
+        await frameReady(browser);
+        if (!guarded) {
+          guarded = true;
+          browser.addProgressListener(guard, Ci.nsIWebProgress.NOTIFY_LOCATION);
+        }
+        browser.browsingContext.allowJavascript = false;
+        url = doc.url;
+        browser.loadURI(Services.io.newURI(url), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+      } catch (e) {
+        console.error("Tabora mail: письмо с вёрсткой не показано", e);
+        fail();
+      }
+    };
+    // Письмо шире листа (рассылки свёрстаны под 600–700 точек) показывается уменьшенным, как
+    // в почтовых программах: масштаб подбирается так, чтобы оно поместилось по ширине, но не
+    // мельче MIN_ZOOM. Высота листа — высота письма в этом масштабе.
+    const MIN_ZOOM = 0.6;
+    let zoom = 1;
+    browser.addEventListener("tabora-mail-size", e => {
+      const { height, width, view } = e.detail;
+      if (view > 0 && width > view + 1 && zoom > MIN_ZOOM) {
+        zoom = Math.max(MIN_ZOOM, Math.floor((zoom * view * 100) / width) / 100);
+        browser.fullZoom = zoom; // письмо перестроится и сообщит новые размеры
+        return;
+      }
+      const shown = Math.max(40, Math.ceil(height * zoom));
+      this.htmlHeights.set(m.id, shown);
+      host.style.height = `${shown}px`;
+      host.dataset.state = "ready";
+    });
+    // лист стал шире или уже (окно, боковые панели): масштаб подбирается заново
+    let lastWidth = 0;
+    new ResizeObserver(() => {
+      const w = Math.round(host.getBoundingClientRect().width);
+      if (lastWidth && Math.abs(w - lastWidth) > 1 && zoom !== 1) {
+        zoom = 1;
+        browser.fullZoom = 1;
+      }
+      lastWidth = w;
+    }).observe(host);
+    browser.addEventListener("tabora-mail-link", e => openMailHref(e.detail.href));
+    browser.addEventListener("tabora-mail-hover", e => {
+      status.textContent = e.detail.href;
+      status.hidden = !e.detail.href;
+    });
+    load();
+    return wrap;
   },
 
   /** Повторная расшифровка: ключ мог появиться после того, как письмо пришло. */

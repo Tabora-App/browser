@@ -1,0 +1,21 @@
+diff --git a/dom/base/nsFrameLoader.cpp b/dom/base/nsFrameLoader.cpp
+index d053fbe719..a7161032f7 100644
+--- a/dom/base/nsFrameLoader.cpp
++++ b/dom/base/nsFrameLoader.cpp
+@@ -2606,6 +2606,8 @@ bool nsFrameLoader::TryRemoteBrowserInternal() {
+       // - DevTools webext panels if DevTools is loaded in a content frame
+       // - DevTools Network Monitor, which uses content frame for HTML request
+       // previews
++      // - Tabora mail (mail.html) so it can render a message's HTML in a
++      //   remote, script-less frame instead of in the parent process
+       // - Chrome mochitests can also do this.
+       //
+       // Note that the new frame's message manager will not be a child of the
+@@ -2635,6 +2637,7 @@ bool nsFrameLoader::TryRemoteBrowserInternal() {
+             "chrome://browser/content/webext-panels.xhtml"_ns,
+             "chrome://devtools/content/netmonitor/index.html"_ns,
+             "chrome://devtools/content/webconsole/index.html"_ns,
++            "chrome://tabora/content/mail/mail.html"_ns,
+         };
+ 
+         for (const auto& allowedURI : kAllowedURIs) {

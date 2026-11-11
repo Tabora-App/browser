@@ -35,7 +35,9 @@ ChromeUtils.defineESModuleGetters(lazy, {
   ImapClient: "chrome://tabora/content/mail/net/Imap.sys.mjs",
   smtpSend: "chrome://tabora/content/mail/net/Smtp.sys.mjs",
   Pgp: "chrome://tabora/content/mail/Pgp.sys.mjs",
+  MailView: "chrome://tabora/content/mail/MailView.sys.mjs",
   AsyncShutdown: "resource://gre/modules/AsyncShutdown.sys.mjs",
+  BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
 });
 ChromeUtils.defineLazyGetter(lazy, "Mime", () => ChromeUtils.importESModule("chrome://tabora/content/mail/net/Mime.sys.mjs"));
 
@@ -45,8 +47,10 @@ const DATA = 5; // данные внутри: { v: 5, accounts, messages, aliase
 const ROLES = ["inbox", "sent", "drafts", "archive", "spam", "trash"];
 const WINDOW = { inbox: 80, sent: 40, drafts: 20, archive: 40, spam: 30, trash: 30 };
 const FETCH_BYTES = 262_144; // от каждого письма читается начало: заголовки и текст; вложения — по запросу
+const HTML_FETCH_BYTES = 1_048_576; // письмо, открытое до появления показа с вёрсткой, дочитывается за ней
 const SYNC_EVERY_MS = 3 * 60_000;
 const WRITE_GAP_MS = 2000;
+const NOTIFY_PREF = "tabora.mail.notify"; // сообщать о новых письмах системным уведомлением
 const MAX_ATTACH_BYTES = 20 * 1024 * 1024;
 const TABORA = "tabora"; // id ящика аккаунта
 const CODE_RULES = 2; // версия правил распознавания кода: при смене коды в кэше пересчитываются
@@ -129,13 +133,26 @@ export const MailStore = {
         this.forget();
       } else if (what === "signed-in" && this.data) {
         this.syncSoon(200); // после входа или подключения к серверу появился ящик аккаунта
+      } else if (what === "signed-in" && this._started) {
+        this.ready().catch(() => {});
       }
     }, Account.TOPIC);
     Services.obs.addObserver((s, t, what) => {
       if (what === "locked" || what === "reset") {
         this.forget();
+      } else if (what === "unlocked" && this._started && !this.data) {
+        this.ready().catch(() => {});
       }
     }, Vault.TOPIC);
+    // связь вернулась или компьютер проснулся: соединения, ждавшие письма, уже мертвы
+    const revive = () => {
+      if (this.data) {
+        this._stopWatching();
+        this.syncSoon(1500);
+      }
+    };
+    Services.obs.addObserver(revive, "wake_notification");
+    Services.obs.addObserver((s, t, state) => state === "up" && revive(), "network:link-status-changed");
     Services.obs.addObserver((s, t, what) => {
       if (what === "own" && this.data) {
         this._retryDecrypt(); // ключ аккаунта появился или сменился: не открывшиеся письма пробуем снова
@@ -162,6 +179,15 @@ export const MailStore = {
         this.save({ soon: true });
       }
     });
+  },
+
+  /** Запуск из оболочки при открытии окна: почта работает с запуска браузера, а не с открытия
+   * своей страницы — иначе о новом письме не узнать, пока её не откроешь. Без входа в аккаунт
+   * ничего не происходит: загрузка начнётся после входа. */
+  start() {
+    this._started = true;
+    this._observe();
+    this.ready().catch(() => {});
   },
 
   /** Загружает данные один раз. Без входа в аккаунт или с заблокированным сейфом отклоняется
@@ -301,6 +327,8 @@ export const MailStore = {
     if (this._writeTimer) {
       this._writeNow(); // при выходе из аккаунта ключ сейфа ещё в памяти; после блокировки писать нечем
     }
+    this._stopWatching();
+    lazy.MailView.forget();
     if (this.data) {
       this.data = null;
       Services.obs.notifyObservers(null, this.TOPIC, "closed");
@@ -511,7 +539,13 @@ export const MailStore = {
 
   syncSoon(delayMs = 0) {
     clearTimeout(this._syncTimer);
-    this._syncTimer = setTimeout(() => this.sync().catch(() => {}), delayMs);
+    this._syncTimer = setTimeout(() => {
+      if (this._syncRun) {
+        this._syncAgain = true; // сверка уже идёт и могла пройти нужную папку: повторим после неё
+      } else {
+        this.sync().catch(() => {});
+      }
+    }, delayMs);
   },
 
   /** Сверить все ящики. Повторный вызов во время сверки ждёт её конца. */
@@ -550,15 +584,144 @@ export const MailStore = {
       if (this.data) {
         this._countAliases();
         this._write();
+        this._sweepHtml();
+        this._watchAll();
+        this._announce();
       }
     } finally {
       this.syncing = false;
       if (this.data) {
         this.notify();
-        this._syncTimer = setTimeout(() => this.sync().catch(() => {}), SYNC_EVERY_MS);
+        const again = this._syncAgain;
+        this._syncAgain = false;
+        this._syncTimer = setTimeout(() => this.sync().catch(() => {}), again ? 100 : SYNC_EVERY_MS);
       }
     }
   },
+
+  /* ---- новые письма: ожидание и уведомление ------------------------------------------------ */
+
+  /** У каждого ящика своё соединение, которое ждёт писем во «Входящих» (IMAP IDLE): сервер сам
+   * сообщает о новом письме, и сверка запускается сразу, а не по расписанию. */
+  _watchAll() {
+    this._watchers ||= new Map();
+    const ids = new Set(this.data.accounts.map(a => a.id));
+    for (const [id, w] of this._watchers) {
+      if (!ids.has(id)) {
+        w.stop();
+        this._watchers.delete(id);
+      }
+    }
+    for (const acc of this.data.accounts) {
+      if (!this._watchers.has(acc.id) && !acc.error) {
+        this._watchers.set(acc.id, this._watch(acc));
+      }
+    }
+  },
+
+  _stopWatching() {
+    for (const w of this._watchers?.values() || []) {
+      w.stop();
+    }
+    this._watchers?.clear();
+  },
+
+  _watch(acc) {
+    let stopped = false;
+    let client = null;
+    let timer = null;
+    let wake = null;
+    const run = async () => {
+      let delay = 5000;
+      while (!stopped && this.data && this._acc(acc.id)) {
+        try {
+          client = await this._connect(acc);
+          if (!client.canIdle) {
+            await client.logout(); // сервер ждать не умеет: остаётся сверка по расписанию
+            return;
+          }
+          await client.select(acc.folders?.inbox || "INBOX");
+          delay = 5000;
+          while (!stopped) {
+            const why = await client.idle();
+            if (why === "exists") {
+              this.syncSoon(150);
+            } else if (why === "changed") {
+              this.syncSoon(1500);
+            } else if (why === "stopped") {
+              break;
+            }
+          }
+        } catch (e) {
+          // связь пропала или сервер закрыл соединение: пробуем снова, всё реже
+        } finally {
+          client?.close();
+          client = null;
+        }
+        if (stopped) {
+          return;
+        }
+        await new Promise(resolve => {
+          wake = resolve;
+          timer = setTimeout(resolve, delay);
+        });
+        delay = Math.min(delay * 2, 5 * 60_000);
+      }
+    };
+    run();
+    return {
+      stop() {
+        stopped = true;
+        clearTimeout(timer);
+        wake?.();
+        client?.stopIdle();
+        client?.close();
+      },
+    };
+  },
+
+  /** Системное уведомление о письмах, пришедших при этой сверке. Одно письмо — отправитель и
+   * тема (текст письма в уведомление не попадает: его видно на заблокированном экране),
+   * несколько — их число и отправители. Щелчок открывает письмо. */
+  _announce() {
+    const fresh = (this._fresh || []).filter(m => this.data.messages.includes(m) && m.unread && m.folder === "inbox");
+    this._fresh = [];
+    if (!fresh.length || !Services.prefs.getBoolPref(NOTIFY_PREF, true)) {
+      return;
+    }
+    const win = lazy.BrowserWindowTracker.getTopWindow();
+    if (win && Services.focus.activeWindow === win && win.Tabora?.isMailUrl(win.gBrowser?.selectedBrowser?.currentURI?.spec)) {
+      return; // почта и так перед глазами
+    }
+    const one = fresh.length === 1 ? fresh[0] : null;
+    const names = [...new Set(fresh.map(m => m.from?.name || m.from?.email).filter(Boolean))];
+    const title = one ? one.from?.name || one.from?.email || "Новое письмо" : `Новых писем: ${fresh.length}`;
+    const text = one ? one.subject || "(без темы)" : `${names.slice(0, 3).join(", ")}${names.length > 3 ? ` и ещё ${names.length - 3}` : ""}`;
+    const thread = one ? one.thread : "";
+    this._alert(title.slice(0, 120), text.slice(0, 240), () => {
+      const target = lazy.BrowserWindowTracker.getTopWindow();
+      if (target?.Tabora) {
+        target.focus();
+        target.Tabora.openMail(thread && this.thread(thread).length ? `msg/${thread}` : "");
+      }
+    });
+  },
+
+  /** Системное уведомление (центр уведомлений macOS, Windows или среды Linux). */
+  _alert(title, text, onClick) {
+    try {
+      const alert = Cc["@mozilla.org/alert-notification;1"].createInstance(Ci.nsIAlertNotification);
+      alert.init(`tabora-mail-${Date.now()}`, "", title, text, true);
+      Cc["@mozilla.org/alerts-service;1"].getService(Ci.nsIAlertsService).showAlert(alert, (subject, topic) => {
+        if (topic === "alertclickcallback") {
+          onClick();
+        }
+      });
+    } catch (e) {
+      console.error("Tabora mail: уведомление не показано", e);
+    }
+  },
+
 
   async _syncAccount(acc) {
     if (acc.id === TABORA) {
@@ -595,8 +758,18 @@ export const MailStore = {
       const drop = new Set(mine().map(m => m.id));
       this.data.messages = this.data.messages.filter(m => !drop.has(m.id));
     }
+    if (st.uidValidity !== box.uidValidity) {
+      delete st.seen;
+    }
     st.uidValidity = box.uidValidity;
     const win = await client.window(WINDOW[role] || 40);
+    // О письмах с номером больше уже виденного сообщается уведомлением (_announce). При первой
+    // сверке ящика уведомлять не о чем: все письма в нём «старые».
+    const top = win.length ? win[win.length - 1].uid : 0;
+    const announced = role === "inbox" ? st.seen : undefined;
+    if (role === "inbox") {
+      st.seen = Math.max(st.seen || 0, top);
+    }
     const have = new Map(mine().map(m => [m.at.uid, m]));
     const seen = new Set();
     const need = [];
@@ -628,6 +801,9 @@ export const MailStore = {
         const rec = this._record(acc, role, path, box.uidValidity, item);
         if (rec) {
           this._adopt(rec);
+          if (announced !== undefined && item.uid > announced && rec.unread) {
+            (this._fresh ||= []).push(rec);
+          }
           if (rec._autocrypt) {
             // сначала ключ отправителя из заголовка: им же проверяется подпись этого письма
             await lazy.Pgp.noteAutocrypt(rec.from.email, rec._autocrypt, rec.date);
@@ -707,8 +883,98 @@ export const MailStore = {
     if (parsed.autocrypt && role === "inbox") {
       Object.defineProperty(rec, "_autocrypt", { value: parsed.autocrypt, enumerable: false });
     }
+    if (!parsed.pgp || parsed.pgp.kind === "signed") {
+      this._keepHtml(rec, parsed);
+    }
     this._applyFlags(rec, item.flags, role);
     return rec;
+  },
+
+  /* ---- письмо с вёрсткой ---------------------------------------------------------------- */
+
+  /** Разметка письма (если это письмо с вёрсткой) сохраняется в свой кэш, в записи остаётся
+   * имя: html. Простое письмо показывается блоками, у него стоит noHtml. */
+  _keepHtml(rec, part) {
+    if (part.html && lazy.MailView.rich(part.html)) {
+      rec.html = lazy.MailView.newToken();
+      delete rec.noHtml;
+      lazy.MailView.put(rec.html, lazy.MailView.embedInline(part.html, part.inline));
+    } else {
+      delete rec.html;
+      rec.noHtml = true;
+    }
+  },
+
+  /** Разметка письма для показа: из кэша, а для письма, полученного до появления показа с
+   * вёрсткой (или после смены ключа сейфа), — заново с сервера. null — у письма её нет. */
+  async loadHtml(id) {
+    await this.ready();
+    const rec = this.byId(id);
+    if (!rec || rec.noHtml || rec.pgp?.error || rec.pgp?.pending) {
+      return null;
+    }
+    if (rec.html) {
+      const html = await lazy.MailView.get(rec.html);
+      if (html) {
+        return html;
+      }
+      delete rec.html; // запись кэша пропала: читаем письмо заново
+    }
+    if (rec.local || !rec.at?.uid) {
+      return null;
+    }
+    if (!this._htmlJobs) {
+      this._htmlJobs = new Map();
+    }
+    if (!this._htmlJobs.has(id)) {
+      this._htmlJobs.set(id, this._fetchHtml(rec).finally(() => this._htmlJobs.delete(id)));
+    }
+    return this._htmlJobs.get(id);
+  },
+
+  async _fetchHtml(rec) {
+    let part = null;
+    try {
+      if (rec.pgp?.encrypted) {
+        const { kind, bytes } = await this._fetchDecrypted(rec);
+        if (kind !== "inline") {
+          let bin = "";
+          for (let i = 0; i < bytes.length; i += 0x8000) {
+            bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+          }
+          part = lazy.Mime.parseEntity(bin);
+        }
+      } else {
+        let raw = "";
+        await this._ops;
+        await this._withFolder(rec, async client => {
+          raw = (await client.fetch([rec.at.uid], { maxBytes: HTML_FETCH_BYTES }))[0]?.raw || "";
+        });
+        part = raw ? lazy.Mime.parseMessage(raw) : null;
+      }
+    } catch (e) {
+      console.error("Tabora mail: вёрстка письма не получена", e);
+      return null; // связи нет или письмо уже не на сервере: в следующий раз попробуем снова
+    }
+    if (!this.data || !this.data.messages.includes(rec)) {
+      return null;
+    }
+    this._keepHtml(rec, part || {});
+    this.save({ soon: true });
+    return rec.html ? lazy.MailView.embedInline(part.html, part.inline) : null;
+  },
+
+  /** Документ письма для показа в отдельном процессе: { url, remote } или null (см. MailView). */
+  async htmlDocument(id, { images = false } = {}) {
+    const html = await this.loadHtml(id);
+    return html ? lazy.MailView.document(html, { images }) : null;
+  },
+
+  /** Записи кэша вёрстки, на которые не ссылается ни одно письмо, убираются. */
+  _sweepHtml() {
+    if (this.data) {
+      lazy.MailView.sweep(new Set(this.data.messages.map(m => m.html).filter(Boolean)));
+    }
   },
 
   /* ---- OpenPGP: расшифровка, подписи, ключи собеседников ------------------------------------ */
@@ -732,6 +998,7 @@ export const MailStore = {
       sig = await lazy.Pgp.verify(lazy.Mime.bytesOf(part.pgp.data), part.pgp.signature, this._pgpSender(rec));
     }
     const { body, snippet, code } = lazy.Mime.toBlocks({ ...part, subject: rec.subject });
+    this._keepHtml(rec, part);
     rec.body = body;
     rec.snippet = snippet;
     rec.attachments = part.attachments.map(a => ({ ...a, inner: true }));

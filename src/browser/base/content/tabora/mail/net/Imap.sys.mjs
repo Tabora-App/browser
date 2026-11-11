@@ -10,6 +10,8 @@
 
 import { MailSocket } from "chrome://tabora/content/mail/net/Socket.sys.mjs";
 
+const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
+
 function utf8Bytes(s) {
   const u = new TextEncoder().encode(String(s));
   let out = "";
@@ -401,6 +403,69 @@ export class ImapClient {
 
   async create(path) {
     await this.cmd(`CREATE ${quote(path)}`);
+  }
+
+  /** Умеет ли сервер сообщать о новых письмах сам (IDLE, RFC 2177). */
+  get canIdle() {
+    return this.caps.has("IDLE");
+  }
+
+  /** Ждать изменений открытой папки, не опрашивая сервер: команда IDLE держит соединение, а
+   * сервер пишет в него, когда что-то произошло. Возвращает "exists" (пришло письмо), "changed"
+   * (пометки или удаление — письмо прочитали в другой программе), "timeout" (за maxMs ничего:
+   * ожидание пора возобновить, пока соединение не закрыли по простою) или "stopped" (stopIdle).
+   * Соединение на это время занято: другие команды по нему не идут. */
+  async idle({ maxMs = 8 * 60_000 } = {}) {
+    const tag = `T${++this._tag}`;
+    let reason = "timeout";
+    let done = false;
+    const finish = why => {
+      if (!done) {
+        done = true;
+        reason = why;
+        this.sock.write("DONE\r\n").catch(() => {});
+      }
+    };
+    await this.sock.write(`${tag} IDLE\r\n`);
+    const timer = setTimeout(() => finish("timeout"), maxMs);
+    this._idleStop = () => finish("stopped");
+    try {
+      for (;;) {
+        const chunks = await this._readResponse(maxMs + 30_000);
+        const head = typeof chunks[0] === "string" ? chunks[0] : "";
+        if (head.startsWith(`${tag} `)) {
+          const m = /^(OK|NO|BAD)\b\s*(.*)$/i.exec(head.slice(tag.length + 1)) || ["", "BAD", head];
+          if (m[1].toUpperCase() !== "OK") {
+            throw fail(`Сервер отклонил ожидание писем: ${m[2] || m[1]}`, "no", { server: m[2] });
+          }
+          return reason;
+        }
+        if (/^\* BYE/i.test(head)) {
+          throw fail("Сервер закрыл соединение", "network");
+        }
+        const m = /^\* (\d+) (EXISTS|EXPUNGE|FETCH)\b/i.exec(head);
+        if (m && !done) {
+          if (m[2].toUpperCase() === "EXISTS") {
+            const count = Number(m[1]);
+            const grew = count > (this.selected?.exists ?? 0);
+            if (this.selected) {
+              this.selected.exists = count;
+            }
+            finish(grew ? "exists" : "changed");
+          } else {
+            finish("changed");
+          }
+        }
+      }
+    } finally {
+      clearTimeout(timer);
+      this._idleStop = null;
+    }
+  }
+
+  /** Прервать ожидание idle(): оно вернёт "stopped". */
+  stopIdle() {
+    this._idleStop?.();
   }
 
   async logout() {

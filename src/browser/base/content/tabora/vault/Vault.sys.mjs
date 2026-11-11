@@ -38,7 +38,7 @@ const RK_MAIL_KEYS_INFO = "tabora-mail-keys-recovery-v1"; // ключ, кото�
 const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 // Модули, чьи данные зашифрованы подключами сейфа. Перед сменой ключа они загружаются,
 // чтобы успеть подписаться на перешифровку (см. registerRekey).
-const REKEY_MODULES = ["chrome://tabora/content/vault/Otp.sys.mjs", "chrome://tabora/content/mail/MailStore.sys.mjs"];
+const REKEY_MODULES = ["chrome://tabora/content/vault/Otp.sys.mjs", "chrome://tabora/content/mail/MailStore.sys.mjs", "chrome://tabora/content/mail/MailView.sys.mjs"];
 // Файлы, зашифрованные ключом сейфа: при осознанном создании нового сейфа после
 // повреждения они переносятся в сторону, а не перезаписываются.
 const DEPENDENT_FILES = ["logins.db", "logins.db-wal", "logins.db-shm", "tabora-otp.json", "tabora-otp.json.bak", "tabora-mail.json", "tabora-agent.json", "tabora-pgp.json"];

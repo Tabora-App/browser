@@ -277,6 +277,8 @@ function defaultName(type) {
   return ext ? `вложение.${ext}` : "вложение";
 }
 
+const INLINE_IMAGES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+
 function walk(raw, out, section, depth) {
   const [head, body] = splitHeaderBody(raw);
   const headers = parseHeaders(head);
@@ -316,8 +318,18 @@ function walk(raw, out, section, depth) {
     }
     return;
   }
+  // Картинка, на которую разметка письма ссылается как cid:…: при показе с вёрсткой она
+  // подставляется прямо из письма (MailView.embedInline), сети для этого не нужно.
+  const cid = first(headers, "content-id").trim().replace(/^<|>$/g, "").toLowerCase();
+  if (cid && INLINE_IMAGES.has(ct.value) && cte.trim().toLowerCase() === "base64") {
+    const data = body.replace(/[^A-Za-z0-9+/=]/g, "");
+    if (data.length % 4 === 0 && data.length <= 400_000 && out.inlineSize + data.length <= 1_500_000) {
+      out.inline[cid] = { type: ct.value, data };
+      out.inlineSize += data.length;
+    }
+  }
   if (cd.value === "inline" && ct.value.startsWith("image/") && headers.has("content-id")) {
-    out.images++; // картинка внутри текста письма: не показываем и вложением не считаем
+    out.images++; // картинка внутри текста письма: вложением не считается
     return;
   }
   const enc = cte.trim().toLowerCase();
@@ -338,7 +350,7 @@ function inlinePgp(out) {
 /** Разбор одной части письма (заголовки Content-* и тело): так выглядит расшифрованное
  * содержимое PGP/MIME. Возвращает { text, html, attachments, images, pgp }. */
 export function parseEntity(raw) {
-  const out = { text: "", html: "", attachments: [], images: 0, pgp: null };
+  const out = { text: "", html: "", attachments: [], images: 0, pgp: null, inline: {}, inlineSize: 0 };
   walk(raw, out, "", 0);
   inlinePgp(out);
   return out;
@@ -371,7 +383,7 @@ export function findSection(raw, target, section = "", depth = 0) {
 export function parseMessage(raw) {
   const [head] = splitHeaderBody(raw);
   const headers = parseHeaders(head);
-  const out = { text: "", html: "", attachments: [], images: 0, pgp: null };
+  const out = { text: "", html: "", attachments: [], images: 0, pgp: null, inline: {}, inlineSize: 0 };
   walk(raw, out, "", 0);
   inlinePgp(out);
   // ключ отправителя: заголовок Autocrypt действителен, только если он в письме один
@@ -393,6 +405,7 @@ export function parseMessage(raw) {
     newsletter: headers.has("list-unsubscribe") || headers.has("list-id") || /bulk|list/i.test(first(headers, "precedence")),
     text: out.text,
     html: out.html,
+    inline: out.inline,
     attachments: out.attachments,
     images: out.images,
     pgp: out.pgp,

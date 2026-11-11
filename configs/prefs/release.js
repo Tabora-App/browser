@@ -203,6 +203,9 @@ pref("signon.storage.rust.enabled", true);
 pref("tabora.account.domain", "tabora.app");
 pref("tabora.account.server", "https://api.tabora.app");
 
+// Почта: системное уведомление о новом письме (выключается в почте, в меню аккаунта).
+pref("tabora.mail.notify", true);
+
 // Обновления: подписанный манифест цели и update.xml лежат в репозитории GitHub, пакеты —
 // в GitHub Releases. Адреса читаются только из настроек по умолчанию (значение пользователя
 // не действует) и только https; формат и подпись — docs/UPDATES.md.
