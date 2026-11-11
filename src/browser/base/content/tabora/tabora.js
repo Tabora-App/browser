@@ -3639,7 +3639,14 @@ var Tabora = {
     }
   },
 
-  /* ---- Пространства на контейнерах Firefox ----------------------------- */
+  /* ---- Пространства на контейнерах Firefox -----------------------------
+   * Пространство — это контейнер Firefox; «Личное» — вкладки без контейнера. Контейнеры видны и в
+   * интерфейсе Firefox (настройки «Вкладки и просмотр → Управление контейнерами», меню «Новая
+   * вкладка в контейнере»), поэтому список пространств следует за службой контейнеров
+   * (syncSpaces): контейнер, заведённый там, становится пространством, переименованный —
+   * переименовывается, удалённый — исчезает. Контейнера вне пространств быть не должно: его
+   * вкладки не видны ни в одном пространстве. Четыре контейнера, которые Firefox заводит в каждом
+   * профиле сам, разбирает cleanStockContainers. */
 
   DEFAULT_SPACES: [
     { id: "personal", name: "Личное", icon: "fingerprint", color: "yellow", userContextId: 0 },
@@ -3693,6 +3700,123 @@ var Tabora = {
       gURLBar.select();
       return undefined;
     };
+
+    // служба сообщает об изменении раньше, чем окно, которое его сделало, сохранит свой список:
+    // сверка идёт следующим шагом и читает уже сохранённое
+    const observer = {
+      observe: () => {
+        clearTimeout(this._spacesSync);
+        this._spacesSync = setTimeout(() => this.syncSpaces(), 0);
+      },
+    };
+    const topics = ["contextual-identity-created", "contextual-identity-updated", "contextual-identity-deleted"];
+    topics.forEach(topic => Services.obs.addObserver(observer, topic));
+    window.addEventListener("unload", () => topics.forEach(topic => Services.obs.removeObserver(observer, topic)), { once: true });
+    this.cleanStockContainers().catch(e => console.error("Tabora: stock containers", e));
+  },
+
+  /** Сверяет список пространств со службой контейнеров: порядок и номера пространств — из
+   *  сохранённого списка, название, значок и цвет — из контейнера. */
+  syncSpaces() {
+    const cis = this.ContextualIdentityService;
+    const identities = new Map(cis.getPublicIdentities().map(i => [i.userContextId, i]));
+    let saved = null;
+    try {
+      saved = JSON.parse(Services.prefs.getStringPref("tabora.spaces", "[]"));
+    } catch (e) {}
+    const list = [];
+    for (const space of Array.isArray(saved) && saved.length ? saved : this.spaces) {
+      if (space.userContextId === 0) {
+        list.push(space);
+        continue;
+      }
+      const identity = identities.get(space.userContextId);
+      if (!identity) {
+        continue; // контейнер удалён
+      }
+      identities.delete(space.userContextId);
+      list.push({ ...space, name: identity.name || space.name, icon: identity.icon, color: identity.color });
+    }
+    for (const identity of identities.values()) {
+      // без названия — нетронутый контейнер Firefox: им занимается cleanStockContainers
+      if (identity.name) {
+        list.push({ id: `ctx-${identity.userContextId}`, name: identity.name, icon: identity.icon, color: identity.color, userContextId: identity.userContextId });
+      }
+    }
+    if (!list.some(space => space.userContextId === 0)) {
+      list.unshift({ ...this.DEFAULT_SPACES[0] });
+    }
+    const json = JSON.stringify(list);
+    if (json === JSON.stringify(this.spaces)) {
+      return;
+    }
+    this.spaces = list;
+    if (Services.prefs.getStringPref("tabora.spaces", "") !== json) {
+      Services.prefs.setStringPref("tabora.spaces", json);
+    }
+    if (!list.some(space => space.id === this.activeSpaceId)) {
+      this.activeSpaceId = "personal";
+      Services.prefs.setStringPref("tabora.spaces.active", "personal");
+    }
+    this.renderSpacesBar();
+    this.applySpace();
+    this.drawerDirty?.("spaces");
+  },
+
+  /** Контейнеры «Личное», «Работа», «Банкинг» и «Покупки» Firefox заводит в каждом профиле сам.
+   *  Пространствами они не были, а в списках контейнеров стояли рядом с ними: «Работа» дважды,
+   *  вкладка в таком контейнере не видна ни в одном пространстве. Один раз на профиль: пустой
+   *  нетронутый контейнер удаляется, непустой получает своё название и становится пространством.
+   *  Пустой — значит без открытых вкладок, cookie, данных сайтов и привязанных сайтов; если это
+   *  не удалось проверить, контейнер считается непустым. */
+  async cleanStockContainers() {
+    const PREF = "tabora.spaces.stockCleaned";
+    if (Services.prefs.getBoolPref(PREF, false)) {
+      return;
+    }
+    Services.prefs.setBoolPref(PREF, true); // сразу: второе окно при запуске не начнёт то же самое
+    const cis = this.ContextualIdentityService;
+    const spaces = new Set(this.spaces.map(space => space.userContextId));
+    const stock = cis.getPublicIdentities().filter(i => !i.name && !spaces.has(i.userContextId));
+    if (!stock.length) {
+      return;
+    }
+    const used = await this.containersInUse(stock.map(i => i.userContextId));
+    for (const identity of stock) {
+      const id = identity.userContextId;
+      if (used.has(id)) {
+        cis.update(id, cis.getUserContextLabel(id) || `Контейнер ${id}`, identity.icon, identity.color);
+      } else {
+        cis.remove(id);
+      }
+    }
+  },
+
+  async containersInUse(ids) {
+    const used = new Set();
+    const cis = this.ContextualIdentityService;
+    for (const id of ids) {
+      const tabs = [...Services.wm.getEnumerator("navigator:browser")].some(win => win.gBrowser?.tabs.some(t => parseInt(t.getAttribute("usercontextid") || "0", 10) === id));
+      const cookies = Services.cookies.getCookiesWithOriginAttributes(JSON.stringify({ userContextId: id })).length;
+      const sites = [...(cis._siteAssociations?.values?.() || [])].includes(id);
+      if (tabs || cookies || sites) {
+        used.add(id);
+      }
+    }
+    try {
+      const origins = await new Promise((resolve, reject) => {
+        Services.qms.getUsage(request => (request.resultCode === Cr.NS_OK ? resolve(request.result.map(item => item.origin)) : reject(new Error("usage"))));
+      });
+      for (const origin of origins) {
+        const id = Number(/\^(?:.*&)?userContextId=(\d+)/.exec(origin)?.[1]);
+        if (ids.includes(id)) {
+          used.add(id);
+        }
+      }
+    } catch (e) {
+      ids.forEach(id => used.add(id));
+    }
+    return used;
   },
 
   activeSpace() {

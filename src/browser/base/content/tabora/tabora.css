@@ -4097,6 +4097,15 @@ toolbarseparator {
   container: tabora-tab / inline-size;
 }
 
+/* Стрелок прокрутки у полосы нет. Место под них само вызывало прокрутку: три вкладки-значка в
+   узком окне были видны все, а полоса оставалась в режиме прокрутки со стрелками по краям.
+   Полоса прокручивается колесом и жестом, выбранная вкладка сама встаёт в видимую часть, полный
+   список вкладок — в кнопке справа от «+». */
+#tabbrowser-tabs[orient="horizontal"] > #tabbrowser-arrowscrollbox::part(scrollbutton-up),
+#tabbrowser-tabs[orient="horizontal"] > #tabbrowser-arrowscrollbox::part(scrollbutton-down) {
+  display: none !important;
+}
+
 @container tabora-tab (max-width: 68px) {
   .tab-content {
     justify-content: center;
