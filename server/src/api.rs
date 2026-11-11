@@ -12,11 +12,15 @@ use crate::limit::Limiter;
 use crate::mail::{MailError, Stalwart};
 use crate::pgp;
 use crate::security;
+use crate::support;
+use crate::sync;
 use crate::util::{clean_backup_code, clean_digits, clean_name, hmac256, is_hex, iso, now_ms, open, random, reserved_local, same, sha256, totp, totp_step, valid_local};
 use axum::body::Bytes;
-use axum::extract::{DefaultBodyLimit, Path, Query, State};
+use axum::extract::rejection::BytesRejection;
+use axum::extract::{DefaultBodyLimit, Path, Query, Request, State};
 use axum::http::header::{AUTHORIZATION, CACHE_CONTROL};
-use axum::http::{HeaderMap, HeaderValue, StatusCode};
+use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
+use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, patch, post};
 use axum::{Json, Router};
@@ -44,27 +48,49 @@ pub struct App {
     pub signup_daily_cap: i64,
     pub signup_per_ip_day: u32,
     pub alias_max: usize,
+    /// Адреса аккаунтов сотрудников поддержки, в нижнем регистре.
+    pub support_staff: Vec<String>,
+    /// Куда писать о новых обращениях и ответах пользователей (None — не писать).
+    pub support_notify: Option<String>,
 }
 
+#[derive(Debug)]
 pub struct ApiError {
-    status: StatusCode,
+    pub(crate) status: StatusCode,
     pub(crate) code: &'static str,
     message: String,
+    /// Дополнительные поля ответа рядом с `code` и `message` (у отказов синхронизации).
+    extra: Option<serde_json::Map<String, Value>>,
 }
 
 pub(crate) type ApiResult = Result<Json<Value>, ApiError>;
 
 pub(crate) fn err(status: StatusCode, code: &'static str, message: impl Into<String>) -> ApiError {
-    ApiError { status, code, message: message.into() }
+    ApiError { status, code, message: message.into(), extra: None }
 }
 
 pub(crate) fn bad(code: &'static str, message: impl Into<String>) -> ApiError {
     err(StatusCode::BAD_REQUEST, code, message)
 }
 
+impl ApiError {
+    /// Ещё одно поле в теле ответа об ошибке.
+    pub(crate) fn with(mut self, key: &str, value: Value) -> Self {
+        self.extra.get_or_insert_with(Default::default).insert(key.to_string(), value);
+        self
+    }
+
+    fn body(&self) -> Value {
+        let mut body = self.extra.clone().unwrap_or_default();
+        body.insert("code".to_string(), json!(self.code));
+        body.insert("message".to_string(), json!(self.message));
+        Value::Object(body)
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        (self.status, Json(json!({ "code": self.code, "message": self.message }))).into_response()
+        (self.status, Json(self.body())).into_response()
     }
 }
 
@@ -125,6 +151,12 @@ pub(crate) fn client_ip(headers: &HeaderMap) -> String {
 
 pub(crate) fn parse<'a, T: Deserialize<'a>>(body: &'a Bytes) -> Result<T, ApiError> {
     serde_json::from_slice(body).map_err(|_| bad("bad-request", "Некорректный запрос"))
+}
+
+/// Тело запроса там, где предел размера увеличен и о его превышении нужно сказать в общем
+/// формате ошибок: `too_large` — отказ для слишком большого тела.
+pub(crate) fn sized(body: Result<Bytes, BytesRejection>, too_large: fn() -> ApiError) -> Result<Bytes, ApiError> {
+    body.map_err(|e| if e.status() == StatusCode::PAYLOAD_TOO_LARGE { too_large() } else { bad("bad-request", "Некорректный запрос") })
 }
 
 pub(crate) fn local_of(email: &str) -> &str {
@@ -842,12 +874,24 @@ async fn not_found() -> ApiError {
     err(StatusCode::NOT_FOUND, "not-found", "Нет такого адреса")
 }
 
+/// Ответы не кешируются, если обработчик не решил иначе (вложения обращений отдаются с коротким
+/// личным кешем).
 async fn no_store(mut res: Response) -> Response {
-    res.headers_mut().insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    res.headers_mut().entry(CACHE_CONTROL).or_insert(HeaderValue::from_static("no-store"));
     res
 }
 
+/// Маршруты с большим телом запроса: сессия проверяется до того, как тело прочитано. Иначе
+/// любой посторонний мог бы заставить сервер принять в память мегабайты на каждый запрос.
+async fn session_first(State(app): State<Arc<App>>, req: Request, next: Next) -> Result<Response, ApiError> {
+    if req.method() == Method::POST {
+        app.auth(req.headers()).await?;
+    }
+    Ok(next.run(req).await)
+}
+
 pub fn router(app: Arc<App>) -> Router {
+    let session_first = || axum::middleware::from_fn_with_state(app.clone(), session_first);
     Router::new()
         .route("/v1/health", get(health))
         .route("/v1/account/available", get(available))
@@ -877,6 +921,15 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/.well-known/openpgpkey/policy", get(pgp::wkd_policy))
         .route("/v1/mail/aliases", get(alias_list).post(alias_create))
         .route("/v1/mail/aliases/:id", patch(alias_update).delete(alias_delete))
+        // записи синхронизации и вложения обращений больше общего предела тела запроса
+        .route("/v1/sync", get(sync::pull).post(sync::push).delete(sync::wipe).layer(DefaultBodyLimit::max(sync::MAX_BODY)).layer(session_first()))
+        .route("/v1/sync/reset", post(sync::reset))
+        .route("/v1/support/tickets", get(support::list).post(support::create).layer(DefaultBodyLimit::max(support::MAX_BODY)).layer(session_first()))
+        .route("/v1/support/tickets/:id", get(support::ticket))
+        .route("/v1/support/tickets/:id/messages", post(support::reply).layer(DefaultBodyLimit::max(support::MAX_BODY)).layer(session_first()))
+        .route("/v1/support/tickets/:id/status", post(support::set_status))
+        .route("/v1/support/files/:id", get(support::file))
+        .route("/v1/support/unread", get(support::unread))
         .fallback(not_found)
         .layer(DefaultBodyLimit::max(64 * 1024))
         .layer(axum::middleware::map_response(no_store))
@@ -910,6 +963,16 @@ mod tests {
         assert_eq!(second_pause(1000), 86_400_000);
         assert_eq!(wait_text(15 * 60_000), "15 мин");
         assert_eq!(wait_text(86_400_000), "24 ч");
+    }
+
+    #[test]
+    fn error_body() {
+        let plain = err(StatusCode::CONFLICT, "taken", "Такой адрес уже занят");
+        assert_eq!(plain.body(), json!({ "code": "taken", "message": "Такой адрес уже занят" }));
+        let rich = err(StatusCode::CONFLICT, "sync-reset", "сброс").with("gen", json!(3)).with("keyId", Value::Null);
+        assert_eq!(rich.body(), json!({ "code": "sync-reset", "message": "сброс", "gen": 3, "keyId": null }));
+        // дополнительное поле не подменяет код и сообщение
+        assert_eq!(err(StatusCode::CONFLICT, "a", "b").with("code", json!("x")).body()["code"], "a");
     }
 
     #[test]

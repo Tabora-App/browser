@@ -2,7 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-//! tabora-server: аккаунты Tabora, устройства, ящики и алиасы на почтовом сервере.
+//! tabora-server: аккаунты Tabora, устройства, ящики и алиасы на почтовом сервере,
+//! синхронизация данных браузера и обращения в поддержку.
 //!
 //! Слушает только локальный адрес (наружу его публикует nginx за туннелем Cloudflare).
 //! Настройки — переменные окружения (на сервере /etc/tabora/server.env):
@@ -20,6 +21,8 @@
 //!   TABORA_ALIAS_MAX         алиасов на аккаунт, по умолчанию 100
 //!   TABORA_MAIL_DAILY_CAP    писем от сервера в сутки (коды, уведомления), по умолчанию 500
 //!   TABORA_MAIL_OUTBOX       только для проверок: каталог, куда письма складываются файлами
+//!   TABORA_SUPPORT_STAFF     адреса аккаунтов сотрудников поддержки через запятую (пусто — их нет)
+//!   TABORA_SUPPORT_NOTIFY    адрес для писем о новых обращениях и ответах пользователей (пусто — не слать)
 
 mod api;
 mod db;
@@ -27,6 +30,8 @@ mod limit;
 mod mail;
 mod pgp;
 mod security;
+mod support;
+mod sync;
 mod util;
 
 use std::sync::Arc;
@@ -101,6 +106,13 @@ async fn main() {
     if let Some(dir) = &outbox {
         eprintln!("tabora-server: письма не отправляются, а пишутся в {} (режим проверок)", dir.display());
     }
+    // сотрудником поддержки становится тот, кто владеет аккаунтом с таким адресом: в списке
+    // должны быть только адреса уже существующих аккаунтов
+    let support_staff = support::staff_list(&env("TABORA_SUPPORT_STAFF"));
+    let support_notify = match env("TABORA_SUPPORT_NOTIFY") {
+        s if s.is_empty() => None,
+        s => Some(util::clean_address(&s).unwrap_or_else(|| fail("TABORA_SUPPORT_NOTIFY должен быть адресом электронной почты"))),
+    };
     let stalwart = mail::Stalwart::new(&env("STALWART_URL"), &env("STALWART_API_KEY"), &domain, mail_key, quota, outbox);
     let app = Arc::new(api::App {
         domain: domain.clone(),
@@ -117,6 +129,8 @@ async fn main() {
         signup_daily_cap: env_num("TABORA_SIGNUP_DAILY_CAP", 50),
         signup_per_ip_day: env_num("TABORA_SIGNUP_PER_IP", 3),
         alias_max: env_num("TABORA_ALIAS_MAX", 100),
+        support_staff,
+        support_notify,
     });
 
     // уборка раз в час: истёкшие сессии и nonce, старые счётчики ограничителей
@@ -136,7 +150,12 @@ async fn main() {
     });
 
     let listener = tokio::net::TcpListener::bind(&listen).await.unwrap_or_else(|e| fail(&format!("не удалось занять {listen}: {e}")));
-    eprintln!("tabora-server {}: {listen}, домен {domain}, почта {}", env!("CARGO_PKG_VERSION"), if app.mail.enabled() { "включена" } else { "выключена" });
+    eprintln!(
+        "tabora-server {}: {listen}, домен {domain}, почта {}, сотрудников поддержки: {}",
+        env!("CARGO_PKG_VERSION"),
+        if app.mail.enabled() { "включена" } else { "выключена" },
+        app.support_staff.len()
+    );
     if let Err(e) = axum::serve(listener, api::router(app)).with_graceful_shutdown(shutdown()).await {
         fail(&format!("сервер остановился с ошибкой: {e}"));
     }

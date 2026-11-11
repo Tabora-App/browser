@@ -1,7 +1,11 @@
 // Проверка HTTP-контракта tabora-server на запущенном экземпляре без почтового сервера:
-//   node tests/contract.mjs http://127.0.0.1:7711 tabora.app /путь/к/каталогу-писем
+//   node tests/contract.mjs http://127.0.0.1:7711 tabora.app /путь/к/каталогу-писем [сотрудник] [адрес-поддержки]
 // Сервер должен быть запущен с пустой базой, TABORA_SIGNUP_PER_IP=6 (тест проверяет и этот
 // предел) и TABORA_MAIL_OUTBOX=<тот же каталог>: письма сервера складываются туда файлами.
+// Для обращений в поддержку проверка сама регистрирует аккаунт сотрудника: его адрес (четвёртый
+// аргумент, по умолчанию kot.test@<домен>) должен стоять в TABORA_SUPPORT_STAFF сервера, а
+// адрес для писем поддержке (пятый аргумент, по умолчанию postmaster@<домен>) — в
+// TABORA_SUPPORT_NOTIFY.
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -9,6 +13,8 @@ import path from "node:path";
 const BASE = (process.argv[2] || "http://127.0.0.1:7711").replace(/\/+$/, "");
 const DOMAIN = process.argv[3] || "tabora.app";
 const OUTBOX = process.argv[4] || "";
+const STAFF = (process.argv[5] || `kot.test@${DOMAIN}`).toLowerCase();
+const NOTIFY = (process.argv[6] || `postmaster@${DOMAIN}`).toLowerCase();
 let passed = 0;
 let failed = 0;
 
@@ -484,6 +490,475 @@ for (const [what, url] of [
 }
 res = await fetch(`${BASE}/.well-known/openpgpkey/policy`);
 check("файл политики каталога есть", res.status === 200 && (await res.text()) === "");
+
+// ---- синхронизация: непрозрачные записи, зашифрованные браузером ----
+const kid = seed => crypto.createHash("sha256").update(seed).digest("hex").slice(0, 16);
+const S = { email: mail("sy"), pw: hash("sy-pass"), ip: "198.51.100.80" };
+r = await call("POST", "/v1/account/register", { body: { email: S.email, loginHash: S.pw, kdf: 2, deviceId: device(70), deviceName: "Мак" }, ip: S.ip });
+S.s = r.json?.session?.token;
+const T = { email: mail("sz"), pw: hash("sz-pass"), ip: "198.51.100.81" };
+r = await call("POST", "/v1/account/register", { body: { email: T.email, loginHash: T.pw, kdf: 2, deviceId: device(71), deviceName: "Мак" }, ip: T.ip });
+T.s = r.json?.session?.token;
+const sync = (who, method, tail = "", body) => call(method, "/v1/sync" + tail, { token: who.s, ip: who.ip, body });
+const [K1, K2, K3] = [kid("k1"), kid("k2"), kid("k3")];
+const savedList = j => (j?.saved || []).map(x => `${x.c}/${x.id}:${x.rev}`).join();
+const itemList = j => (j?.items || []).map(x => `${x.c}/${x.id}:${x.rev}:${x.deleted}`).join();
+const put = (who, gen, keyId, items) => sync(who, "POST", "", { gen, keyId, items });
+const bm = (id, base, blob) => ({ c: "bookmarks", id, base, blob });
+
+r = await call("GET", "/v1/sync", { ip: S.ip });
+check("синхронизация без сессии → 401", r.status === 401 && r.json.code === "session-expired", r.text);
+check("запись и сброс синхронизации без сессии → 401", (await call("POST", "/v1/sync", { ip: S.ip, body: { gen: 1, keyId: K1, items: [] } })).status === 401 && (await call("POST", "/v1/sync/reset", { ip: S.ip, body: { keyId: K1 } })).status === 401 && (await call("DELETE", "/v1/sync", { ip: S.ip })).status === 401);
+r = await sync(S, "GET");
+check("у нового аккаунта данных синхронизации нет", r.status === 200 && r.json.rev === 0 && r.json.gen === 1 && r.json.keyId === null && Array.isArray(r.json.items) && r.json.items.length === 0 && r.json.more === false, r.text);
+const [b1, b2, b3] = [b64(100), b64(2000), b64(1)];
+r = await put(S, 1, K1, [bm("a1", 0, b1), bm("a2", 0, b2), { c: "history", id: "h_1-X", base: 0, blob: b3 }]);
+check("первые записи сохранены, каждая получила следующий номер", r.status === 200 && r.json.rev === 3 && r.json.gen === 1 && r.json.keyId === K1 && savedList(r.json) === "bookmarks/a1:1,bookmarks/a2:2,history/h_1-X:3" && Array.isArray(r.json.conflicts) && r.json.conflicts.length === 0, r.text);
+r = await sync(S, "GET", "?since=0");
+check("записи читаются по возрастанию номера, блоки те же", r.status === 200 && r.json.rev === 3 && r.json.keyId === K1 && r.json.more === false && itemList(r.json) === "bookmarks/a1:1:false,bookmarks/a2:2:false,history/h_1-X:3:false" && r.json.items[0].blob === b1 && r.json.items[1].blob === b2 && r.json.items[2].blob === b3, r.text);
+r = await sync(S, "GET", "?since=1&limit=1");
+check("limit ограничивает ответ, more сообщает об остатке", r.status === 200 && itemList(r.json) === "bookmarks/a2:2:false" && r.json.more === true && r.json.rev === 3, r.text);
+r = await sync(S, "GET", "?since=2&limit=1");
+check("последняя страница: more = false", itemList(r.json) === "history/h_1-X:3:false" && r.json.more === false, r.text);
+r = await sync(S, "GET", "?since=3");
+check("новее последнего номера записей нет", r.status === 200 && r.json.items.length === 0 && r.json.more === false && r.json.rev === 3, r.text);
+r = await sync(S, "GET", "?limit=5000");
+check("limit больше тысячи не ошибка", r.status === 200 && r.json.items.length === 3, r.text);
+for (const q of ["?since=-1", "?since=abc", "?limit=0", "?limit=x"]) {
+  r = await sync(S, "GET", q);
+  check(`чтение синхронизации: ${q} → 400`, r.status === 400 && r.json.code === "sync-invalid" && !!r.json.message, r.text);
+}
+const b1b = b64(300);
+r = await put(S, 1, K1, [bm("a1", 1, b1b)]);
+check("обновление виденной версии сохраняется", r.status === 200 && savedList(r.json) === "bookmarks/a1:4" && r.json.rev === 4 && r.json.conflicts.length === 0, r.text);
+r = await sync(S, "GET", "?since=3");
+check("обновлённая запись приходит с новым номером и блоком", itemList(r.json) === "bookmarks/a1:4:false" && r.json.items[0].blob === b1b, r.text);
+const b4 = b64(50);
+r = await put(S, 1, K1, [bm("a1", 1, b64(10)), bm("a3", 0, b4), bm("a2", 0, b64(10)), bm("zz", 9, b64(10))]);
+let cf = Object.fromEntries((r.json?.conflicts || []).map(x => [x.id, x]));
+check(
+  "устаревшая версия попадает в conflicts с состоянием сервера, остальные записи сохраняются",
+  r.status === 200 && savedList(r.json) === "bookmarks/a3:5" && r.json.rev === 5 && r.json.conflicts.length === 3 && cf.a1?.c === "bookmarks" && cf.a1.rev === 4 && cf.a1.deleted === false && cf.a1.blob === b1b && cf.a2?.rev === 2 && cf.a2.blob === b2,
+  r.text
+);
+check("запись, которой на сервере нет, а устройство её «видело» → conflict как удалённая", cf.zz?.rev === 0 && cf.zz.deleted === true && cf.zz.blob === null, r.text);
+r = await sync(S, "GET", "?since=4");
+check("расхождения на сервере ничего не изменили", itemList(r.json) === "bookmarks/a3:5:false" && r.json.items[0].blob === b4, r.text);
+r = await put(S, 1, K1, [{ c: "bookmarks", id: "a2", base: 2, deleted: true }]);
+check("удаление сохраняется надгробием", r.status === 200 && savedList(r.json) === "bookmarks/a2:6" && r.json.rev === 6, r.text);
+r = await sync(S, "GET", "?since=5");
+check("надгробие приходит без блока", itemList(r.json) === "bookmarks/a2:6:true" && r.json.items[0].blob === null, r.text);
+r = await put(S, 1, K1, [bm("a2", 2, b64(10))]);
+check("запись поверх надгробия по старой версии → conflict с надгробием", r.status === 200 && savedList(r.json) === "" && r.json.rev === 6 && r.json.conflicts.length === 1 && r.json.conflicts[0].rev === 6 && r.json.conflicts[0].deleted === true && r.json.conflicts[0].blob === null, r.text);
+const b5 = b64(20);
+r = await put(S, 1, K1, [bm("a2", 6, b5)]);
+check("запись поверх надгробия по его версии восстанавливает её", r.status === 200 && savedList(r.json) === "bookmarks/a2:7", r.text);
+const b6 = b64(30);
+r = await put(S, 1, K1, [bm("d1", 0, b6), bm("d1", 0, b64(30))]);
+check("повтор ключа в одном запросе: первая сохраняется, вторая расходится с ней", r.status === 200 && savedList(r.json) === "bookmarks/d1:8" && r.json.conflicts.length === 1 && r.json.conflicts[0].rev === 8 && r.json.conflicts[0].blob === b6, r.text);
+r = await put(S, 1, K2, [bm("k", 0, b64(10))]);
+check("другой ключ шифрования → 409 sync-key, в ответе текущие поколение и ключ", r.status === 409 && r.json.code === "sync-key" && r.json.message === "Данные синхронизации зашифрованы другим ключом" && r.json.gen === 1 && r.json.keyId === K1, r.text);
+r = await put(S, 2, K1, [bm("k", 0, b64(10))]);
+check("чужое поколение → 409 sync-reset", r.status === 409 && r.json.code === "sync-reset" && r.json.gen === 1 && r.json.keyId === K1, r.text);
+for (const [what, body] of [
+  ["неверный ключ записи", { gen: 1, keyId: K1, items: [bm("a/b", 0, b3)] }],
+  ["слишком длинный ключ записи", { gen: 1, keyId: K1, items: [bm("x".repeat(65), 0, b3)] }],
+  ["неверный раздел", { gen: 1, keyId: K1, items: [{ c: "Bookmarks", id: "n1", base: 0, blob: b3 }] }],
+  ["отрицательная версия", { gen: 1, keyId: K1, items: [bm("n1", -1, b3)] }],
+  ["дробная версия", { gen: 1, keyId: K1, items: [bm("n1", 1.5, b3)] }],
+  ["запись без содержимого", { gen: 1, keyId: K1, items: [{ c: "bookmarks", id: "n1", base: 0 }] }],
+  ["пустое содержимое", { gen: 1, keyId: K1, items: [bm("n1", 0, "")] }],
+  ["содержимое не в Base64", { gen: 1, keyId: K1, items: [bm("n1", 0, "@@@")] }],
+  ["неверный отпечаток ключа", { gen: 1, keyId: "XYZ", items: [bm("n1", 0, b3)] }],
+  ["нет поколения", { keyId: K1, items: [bm("n1", 0, b3)] }],
+  ["нулевое поколение", { gen: 0, keyId: K1, items: [bm("n1", 0, b3)] }],
+  ["записи не списком", { gen: 1, keyId: K1, items: { n1: b3 } }],
+]) {
+  r = await sync(S, "POST", "", body);
+  check(`запись синхронизации: ${what} → 400`, r.status === 400 && r.json.code === "sync-invalid" && !!r.json.message, r.text);
+}
+r = await call("POST", "/v1/sync", { token: S.s, ip: S.ip, raw: "{не json" });
+check("запись синхронизации: не JSON → 400", r.status === 400 && r.json?.code === "sync-invalid", r.text);
+// одна неверная запись отклоняет запрос целиком
+r = await put(S, 1, K1, [bm("n1", 0, b3), bm("n2", 0, b64(96 * 1024 + 1))]);
+check("блок больше 96 КиБ → 413 sync-limit", r.status === 413 && r.json.code === "sync-limit" && !!r.json.message, r.text);
+r = await put(S, 1, K1, Array.from({ length: 201 }, (_, i) => bm("m" + i, 0, b3)));
+check("больше 200 записей в запросе → 413 sync-limit", r.status === 413 && r.json.code === "sync-limit", r.text);
+r = await sync(S, "GET", "?since=8");
+check("отклонённые запросы ничего не сохранили", r.status === 200 && r.json.rev === 8 && r.json.items.length === 0 && r.json.keyId === K1, r.text);
+const bMax = b64(96 * 1024);
+r = await put(S, 1, K1, [bm("max", 0, bMax)]);
+check("блок ровно 96 КиБ принимается", r.status === 200 && savedList(r.json) === "bookmarks/max:9", r.text);
+// 120 записей по 72 КиБ тремя запросами около 3,8 МиБ: больше общего предела тела, меньше предела синхронизации
+const heavy = Array.from({ length: 120 }, (_, i) => bm("w" + i, 0, b64(72 * 1024)));
+codes = [];
+for (let i = 0; i < 3; i++) {
+  r = await put(S, 1, K1, heavy.slice(i * 40, i * 40 + 40));
+  codes.push(r.status);
+}
+check("запросы на несколько мегабайт принимаются, номера идут подряд", codes.join() === "200,200,200" && r.json.saved.length === 40 && r.json.saved[0].rev === 90 && r.json.saved[39].rev === 129 && r.json.rev === 129, codes.join() + " " + r.text.slice(0, 200));
+r = await sync(S, "GET", "?since=9&limit=1000");
+const page1 = r.json?.items || [];
+check("ответ ограничен и по объёму: блоков не больше 8 МиБ за раз, об остатке говорит more", r.status === 200 && page1.length === 113 && r.json.more === true && r.json.rev === 129 && page1.every((x, i) => x.rev === 10 + i && x.blob === heavy[i].blob), `${r.status} ${page1.length} ${r.json?.more}`);
+r = await sync(S, "GET", `?since=${page1[page1.length - 1]?.rev}&limit=1000`);
+check("остаток дочитывается от номера последней полученной записи", r.status === 200 && r.json.items.length === 7 && r.json.more === false && r.json.items.every((x, i) => x.rev === 123 + i && x.blob === heavy[113 + i].blob), `${r.status} ${r.json?.items?.length} ${r.json?.more}`);
+// тело больше 4 МиБ: сервер отвечает 413, не дочитав запрос, поэтому клиент может увидеть и обрыв соединения
+let tooBig = "";
+try {
+  r = await put(S, 1, K1, Array.from({ length: 50 }, (_, i) => bm("v" + i, 0, b64(72 * 1024))));
+  tooBig = `${r.status} ${r.json?.code}`;
+} catch (e) {
+  tooBig = "обрыв";
+}
+r = await sync(S, "GET", "?since=129");
+check(`запрос синхронизации больше 4 МиБ не принимается (${tooBig})`, (tooBig === "413 sync-limit" || tooBig === "обрыв") && r.status === 200 && r.json.rev === 129 && r.json.items.length === 0, tooBig);
+// изоляция аккаунтов
+r = await sync(T, "GET");
+check("второй аккаунт чужих записей не видит", r.status === 200 && r.json.rev === 0 && r.json.gen === 1 && r.json.keyId === null && r.json.items.length === 0, r.text.slice(0, 300));
+const tb = b64(64);
+r = await put(T, 1, K2, [bm("a1", 0, tb)]);
+check("у каждого аккаунта свой счётчик и свой ключ", r.status === 200 && savedList(r.json) === "bookmarks/a1:1" && r.json.rev === 1 && r.json.keyId === K2, r.text);
+r = await sync(S, "GET", "?since=0&limit=3");
+check("запись второго аккаунта не затронула первый", r.json.rev === 129 && r.json.items.every(x => x.blob !== tb) && itemList(r.json) === "history/h_1-X:3:false,bookmarks/a1:4:false,bookmarks/a3:5:false" && r.json.more === true, r.text.slice(0, 300));
+// сброс
+r = await sync(S, "POST", "/reset", { keyId: "не ключ" });
+check("сброс с неверным отпечатком ключа → 400", r.status === 400 && r.json.code === "sync-invalid", r.text);
+r = await sync(S, "POST", "/reset", { keyId: K1 });
+check("сброс: записи удалены, поколение выросло, счётчик не обнулился", r.status === 200 && r.json.rev === 130 && r.json.gen === 2 && r.json.keyId === K1 && Object.keys(r.json).length === 3, r.text);
+r = await sync(S, "GET", "?since=0");
+check("после сброса записей нет", r.status === 200 && r.json.items.length === 0 && r.json.rev === 130 && r.json.gen === 2 && r.json.keyId === K1 && r.json.more === false, r.text);
+r = await put(S, 1, K1, [bm("a1", 0, b1)]);
+check("запись со старым поколением после сброса → 409 sync-reset", r.status === 409 && r.json.code === "sync-reset" && r.json.message === "Данные синхронизации были сброшены: нужно начать заново" && r.json.gen === 2 && r.json.keyId === K1, r.text);
+r = await put(S, 2, K1, [bm("a1", 0, b1)]);
+check("с новым поколением записи создаются заново, номера продолжаются", r.status === 200 && savedList(r.json) === "bookmarks/a1:131" && r.json.gen === 2, r.text);
+r = await sync(S, "POST", "/reset", { keyId: K2 });
+check("сброс с новым ключом", r.status === 200 && r.json.rev === 132 && r.json.gen === 3 && r.json.keyId === K2, r.text);
+r = await put(S, 3, K1, [bm("a1", 0, b1)]);
+check("прежний ключ после сброса с новым → 409 sync-key", r.status === 409 && r.json.code === "sync-key" && r.json.gen === 3 && r.json.keyId === K2, r.text);
+r = await put(S, 3, K2, [bm("a1", 0, b1)]);
+check("новый ключ и новое поколение принимаются", r.status === 200 && savedList(r.json) === "bookmarks/a1:133", r.text);
+// выключение синхронизации
+r = await sync(S, "DELETE");
+check("DELETE стирает записи и ключ, поколение растёт", r.status === 200 && r.json.gen === 4 && r.json.keyId === null && r.json.rev === 133 && Object.keys(r.json).length === 3, r.text);
+r = await sync(S, "GET", "?since=0");
+check("после DELETE записей и ключа нет", r.status === 200 && r.json.items.length === 0 && r.json.keyId === null && r.json.gen === 4 && r.json.rev === 133, r.text);
+r = await put(S, 3, K2, [bm("a1", 0, b1)]);
+check("запись со старым поколением после DELETE → 409 sync-reset", r.status === 409 && r.json.code === "sync-reset" && r.json.gen === 4 && r.json.keyId === null, r.text);
+r = await sync(S, "GET");
+check("отклонённая запись ключ не запомнила", r.json.keyId === null && r.json.rev === 133, r.text);
+r = await put(S, 4, K3, [bm("a1", 0, b1)]);
+check("после DELETE синхронизация начинается заново с любым ключом", r.status === 200 && savedList(r.json) === "bookmarks/a1:134" && r.json.keyId === K3 && r.json.gen === 4, r.text);
+// одновременные запросы одного аккаунта идут по очереди
+let batches = await Promise.all(Array.from({ length: 8 }, (_, i) => put(S, 4, K3, Array.from({ length: 25 }, (_, j) => bm(`c${i}_${j}`, 0, "eA==")))));
+let revs = batches.flatMap(x => (x.json?.saved || []).map(v => v.rev)).sort((x, y) => x - y);
+check(
+  "одновременные записи получают номера подряд, без повторов и пропусков",
+  batches.every(x => x.status === 200 && x.json.saved.length === 25 && x.json.saved.every((v, i, all) => i === 0 || v.rev === all[i - 1].rev + 1)) && revs.length === 200 && revs.every((v, i) => v === 135 + i),
+  batches.map(x => x.status).join() + " " + revs.slice(0, 5).join()
+);
+batches = await Promise.all(Array.from({ length: 6 }, () => put(S, 4, K3, [bm("race", 0, b64(8))])));
+const won = batches.filter(x => x.json?.saved?.length === 1);
+check(
+  "одну и ту же новую запись из одновременных запросов сохраняет только один, остальным приходит его версия",
+  batches.every(x => x.status === 200) && won.length === 1 && won[0].json.saved[0].rev === 335 && batches.filter(x => x !== won[0]).every(x => x.json.saved.length === 0 && x.json.conflicts.length === 1 && x.json.conflicts[0].rev === 335),
+  batches.map(x => `${x.status}:${x.json?.saved?.length}:${x.json?.conflicts?.length}`).join()
+);
+r = await sync(S, "GET", "?since=334");
+check("после одновременных записей счётчик равен числу сохранённых", r.json.rev === 335 && itemList(r.json) === "bookmarks/race:335:false", r.text);
+r = await sync(T, "GET");
+check("сбросы первого аккаунта второй не затронули", r.json.rev === 1 && r.json.gen === 1 && r.json.keyId === K2 && itemList(r.json) === "bookmarks/a1:1:false" && r.json.items[0].blob === tb, r.text);
+// предел числа записей: 30 000 на аккаунт (у второго аккаунта одна уже есть)
+const tiny = (prefix, n) => Array.from({ length: n }, (_, j) => bm(prefix + j, 0, "eA=="));
+let seen = new Set();
+for (let i = 0; i < 149; i++) {
+  seen.add((await put(T, 1, K2, tiny(`n${i}_`, 200))).status);
+}
+r = await put(T, 1, K2, tiny("q", 200));
+check("запрос, с которым записей стало бы больше 30 000, отклоняется целиком", [...seen].join() === "200" && r.status === 413 && r.json.code === "sync-limit" && /30000/.test(r.json.message), [...seen].join() + " " + r.text);
+r = await put(T, 1, K2, tiny("q", 199));
+check("ровно 30 000 записей помещаются", r.status === 200 && r.json.saved.length === 199 && r.json.rev === 30000, r.text.slice(0, 200));
+const q0 = r.json?.saved?.[0]?.rev;
+r = await put(T, 1, K2, [bm("one-more", 0, "eA==")]);
+check("ещё одна запись сверх предела → 413 sync-limit", r.status === 413 && r.json.code === "sync-limit", r.text);
+r = await put(T, 1, K2, [bm("a1", 1, b64(10)), { c: "bookmarks", id: "q0", base: q0, deleted: true }]);
+check("при заполненном хранилище записи можно обновлять и удалять", r.status === 200 && r.json.saved.length === 2 && r.json.rev === 30002, r.text);
+r = await put(T, 1, K2, [bm("one-more", 0, "eA==")]);
+check("надгробие остаётся записью и места под новую не освобождает", r.status === 413 && r.json.code === "sync-limit", r.text);
+// предел объёма: 64 МиБ на аккаунт; 682 записи по 96 КиБ — это 65 472 КиБ из 65 536
+r = await sync(T, "POST", "/reset", { keyId: K2 });
+check("сброс освобождает хранилище", r.status === 200 && r.json.gen === 2 && r.json.rev === 30003, r.text);
+seen = new Set();
+let g0 = 0;
+for (let i = 0; i < 22; i++) {
+  r = await put(T, 2, K2, Array.from({ length: 31 }, (_, j) => bm(`g${i}_${j}`, 0, b64(96 * 1024))));
+  seen.add(r.status);
+  if (i === 0) {
+    g0 = r.json?.saved?.[0]?.rev;
+  }
+}
+r = await put(T, 2, K2, [bm("over", 0, b64(64 * 1024 + 1))]);
+check("запись, с которой данных стало бы больше 64 МиБ, отклоняется", [...seen].join() === "200" && r.status === 413 && r.json.code === "sync-limit" && /64 МБ/.test(r.json.message), [...seen].join() + " " + r.text);
+r = await put(T, 2, K2, [bm("fit", 0, b64(64 * 1024))]);
+check("ровно 64 МиБ помещаются", r.status === 200 && r.json.saved.length === 1, r.text);
+r = await put(T, 2, K2, [bm("byte", 0, "eA==")]);
+check("ещё один байт сверх предела → 413 sync-limit", r.status === 413 && r.json.code === "sync-limit", r.text);
+r = await put(T, 2, K2, [{ c: "bookmarks", id: "g0_0", base: g0, deleted: true }]);
+const freed = r.status;
+r = await put(T, 2, K2, [bm("after", 0, b64(96 * 1024))]);
+check("надгробие в объём не входит: место удалённой записи можно занять", freed === 200 && r.status === 200 && r.json.saved.length === 1, `${freed} ${r.text.slice(0, 200)}`);
+codes = [];
+for (let i = 0; i < 6; i++) {
+  codes.push((await sync(T, "POST", "/reset", { keyId: K2 })).status);
+}
+check("сброс синхронизации — не больше шести в час", codes.join() === "200,200,200,200,200,429", codes.join());
+
+// ---- обращения в поддержку ----
+const U = { email: mail("u"), pw: hash("u-pass"), ip: "198.51.100.90" };
+const V = { email: mail("v"), pw: hash("v-pass"), ip: "198.51.100.91" };
+const H = { email: STAFF, pw: hash("staff-pass"), ip: "198.51.100.92" };
+for (const [who, n] of [[U, 80], [V, 81], [H, 82]]) {
+  r = await call("POST", "/v1/account/register", { body: { email: who.email, loginHash: who.pw, kdf: 2, deviceId: device(n), deviceName: "Мак" }, ip: who.ip });
+  if (r.status === 409) {
+    // база не пустая: аккаунт сотрудника остался от прошлого запуска
+    r = await call("POST", "/v1/account/login", { body: { email: who.email, loginHash: who.pw, deviceId: device(n), deviceName: "Мак" }, ip: who.ip });
+  }
+  who.s = r.json?.session?.token;
+}
+check(`аккаунт сотрудника поддержки ${STAFF} готов`, !!H.s && !!U.s && !!V.s, r.text);
+const sup = (who, method, tail, body) => call(method, "/v1/support" + tail, { token: who.s, ip: who.ip, body });
+const download = async (who, id) => {
+  const res = await fetch(`${BASE}/v1/support/files/${id}`, { headers: { "X-Forwarded-For": who.ip, ...(who.s ? { Authorization: `Bearer ${who.s}` } : {}) } });
+  return { status: res.status, headers: res.headers, body: Buffer.from(await res.arrayBuffer()) };
+};
+const isoTime = v => /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(v || "");
+const byId = (j, id) => (j?.tickets || []).find(t => t.id === id);
+
+check(
+  "обращения без сессии → 401",
+  (await call("GET", "/v1/support/tickets")).status === 401 && (await call("GET", "/v1/support/unread")).status === 401 && (await call("POST", "/v1/support/tickets", { body: { subject: "Тема", text: "Текст" } })).status === 401 && (await call("GET", "/v1/support/tickets/1")).status === 401 && (await download({ ip: U.ip }, 1)).status === 401
+);
+r = await sup(U, "GET", "/tickets");
+check("у нового аккаунта обращений нет", r.status === 200 && r.json.staff === false && Array.isArray(r.json.tickets) && r.json.tickets.length === 0 && r.headers.get("cache-control") === "no-store", r.text);
+r = await sup(U, "GET", "/unread");
+check("непрочитанных ответов нет, очереди у пользователя нет", r.status === 200 && r.json.count === 0 && r.json.staff === false && !("queue" in r.json), r.text);
+const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), crypto.randomBytes(5000)]);
+const note = Buffer.from("журнал: строка 1\nстрока 2\n");
+const shot = { name: "shot.png", type: "image/png", data: png.toString("base64") };
+for (const [what, body] of [
+  ["короткая тема", { subject: " ab ", text: "Текст" }],
+  ["слишком длинная тема", { subject: "я".repeat(141), text: "Текст" }],
+  ["нет темы", { text: "Текст" }],
+  ["пустой текст", { subject: "Тема", text: "  \n " }],
+  ["слишком длинный текст", { subject: "Тема", text: "я".repeat(8001) }],
+  ["сведения о браузере не объектом", { subject: "Тема", text: "Текст", meta: ["x"] }],
+  ["слишком большие сведения о браузере", { subject: "Тема", text: "Текст", meta: { pad: "x".repeat(2100) } }],
+  ["пять вложений", { subject: "Тема", text: "Текст", files: Array(5).fill(shot) }],
+  ["вложение неверного типа", { subject: "Тема", text: "Текст", files: [{ name: "a.svg", type: "image/svg+xml", data: png.toString("base64") }] }],
+  ["вложение без типа", { subject: "Тема", text: "Текст", files: [{ name: "a.png", data: png.toString("base64") }] }],
+  ["вложение больше 2 МиБ", { subject: "Тема", text: "Текст", files: [{ name: "big.png", type: "image/png", data: b64(2 * 1024 * 1024 + 1) }] }],
+  ["пустое вложение", { subject: "Тема", text: "Текст", files: [{ name: "a.png", type: "image/png", data: "" }] }],
+  ["вложение не в Base64", { subject: "Тема", text: "Текст", files: [{ name: "a.png", type: "image/png", data: "@@@" }] }],
+]) {
+  r = await sup(U, "POST", "/tickets", body);
+  check(`обращение: ${what} → 400`, r.status === 400 && r.json.code === "support-invalid" && !!r.json.message, r.text);
+}
+check("отклонённые обращения не созданы", (await sup(U, "GET", "/tickets")).json.tickets.length === 0 && mailsTo(NOTIFY).length === 0);
+t0 = Date.now();
+r = await sup(U, "POST", "/tickets", {
+  subject: "  Не открывается почта  ",
+  text: "Здравствуйте!\r\nПочта не открывается после обновления.",
+  meta: { version: "1.4.2", os: "macOS 15" },
+  files: [{ name: "../снимок\\экрана\u0007.png", type: "image/png", data: png.toString("base64") }, { name: "журнал.txt", type: "text/plain", data: note.toString("base64") }],
+});
+const created = r;
+U.t = r.json?.id;
+let m0 = r.json?.messages?.[0];
+check(
+  "обращение создано",
+  r.status === 200 && Number.isInteger(U.t) && r.json.subject === "Не открывается почта" && r.json.status === "open" && isoTime(r.json.createdAt) && isoTime(r.json.updatedAt) && r.json.staff === false && !("author" in r.json) && !("meta" in r.json) && r.json.messages.length === 1 && Number.isInteger(m0.id) && m0.from === "user" && m0.text === "Здравствуйте!\nПочта не открывается после обновления." && isoTime(m0.at),
+  r.text
+);
+const att = m0?.files || [];
+check(
+  "вложения приняты, имя очищено от путей и управляющих знаков",
+  att.length === 2 && Number.isInteger(att[0].id) && att[0].name === "снимокэкрана.png" && att[0].type === "image/png" && att[0].size === png.length && att[1].name === "журнал.txt" && att[1].type === "text/plain" && att[1].size === note.length && !("data" in att[0]),
+  JSON.stringify(att)
+);
+letter = await lastMail(NOTIFY, { after: t0 - 5 });
+check("поддержке ушло письмо о новом обращении", !!letter && letter.subject === `Новое обращение № ${U.t}: Не открывается почта` && letter.text.includes(U.email) && letter.text.includes("Почта не открывается после обновления."), JSON.stringify(letter));
+r = await sup(U, "GET", "/tickets");
+let row = byId(r.json, U.t);
+check("обращение в списке автора", r.status === 200 && r.json.tickets.length === 1 && row?.subject === "Не открывается почта" && row.status === "open" && row.messages === 1 && row.unread === false && isoTime(row.createdAt) && isoTime(row.updatedAt) && !("author" in row), r.text);
+r = await sup(U, "GET", `/tickets/${U.t}`);
+check("чтение отдаёт обращение в том же виде, что и создание", r.status === 200 && r.text === created.text, r.text);
+// посторонний
+let codes4 = [
+  (await sup(V, "GET", `/tickets/${U.t}`)).json?.code,
+  (await sup(V, "POST", `/tickets/${U.t}/messages`, { text: "Чужой" })).json?.code,
+  (await sup(V, "POST", `/tickets/${U.t}/status`, { status: "closed" })).json?.code,
+];
+let f = await download(V, att[0].id);
+check("чужое обращение для постороннего не существует: чтение, ответ, статус, вложение → 404", codes4.join() === "not-found,not-found,not-found" && f.status === 404 && (await sup(V, "GET", `/tickets/${U.t}`)).status === 404, codes4.join() + " " + f.status);
+r = await sup(V, "GET", "/tickets?scope=all");
+check("scope=all для обычного пользователя — только свои обращения", r.status === 200 && r.json.staff === false && r.json.tickets.length === 0, r.text);
+codes4 = [];
+for (const tail of ["/tickets/abc", "/tickets/0", "/tickets/-1", "/tickets/99999999", "/files/abc", "/files/99999999"]) {
+  r = await sup(U, "GET", tail);
+  codes4.push(`${r.status}:${r.json?.code}`);
+}
+check("несуществующие обращение и вложение → 404", codes4.every(c => c === "404:not-found"), codes4.join());
+r = await sup(U, "GET", `/tickets/${U.t}`);
+check("посторонний ничего не изменил", r.json.status === "open" && r.json.messages.length === 1, r.text);
+// вложения
+f = await download(U, att[0].id);
+check(
+  "автор скачивает вложение байт в байт, с типом и запретом его угадывать",
+  f.status === 200 && f.body.equals(png) && f.headers.get("content-type") === "image/png" && f.headers.get("content-disposition") === `attachment; filename*=UTF-8''${encodeURIComponent("снимокэкрана.png")}` && f.headers.get("x-content-type-options") === "nosniff" && f.headers.get("cache-control") === "private, max-age=3600",
+  `${f.status} ${f.body.length} ${f.headers.get("content-type")} ${f.headers.get("content-disposition")} ${f.headers.get("cache-control")}`
+);
+f = await download(U, att[1].id);
+check("текстовое вложение отдаётся как text/plain", f.status === 200 && f.body.equals(note) && f.headers.get("content-type") === "text/plain", `${f.status} ${f.headers.get("content-type")}`);
+// сотрудник
+r = await sup(H, "GET", "/tickets");
+check("сотрудник: свой список пуст, признак staff", r.status === 200 && r.json.staff === true && r.json.tickets.length === 0, r.text);
+r = await sup(H, "GET", "/tickets?scope=all");
+row = byId(r.json, U.t);
+check("сотрудник: scope=all показывает обращения всех с адресом автора", r.status === 200 && r.json.staff === true && row?.author === U.email && row.unread === true && row.messages === 1 && row.status === "open", r.text);
+r = await sup(H, "GET", "/unread");
+H.queue = r.json?.queue;
+check("сотрудник: очередь открытых обращений", r.status === 200 && r.json.staff === true && r.json.count === 0 && Number.isInteger(H.queue) && H.queue >= 1, r.text);
+r = await sup(H, "GET", `/tickets/${U.t}`);
+check("сотрудник видит автора и сведения о браузере", r.status === 200 && r.json.staff === true && r.json.author === U.email && r.json.meta?.version === "1.4.2" && r.json.meta.os === "macOS 15" && r.json.messages.length === 1 && r.json.messages[0].files.length === 2, r.text);
+check("прочитанное сотрудником обращение не отмечено непрочитанным", byId((await sup(H, "GET", "/tickets?scope=all")).json, U.t)?.unread === false);
+f = await download(H, att[0].id);
+check("сотрудник скачивает вложение", f.status === 200 && f.body.equals(png), String(f.status));
+t0 = Date.now();
+r = await sup(H, "POST", `/tickets/${U.t}/messages`, { text: "Здравствуйте! Очистите кеш и перезапустите браузер." });
+check(
+  "ответ сотрудника: статус answered, сообщение от поддержки",
+  r.status === 200 && r.json.status === "answered" && r.json.staff === true && r.json.messages.length === 2 && r.json.messages[1].from === "staff" && r.json.messages[1].text === "Здравствуйте! Очистите кеш и перезапустите браузер." && r.json.messages[1].files.length === 0 && r.json.updatedAt > created.json.updatedAt,
+  r.text
+);
+letter = await lastMail(U.email, { after: t0 - 5 });
+check("пользователю ушло письмо с ответом поддержки", !!letter && letter.subject === "Ответ поддержки Tabora: Не открывается почта" && letter.text.includes("Очистите кеш и перезапустите браузер.") && letter.text.includes("Ответить можно в браузере: Настройки → Поддержка"), JSON.stringify(letter));
+r = await sup(U, "GET", "/unread");
+check("у пользователя один непрочитанный ответ", r.status === 200 && r.json.count === 1 && r.json.staff === false, r.text);
+row = byId((await sup(U, "GET", "/tickets")).json, U.t);
+check("в списке пользователя обращение отвечено и не прочитано", row?.status === "answered" && row.unread === true && row.messages === 2, JSON.stringify(row));
+check("отвеченное обращение ушло из очереди поддержки", (await sup(H, "GET", "/unread")).json.queue === H.queue - 1);
+r = await sup(U, "GET", `/tickets/${U.t}`);
+check("пользователь читает ответ: автора и сведений о браузере в ответе нет", r.status === 200 && r.json.messages.length === 2 && r.json.messages[1].from === "staff" && r.json.staff === false && !("author" in r.json) && !("meta" in r.json), r.text);
+check("чтение снимает отметку непрочитанного", (await sup(U, "GET", "/unread")).json.count === 0 && byId((await sup(U, "GET", "/tickets")).json, U.t)?.unread === false);
+// ответ пользователя
+const webp = Buffer.concat([Buffer.from("RIFF"), crypto.randomBytes(300)]);
+t0 = Date.now();
+r = await sup(U, "POST", `/tickets/${U.t}/messages`, { text: "Не помогло, всё по-прежнему.", files: [{ name: "после.webp", type: "image/webp", data: webp.toString("base64") }] });
+m0 = r.json?.messages?.[2];
+check("ответ пользователя возвращает обращение в open", r.status === 200 && r.json.status === "open" && r.json.messages.length === 3 && m0?.from === "user" && m0.files.length === 1 && m0.files[0].name === "после.webp" && m0.files[0].type === "image/webp" && m0.files[0].size === webp.length, r.text);
+letter = await lastMail(NOTIFY, { after: t0 - 5 });
+check("поддержке ушло письмо об ответе пользователя", !!letter && letter.subject === `Ответ в обращении № ${U.t}: Не открывается почта` && letter.text.includes(U.email) && letter.text.includes("Не помогло, всё по-прежнему."), JSON.stringify(letter));
+r = await sup(H, "GET", "/tickets?scope=all&status=open");
+row = byId(r.json, U.t);
+check("сотрудник видит новый ответ: обращение открыто и не прочитано", row?.status === "open" && row.unread === true && row.messages === 3 && (await sup(H, "GET", "/unread")).json.queue === H.queue, r.text);
+check("свой ответ пользователю непрочитанным не считается", (await sup(U, "GET", "/unread")).json.count === 0);
+f = await download(H, m0?.files?.[0]?.id);
+check("вложение из ответа скачивается", f.status === 200 && f.body.equals(webp) && f.headers.get("content-type") === "image/webp", String(f.status));
+// закрытие и повторное открытие
+r = await sup(U, "POST", `/tickets/${U.t}/status`, { status: "closed" });
+check("автор закрывает обращение", r.status === 200 && r.json.status === "closed" && r.json.messages.length === 3 && r.json.staff === false, r.text);
+check("фильтр по статусу", (await sup(U, "GET", "/tickets?status=closed")).json.tickets.length === 1 && (await sup(U, "GET", "/tickets?status=open")).json.tickets.length === 0 && (await sup(H, "GET", "/unread")).json.queue === H.queue - 1);
+r = await sup(U, "POST", `/tickets/${U.t}/status`, { status: "open" });
+check("автор открывает обращение снова", r.status === 200 && r.json.status === "open", r.text);
+r = await sup(H, "POST", `/tickets/${U.t}/status`, { status: "closed" });
+check("сотрудник закрывает обращение", r.status === 200 && r.json.status === "closed" && r.json.staff === true && r.json.author === U.email, r.text);
+r = await sup(U, "POST", `/tickets/${U.t}/messages`, { text: "Снова не работает." });
+check("сообщение автора открывает закрытое обращение", r.status === 200 && r.json.status === "open" && r.json.messages.length === 4, r.text);
+for (const [what, body] of [["статус answered", { status: "answered" }], ["пустой статус", { status: "" }], ["без статуса", {}]]) {
+  r = await sup(U, "POST", `/tickets/${U.t}/status`, body);
+  check(`смена статуса: ${what} → 400`, r.status === 400 && r.json.code === "support-invalid", r.text);
+}
+for (const [what, body] of [["пустой текст", { text: " " }], ["нет текста", {}], ["вложение неверного типа", { text: "Текст", files: [{ name: "a.html", type: "text/html", data: "eA==" }] }]]) {
+  r = await sup(U, "POST", `/tickets/${U.t}/messages`, body);
+  check(`сообщение: ${what} → 400`, r.status === 400 && r.json.code === "support-invalid", r.text);
+}
+check("неизвестные фильтры списка → 400", (await sup(U, "GET", "/tickets?status=nope")).json.code === "support-invalid" && (await sup(U, "GET", "/tickets?scope=nope")).json.code === "support-invalid");
+// сотрудник в собственном обращении — обычный пользователь
+r = await sup(H, "POST", "/tickets", { subject: "Проверка от сотрудника", text: "Пишу как пользователь" });
+H.t = r.json?.id;
+check("сотрудник создаёт своё обращение как пользователь", r.status === 200 && r.json.staff === false && !("author" in r.json) && r.json.messages[0].from === "user", r.text);
+r = await sup(H, "POST", `/tickets/${H.t}/messages`, { text: "Дополнение" });
+check("сообщение сотрудника в своём обращении — от пользователя, статус open", r.status === 200 && r.json.status === "open" && r.json.messages.length === 2 && r.json.messages[1].from === "user" && r.json.staff === false, r.text);
+r = await sup(H, "GET", "/tickets");
+check("своё обращение сотрудника в списке «мои», без адреса автора", r.json.tickets.length === 1 && r.json.tickets[0].id === H.t && !("author" in r.json.tickets[0]) && r.json.tickets[0].unread === false, r.text);
+r = await sup(H, "GET", "/tickets?scope=all");
+check(
+  "общий список: обращения всех, недавно изменённые сверху",
+  byId(r.json, H.t)?.author === H.email && byId(r.json, U.t)?.author === U.email && r.json.tickets.every((t, i, all) => i === 0 || all[i - 1].updatedAt >= t.updatedAt) && r.json.tickets[0].id === H.t,
+  r.text
+);
+check("обращение сотрудника пользователю не видно", (await sup(U, "GET", `/tickets/${H.t}`)).status === 404);
+// четыре вложения по 2 МиБ: запрос около 11 МиБ
+const big = crypto.randomBytes(2 * 1024 * 1024);
+r = await sup(V, "POST", "/tickets", { subject: "Большие вложения", text: "Четыре файла по 2 МиБ", files: [0, 1, 2, 3].map(i => ({ name: `f${i}.jpg`, type: "image/jpeg", data: big.toString("base64") })) });
+V.t = r.json?.id;
+check("четыре вложения по 2 МиБ принимаются", r.status === 200 && r.json.messages[0].files.length === 4 && r.json.messages[0].files.every(x => x.size === big.length && x.type === "image/jpeg"), r.text.slice(0, 300));
+f = await download(V, r.json?.messages?.[0]?.files?.[3]?.id);
+check("большое вложение скачивается байт в байт", f.status === 200 && f.body.equals(big), `${f.status} ${f.body.length}`);
+// пределы: сообщений в час от пользователя и сообщений в обращении
+codes = [];
+for (let i = 0; i < 61; i++) {
+  codes.push((await sup(V, "POST", `/tickets/${V.t}/messages`, { text: `Сообщение ${i + 1}` })).status);
+}
+r = await sup(V, "POST", `/tickets/${V.t}/messages`, { text: "Ещё одно" });
+check("от пользователя не больше 60 сообщений в час", codes.slice(0, 60).every(c => c === 200) && codes[60] === 429 && r.status === 429 && r.json.code === "support-limit" && !!r.json.message, codes.slice(55).join() + " " + r.text);
+codes = [];
+for (let i = 0; i < 139; i++) {
+  codes.push((await sup(H, "POST", `/tickets/${V.t}/messages`, { text: `Ответ ${i + 1}` })).status);
+}
+r = await sup(H, "POST", `/tickets/${V.t}/messages`, { text: "Двести первое" });
+check("в обращении не больше 200 сообщений", codes.every(c => c === 200) && r.status === 429 && r.json.code === "support-limit" && /слишком много сообщений/.test(r.json.message), codes.filter(c => c !== 200).join() + " " + r.text);
+r = await sup(V, "GET", `/tickets/${V.t}`);
+check("переписка из 200 сообщений читается целиком и по порядку", r.status === 200 && r.json.messages.length === 200 && r.json.status === "answered" && r.json.messages[199].from === "staff" && r.json.messages.every((x, i, all) => i === 0 || all[i - 1].id < x.id), `${r.status} ${r.json?.messages?.length}`);
+// одновременные создания не обходят предел незакрытых обращений (у V одно уже есть)
+batches = await Promise.all(Array.from({ length: 8 }, (_, i) => sup(V, "POST", "/tickets", { subject: `Одновременное ${i + 1}`, text: "Текст" })));
+check(
+  "одновременные создания: незакрытых обращений всё равно не больше пяти",
+  batches.filter(x => x.status === 200).length === 4 && batches.filter(x => x.status === 429 && x.json.code === "support-limit").length === 4 && (await sup(V, "GET", "/tickets")).json.tickets.length === 5,
+  batches.map(x => x.status).join()
+);
+// пределы: незакрытые обращения и новые обращения за сутки (у U одно уже есть)
+codes = [];
+const mine = [U.t];
+for (let i = 0; i < 4; i++) {
+  r = await sup(U, "POST", "/tickets", { subject: `Обращение ${i + 2}`, text: "Текст" });
+  codes.push(r.status);
+  mine.push(r.json?.id);
+}
+r = await sup(U, "POST", "/tickets", { subject: "Шестое обращение", text: "Текст" });
+check("не больше пяти незакрытых обращений", codes.join() === "200,200,200,200" && r.status === 429 && r.json.code === "support-limit" && /незакрытых/.test(r.json.message), codes.join() + " " + r.text);
+for (const id of mine) {
+  await sup(U, "POST", `/tickets/${id}/status`, { status: "closed" });
+}
+codes = [];
+for (let i = 0; i < 5; i++) {
+  r = await sup(U, "POST", "/tickets", { subject: `Обращение ${i + 6}`, text: "Текст" });
+  codes.push(r.status);
+  mine.push(r.json?.id);
+}
+await sup(U, "POST", `/tickets/${mine[mine.length - 1]}/status`, { status: "closed" });
+r = await sup(U, "POST", "/tickets", { subject: "Одиннадцатое обращение", text: "Текст" });
+check("не больше десяти новых обращений в сутки", codes.join() === "200,200,200,200,200" && r.status === 429 && r.json.code === "support-limit" && /сутки/.test(r.json.message), codes.join() + " " + r.text);
+r = await sup(U, "GET", "/tickets");
+check("в списке пользователя десять обращений, чужих нет", r.json.tickets.length === 10 && r.json.tickets.every(t => mine.includes(t.id)), String(r.json.tickets.length));
+// тело больше 12 МиБ: как и у синхронизации, отказ может выглядеть обрывом соединения
+tooBig = "";
+try {
+  r = await sup(H, "POST", "/tickets", { subject: "Слишком большой запрос", text: "x".repeat(13 * 1024 * 1024) });
+  tooBig = `${r.status} ${r.json?.code}`;
+} catch (e) {
+  tooBig = "обрыв";
+}
+check(`запрос обращения больше 12 МиБ не принимается (${tooBig})`, (tooBig === "400 support-invalid" || tooBig === "обрыв") && (await sup(H, "GET", "/tickets")).json.tickets.length === 1, tooBig);
 
 // пределы регистрации с одного адреса и прочее
 codes = [];

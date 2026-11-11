@@ -115,6 +115,7 @@ export const Sync = {
    * их стирает erase(). */
   setEnabled(on) {
     Services.prefs.setBoolPref(`${PREF}enabled`, !!on);
+    Services.prefs.clearUserPref(`${PREF}erasedElsewhere`);
     this._failures = 0;
     this.notify("settings");
     if (on) {
@@ -344,6 +345,20 @@ export const Sync = {
   },
 
   _failed(e) {
+    if (e.code === "sync-erased") {
+      Services.prefs.setBoolPref(`${PREF}enabled`, false);
+      Services.prefs.setBoolPref(`${PREF}erasedElsewhere`, true);
+      if (this.state) {
+        this._forget(this.state, 0);
+        this.state.keyId = "";
+        this.state.cache = {};
+        this.state.at = 0;
+        this._save().catch(() => {});
+      }
+      this._set("off", "");
+      this.notify("settings");
+      return;
+    }
     const offline = e.code === "offline";
     const unsupported = e.status === 404 || e.code === "no-server";
     const state = unsupported ? "unsupported" : offline ? "offline" : e.code === "sync-key" ? "key" : e.code === "session-expired" || e.code === "signed-out" ? "signed-out" : "error";
@@ -421,6 +436,11 @@ export const Sync = {
         return false;
       }
       if (res.gen !== state.gen) {
+        if (state.gen && state.keyId && !res.keyId) {
+          // данные стёрты с сервера с другого компьютера («Стереть с сервера»): заливать их обратно
+          // нельзя, синхронизация выключается и здесь
+          throw fail("Данные синхронизации стёрты с сервера с другого компьютера", "sync-erased");
+        }
         const first = !state.gen && !Object.keys(state.items).length;
         this._forget(state, res.gen);
         active.forEach(c => (state.cur[c] = 0));
@@ -621,8 +641,11 @@ export const Sync = {
           saved++;
         }
       }
-      if ((res.conflicts || []).length) {
+      for (const conflict of res.conflicts || []) {
         clean = false; // запись изменили на сервере, пока мы шли: следующий проход прочитает её
+        if (conflict?.rev === 0 && shadow[conflict.id]) {
+          delete shadow[conflict.id]; // на сервере записи нет вовсе: в следующем проходе она уйдёт как новая
+        }
       }
       rev = Math.max(rev, res.rev || 0);
     }
@@ -676,6 +699,8 @@ export const Sync = {
       error: this._note?.error || "",
       at: s?.at || 0,
       busy: this._busy,
+      // синхронизацию выключило стирание данных с другого компьютера
+      erased: !this.enabled && Services.prefs.getBoolPref(`${PREF}erasedElsewhere`, false),
       groups,
     };
   },
