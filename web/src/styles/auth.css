@@ -1,0 +1,66 @@
+/* Экраны до входа: одна колонка по центру, на телефоне — во весь экран. */
+
+.boot { height: 100dvh; display: grid; place-items: center; color: var(--text-4); }
+.boot .spinner { width: 24px; height: 24px; }
+.noscript { padding: 24px; text-align: center; }
+
+.auth {
+  height: 100dvh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: calc(24px + var(--safe-top)) max(20px, env(safe-area-inset-left, 0px)) calc(20px + var(--safe-bottom)) max(20px, env(safe-area-inset-right, 0px));
+  background:
+    radial-gradient(900px 480px at 50% -180px, color-mix(in srgb, var(--accent) 9%, transparent), transparent 70%),
+    var(--bg);
+}
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  margin: auto 0;
+  padding: 28px 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  animation: auth-in 240ms cubic-bezier(0.2, 0, 0, 1);
+}
+@keyframes auth-in { from { opacity: 0; transform: translateY(8px); } }
+.auth-head { display: flex; flex-direction: column; gap: 10px; }
+.auth-head .mark { margin-bottom: 10px; border-radius: 12px; }
+.auth-head h1 { font-size: 27px; line-height: 1.15; font-weight: 800; letter-spacing: -0.025em; text-wrap: balance; }
+.auth-head p { color: var(--text-3); font-size: 14.5px; line-height: 1.5; text-wrap: pretty; }
+.auth-form { display: flex; flex-direction: column; gap: 16px; }
+.auth-links { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 13.5px; }
+.auth-fine { color: var(--text-4); font-size: 12.5px; line-height: 1.5; text-wrap: pretty; }
+.auth-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.auth-row .btn { flex: 1; }
+.auth-foot { display: flex; gap: 20px; padding-top: 18px; font-size: 12.5px; }
+.auth-foot a { color: var(--text-4); text-decoration: none; }
+.auth-foot a:hover { color: var(--text-2); text-decoration: underline; }
+
+.name-status[data-tone="ok"] { color: var(--tone-ok); }
+.name-status[data-tone="bad"] { color: var(--tone-bad); }
+
+/* Ключ восстановления: восемь групп, читаются и переписываются по одной */
+.recovery-key {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding: 16px;
+  border-radius: var(--r);
+  background: var(--card);
+  border: 1px solid var(--line-2);
+  user-select: all;
+  -webkit-user-select: all;
+}
+.recovery-key span { padding: 9px 0; border-radius: var(--r-xs); background: var(--raised); text-align: center; font: 650 15px/1 var(--mono); letter-spacing: 0.06em; }
+
+.auth-choices { display: flex; flex-direction: column; gap: 10px; }
+.choice { display: flex; align-items: center; gap: 14px; padding: 14px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--card); color: var(--text); text-align: left; transition: border-color var(--ease), background-color var(--ease); }
+.choice:hover { border-color: var(--stroke); background: var(--card-2); }
+.choice > span:nth-child(2) { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.choice b { font-size: 14.5px; font-weight: 700; }
+.choice small { font-size: 12.5px; color: var(--text-3); line-height: 1.4; }
+.choice-icon { display: grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 12px; background: var(--raised); color: var(--text-2); }
+.choice > .icon { color: var(--text-4); }

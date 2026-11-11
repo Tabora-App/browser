@@ -712,7 +712,38 @@ async fn devices(State(app): State<Arc<App>>, headers: HeaderMap) -> Result<Json
     let (user, device_id, _) = app.auth(&headers).await?;
     let c = app.pool.get().await?;
     let list = db::devices(&c, user.id).await?;
-    Ok(Json(Value::Array(list.iter().map(|d| json!({ "id": d.id, "name": d.name, "at": d.at, "current": d.id == device_id })).collect())))
+    Ok(Json(Value::Array(list.iter().map(|d| json!({ "id": d.id, "name": d.name, "at": d.at, "current": d.id == device_id, "active": d.active })).collect())))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeviceRevokeBody {
+    login_hash: String,
+}
+
+/// Завершить сеанс другого устройства: потерянный телефон, чужой компьютер, на котором забыли
+/// выйти. Его сессии удаляются, пароль приложения почты отзывается, само устройство пропадает из
+/// списка. Нужен пароль заново: украденная сессия не должна уметь выгнать владельца.
+async fn device_revoke(State(app): State<Arc<App>>, headers: HeaderMap, Path(id): Path<String>, body: Bytes) -> ApiResult {
+    let (user, device_id, _) = app.auth(&headers).await?;
+    let b: DeviceRevokeBody = parse(&body)?;
+    check_device(&id)?;
+    app.reauth(&user, &b.login_hash, &client_ip(&headers))?;
+    if id == device_id {
+        return Err(bad("bad-request", "Это устройство выходит из аккаунта обычным выходом"));
+    }
+    let c = app.pool.get().await?;
+    if !db::devices(&c, user.id).await?.iter().any(|d| d.id == id) {
+        return Err(err(StatusCode::NOT_FOUND, "not-found", "Такого устройства у аккаунта нет"));
+    }
+    db::delete_device_sessions(&c, user.id, &id).await?;
+    let cred = db::device_cred(&c, user.id, &id).await?;
+    drop(c);
+    app.revoke_mail(&user, &[(id.clone(), cred)]).await;
+    let c = app.pool.get().await?;
+    // если почтовый сервер не ответил, запись остаётся: доступ к почте отзовётся при следующей попытке
+    db::forget_device(&c, user.id, &id).await?;
+    Ok(Json(json!({})))
 }
 
 /// Новый пароль приложения для этого устройства (прежний перестаёт действовать): на случай,
@@ -915,6 +946,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/v1/account/backup-email/remove", post(security::backup_email_remove))
         .route("/v1/account/logout", post(logout))
         .route("/v1/account/devices", get(devices))
+        .route("/v1/account/devices/:id/revoke", post(device_revoke))
         .route("/v1/mail/password", post(mail_password))
         .route("/v1/mail/pgp", get(pgp::keys_get).put(pgp::keys_put))
         .route("/.well-known/openpgpkey/hu/:hash", get(pgp::wkd_key))

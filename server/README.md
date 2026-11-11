@@ -45,6 +45,8 @@ PostgreSQL, почтовый сервер Stalwart по JMAP на том же х
 | `PATCH /v1/mail/aliases/:id { on?, site?, space? }` | выключенный алиас отвечает отправителю «ящика нет» |
 | `DELETE /v1/mail/aliases/:id` | алиас перестаёт принимать почту навсегда |
 | `GET /v1/health` | `{ ok, mail }` |
+| `GET /v1/account/devices` (Bearer) | `[{ id, name, at, current, active }]` — `active`: у устройства есть действующая сессия |
+| `POST /v1/account/devices/:id/revoke { loginHash }` | сеанс другого устройства завершён: его сессии удалены, пароль приложения почты отозван, устройство убрано из списка; своё устройство — `400`, неизвестное — `404 not-found` |
 | `POST /v1/account/login { …, totp? }` | при включённой защите без кода — `401 2fa-required`, с неверным — `401 bad-2fa`; `totp` — код приложения или резервный код |
 | `GET /v1/account/security` (Bearer) | `{ mail, twoFactor: { enabled, since, backupCodes }, backupEmail: { address, since }?, backupEmailPending: { address, expiresAt }?, recoveryKey }` |
 | `POST /v1/account/2fa/setup { loginHash }` | `{ secret, uri }` — секрет ждёт первого кода 15 минут, защита ещё выключена |

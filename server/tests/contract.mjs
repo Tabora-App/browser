@@ -161,6 +161,27 @@ check("чужой токен → 401 «сессия истекла»", r.status 
 r = await call("GET", "/v1/account/devices");
 check("без токена → 401", r.status === 401 && r.json.code === "session-expired", r.text);
 
+// завершение сеанса другого устройства
+r = await call("POST", "/v1/account/login", { body: { email: A.email, loginHash: A.pw1, deviceId: device(3), deviceName: "Потерянный телефон" } });
+const s3 = r.json?.session?.token;
+r = await call("GET", "/v1/account/devices", { token: A.s1 });
+check("в списке устройств видно, у каких есть действующая сессия", r.status === 200 && r.json.length === 3 && r.json.every(d => d.active === true), r.text);
+r = await call("POST", `/v1/account/devices/${device(3)}/revoke`, { body: { loginHash: A.pw1 } });
+check("завершение сеанса без токена → 401", r.status === 401 && r.json.code === "session-expired", r.text);
+r = await call("POST", `/v1/account/devices/${device(3)}/revoke`, { token: A.s1, body: { loginHash: A.pw2 } });
+check("завершение сеанса с неверным паролем → 401", r.status === 401 && r.json.code === "bad-credentials" && (await call("GET", "/v1/account/devices", { token: s3 })).status === 200, r.text);
+r = await call("POST", `/v1/account/devices/${device(1)}/revoke`, { token: A.s1, body: { loginHash: A.pw1 } });
+check("своё устройство так не завершить → 400", r.status === 400 && r.json.code === "bad-request", r.text);
+r = await call("POST", `/v1/account/devices/${device(7)}/revoke`, { token: A.s1, body: { loginHash: A.pw1 } });
+check("неизвестное устройство → 404", r.status === 404 && r.json.code === "not-found", r.text);
+r = await call("POST", "/v1/account/devices/x/revoke", { token: A.s1, body: { loginHash: A.pw1 } });
+check("кривой номер устройства → 400", r.status === 400, r.text);
+r = await call("POST", `/v1/account/devices/${device(3)}/revoke`, { token: A.s1, body: { loginHash: A.pw1 } });
+check("завершение сеанса другого устройства", r.status === 200, r.text);
+check("его сессия больше не действует", (await call("GET", "/v1/account/devices", { token: s3 })).status === 401);
+r = await call("GET", "/v1/account/devices", { token: A.s1 });
+check("устройство пропало из списка, остальные на месте", r.status === 200 && r.json.length === 2 && !r.json.some(d => d.id === device(3)) && (await call("GET", "/v1/account/devices", { token: A.s2 })).status === 200, r.text);
+
 // блокировка перебора (отдельный аккаунт и адрес)
 const B = { email: mail("b"), pw: hash("b-pass") };
 r = await call("POST", "/v1/account/register", { body: { email: B.email, loginHash: B.pw, kdf: 2, deviceId: device(3), deviceName: "B" } });

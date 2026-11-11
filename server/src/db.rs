@@ -320,11 +320,35 @@ pub struct Device {
     pub id: String,
     pub name: String,
     pub at: i64,
+    /// у устройства есть действующая сессия (иначе оно вышло и осталось только в списке)
+    pub active: bool,
 }
 
 pub async fn devices<C: GenericClient>(c: &C, user_id: i64) -> Result<Vec<Device>, DbError> {
-    let rows = c.query("SELECT device_id, name, last_seen FROM devices WHERE user_id = $1 ORDER BY last_seen DESC", &[&user_id]).await?;
-    Ok(rows.iter().map(|r| Device { id: r.get(0), name: r.get(1), at: r.get(2) }).collect())
+    let rows = c
+        .query(
+            "SELECT d.device_id, d.name, d.last_seen, EXISTS(SELECT 1 FROM sessions s WHERE s.user_id = d.user_id AND s.device_id = d.device_id AND s.expires_at > $2)
+             FROM devices d WHERE d.user_id = $1 ORDER BY d.last_seen DESC",
+            &[&user_id, &crate::util::now_ms()],
+        )
+        .await?;
+    Ok(rows.iter().map(|r| Device { id: r.get(0), name: r.get(1), at: r.get(2), active: r.get(3) }).collect())
+}
+
+/// Завершить все сессии одного устройства. Возвращает, сколько их было.
+pub async fn delete_device_sessions<C: GenericClient>(c: &C, user_id: i64, device_id: &str) -> Result<u64, DbError> {
+    Ok(c.execute("DELETE FROM sessions WHERE user_id = $1 AND device_id = $2", &[&user_id, &device_id]).await?)
+}
+
+/// Убрать устройство из списка: только когда у него не осталось ни сессий, ни доступа к почте.
+pub async fn forget_device<C: GenericClient>(c: &C, user_id: i64, device_id: &str) -> Result<u64, DbError> {
+    Ok(c
+        .execute(
+            "DELETE FROM devices d WHERE d.user_id = $1 AND d.device_id = $2 AND d.mail_cred IS NULL
+             AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.user_id = d.user_id AND s.device_id = d.device_id)",
+            &[&user_id, &device_id],
+        )
+        .await?)
 }
 
 pub async fn create_session<C: GenericClient>(c: &C, token_hash: &[u8], user_id: i64, device_id: &str, now: i64, expires: i64) -> Result<(), DbError> {

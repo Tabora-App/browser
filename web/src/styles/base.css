@@ -1,0 +1,171 @@
+/* Основа оформления веб-версии Tabora: шрифты, цвета, сброс. Цвета и радиусы — те же, что в
+ * браузере (почта, сейф): тёмная тема по умолчанию, светлая — по настройке системы.
+ * Политика содержимого запрещает встроенные стили: всё оформление в файлах, динамика — через CSSOM. */
+
+@font-face {
+  font-family: "Manrope";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url(/assets/fonts/Manrope-cyrillic-ext.woff2) format("woff2");
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: "Manrope";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url(/assets/fonts/Manrope-cyrillic.woff2) format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: "Manrope";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url(/assets/fonts/Manrope-latin-ext.woff2) format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Manrope";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url(/assets/fonts/Manrope-latin.woff2) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url(/assets/fonts/JetBrainsMono-cyrillic.woff2) format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url(/assets/fonts/JetBrainsMono-latin.woff2) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  --bg: #0f1013;
+  --card: #121317;
+  --card-2: #17191d;
+  --line: #1b1d22;
+  --line-2: #23262c;
+  --field: #1b1d22;
+  --field-border: #2a2d34;
+  --raised: #23262c;
+  --raised-2: #2a2d34;
+  --stroke: #2e3138;
+  --text: #ecedef;
+  --text-2: #c9ccd3;
+  --text-3: #9a9ea8;
+  --text-4: #868b95;
+  --text-5: #6e737d;
+  --text-strong: #fff;
+  --accent: #c8f25a;
+  --accent-hover: #d4f87a;
+  --accent-dim: rgba(200, 242, 90, 0.16);
+  --accent-ink: #c8f25a;
+  --on-accent: #0b0c0e;
+  --tone-ok: var(--accent-ink);
+  --tone-ok-bg: rgba(200, 242, 90, 0.14);
+  --tone-warn: #f2c56b;
+  --tone-warn-bg: rgba(242, 197, 107, 0.14);
+  --tone-bad: #ff9c8a;
+  --tone-bad-bg: rgba(255, 156, 138, 0.14);
+  --paper: #ffffff;
+  --paper-text: #16171a;
+  --selected: #1d2025;
+  --hover: #17191d;
+  --shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  --shadow-pop: 0 14px 40px rgba(0, 0, 0, 0.5);
+  --font: "Manrope", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --ease: 140ms cubic-bezier(0.2, 0, 0, 1);
+  --r-lg: 18px;
+  --r: 14px;
+  --r-md: 12px;
+  --r-sm: 10px;
+  --r-xs: 8px;
+  --rail: 76px;
+  --bar: 60px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f6f4ef;
+    --card: #ffffff;
+    --card-2: #ffffff;
+    --line: #ebe8e1;
+    --line-2: #e0dcd3;
+    --field: #ffffff;
+    --field-border: #dad6cd;
+    --raised: #e9e6df;
+    --raised-2: #ddd9d0;
+    --stroke: #d6d2c8;
+    --text: #16171a;
+    --text-2: #3d4047;
+    --text-3: #5e626b;
+    --text-4: #7b808a;
+    --text-5: #9a9ea8;
+    --text-strong: #16171a;
+    --accent-dim: rgba(200, 242, 90, 0.4);
+    --accent-ink: #5f7d0a;
+    --tone-ok-bg: rgba(200, 242, 90, 0.42);
+    --tone-warn: #8a5a00;
+    --tone-warn-bg: rgba(233, 170, 40, 0.2);
+    --tone-bad: #b3261e;
+    --tone-bad-bg: rgba(179, 38, 30, 0.1);
+    --selected: #f1efe9;
+    --hover: #f3f1ec;
+    --shadow: 0 24px 70px rgba(40, 36, 30, 0.22);
+    --shadow-pop: 0 14px 40px rgba(40, 36, 30, 0.18);
+    color-scheme: light;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 500 14px/1.45 var(--font);
+  letter-spacing: -0.003em;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+}
+
+body { overflow: hidden; }
+
+h1, h2, h3, p { margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; letter-spacing: inherit; }
+button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+a { color: var(--accent-ink); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+[hidden] { display: none !important; }
+.icon { flex: none; }
+.mark { flex: none; display: block; }
+.mono { font-family: var(--mono); letter-spacing: 0; }
+.offscreen { position: fixed; left: -9999px; top: 0; opacity: 0; }
+
+:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; border-radius: 6px; }
+
+::selection { background: var(--accent-dim); }
+
+/* Полосы прокрутки тихие: содержимое важнее */
+* { scrollbar-width: thin; scrollbar-color: var(--raised-2) transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
