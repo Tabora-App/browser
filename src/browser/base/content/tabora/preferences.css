@@ -498,6 +498,8 @@ button.tabora-sup-chip.link:hover {
 
 .tabora-sup-scope .tabora-acc-tab {
   flex: 0 0 auto;
+  padding: 0 14px !important;
+  font-size: 13px;
 }
 
 .tabora-acc-contact {
@@ -594,7 +596,7 @@ setting-pane[data-category="paneSync"][data-acc-tab="data"] setting-group[groupi
 /* вкладки: тот же переключатель, что у пространств в боковой панели */
 .tabora-acc-tabs {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   padding: 4px;
   border-radius: 12px;
   background: var(--tabora-seg-bg);
@@ -609,12 +611,14 @@ setting-pane[data-category="paneSync"][data-acc-tab="data"] setting-group[groupi
   min-width: 0 !important;
   min-height: 0 !important;
   margin: 0 !important;
-  padding: 0 14px !important;
+  /* семь вкладок помещаются в ширину страницы настроек (600px) целиком: строка, которая
+     прокручивается, при выборе вкладки сдвигалась бы вся */
+  padding: 0 8px !important;
   border: 0 !important;
   border-radius: 9px;
   background: transparent;
   color: var(--tabora-text-3);
-  font: 600 13px/1 var(--tabora-font);
+  font: 600 12.5px/1 var(--tabora-font);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -625,6 +629,23 @@ setting-pane[data-category="paneSync"][data-acc-tab="data"] setting-group[groupi
 
 .tabora-acc-tab:hover {
   color: var(--tabora-text);
+}
+
+/* подпись заранее занимает ширину жирного начертания: выбранная вкладка становится жирной,
+   не раздвигая соседние */
+.tabora-acc-tab-label {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tabora-acc-tab-label::after {
+  content: attr(data-label);
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: 700;
+  user-select: none;
 }
 
 .tabora-acc-tab[aria-selected="true"] {
@@ -639,21 +660,27 @@ setting-pane[data-category="paneSync"][data-acc-tab="data"] setting-group[groupi
   outline-offset: 2px;
 }
 
+/* Отметка «здесь есть новое» — точка в углу вкладки. Она вне потока: её появление не меняет
+   ширину вкладки и не сдвигает соседние (числом то же сказано в меню аккаунта и в самом списке). */
+.tabora-acc-tab {
+  position: relative;
+}
+
 .tabora-acc-badge {
-  min-width: 16px;
-  height: 16px;
-  padding: 0 5px;
-  border-radius: 8px;
-  display: inline-grid;
-  place-items: center;
+  position: absolute;
+  top: 5px;
+  inset-inline-end: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
   background: var(--tabora-warn);
-  color: #0b0c0e;
-  font: 800 10px/1 var(--tabora-font);
+  font-size: 0; /* число остаётся в разметке для чтения с экрана */
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  /* вкладка сменилась: группы проявляются и встают на место, как на остальных поверхностях */
-  .tabora-acc-panel {
+  /* вкладка сменилась: группы проявляются и встают на место, как на остальных поверхностях.
+     Перерисовка той же вкладки (пришли данные) идёт без движения */
+  .tabora-acc-panel.enter {
     animation: tabora-acc-in 200ms cubic-bezier(0.2, 0, 0, 1);
   }
 }

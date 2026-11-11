@@ -105,7 +105,9 @@ window.TaboraAccountPane = (function () {
   const SUP_FILES_MAX = 4;
   const SUP_TYPES = ["image/png", "image/jpeg", "image/webp", "text/plain"];
   const sup = {
-    view: "list", scope: "mine", list: null, staff: false, error: "", unsupported: false, ticket: null, busy: false, loading: false,
+    // lists — последний полученный список каждого вида: при переключении он виден сразу, а
+    // свежий подменяет его, когда придёт (без строки «Загружаю…» и прыжка страницы)
+    view: "list", scope: "mine", lists: { mine: null, all: null }, stale: true, staff: false, error: "", unsupported: false, ticket: null, busy: false, loading: false,
     draft: { subject: "", text: "", meta: true, files: [] }, reply: { text: "", files: [] }, images: new Map(), timer: null,
   };
 
@@ -133,20 +135,25 @@ window.TaboraAccountPane = (function () {
       return;
     }
     sup.loading = true;
+    const scope = sup.scope;
+    const before = JSON.stringify([sup.lists[scope], sup.staff, sup.error, sup.unsupported]);
     try {
-      const r = await Account.supportTickets({ scope: sup.scope });
-      sup.list = Array.isArray(r.tickets) ? r.tickets : [];
+      const r = await Account.supportTickets({ scope });
+      sup.lists[scope] = Array.isArray(r.tickets) ? r.tickets : [];
       sup.staff = !!r.staff;
       sup.error = "";
       sup.unsupported = false;
     } catch (e) {
       sup.error = supFail(e);
-      sup.list ||= [];
+      sup.lists[scope] ||= [];
     }
     sup.loading = false;
+    sup.stale = false;
     Shell?.supportPoll?.();
-    if (state.tab === "support" && sup.view === "list") {
-      render();
+    if (scope !== sup.scope) {
+      supLoadList(); // пока шёл запрос, выбрали другой вид
+    } else if (state.tab === "support" && sup.view === "list" && before !== JSON.stringify([sup.lists[scope], sup.staff, sup.error, sup.unsupported])) {
+      render(); // перерисовка только если что-то изменилось
     }
   }
 
@@ -301,7 +308,7 @@ window.TaboraAccountPane = (function () {
       sup.ticket = t;
       sup.reply = { text: "", files: [] };
       sup.view = "ticket";
-      sup.list = null;
+      sup.stale = true;
       shell(s => s.notice(`Обращение № ${t.id} отправлено`))();
     } catch (e) {
       shell(s => s.notice(e.message || String(e)))();
@@ -321,7 +328,7 @@ window.TaboraAccountPane = (function () {
       sup.ticket = await Account.supportReply(sup.ticket.id, { text: r.text, files: supWire(r.files) });
       r.files.forEach(f => f.url && URL.revokeObjectURL(f.url));
       sup.reply = { text: "", files: [] };
-      sup.list = null;
+      sup.stale = true;
     } catch (e) {
       shell(s => s.notice(e.message || String(e)))();
     }
@@ -336,7 +343,7 @@ window.TaboraAccountPane = (function () {
     sup.busy = true;
     try {
       sup.ticket = await Account.supportStatus(sup.ticket.id, status);
-      sup.list = null;
+      sup.stale = true;
     } catch (e) {
       shell(s => s.notice(e.message || String(e)))();
     }
@@ -384,7 +391,7 @@ window.TaboraAccountPane = (function () {
     if (sup.unsupported) {
       return [group("Поддержка", "", [item("Обращения из браузера скоро заработают", "Сервер Tabora ещё не обновлён. Пока напишите нам на hello@tabora.app — ответим письмом.", [button("Проверить снова", () => {
         sup.unsupported = false;
-        sup.list = null;
+        sup.stale = true;
         render();
       })])])];
     }
@@ -462,15 +469,16 @@ window.TaboraAccountPane = (function () {
       ])];
     }
 
-    // список
-    if (sup.list === null) {
+    // список: что есть — показано сразу, свежее подтягивается в фоне
+    if (sup.lists[sup.scope] === null || sup.stale) {
       supLoadList();
     }
     const create = button("Новое обращение", () => {
       sup.view = "new";
       render();
     }, { type: "primary" });
-    const list = sup.list || [];
+    const loaded = sup.lists[sup.scope];
+    const list = loaded || [];
     const row = t => {
       const staffView = sup.scope === "all" && sup.staff;
       const b = button("Открыть", () => supOpen(t.id), { type: t.unread ? "primary" : "default" });
@@ -483,11 +491,13 @@ window.TaboraAccountPane = (function () {
     const scope = sup.staff
       ? (() => {
           const seg = el("div", { class: "tabora-acc-tabs tabora-sup-scope", role: "tablist", "aria-label": "Какие обращения показывать" }, [["mine", "Мои обращения"], ["all", "Очередь поддержки"]].map(([id, label]) => {
-            const b = el("button", { class: "tabora-acc-tab", type: "button", role: "tab", "aria-selected": String(sup.scope === id) }, label);
+            const b = el("button", { class: "tabora-acc-tab", type: "button", role: "tab", "aria-selected": String(sup.scope === id) }, [el("span", { class: "tabora-acc-tab-label", "data-label": label }, label)]);
             b.addEventListener("click", () => {
-              sup.scope = id;
-              sup.list = null;
-              render();
+              if (sup.scope !== id) {
+                sup.scope = id;
+                sup.stale = true;
+                render();
+              }
             });
             return b;
           }));
@@ -499,11 +509,11 @@ window.TaboraAccountPane = (function () {
       group(sup.scope === "all" && sup.staff ? "Очередь поддержки" : "Поддержка", sup.scope === "all" && sup.staff ? "Обращения всех пользователей: сначала те, что изменились последними." : head, [
         sup.scope === "all" && sup.staff ? null : item("Что-то не работает или есть идея?", "Опишите, приложите снимок экрана — и следите за ответом здесь.", [create]),
         sup.error ? item("Обращения не загрузились", sup.error, [button("Повторить", () => {
-          sup.list = null;
+          sup.stale = true;
           render();
         })]) : null,
-        ...(sup.list === null && !sup.error ? [item("Загружаю обращения…", "")] : list.map(row)),
-        sup.list && !list.length && !sup.error && sup.scope === "all" ? item("Очередь пуста", "Новых обращений нет.") : null,
+        ...(loaded === null && !sup.error ? [item("Загружаю обращения…", "")] : list.map(row)),
+        loaded && !list.length && !sup.error && sup.scope === "all" ? item("Очередь пуста", "Новых обращений нет.") : null,
       ]),
     ];
   }
@@ -864,7 +874,7 @@ window.TaboraAccountPane = (function () {
     const bar = el("div", { class: "tabora-acc-tabs", role: "tablist", "aria-label": "Разделы аккаунта" }, TABS.map(([id, label]) => {
       const selected = id === state.tab;
       const b = el("button", { class: "tabora-acc-tab", type: "button", role: "tab", id: `tabora-acc-tab-${id}`, "aria-selected": String(selected), tabindex: selected ? "0" : "-1" }, [
-        label,
+        el("span", { class: "tabora-acc-tab-label", "data-label": label }, label),
         id === where && attention ? el("span", { class: "tabora-acc-badge", "aria-label": "нужно действие" }, "1") : null,
         id === "support" && Shell?.account?.support?.count ? el("span", { class: "tabora-acc-badge", "aria-label": "есть ответ поддержки" }, String(Shell.account.support.count)) : null,
       ]);
@@ -906,7 +916,11 @@ window.TaboraAccountPane = (function () {
       root.replaceChildren(who(), el("p", { class: "tabora-acc-contact" }, "Не получается войти? Напишите нам на hello@tabora.app."));
       return;
     }
-    const panel = el("div", { class: "tabora-acc-panel", role: "tabpanel", "aria-labelledby": `tabora-acc-tab-${state.tab}` }, PANELS[state.tab]());
+    // появление панели проигрывается только при смене вкладки: перерисовка на месте (пришли данные,
+    // сменился список) не должна дёргать страницу
+    const entered = state.shown !== state.tab;
+    state.shown = state.tab;
+    const panel = el("div", { class: `tabora-acc-panel${entered ? " enter" : ""}`, role: "tabpanel", "aria-labelledby": `tabora-acc-tab-${state.tab}` }, PANELS[state.tab]());
     root.replaceChildren(who(), tabs(), panel);
     if (state.tab === "sync") {
       loadDevices();
