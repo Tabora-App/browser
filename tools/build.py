@@ -498,9 +498,12 @@ def cmd_import(args: argparse.Namespace) -> None:
     need_engine()
     config = load_config()
     brand = brand_name(config, args.brand)
-    verify_mar_certs()
+    # до переноса проверяются только сертификаты в src/: в свежей копии движка ещё лежат
+    # сертификаты Mozilla, наши туда кладёт apply_src; копия в engine/ сверяется после него
+    verify_mar_certs(engine=False)
     apply_branding(config, brand)
     apply_src()
+    verify_mar_certs()
     write_mozconfig(config, brand)
     log("import завершён")
 
@@ -930,15 +933,16 @@ def cmd_run(args: argparse.Namespace) -> None:
 # ---------------------------------------------------------------------------
 # Проверки сертификатов и упакованного приложения (используются и tools/release.py)
 
-def verify_mar_certs() -> None:
-    """Сертификаты MAR в src/ (и то, что видит движок) совпадают с закреплёнными отпечатками."""
+def verify_mar_certs(engine: bool = True) -> None:
+    """Сертификаты MAR в src/ (и то, что видит движок) совпадают с закреплёнными отпечатками.
+    engine=False — только src/: так проверяет import до того, как положит их в движок."""
     for name, expected in MAR_CERT_SHA256.items():
         path = MAR_CERTS_DIR / name
         if not path.is_file() or _sha256_bytes(path.read_bytes()) != expected:
             die(f"сертификат {path.relative_to(ROOT)} не совпадает с закреплённым в tools/build.py: "
                 "подмена ключа обновлений?")
         engine_copy = ENGINE / "toolkit" / "mozapps" / "update" / "updater" / name
-        if engine_copy.exists() and _sha256_bytes(engine_copy.read_bytes()) != expected:
+        if engine and engine_copy.exists() and _sha256_bytes(engine_copy.read_bytes()) != expected:
             die(f"в engine/ лежит другой {name}: выполните tools/build.py import")
 
 
