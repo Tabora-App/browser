@@ -3388,6 +3388,47 @@ toolbarseparator {
   padding: 3px 5px;
 }
 
+/* Письмо отправляется: надпись кнопки остаётся на месте невидимой (ширина не меняется), поверх
+   крутится кольцо, как на кнопках кошелька и окна аккаунта; поля не правятся. */
+#tabora-compose .primary.loading {
+  position: relative;
+  color: transparent;
+  cursor: progress;
+}
+
+#tabora-compose .primary.loading:hover {
+  background: var(--tabora-accent);
+}
+
+#tabora-compose .primary.loading .kbd {
+  visibility: hidden;
+}
+
+#tabora-compose .primary.loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(11, 12, 14, 0.25);
+  border-top-color: var(--tabora-on-accent);
+  animation: tabora-spin 0.7s linear infinite;
+}
+
+#tabora-compose[sending] .body {
+  pointer-events: none;
+  opacity: 0.6;
+  transition: opacity 140ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #tabora-compose .primary.loading::after {
+    animation-duration: 2s;
+  }
+}
+
 #tabora-compose .status {
   flex: 1;
   font-size: 11px;

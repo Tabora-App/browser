@@ -35,6 +35,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   ImapClient: "chrome://tabora/content/mail/net/Imap.sys.mjs",
   smtpSend: "chrome://tabora/content/mail/net/Smtp.sys.mjs",
   Pgp: "chrome://tabora/content/mail/Pgp.sys.mjs",
+  AsyncShutdown: "resource://gre/modules/AsyncShutdown.sys.mjs",
 });
 ChromeUtils.defineLazyGetter(lazy, "Mime", () => ChromeUtils.importESModule("chrome://tabora/content/mail/net/Mime.sys.mjs"));
 
@@ -45,8 +46,10 @@ const ROLES = ["inbox", "sent", "drafts", "archive", "spam", "trash"];
 const WINDOW = { inbox: 80, sent: 40, drafts: 20, archive: 40, spam: 30, trash: 30 };
 const FETCH_BYTES = 262_144; // от каждого письма читается начало: заголовки и текст; вложения — по запросу
 const SYNC_EVERY_MS = 3 * 60_000;
+const WRITE_GAP_MS = 2000;
 const MAX_ATTACH_BYTES = 20 * 1024 * 1024;
 const TABORA = "tabora"; // id ящика аккаунта
+const CODE_RULES = 2; // версия правил распознавания кода: при смене коды в кэше пересчитываются
 
 export const SPACES = ["Личное", "Работа", "Проекты"];
 export const SPACE_COLORS = { Личное: "#c8f25a", Работа: "#7cc4ff", Проекты: "#ff9f5a" };
@@ -67,6 +70,12 @@ const PRESETS = [
 function accessError(code) {
   const text = code === "signed-out" ? "Почта доступна после входа в аккаунт Tabora" : "Сейф заблокирован: разблокируйте его, чтобы открыть почту";
   return Object.assign(new Error(text), { code });
+}
+
+/** Пауза до свободной минуты главного потока (не дольше 40 мс): длинная работа режется на куски,
+ * чтобы не задерживать отрисовку и прокрутку. */
+function breathe() {
+  return new Promise(resolve => ChromeUtils.idleDispatch(resolve, { timeout: 40 }));
 }
 
 function hash(s) {
@@ -114,6 +123,7 @@ export const MailStore = {
       return;
     }
     this._observing = true;
+    lazy.AsyncShutdown.profileBeforeChange.addBlocker("Tabora: запись кэша почты", () => this.flush());
     Services.obs.addObserver((s, t, what) => {
       if (what === "signed-out") {
         this.forget();
@@ -149,7 +159,7 @@ export const MailStore = {
         }
       }
       if (this.data && list.length) {
-        this.save();
+        this.save({ soon: true });
       }
     });
   },
@@ -212,34 +222,85 @@ export const MailStore = {
       data.messages = data.messages.filter(m => m.account !== TABORA);
       data.aliases = [];
     }
+    if (data.codeRules !== CODE_RULES) {
+      data.messages.forEach(m => this._recode(m));
+      data.codeRules = CODE_RULES;
+    }
     this.data = data;
     this._seq = data.messages.reduce((n, m) => (/^m\d+$/.test(m.id) ? Math.max(n, Number(m.id.slice(1))) : n), 0);
     this.syncSoon(0);
   },
 
-  /** Записи по очереди: два одновременных сохранения не должны делить временный файл. */
+  /** Код подтверждения записи пересчитывается по сохранённому тексту: правила распознавания
+   * менялись, а письма в кэше разобраны по прежним. */
+  _recode(rec) {
+    const blocks = rec.body || [];
+    const outgoing = rec.local || rec.folder === "sent" || rec.folder === "drafts";
+    const text = blocks.map(b => b.h || b.p || b.q || b.btn || b.code || "").filter(Boolean).join("\n");
+    const code = outgoing ? null : lazy.Mime.findCode(rec.subject, text);
+    blocks.forEach((b, i) => {
+      if (b.code && b.code !== code) {
+        blocks[i] = { p: b.code };
+      }
+    });
+    rec.labels = (rec.labels || []).filter(l => l !== "codes");
+    if (code) {
+      rec.code = code;
+      rec.labels.push("codes");
+    } else {
+      delete rec.code;
+    }
+  },
+
+  /** Запись кэша на диск. Кэш шифруется целиком: на большом ящике это десятки миллисекунд
+   * главного потока, поэтому изменения, которые сервер помнит и сам (сверка, пометки,
+   * расшифровка), пишутся одним разом не чаще раза в WRITE_GAP_MS. То, что есть только здесь
+   * (черновики, внешние ящики), пишется сразу: _writeNow(). */
   _write() {
-    this._writing = this._writing.then(() => this._doWrite()).catch(e => console.error("Tabora mail: не удалось сохранить", e));
+    this._writeTimer ||= setTimeout(() => this._writeNow(), WRITE_GAP_MS);
+  },
+
+  /** Снимок данных шифруется сразу (ключ сейфа берётся в момент вызова, так что запись успевает
+   * и перед выходом из аккаунта), сама запись в файл встаёт в очередь: две одновременные не
+   * должны делить временный файл. */
+  _writeNow() {
+    clearTimeout(this._writeTimer);
+    this._writeTimer = null;
+    if (!this.data || !Vault.unlocked) {
+      return this._writing;
+    }
+    let enc;
+    try {
+      const bytes = new TextEncoder().encode(JSON.stringify(this.data));
+      enc = Vault.encrypt("mail", bytes).finally(() => bytes.fill(0));
+    } catch (e) {
+      console.error("Tabora mail: не удалось сохранить", e);
+      return this._writing;
+    }
+    enc.catch(() => {}); // ошибка шифрования сообщается ниже, из очереди записи
+    this._writing = this._writing
+      .then(async () => {
+        await IOUtils.writeJSON(FILE(), { v: FORMAT, enc: await enc }, { tmpPath: `${FILE()}.tmp` });
+        try {
+          await IOUtils.setPermissions(FILE(), 0o600);
+        } catch (e) {}
+      })
+      .catch(e => console.error("Tabora mail: не удалось сохранить", e));
     return this._writing;
   },
 
-  async _doWrite() {
-    if (!this.data || !Vault.unlocked) {
-      return;
-    }
-    const bytes = new TextEncoder().encode(JSON.stringify(this.data));
-    const enc = await Vault.encrypt("mail", bytes);
-    bytes.fill(0);
-    await IOUtils.writeJSON(FILE(), { v: FORMAT, enc }, { tmpPath: `${FILE()}.tmp` });
-    try {
-      await IOUtils.setPermissions(FILE(), 0o600);
-    } catch (e) {}
+  /** Дождаться, пока всё изменённое окажется на диске (закрытие браузера, проверки). */
+  flush() {
+    return this._writeTimer ? this._writeNow() : this._writing;
   },
 
   /** Выход из аккаунта или блокировка сейфа: данные в памяти больше не держим. */
   forget() {
     clearTimeout(this._syncTimer);
     this._syncTimer = null;
+    if (this._writeTimer) {
+      this._writeNow(); // при выходе из аккаунта ключ сейфа ещё в памяти; после блокировки писать нечем
+    }
     if (this.data) {
       this.data = null;
       Services.obs.notifyObservers(null, this.TOPIC, "closed");
@@ -250,11 +311,17 @@ export const MailStore = {
     Services.obs.notifyObservers(null, this.TOPIC, what);
   },
 
-  save() {
+  /** Данные изменились: записать и сообщить интерфейсу. soon: true — изменение не страшно
+   * потерять (сервер его помнит), запись можно отложить и объединить с соседними. */
+  save({ soon = false } = {}) {
     if (!this.data) {
       return;
     }
-    this._write();
+    if (soon) {
+      this._write();
+    } else {
+      this._writeNow();
+    }
     this.notify();
   },
 
@@ -553,6 +620,11 @@ export const MailStore = {
     for (let i = 0; i < need.length && this.data; i += 12) {
       const items = await client.fetch(need.slice(i, i + 12), { maxBytes: FETCH_BYTES });
       for (const item of items) {
+        // разбор письма занимает главный поток: между письмами отдаём его интерфейсу и страницам
+        await breathe();
+        if (!this.data) {
+          return;
+        }
         const rec = this._record(acc, role, path, box.uidValidity, item);
         if (rec) {
           this._adopt(rec);
@@ -592,7 +664,8 @@ export const MailStore = {
     const rcpt = [...parsed.deliveredTo, ...parsed.to, ...parsed.cc];
     const alias = outgoing ? parsed.from.email || acc.address : rcpt.find(a => own.has(a)) || (domain && rcpt.find(a => a.endsWith(domain))) || acc.address;
     const labels = [];
-    if (code) {
+    const found = outgoing ? null : code; // в своих письмах код искать незачем
+    if (found) {
       labels.push("codes");
     }
     if (parsed.newsletter) {
@@ -608,8 +681,8 @@ export const MailStore = {
       messageId: parsed.messageId, refs: [...parsed.references, parsed.inReplyTo].filter(Boolean).slice(-12),
       body, snippet, attachments: parsed.attachments, size: item.size || 0, partial: (item.size || 0) > FETCH_BYTES,
     };
-    if (code) {
-      rec.code = code;
+    if (found) {
+      rec.code = found;
     }
     if (parsed.newsletter) {
       rec.newsletter = true;
@@ -712,7 +785,7 @@ export const MailStore = {
         }
       }
       if (this.data) {
-        this.save();
+        this.save({ soon: true });
       }
     });
   },
@@ -753,7 +826,7 @@ export const MailStore = {
     } catch (e) {
       this._pgpFailed(rec, e);
     }
-    this.save();
+    this.save({ soon: true });
     return rec;
   },
 
@@ -842,7 +915,7 @@ export const MailStore = {
         this._enqueue("перенос письма", () => this._move(m, to));
       }
     }
-    this.save();
+    this.save({ soon: !m.local }); // черновик есть только здесь, пометки письма помнит сервер
     return m;
   },
 
@@ -898,7 +971,7 @@ export const MailStore = {
     if (!m.local && m.at?.uid) {
       this._enqueue("удаление письма", () => this._withFolder(m, c => c.destroy([m.at.uid])));
     }
-    this.save();
+    this.save({ soon: !m.local });
   },
 
   _senderAccount(address) {
@@ -1112,7 +1185,7 @@ export const MailStore = {
  * удалась, кэш начнётся заново и наполнится с сервера (пароли внешних ящиков придётся ввести снова). */
 Vault.registerRekey("mail", async ({ decryptOld, encryptNew }) => {
   if (MailStore.data) {
-    await MailStore._write(); // Vault.encrypt уже работает новым ключом
+    await MailStore._writeNow(); // Vault.encrypt уже работает новым ключом
     return;
   }
   let raw;

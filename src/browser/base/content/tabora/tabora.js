@@ -633,7 +633,14 @@ var Tabora = {
     if (button.disabled) {
       return;
     }
-    button.disabled = true;
+    // кнопка занята до ответа сервера: кольцо вместо надписи, поля письма не правятся
+    const busy = on => {
+      button.disabled = on;
+      button.classList.toggle("loading", on);
+      button.toggleAttribute("aria-busy", on);
+      this.compose.box.toggleAttribute("sending", on);
+    };
+    busy(true);
     try {
       // замок должен отвечать тому, что сейчас в полях
       const confirmed = s.plainConfirmed;
@@ -663,7 +670,7 @@ var Tabora = {
       status.textContent = "Не отправлено: письмо осталось в окне";
       this.notice(`Письмо не отправлено. ${e.message}`);
     } finally {
-      button.disabled = false;
+      busy(false);
     }
   },
 

@@ -563,18 +563,49 @@ function textToBlocks(text) {
   return blocks;
 }
 
-/** Код подтверждения из темы и текста: 4–8 цифр рядом со словами про код. */
+/* Код подтверждения. Ошибка здесь заметнее пропуска: номер заказа, показанный как код, хуже
+ * письма без карточки кода. Поэтому кодом считается только отдельно стоящее число, о котором
+ * рядом сказано, что это код. */
+
+// слова о коде; только целиком («кодировка» и «shipping» не подходят)
+const CODE_WORD = "(?<![\\p{L}\\p{N}_-])(?:код(?:а|у|ом|е|ы)?|пин(?:-код(?:а|у|ом|е)?)?|парол(?:ь|я|ю|ем|е)|одноразов\\p{L}*|code|passcode|password|pin|otp)(?![\\p{L}\\p{N}_])";
+// рядом со словом о коде сказано, что это номер чего-то другого
+const CODE_NOT = /заказ|товар|город|стран|подраздел|купон|скидк|промо|отслежив|трек|бронир|индекс|почтов|артикул|ошибк|order|product|promo|discount|coupon|voucher|tracking|zip|postal|area|country|booking|reference|invoice|error|item|sku|№|#/iu;
+// 4–8 цифр подряд или две группы по три-четыре цифры через пробел либо дефис; не часть слова,
+// адреса, телефона, суммы, даты, дроби, более длинного числа
+const CODE_NUMBER = /(?<![\p{L}\p{N}_+#№$€£₽@.,/\\=-])(?<!\d[ -])(\d{3,4}[ -]\d{3,4}|\d{4,8})(?![\p{L}\p{N}_]|[.,:/-]\d|[ -]\d|\s?(?:₽|руб|р\.|\$|€|£|usd|eur|%))/giu;
+// любое отдельно стоящее число: между словом о коде и самим кодом такого быть не должно
+const LOOSE_NUMBER = /(?<![\p{L}\p{N}_@.+-])\d+(?![\p{L}\p{N}_@])/u;
+
+/** Код подтверждения из темы и текста письма либо null. Слово о коде стоит перед числом (не
+ * дальше 80 знаков и двух строк) или сразу после него в той же строке: «123456 — ваш код». */
 export function findCode(subject, text) {
   const hay = `${subject || ""}\n${String(text || "").slice(0, 3000)}`;
-  const near = /(?:код|code|пароль|password|passcode|pin|otp|verification|подтвержд|одноразов|security)[^\d\n]{0,80}?(\d[\d \-]{2,9}\d)\b/i.exec(hay) || /\b(\d{3}[ \-]\d{3}|\d{4,8})\b[^\d\n]{0,40}(?:код|code|is your)/i.exec(hay);
-  if (!near) {
-    return null;
+  for (const m of hay.matchAll(CODE_NUMBER)) {
+    const digits = m[1].replace(/\D/g, "");
+    if (digits.length < 4 || digits.length > 8 || /^(19|20)\d\d$/.test(digits)) {
+      continue;
+    }
+    const before = hay.slice(Math.max(0, m.index - 110), m.index);
+    let word = null;
+    for (const w of before.matchAll(new RegExp(CODE_WORD, "giu"))) {
+      word = w;
+    }
+    let found = false;
+    if (word) {
+      const gap = before.slice(word.index + word[0].length);
+      found = gap.length <= 80 && !LOOSE_NUMBER.test(gap) && (gap.match(/\n/g) || []).length <= 2 && !CODE_NOT.test(before.slice(Math.max(0, word.index - 30)));
+    }
+    if (!found) {
+      const after = hay.slice(m.index + m[0].length, m.index + m[0].length + 60).split("\n")[0];
+      const w = new RegExp(CODE_WORD, "iu").exec(after);
+      found = !!w && w.index <= 40 && !LOOSE_NUMBER.test(after.slice(0, w.index)) && !CODE_NOT.test(after.slice(0, w.index + w[0].length + 20)) && !CODE_NOT.test(before.slice(-30));
+    }
+    if (found) {
+      return m[1].replace(/-/g, " ").replace(/\s+/g, " ").trim();
+    }
   }
-  const digits = near[1].replace(/\D/g, "");
-  if (digits.length < 4 || digits.length > 8 || /^(19|20)\d\d$/.test(digits)) {
-    return null;
-  }
-  return near[1].replace(/-/g, " ").replace(/\s+/g, " ").trim();
+  return null;
 }
 
 /** Тело разобранного письма → { body: блоки, snippet, code }. */

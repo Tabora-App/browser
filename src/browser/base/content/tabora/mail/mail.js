@@ -279,12 +279,24 @@ function mailLink(text, href, cls = "") {
   return a;
 }
 
+/** Код подтверждения письма: его находит разбор письма (Mime.findCode), здесь догадок нет. */
 function codeOf(m) {
-  if (m.code) {
-    return m.code;
+  return m.code || null;
+}
+
+/** Кнопка на время работы: не нажимается и показывает кольцо (надпись остаётся на месте
+ * невидимой, ширина кнопки не меняется). */
+function setBusy(button, on) {
+  if (!button) {
+    return;
   }
-  const match = (m.subject || "").match(/\b\d[\d ]{3,8}\d\b/) || snippetOf(m).match(/\b\d{4,8}\b/);
-  return match ? match[0] : null;
+  button.disabled = on;
+  button.classList.toggle("loading", on);
+  if (on) {
+    button.setAttribute("aria-busy", "true");
+  } else {
+    button.removeAttribute("aria-busy");
+  }
 }
 
 function validEmail(s) {
@@ -306,6 +318,10 @@ const App = {
   aliasQuery: "",
   compose: null,
   visibleThreads: [],
+  box: null, // показаны письма только этого ящика (его id) или всех
+  replyTexts: new Map(), // набранный быстрый ответ по цепочкам: переживает перерисовку письма
+  sendingReply: null, // цепочка, ответ на которую сейчас отправляется
+  expanded: new Set(), // письма открытой цепочки, развёрнутые вручную
 
   started: false,
   gate: null,
@@ -340,7 +356,8 @@ const App = {
     this.renderBoxes();
   },
 
-  /** Ящики: ящик аккаунта и внешние. Внешний можно убрать с этого компьютера. */
+  /** Ящики: ящик аккаунта и внешние. Щелчок по ящику оставляет в списках только его письма,
+   * повторный возвращает все. Внешний ящик можно убрать с этого компьютера. */
   renderBoxes() {
     const box = $("boxes");
     const list = MailStore.accounts;
@@ -348,12 +365,26 @@ const App = {
     // один только ящик аккаунта уже показан строкой аккаунта ниже: список нужен, когда есть
     // внешние ящики или с ящиком что-то не так
     box.hidden = !list.some(a => a.kind !== "tabora" || a.error);
+    if (this.box && !list.some(a => a.id === this.box)) {
+      this.box = null;
+    }
+    const pickable = list.length > 1;
     for (const a of list) {
       const external = a.kind !== "tabora";
+      const selected = this.box === a.id;
       const sub = a.error ? a.error : external ? "внешний ящик" : "ящик Tabora";
-      const row = el("div", { class: "box-row", dataset: { error: String(!!a.error) }, title: a.error || a.address }, [
+      const inner = [
         el("span", { class: "box-letter", "aria-hidden": "true", text: letterOf(a.address) }),
         el("span", { class: "box-text" }, [el("b", { text: a.address }), el("span", { text: sub })]),
+      ];
+      const row = el("div", { class: "box-row", dataset: { error: String(!!a.error), selected: String(selected), static: String(!pickable && !external) } }, [
+        pickable
+          ? el("button", {
+              class: "box-pick", type: "button", "aria-pressed": String(selected),
+              title: a.error || (selected ? "Показать письма всех ящиков" : `Показать только письма ящика ${a.address}`),
+              onclick: () => this.pickBox(a.id),
+            }, inner)
+          : el("div", { class: "box-pick", title: a.error || a.address }, inner),
         external
           ? el("button", {
               class: "box-remove", type: "button", "aria-label": `Убрать ящик ${a.address}`, title: "Убрать ящик с этого компьютера",
@@ -378,6 +409,26 @@ const App = {
       ]);
       box.append(row);
     }
+  },
+
+  pickBox(id) {
+    this.box = this.box === id ? null : id;
+    this.checked.clear();
+    this.focusIndex = 0;
+    if (this.box && this.selectedThread && !this.threadMsgs(this.selectedThread).some(m => m.account === this.box)) {
+      this.selectedThread = null; // открытое письмо лежит в другом ящике
+    }
+    this.renderBoxes();
+    if (this.view !== "mail") {
+      this.go(`folder/${this.folder || "inbox"}`);
+    } else {
+      this.renderAll();
+    }
+  },
+
+  /** Письма с учётом выбранного ящика. */
+  scope() {
+    return this.box ? Store.messages.filter(m => m.account === this.box) : Store.messages;
   },
 
   refresh() {
@@ -488,7 +539,13 @@ const App = {
           return;
         }
         $("refresh-btn").dataset.busy = String(MailStore.syncing);
-        this.checkAccess();
+        if (topic === MailStore.TOPIC && what === "changed" && this.started && !this.gate) {
+          // сверка, пометки и расшифровка сообщают об изменениях пачками
+          this.updateTitle();
+          this.renderSoon();
+        } else {
+          this.checkAccess();
+        }
       },
     };
     const topics = [MailStore.TOPIC, Account.TOPIC, Vault.TOPIC, lazy.Pgp.TOPIC];
@@ -497,6 +554,18 @@ const App = {
     }
     window.addEventListener("unload", () => topics.forEach(t => Services.obs.removeObserver(recheck, t)));
     this.checkAccess();
+  },
+
+  /** Перерисовка по изменению данных: не чаще раза за кадр и только пока страница видна. */
+  renderSoon() {
+    if (this._renderQueued) {
+      return;
+    }
+    this._renderQueued = true;
+    requestAnimationFrame(() => {
+      this._renderQueued = false;
+      this.checkAccess();
+    });
   },
 
   start() {
@@ -614,9 +683,8 @@ const App = {
   },
 
   countFor(folderId) {
-    const msgs = folderId === "starred"
-      ? Store.messages.filter(m => m.starred && m.folder !== "trash")
-      : Store.messages.filter(m => m.folder === folderId);
+    const all = this.scope();
+    const msgs = folderId === "starred" ? all.filter(m => m.starred && m.folder !== "trash") : all.filter(m => m.folder === folderId);
     const threads = new Set(msgs.map(m => m.thread));
     return {
       total: threads.size,
@@ -625,7 +693,7 @@ const App = {
   },
 
   threadsForView() {
-    let msgs = Store.messages;
+    let msgs = this.scope();
     if (this.label) {
       msgs = msgs.filter(m => m.labels.includes(this.label) && !["trash", "spam"].includes(m.folder));
     } else if (this.folder === "starred") {
@@ -663,33 +731,54 @@ const App = {
     const threads = this.threadsForView();
     this.visibleThreads = threads;
     const box = $("messages");
-    box.replaceChildren();
     $("list-title").textContent = this.currentName();
     const unread = threads.filter(t => t.latest.unread).length;
     $("list-sub").textContent = threads.length
       ? unread ? `${unread} ${plural(unread, "новое", "новых", "новых")}` : `${threads.length} ${plural(threads.length, "письмо", "письма", "писем")}`
       : "";
     const chips = $("filter-chips");
-    for (const chip of chips.querySelectorAll("[data-label]")) {
-      chip.remove();
-    }
-    for (const l of LABELS) {
-      if (l.id === "codes") {
-        continue; // есть фильтр «Коды»
+    const picked = this.box && MailStore.accounts.find(a => a.id === this.box);
+    const labels = LABELS.filter(l => l.id !== "codes") // для кодов есть свой фильтр
+      .filter(l => this.label === l.id || this.scope().some(m => m.labels.includes(l.id) && !["trash", "spam"].includes(m.folder)));
+    const chipsSig = JSON.stringify([picked?.id, picked?.address, this.label, this.folder, labels.map(l => l.id)]);
+    if (chipsSig !== this._chipsSig) {
+      this._chipsSig = chipsSig;
+      for (const chip of chips.querySelectorAll("[data-label], [data-box]")) {
+        chip.remove();
       }
-      const total = Store.messages.filter(m => m.labels.includes(l.id) && !["trash", "spam"].includes(m.folder)).length;
-      if (!total && this.label !== l.id) {
-        continue;
+      if (picked) {
+        chips.prepend(el("button", {
+          class: "chip box-chip", type: "button", dataset: { box: picked.id }, "aria-pressed": "true", title: "Показать письма всех ящиков",
+          onclick: () => this.pickBox(picked.id),
+        }, [el("span", { class: "box-chip-text", text: picked.address }), icon("close", 11, 2.6)]));
       }
-      chips.append(el("button", {
-        class: "chip", type: "button", dataset: { label: l.id }, "aria-pressed": String(this.label === l.id),
-        onclick: () => this.go(this.label === l.id ? `folder/${this.folder || "inbox"}` : `label/${l.id}`),
-      }, [el("span", { class: "label-dot", style: `background:${l.color};margin:0` }), l.name]));
+      for (const l of labels) {
+        chips.append(el("button", {
+          class: "chip", type: "button", dataset: { label: l.id }, "aria-pressed": String(this.label === l.id),
+          onclick: () => this.go(this.label === l.id ? `folder/${this.folder || "inbox"}` : `label/${l.id}`),
+        }, [el("span", { class: "label-dot", style: `background:${l.color};margin:0` }), l.name]));
+      }
     }
     for (const chip of chips.querySelectorAll("[data-filter]")) {
       chip.setAttribute("aria-pressed", String(this.filters.has(chip.dataset.filter)));
     }
     this.renderBulk();
+
+    // строки перестраиваются, только если в них что-то изменилось: иначе при каждой фоновой
+    // сверке кнопки под курсором мигали бы, а список дёргался
+    if (this.focusIndex >= threads.length) {
+      this.focusIndex = Math.max(0, threads.length - 1);
+    }
+    const rowsSig = JSON.stringify([
+      this.selectedThread, this.focusIndex, [...this.checked], this.query, [...this.filters], this.folder, this.label, new Date().toDateString(),
+      MailStore.syncing && !Store.messages.length, MailStore.accounts.length, Account.needsServerLink,
+      threads.map(t => [t.latest.id, t.all.length, t.latest.unread, t.latest.starred, t.latest.draft, t.latest.subject, t.latest.date, t.latest.from?.name, t.latest.alias, snippetOf(t.latest), codeOf(t.latest), t.latest.newsletter, !!t.latest.agent, !!t.latest.pgp?.encrypted, (t.latest.attachments || []).length, t.latest.to]),
+    ]);
+    if (rowsSig === this._rowsSig && box.childElementCount) {
+      return;
+    }
+    this._rowsSig = rowsSig;
+    box.replaceChildren();
 
     if (!threads.length) {
       const filtered = this.query || this.filters.size;
@@ -711,9 +800,6 @@ const App = {
         none ? el("button", { class: none && Account.needsServerLink ? "ghost" : "primary", type: "button", text: "Добавить ящик", onclick: () => this.openBoxModal() }) : null,
       ]));
       return;
-    }
-    if (this.focusIndex >= threads.length) {
-      this.focusIndex = threads.length - 1;
     }
     const groups = [["today", "Сегодня"], ["yesterday", "Вчера"], ["week", "На этой неделе"], ["earlier", "Ранее"]];
     let index = 0;
@@ -897,10 +983,31 @@ const App = {
 
   /* ---- Письмо ---- */
 
+  /** Открытое письмо перестраивается, только когда в нём что-то изменилось, а прокрутка,
+   * развёрнутые письма и набранный ответ переживают перестройку: фоновая сверка почты не должна
+   * мешать читать и писать. */
   renderReader() {
     const thread = this.selectedThread ? this.threadMsgs(this.selectedThread) : [];
-    $("reader-empty").hidden = thread.length > 0;
     const box = $("thread");
+    const same = this._readerThread === this.selectedThread;
+    const aliases = new Set(Store.aliases.map(a => a.address));
+    const sig = JSON.stringify([
+      this.folder, this.label, this.sendingReply === this.selectedThread, new Date().toDateString(),
+      thread.map(m => [m.id, m.folder, m.starred, m.draft, m.subject, m.date, m.from, m.to, m.alias, aliases.has(m.alias), m.labels, m.pgp, m.code, m.images, m.agent, m.partial, (m.attachments || []).map(a => a.name), JSON.stringify(m.body || []).length]),
+    ]);
+    if (same && sig === this._readerSig && (box.childElementCount || !thread.length)) {
+      return;
+    }
+    const oldReply = box.querySelector(".quick-reply textarea");
+    const kept = same
+      ? { scroll: box.querySelector(".thread-body")?.scrollTop || 0, caret: oldReply && document.activeElement === oldReply ? [oldReply.selectionStart, oldReply.selectionEnd] : null }
+      : null;
+    if (!same) {
+      this.expanded.clear();
+    }
+    this._readerThread = this.selectedThread;
+    this._readerSig = sig;
+    $("reader-empty").hidden = thread.length > 0;
     box.hidden = !thread.length;
     box.replaceChildren();
     if (!thread.length) {
@@ -945,13 +1052,26 @@ const App = {
       ]));
     }
 
-    thread.forEach((m, i) => body.append(this.renderMessage(m, i < thread.length - 1)));
+    thread.forEach((m, i) => body.append(this.renderMessage(m, i < thread.length - 1 && !this.expanded.has(m.id))));
 
+    let ta = null;
+    let fit = () => {};
     if (!latest.draft) {
-      const ta = el("textarea", { placeholder: `Ответить ${latest.from.name}…`, rows: "1", "aria-label": "Быстрый ответ" });
-      ta.addEventListener("input", () => {
+      const sending = this.sendingReply === latest.thread;
+      ta = el("textarea", { placeholder: `Ответить ${latest.from.name}…`, rows: "1", "aria-label": "Быстрый ответ" });
+      ta.value = this.replyTexts.get(latest.thread) || "";
+      ta.readOnly = sending;
+      fit = () => {
         ta.style.height = "auto";
         ta.style.height = `${Math.min(240, ta.scrollHeight)}px`;
+      };
+      ta.addEventListener("input", () => {
+        if (ta.value) {
+          this.replyTexts.set(latest.thread, ta.value);
+        } else {
+          this.replyTexts.delete(latest.thread);
+        }
+        fit();
       });
       ta.addEventListener("keydown", e => {
         if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -959,12 +1079,15 @@ const App = {
           this.sendQuickReply(latest, ta.value);
         }
       });
-      body.append(el("div", { class: "quick-reply" }, [
+      body.append(el("div", { class: "quick-reply", dataset: { sending: String(sending) } }, [
         ta,
         el("div", { class: "bar" }, [
-          el("span", { class: "hint", text: "⌘⏎ отправить · R развернуть ответ" }),
-          el("button", { class: "btn", type: "button", onclick: () => this.openCompose({ forward: latest }) }, [icon("forward", 14), "Переслать"]),
-          el("button", { class: "primary", type: "button", style: "height:32px;font-size:12px", onclick: () => this.sendQuickReply(latest, ta.value) }, "Отправить"),
+          el("span", { class: "hint", role: "status", text: sending ? "Отправляем…" : "⌘⏎ отправить · R развернуть ответ" }),
+          el("button", { class: "btn", type: "button", disabled: sending, onclick: () => this.openCompose({ forward: latest }) }, [icon("forward", 14), "Переслать"]),
+          el("button", {
+            class: `primary${sending ? " loading" : ""}`, type: "button", disabled: sending, "aria-busy": sending ? "true" : null,
+            style: "height:32px;font-size:12px", onclick: () => this.sendQuickReply(latest, ta.value),
+          }, "Отправить"),
         ]),
       ]));
     } else {
@@ -977,6 +1100,16 @@ const App = {
     }
 
     box.append(head, body);
+    if (ta?.value) {
+      fit();
+    }
+    if (kept) {
+      body.scrollTop = kept.scroll;
+      if (kept.caret && ta) {
+        ta.focus({ preventScroll: true });
+        ta.setSelectionRange(...kept.caret);
+      }
+    }
   },
 
   renderMessage(m, collapsed) {
@@ -988,13 +1121,14 @@ const App = {
         el("span", { text: `${m.from.email} · ${longTime(m.date)}` }),
       ]),
       el("span", { class: "spacer" }),
-      m.alias && m.alias !== ACCOUNT.address && m.folder !== "sent" && !m.draft
+      m.folder !== "sent" && !m.draft && Store.aliases.some(a => a.address === m.alias)
         ? el("button", { class: "to-chip link", type: "button", title: "Управлять алиасом", onclick: e => { e.stopPropagation(); this.go("aliases"); }, text: `через ${m.alias}` })
         : el("span", { class: "to-chip", text: m.folder === "sent" || m.draft ? `кому: ${m.to.join(", ")}` : `на ${m.to[0]}` }),
     ]);
     head.addEventListener("click", () => {
       if (item.classList.contains("collapsed")) {
         item.classList.remove("collapsed");
+        this.expanded.add(m.id);
       }
     });
     const paper = el("div", { class: "paper" });
@@ -1049,12 +1183,12 @@ const App = {
 
   /** Повторная расшифровка: ключ мог появиться после того, как письмо пришло. */
   async decryptAgain(m, button) {
-    button.disabled = true;
-    button.textContent = "Расшифровываем…";
+    setBusy(button, true);
     const rec = await MailStore.decryptAgain(m.id).catch(() => null);
     if (rec?.pgp?.error) {
       this.toast("Письмо не расшифровано: подходящего ключа по-прежнему нет");
     }
+    setBusy(button, false);
     this.renderReader();
   },
 
@@ -1096,10 +1230,12 @@ const App = {
       this.openCompose({ reply: to });
       return;
     }
-    if (this._sending) {
+    if (this.sendingReply) {
       return;
     }
-    this._sending = true;
+    this.sendingReply = to.thread;
+    this.replyTexts.set(to.thread, text);
+    this.renderReader(); // кнопка занята, поле не правится, пока письмо уходит
     // отвечаем с того адреса, на который письмо пришло (алиас остаётся алиасом)
     const mine = MailStore.senders().map(s => s.address);
     const from = mine.includes(to.alias) ? to.alias : ACCOUNT.address;
@@ -1109,17 +1245,19 @@ const App = {
       const plan = await MailStore.encryptPlan(from, [recipient]);
       if (to.pgp?.encrypted && !plan.possible) {
         // ответ на зашифрованное письмо не уходит открытым незаметно: решение — в окне письма
+        this.replyTexts.delete(to.thread);
         this.openCompose({ reply: to, text });
         return;
       }
       const encrypt = plan.possible && (!!to.pgp?.encrypted || plan.suggested);
       await MailStore.send({ from: { email: from }, to: [recipient], subject, text, replyTo: to.id, labels: to.labels, encrypt });
-      this.renderAll();
+      this.replyTexts.delete(to.thread);
       this.toast(encrypt ? `Ответ отправлен ${to.from.name} зашифрованным` : `Ответ отправлен ${to.from.name}`);
     } catch (e) {
       this.toast(`Ответ не отправлен. ${e.message}`);
     } finally {
-      this._sending = false;
+      this.sendingReply = null;
+      this.renderAll();
     }
   },
 
@@ -1350,7 +1488,7 @@ const App = {
     }
     const error = $("secret-error");
     error.hidden = true;
-    button.disabled = true;
+    setBusy(button, true);
     try {
       const b = kind === "recovery" ? await Account.restoreMailKeys(value) : await Account.confirmMailKeys(value, { replace: kind === "replace" });
       $("secret-input").value = "";
@@ -1365,7 +1503,7 @@ const App = {
       error.hidden = false;
       $("secret-input").select();
     } finally {
-      button.disabled = false;
+      setBusy(button, false);
     }
   },
 
@@ -1399,7 +1537,7 @@ const App = {
       $("key-armored").focus();
       return;
     }
-    button.disabled = true;
+    setBusy(button, true);
     try {
       const k = await lazy.Pgp.setPeer(address, $("key-armored").value, { source: "manual" });
       $("key-modal").hidden = true;
@@ -1407,7 +1545,7 @@ const App = {
     } catch (e) {
       show(e.message || "Ключ не добавлен");
     } finally {
-      button.disabled = false;
+      setBusy(button, false);
     }
   },
 
@@ -1431,7 +1569,7 @@ const App = {
     if (button.disabled) {
       return;
     }
-    button.disabled = true;
+    setBusy(button, true);
     try {
       const a = await MailStore.aliasCreate({ site: $("alias-site").value.trim(), space: $("alias-space").value, by: "manual" });
       $("alias-modal").hidden = true;
@@ -1441,7 +1579,7 @@ const App = {
     } catch (e) {
       this.toast(`Алиас не создан. ${e.message}`);
     } finally {
-      button.disabled = false;
+      setBusy(button, false);
     }
   },
 
@@ -1500,8 +1638,7 @@ const App = {
       $("box-address").focus();
       return;
     }
-    button.disabled = true;
-    button.textContent = "Проверяем…";
+    setBusy(button, true);
     try {
       await this.guessBox();
       const r = await MailStore.addAccount({
@@ -1521,8 +1658,7 @@ const App = {
       error.hidden = false;
       $("box-more").open = $("box-more").open || e.code === "network" || e.code === "protocol" || e.code === "tls";
     } finally {
-      button.disabled = false;
-      button.textContent = "Проверить и добавить";
+      setBusy(button, false);
     }
   },
 
@@ -1655,8 +1791,8 @@ const App = {
     });
     $("filter-chips").addEventListener("click", e => {
       const chip = e.target.closest(".chip");
-      if (!chip) {
-        return;
+      if (!chip?.dataset.filter) {
+        return; // у ярлыков и выбранного ящика свои обработчики
       }
       const f = chip.dataset.filter;
       if (this.filters.has(f)) {

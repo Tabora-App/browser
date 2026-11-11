@@ -62,7 +62,20 @@ html, body {
 }
 
 button, input, select, textarea { font: inherit; color: inherit; }
-button { cursor: default; }
+
+/* Курсор и выделение. Страница ведёт себя как приложение: подписи интерфейса не выделяются и не
+ * показывают текстовый курсор, всё нажимаемое показывает руку. Выделяется то, что человеку
+ * бывает нужно скопировать: текст и тема письма, адреса, коды, отпечатки ключей, пояснения. */
+body { cursor: default; user-select: none; }
+button, summary, a[href], select, [role="checkbox"], [role="switch"] { cursor: pointer; }
+button:disabled { cursor: default; }
+input, textarea { user-select: text; }
+.thread-title, .mail-item-head .who, .to-chip:not(.link), .paper, .pgp-text, .code-card .code, .big-code,
+.key-print:not(button), .key-card-title, .key-hint, .key-backup-text, .key-who, .alias-row .site, .aliases-sub,
+.modal-sub, .modal-note, .modal-error, .gate-card p, .toast span {
+  cursor: auto;
+  user-select: text;
+}
 kbd {
   font: 500 10px/1 var(--mono);
   color: var(--text-4);
@@ -269,6 +282,9 @@ kbd {
 .chip:hover { color: var(--text); border-color: var(--stroke); }
 .chip[aria-pressed="true"] { background: var(--raised); color: var(--text-strong); border-color: var(--raised); }
 .chip .label-dot { width: 7px; height: 7px; }
+.box-chip { max-width: 100%; min-width: 0; }
+.box-chip-text { min-width: 0; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.box-chip svg { flex-shrink: 0; color: var(--text-3); }
 
 .bulk-bar {
   display: flex;
@@ -377,7 +393,7 @@ kbd {
 .msg .from { flex: 1; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .msg[data-unread="true"] .from { font-weight: 800; color: var(--text-strong); }
 .msg .time { font: 500 11px/1 var(--mono); color: var(--text-4); flex-shrink: 0; }
-.msg[data-unread="true"] .time { color: var(--accent); }
+.msg[data-unread="true"] .time { color: var(--accent-ink); }
 .msg .subject { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .msg[data-unread="true"] .subject { color: var(--text); font-weight: 600; }
 .msg .snippet { font-size: 12px; color: var(--text-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -395,7 +411,7 @@ kbd {
 .msg .meta { display: flex; align-items: center; gap: 6px; margin-inline-start: auto; color: var(--text-4); }
 .msg .meta svg { width: 13px; height: 13px; }
 .msg .star { color: var(--text-5); }
-.msg .star[data-on="true"] { color: var(--accent); }
+.msg .star[data-on="true"] { color: var(--accent-ink); }
 .msg .count { font: 600 11px/1 var(--mono); color: var(--text-4); }
 
 .msg .actions {
@@ -473,7 +489,7 @@ kbd {
   transition: background-color var(--ease), color var(--ease), border-color var(--ease);
 }
 .icon-btn:hover { background: var(--raised); color: var(--text-strong); }
-.icon-btn[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.icon-btn[aria-pressed="true"] { color: var(--accent-ink); border-color: var(--accent-ink); }
 .icon-btn.danger:hover { color: var(--warn); }
 .icon-btn svg { width: 16px; height: 16px; }
 .thread-labels { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -518,7 +534,7 @@ kbd {
 .mail-item-head .who b { font-weight: 700; }
 .mail-item-head .who span { font-size: 12px; color: var(--text-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mail-item-head .spacer { flex: 1; }
-.to-chip.link { cursor: default; transition: border-color var(--ease), color var(--ease); }
+.to-chip.link { transition: border-color var(--ease), color var(--ease); }
 .to-chip.link:hover { border-color: var(--stroke); color: var(--text-strong); }
 .to-chip.link::after { content: " · управлять"; color: var(--text-4); font-family: var(--font); font-weight: 600; }
 .to-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 8px; background: var(--field); border: 1px solid var(--field-border); font: 500 11px/1 var(--mono); color: var(--text-2); white-space: nowrap; }
@@ -544,7 +560,8 @@ kbd {
 .pgp-note[data-tone="bad"] .pgp-text b { color: var(--tone-bad); }
 .pgp-note .btn { height: 30px; padding: 0 12px; font-size: 12px; flex: none; align-self: center; }
 .pgp-note .btn:disabled { opacity: 0.6; }
-.mail-item.collapsed .mail-item-head { cursor: default; opacity: 0.8; }
+.mail-item.collapsed .mail-item-head { cursor: pointer; opacity: 0.8; }
+.mail-item.collapsed .mail-item-head .who { cursor: pointer; user-select: none; }
 
 .paper {
   border: 1px solid var(--paper-border);
@@ -596,7 +613,7 @@ kbd {
   color: var(--text-3);
 }
 .alias-note button { border: 0; background: transparent; color: var(--text); font-weight: 700; font-size: 12px; white-space: nowrap; }
-.alias-note button:hover { color: var(--accent); }
+.alias-note button:hover { color: var(--accent-ink); }
 
 .quick-reply {
   border: 1px solid var(--field-border);
@@ -650,6 +667,30 @@ kbd {
 }
 .primary:hover { background: var(--accent-hover); }
 .primary kbd { color: rgba(11, 12, 14, 0.6); border-color: rgba(11, 12, 14, 0.25); }
+
+/* Кнопка занята: надпись остаётся на месте невидимой, чтобы кнопка не меняла ширину, поверх
+ * крутится кольцо — то же, что на кнопках кошелька и окна аккаунта. */
+.primary.loading, .btn.loading, .ghost.loading { position: relative; color: transparent; cursor: progress; }
+.primary.loading > *, .btn.loading > *, .ghost.loading > * { visibility: hidden; }
+.primary.loading::after, .btn.loading::after, .ghost.loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--line-2);
+  border-top-color: var(--text);
+  animation: mail-spin 700ms linear infinite;
+}
+.primary.loading, .primary.loading:hover { background: var(--accent); }
+.primary.loading::after { border-color: rgba(11, 12, 14, 0.25); border-top-color: var(--on-accent); }
+.btn.loading:hover, .ghost.loading:hover { background: transparent; }
+@media (prefers-reduced-motion: reduce) {
+  .primary.loading::after, .btn.loading::after, .ghost.loading::after { animation-duration: 2s; }
+}
+.quick-reply[data-sending="true"] textarea { color: var(--text-3); }
 .ghost { height: 36px; padding: 0 14px; border: 1px solid var(--stroke); border-radius: 10px; background: transparent; color: var(--text-2); font-weight: 600; font-size: 13px; }
 .ghost:hover { background: var(--raised); color: var(--text-strong); }
 
@@ -665,7 +706,7 @@ kbd {
 .stat { padding: 12px 14px; background: var(--card); border: 1px solid var(--line-2); border-radius: 12px; display: flex; flex-direction: column; gap: 4px; }
 .stat .l { font-size: 12px; color: var(--text-3); }
 .stat .v { font: 500 20px/1.1 var(--mono); }
-.stat .v.accent { color: var(--accent); }
+.stat .v.accent { color: var(--accent-ink); }
 .aliases-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 
 .alias-table-head, .alias-row {
@@ -701,7 +742,7 @@ kbd {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.alias-row .addr button:hover { color: var(--accent); }
+.alias-row .addr button:hover { color: var(--accent-ink); }
 .alias-row .warn { font-size: 11px; font-weight: 700; color: var(--warn); }
 .alias-row .site { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .alias-row .site b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -872,8 +913,12 @@ kbd {
 /* ---- Ящики: ящик аккаунта и внешние ---- */
 .boxes { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
 .boxes[hidden] { display: none; }
-.box-row { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 4px 6px 4px 10px; border-radius: 10px; }
+.box-row { display: flex; align-items: center; min-height: 38px; padding-inline-end: 6px; border-radius: 10px; transition: background-color var(--ease); }
 .box-row:hover { background: var(--card-2); }
+.box-row[data-static="true"]:hover { background: transparent; }
+.box-row[data-selected="true"] { background: var(--raised); }
+.box-pick { flex: 1; min-width: 0; min-height: 38px; display: flex; align-items: center; gap: 10px; padding: 4px 4px 4px 10px; border: 0; border-radius: 10px; background: transparent; color: inherit; text-align: left; }
+.box-row[data-selected="true"] .box-letter { background: var(--accent); color: var(--on-accent); }
 .box-letter { width: 22px; height: 22px; border-radius: 6px; background: var(--raised); color: var(--text-2); display: grid; place-items: center; font: 800 11px/1 var(--font); flex: none; }
 .box-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
 .box-text b { font: 600 12px/1.2 var(--font); color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
