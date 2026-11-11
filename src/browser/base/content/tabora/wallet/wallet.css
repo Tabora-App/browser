@@ -883,6 +883,98 @@
   color: var(--tabora-text-4);
 }
 
+/* Монета в нескольких сетях: строка раскрывается в список сетей */
+:is(#tabora-drawer, #tabora-modal) .w-asset.w-multi {
+  outline: none;
+}
+
+:is(#tabora-drawer, #tabora-modal) .w-asset.w-multi:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--tabora-accent);
+}
+
+:is(#tabora-drawer, #tabora-modal) .w-asset .w-chevron {
+  flex: none;
+  margin-inline-start: -4px;
+  color: var(--tabora-text-4);
+  transition: rotate var(--tabora-t) var(--tabora-curve);
+}
+
+:is(#tabora-drawer, #tabora-modal) .w-asset.w-multi[aria-expanded="true"] .w-chevron {
+  rotate: 180deg;
+}
+
+:is(#tabora-drawer, #tabora-modal) .w-multi-items {
+  display: flex;
+  flex-direction: column;
+  margin: 0 0 6px 29px;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--tabora-line);
+  animation: tabora-fade-in var(--tabora-t) var(--tabora-curve);
+}
+
+:is(#tabora-drawer, #tabora-modal) .w-asset.sub {
+  min-height: 46px;
+  padding-block: 5px;
+  gap: 10px;
+}
+
+:is(#tabora-drawer, #tabora-modal) .w-asset.sub .w-coin,
+:is(#tabora-drawer, #tabora-modal) .w-asset.sub .w-coin img {
+  width: 26px;
+  height: 26px;
+}
+
+:is(#tabora-drawer, #tabora-modal) .w-asset.sub .w-chain-text b {
+  font-size: 13px;
+}
+
+/* Выбор сети на экране «Получить» */
+:is(#tabora-drawer, #tabora-modal) .w-nets {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+:is(#tabora-drawer, #tabora-modal) .w-nets button {
+  height: 30px;
+  padding: 0 11px 0 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--tabora-line);
+  border-radius: 15px;
+  background: transparent;
+  color: var(--tabora-text-2);
+  font: 600 12px/1 var(--tabora-font);
+  cursor: default;
+  transition: background-color var(--tabora-ease), border-color var(--tabora-ease), color var(--tabora-ease);
+}
+
+:is(#tabora-drawer, #tabora-modal) .w-nets button:hover {
+  background: var(--tabora-panel);
+  color: var(--tabora-text-strong);
+}
+
+:is(#tabora-drawer, #tabora-modal) .w-nets button[aria-pressed="true"] {
+  border-color: transparent;
+  background: var(--tabora-raised);
+  color: var(--tabora-text-strong);
+}
+
+:is(#tabora-drawer, #tabora-modal) .w-nets img {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(#tabora-drawer, #tabora-modal) .w-multi-items {
+    animation: none;
+  }
+}
+
 :is(#tabora-drawer, #tabora-modal) .w-empty {
   padding: 18px 14px;
   text-align: center;

@@ -520,7 +520,7 @@ Object.assign(Tabora, {
     ]);
     const lock = this.iconButton("", "Заблокировать", ["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], () => WalletStore.lock(), 15);
     const settings = this.iconButton("", "Настройки кошелька", ["M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", "M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"], () => this.walletGo("settings"), 15);
-    const receiveBtn = this.wButton("Получить", "", () => { w.receive = "ethereum"; this.walletGo("receive"); });
+    const receiveBtn = this.wButton("Получить", "", () => this.walletReceive("ethereum"));
     receiveBtn.prepend(this.wIcon(["M12 5v14", "M5 12l7 7 7-7"], 14, 2.2));
     const sendBtn = this.wButton("Отправить", "primary", () => this.walletSendStart());
     sendBtn.prepend(this.wIcon(["M12 19V5", "M5 12l7-7 7 7"], 14, 2.2));
@@ -545,9 +545,11 @@ Object.assign(Tabora, {
     if (w.tab === "activity") {
       list = this.walletActivityList();
     } else if (w.tab === "assets") {
-      const nonzero = assets.filter(a => a.pending || parseFloat(a.amount) > 0);
-      const zero = assets.filter(a => !a.pending && !(parseFloat(a.amount) > 0));
-      nonzero.forEach(a => list.append(this.walletAssetRow(a)));
+      // одна монета — одна строка, в каких бы сетях она ни лежала; сети раскрываются по нажатию
+      const groups = this.walletAssetGroups(assets);
+      const nonzero = groups.filter(g => g.pending || g.sum > 0);
+      const zero = groups.filter(g => !g.pending && !(g.sum > 0));
+      nonzero.forEach(g => list.append(...this.walletGroupRows(g)));
       if (!nonzero.length && !assets.some(a => a.pending)) {
         list.append(h("div", { class: "w-empty" }, "Пока пусто. Пополните любой адрес: ниже кнопка «Получить»."));
       }
@@ -559,7 +561,7 @@ Object.assign(Tabora, {
         });
         list.append(h("div", { class: "w-zero-toggle" }, null, [toggle]));
         if (w.showZero) {
-          zero.forEach(a => list.append(this.walletAssetRow(a)));
+          zero.forEach(g => list.append(...this.walletGroupRows(g)));
         }
       }
       const add = h("button", { class: "w-add", type: "button" }, null, [this.wIcon(["M12 5v14", "M5 12h14"], 14, 2.2), h("span", {}, "Добавить токен по адресу контракта")]);
@@ -582,12 +584,12 @@ Object.assign(Tabora, {
             h("span", { class: "w-usd" }, bal && !bal.error ? (price ? `$${(parseFloat(bal.native) * price).toFixed(2)}` : "") : bal?.error ? bal.error.slice(0, 36) : ""),
           ]),
         ]);
-        row.addEventListener("click", () => { w.receive = id; this.walletGo("receive"); });
+        row.addEventListener("click", () => this.walletReceive(id));
         row.addEventListener("contextmenu", e => {
           e.preventDefault();
           this.showMenu([
             { label: "Копировать адрес", run: () => this.copyText(address, "Адрес скопирован") },
-            { label: "Показать адрес и QR", run: () => { w.receive = id; this.walletGo("receive"); } },
+            { label: "Показать адрес и QR", run: () => this.walletReceive(id) },
             { label: "Открыть в обозревателе", run: () => this.openInSpace(chain.explorer + address, true) },
             { separator: true },
             { label: "Скрыть сеть", run: () => WalletStore.setChainHidden(id, true).catch(e => this.notice(e.message)) },
@@ -636,10 +638,10 @@ Object.assign(Tabora, {
       const address = account.addresses[id];
       const bal = this.wallet.balances[`${id}:${address}`];
       if (!bal || bal.error) {
-        out.push({ key: `${id}:native`, chain: id, chainName: chain.name, color: chain.color, symbol: chain.symbol, logo: chain.logo, chainLogo: chain.logo, amount: "0", usd: 0, native: true, pending: !bal, error: bal?.error });
+        out.push({ key: `${id}:native`, chain: id, chainName: chain.name, color: chain.color, symbol: chain.symbol, logo: this.walletCoinLogo(chain.symbol), chainLogo: chain.logo, amount: "0", usd: 0, native: true, pending: !bal, error: bal?.error });
         continue;
       }
-      out.push({ key: `${id}:native`, chain: id, chainName: chain.name, color: chain.color, symbol: chain.symbol, logo: chain.logo, chainLogo: chain.logo, amount: bal.native, usd: parseFloat(bal.native) * (prices[chain.symbol] || 0), native: true, address });
+      out.push({ key: `${id}:native`, chain: id, chainName: chain.name, color: chain.color, symbol: chain.symbol, logo: this.walletCoinLogo(chain.symbol), chainLogo: chain.logo, amount: bal.native, usd: parseFloat(bal.native) * (prices[chain.symbol] || 0), native: true, address });
       for (const t of bal.tokens || []) {
         // свои токены не оцениваются: символ «USDT» у своего токена ничего не стоит
         out.push({ key: `${id}:${t.address || t.mint}`, chain: id, chainName: chain.name, color: chain.color, symbol: t.symbol, logo: t.logo, chainLogo: chain.logo, amount: t.amount, usd: parseFloat(t.amount) * (WalletStore.unitPrice(id, t, prices) || 0), token: t, address });
@@ -649,26 +651,40 @@ Object.assign(Tabora, {
     return out;
   },
 
-  walletAssetRow(a) {
+  /** Значок родной монеты сети: у ETH в Base и Arbitrum это значок Ethereum, а не значок сети. */
+  walletCoinLogo(symbol) {
+    const { CHAINS, CHAIN_ORDER } = this.walletStore();
+    const home = CHAIN_ORDER.find(id => CHAINS[id].symbol === symbol);
+    return home ? CHAINS[home].logo : "";
+  },
+
+  /** Строка актива в одной сети. group — монета, внутри которой строка стоит (тогда строка
+   * подписана сетью: монета названа в строке выше). */
+  walletAssetRow(a, group = null) {
     const h = (t, x, y, c) => this.html(t, x, y, c);
     const { WalletStore, CHAINS } = this.walletStore();
-    const row = h("div", { class: "w-asset", style: `--c:${a.color}` }, null, [
-      h("span", { class: "w-coin" }, null, [
-        a.logo ? h("img", { src: a.logo, alt: "" }) : h("b", {}, a.symbol.slice(0, 1)),
-        h("i", { class: "w-coin-chain" }, null, a.chainLogo ? [h("img", { src: a.chainLogo, alt: "" })] : []),
-      ]),
-      h("div", { class: "w-chain-text" }, null, [h("b", {}, a.symbol), h("span", { class: "w-sub-line" }, a.native ? a.chainName : `${a.chainName}${a.token?.custom ? " · свой токен" : ""}`)]),
+    const groupKey = group?.key || this.walletGroupKey(a);
+    const row = h("div", { class: `w-asset${group ? " sub" : ""}`, style: `--c:${a.color}` }, null, [
+      group
+        ? h("span", { class: "w-coin" }, null, [a.chainLogo ? h("img", { src: a.chainLogo, alt: "" }) : h("b", {}, a.chainName.slice(0, 1))])
+        : h("span", { class: "w-coin" }, null, [
+            a.logo ? h("img", { src: a.logo, alt: "" }) : h("b", {}, a.symbol.slice(0, 1)),
+            a.chainLogo && a.chainLogo !== a.logo ? h("i", { class: "w-coin-chain" }, null, [h("img", { src: a.chainLogo, alt: "" })]) : null,
+          ].filter(Boolean)),
+      group
+        ? h("div", { class: "w-chain-text" }, null, [h("b", {}, a.chainName), h("span", { class: "w-sub-line mono" }, a.address ? this.shortAddr(a.address) : "")])
+        : h("div", { class: "w-chain-text" }, null, [h("b", {}, a.symbol), h("span", { class: "w-sub-line" }, a.native ? a.chainName : `${a.chainName}${a.token?.custom ? " · свой токен" : ""}`)]),
       h("div", { class: "w-chain-bal" }, null, [
         h("b", { class: `w-native${a.error ? " err" : ""}` }, a.pending ? "…" : a.error ? "нет связи" : a.amount),
         h("span", { class: "w-usd" }, a.pending || a.error ? "" : a.usd ? `$${a.usd.toFixed(2)}` : ""),
       ]),
     ]);
-    row.addEventListener("click", () => { this.wallet.receive = a.chain; this.walletGo("receive"); });
+    row.addEventListener("click", () => this.walletReceive(a.chain, groupKey));
     row.addEventListener("contextmenu", e => {
       e.preventDefault();
       const items = [
-        { label: `Отправить ${a.symbol}`, run: () => this.walletSendStart(a.key) },
-        { label: `Получить ${a.symbol}`, run: () => { this.wallet.receive = a.chain; this.walletGo("receive"); } },
+        { label: `Отправить ${a.symbol}`, hint: group ? a.chainName : "", run: () => this.walletSendStart(a.key) },
+        { label: `Получить ${a.symbol}`, hint: group ? a.chainName : "", run: () => this.walletReceive(a.chain, groupKey) },
         { label: "Копировать адрес", run: () => this.copyText(a.address, "Адрес скопирован") },
         { label: "Открыть в обозревателе", run: () => this.openInSpace(CHAINS[a.chain].explorer + a.address, true) },
       ];
@@ -678,6 +694,101 @@ Object.assign(Tabora, {
       this.showMenu(items, e.clientX, e.clientY);
     });
     return row;
+  },
+
+  /* ---- Монета в нескольких сетях -------------------------------------------------------
+   * USDT есть в Ethereum, Base, Arbitrum, Polygon, Solana и TRON; ETH — родная монета трёх сетей.
+   * В списке активов это одна строка с общей суммой; сеть выбирается после монеты: строка
+   * раскрывается в список сетей, а в «Отправить» и «Получить» сеть выбирается вторым шагом.
+   * Объединяются монеты и токены из встроенного списка по названию. Свой токен (добавленный по
+   * адресу контракта) не объединяется ни с чем: назваться «USDT» может любой контракт. */
+
+  walletGroupKey(a) {
+    return a.token?.custom ? `custom:${a.key}` : `${a.native ? "coin" : "token"}:${a.symbol}`;
+  },
+
+  /** [{ key, symbol, logo, color, custom, items (сначала сеть с большим остатком), sum, amount, usd, pending }] */
+  walletAssetGroups(assets = this.walletAssets()) {
+    const { CHAIN_ORDER } = this.walletStore();
+    const order = a => CHAIN_ORDER.indexOf(a.chain);
+    const groups = new Map();
+    for (const a of assets) {
+      const key = this.walletGroupKey(a);
+      if (!groups.has(key)) {
+        groups.set(key, { key, symbol: a.symbol, custom: !!a.token?.custom, items: [] });
+      }
+      groups.get(key).items.push(a);
+    }
+    const out = [...groups.values()].map(g => {
+      // значок и цвет — от первой по порядку сети (у ETH это Ethereum, а не Base)
+      const home = [...g.items].sort((x, y) => order(x) - order(y))[0];
+      g.items.sort((x, y) => (parseFloat(y.amount) || 0) - (parseFloat(x.amount) || 0) || order(x) - order(y));
+      const sum = g.items.reduce((n, a) => n + (parseFloat(a.amount) || 0), 0);
+      return {
+        ...g, logo: home.logo, color: home.color, sum,
+        amount: sum ? String(Number(sum.toFixed(6))) : "0",
+        usd: g.items.reduce((n, a) => n + (a.usd || 0), 0),
+        pending: g.items.every(a => a.pending),
+      };
+    });
+    out.sort((a, b) => (b.usd || 0) - (a.usd || 0) || b.sum - a.sum);
+    return out;
+  },
+
+  /** Строки монеты в списке активов: одна строка, а у монеты в нескольких сетях — раскрывающаяся. */
+  walletGroupRows(g) {
+    if (g.items.length === 1) {
+      return [this.walletAssetRow(g.items[0])];
+    }
+    const h = (t, x, y, c) => this.html(t, x, y, c);
+    const w = this.wallet;
+    w.openGroups ||= new Set();
+    const open = w.openGroups.has(g.key);
+    const funded = g.items.filter(a => parseFloat(a.amount) > 0);
+    const count = funded.length || g.items.length;
+    const where = funded.length && funded.length <= 2 ? funded.map(a => a.chainName).join(" · ") : `${count} ${this.plural(count, "сеть", "сети", "сетей")}`;
+    const chevron = this.wIcon(["m6 9 6 6 6-6"], 13, 2.2);
+    chevron.classList.add("w-chevron");
+    const row = h("div", { class: "w-asset w-multi", role: "button", tabindex: "0", "aria-expanded": String(open), style: `--c:${g.color}` }, null, [
+      h("span", { class: "w-coin" }, null, [g.logo ? h("img", { src: g.logo, alt: "" }) : h("b", {}, g.symbol.slice(0, 1))]),
+      h("div", { class: "w-chain-text" }, null, [h("b", {}, g.symbol), h("span", { class: "w-sub-line" }, where)]),
+      h("div", { class: "w-chain-bal" }, null, [
+        h("b", { class: "w-native" }, g.pending ? "…" : g.amount),
+        h("span", { class: "w-usd" }, g.usd ? `$${g.usd.toFixed(2)}` : ""),
+      ]),
+      chevron,
+    ]);
+    const toggle = () => {
+      if (open) {
+        w.openGroups.delete(g.key);
+      } else {
+        w.openGroups.add(g.key);
+      }
+      this.renderDrawer();
+    };
+    row.addEventListener("click", toggle);
+    row.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggle();
+      }
+    });
+    row.addEventListener("contextmenu", e => {
+      e.preventDefault();
+      this.showMenu([
+        { label: `Отправить ${g.symbol}`, run: () => this.walletSendStart(g.items[0].key) },
+        { label: `Получить ${g.symbol}`, run: () => this.walletReceive(g.items[0].chain, g.key) },
+      ], e.clientX, e.clientY);
+    });
+    return open ? [row, h("div", { class: "w-multi-items" }, null, g.items.map(a => this.walletAssetRow(a, g)))] : [row];
+  },
+
+  /** Экран «Получить»: сеть chainId; groupKey — монета, ради которой он открыт (тогда выбор
+   * сети ограничен сетями этой монеты). */
+  walletReceive(chainId, groupKey = null) {
+    this.wallet.receive = chainId;
+    this.wallet.receiveGroup = groupKey;
+    this.walletGo("receive");
   },
 
   walletAddTokenSheet() {
@@ -816,22 +927,40 @@ Object.assign(Tabora, {
   walletReceiveView() {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { WalletStore, CHAINS } = this.walletStore();
-    const id = this.wallet.receive || "ethereum";
+    const { CHAIN_ORDER } = this.walletStore();
+    const hidden = WalletStore.hiddenChains;
+    // монета выбрана раньше (строка в списке активов): здесь выбирается сеть
+    const group = this.wallet.receiveGroup ? this.walletAssetGroups().find(g => g.key === this.wallet.receiveGroup) : null;
+    const chains = CHAIN_ORDER.filter(c => !hidden.has(c) && (!group || group.items.some(a => a.chain === c)));
+    const id = chains.includes(this.wallet.receive) ? this.wallet.receive : chains[0] || "ethereum";
     const chain = CHAINS[id];
     const account = WalletStore.activeAccount;
     const address = account.addresses[id];
+    const symbol = group ? group.symbol : chain.symbol;
     const back = this.wButton("Назад", "ghost small", () => this.walletGo("main"));
     const qr = h("canvas", { class: "w-qr", width: "220", height: "220" });
     this.drawQr(qr, address);
     const copy = this.wButton("Копировать адрес", "primary", () => this.copyText(address, "Адрес скопирован"));
     const explorer = this.wButton("В обозревателе", "ghost", () => this.openInSpace(chain.explorer + address, true));
+    const nets = h("div", { class: "w-nets", role: "group", "aria-label": "Сеть" }, null, chains.map(c => {
+      const b = h("button", { type: "button", "aria-pressed": String(c === id) }, null, [h("img", { src: CHAINS[c].logo, alt: "" }), h("span", {}, CHAINS[c].name)]);
+      b.addEventListener("click", () => {
+        this.wallet.receive = c;
+        this.renderDrawer();
+      });
+      return b;
+    }));
+    const token = group && !group.items.find(a => a.chain === id)?.native;
     return h("div", { class: "w-receive" }, null, [
-      h("div", { class: "w-flow-head" }, null, [h("span", { class: "w-title-logo" }, null, [h("img", { class: "w-logo", src: chain.logo, alt: "" }), h("b", {}, `Получить ${chain.symbol}`)]), back]),
-      h("p", { class: "w-sub" }, `${chain.name}${chain.sameAs ? " и другие сети EVM с тем же адресом" : ""} · ${account.name}`),
+      h("div", { class: "w-flow-head" }, null, [h("span", { class: "w-title-logo" }, null, [h("img", { class: "w-logo", src: group?.logo || chain.logo, alt: "" }), h("b", {}, `Получить ${symbol}`)]), back]),
+      chains.length > 1 ? nets : h("span"),
+      h("p", { class: "w-sub" }, `Сеть ${chain.name} · ${account.name}`),
       qr,
       h("div", { class: "w-address mono", title: address }, address),
       h("div", { class: "w-actions" }, null, [copy, explorer]),
-      chain.kind === "evm" ? h("p", { class: "w-hint" }, "Этот адрес одинаков в Ethereum, Base, Arbitrum и Polygon. Отправитель должен выбрать нужную сеть.") : h("span"),
+      token
+        ? h("p", { class: "w-hint" }, `Отправитель должен выбрать сеть ${chain.name}: ${symbol}, отправленный на этот адрес в другой сети, сюда не придёт.`)
+        : chain.kind === "evm" ? h("p", { class: "w-hint" }, "Этот адрес одинаков в Ethereum, Base, Arbitrum и Polygon. Отправитель должен выбрать нужную сеть.") : h("span"),
     ]);
   },
 

@@ -241,16 +241,37 @@ Object.assign(Tabora, {
 
     const back = this.wButton("Отмена", "ghost small", () => this.walletGo("main"));
 
-    // Актив
+    // Актив: сначала монета, затем сеть (если монета лежит в нескольких)
+    const groups = this.walletAssetGroups(assets);
+    const group = groups.find(g => g.items.some(a => a.key === asset.key));
+    const multi = group.items.length > 1;
     const assetBtn = h("button", { class: "w-asset-pick", type: "button", style: `--c:${asset.color}` }, null, [
-      h("span", { class: "w-coin" }, null, [asset.logo ? h("img", { src: asset.logo, alt: "" }) : h("b", {}, asset.symbol[0]), h("i", { class: "w-coin-chain" }, null, asset.chainLogo ? [h("img", { src: asset.chainLogo, alt: "" })] : [])]),
-      h("span", { class: "w-asset-pick-text" }, null, [h("b", {}, `${asset.symbol} · ${asset.chainName}`), h("span", {}, pending ? "баланс загружается…" : `доступно ${asset.amount}`)]),
+      multi
+        ? h("span", { class: "w-coin" }, null, [group.logo ? h("img", { src: group.logo, alt: "" }) : h("b", {}, group.symbol[0])])
+        : h("span", { class: "w-coin" }, null, [asset.logo ? h("img", { src: asset.logo, alt: "" }) : h("b", {}, asset.symbol[0]), asset.chainLogo && asset.chainLogo !== asset.logo ? h("i", { class: "w-coin-chain" }, null, [h("img", { src: asset.chainLogo, alt: "" })]) : null].filter(Boolean)),
+      h("span", { class: "w-asset-pick-text" }, null, [
+        h("b", {}, multi ? group.symbol : `${asset.symbol} · ${asset.chainName}`),
+        h("span", {}, multi ? `всего ${group.amount} в ${group.items.length} ${this.plural(group.items.length, "сети", "сетях", "сетях")}` : pending ? "баланс загружается…" : `доступно ${asset.amount}`),
+      ]),
       this.wIcon(["m6 9 6 6 6-6"], 12, 2.2),
     ]);
     assetBtn.addEventListener("click", e => {
       const r = e.currentTarget.getBoundingClientRect();
-      this.showMenu(assets.filter(a => !a.pending).map(a => ({
-        label: `${a.symbol} · ${a.chainName}`, hint: a.amount, icon: a.logo, checked: a.key === asset.key,
+      this.showMenu(groups.filter(g => !g.pending).map(g => ({
+        label: g.items.length > 1 ? g.symbol : `${g.symbol} · ${g.items[0].chainName}${g.custom ? " · свой токен" : ""}`, hint: g.amount, checked: g.key === group.key,
+        // у монеты в нескольких сетях берётся сеть с большим остатком; её можно сменить ниже
+        run: () => { s.asset = g.items[0].key; s.fee = null; this.renderDrawer(); },
+      })), r.left, r.bottom + 6);
+    });
+    const netBtn = h("button", { class: "w-asset-pick", type: "button", style: `--c:${asset.color}` }, null, [
+      h("span", { class: "w-coin" }, null, [asset.chainLogo ? h("img", { src: asset.chainLogo, alt: "" }) : h("b", {}, asset.chainName[0])]),
+      h("span", { class: "w-asset-pick-text" }, null, [h("b", {}, asset.chainName), h("span", {}, pending ? "баланс загружается…" : `доступно ${asset.amount}`)]),
+      this.wIcon(["m6 9 6 6 6-6"], 12, 2.2),
+    ]);
+    netBtn.addEventListener("click", e => {
+      const r = e.currentTarget.getBoundingClientRect();
+      this.showMenu(group.items.filter(a => !a.pending).map(a => ({
+        label: a.chainName, hint: a.amount, checked: a.key === asset.key,
         run: () => { s.asset = a.key; s.fee = null; this.renderDrawer(); },
       })), r.left, r.bottom + 6);
     });
@@ -397,6 +418,7 @@ Object.assign(Tabora, {
     return h("div", { class: "w-send" }, null, [
       h("div", { class: "w-flow-head" }, null, [h("b", { class: "w-title" }, "Отправить"), back]),
       h("label", { class: "w-field" }, null, [h("span", {}, "Актив"), assetBtn]),
+      multi ? h("label", { class: "w-field" }, null, [h("span", {}, "Сеть"), netBtn]) : h("span"),
       h("label", { class: "w-field" }, null, [h("span", {}, "Кому"), h("div", { class: "w-input-row" }, null, [to, book, paste]), toNote]),
       h("label", { class: "w-field" }, null, [h("span", { class: "w-field-head" }, null, [h("span", {}, "Сумма"), maxLink]), h("div", { class: "w-input-row" }, null, [to && amount, h("span", { class: "w-input-suffix" }, asset.symbol)]), amountNote]),
       feeBox,
@@ -1266,7 +1288,7 @@ Object.assign(Tabora, {
           const delta = parseFloat(bal.native) - parseFloat(prev.native);
           const usd = delta * (prices[chain.symbol] || 0);
           if (!prices[chain.symbol] || usd >= 0.01) {
-            incoming.push({ chain, text: `${delta.toLocaleString("en-US", { maximumFractionDigits: 6 })} ${chain.symbol}`, usd, mark: `${id}:${chain.symbol}:${bal.native}` });
+            incoming.push({ chain, text: `${delta.toLocaleString("en-US", { maximumFractionDigits: 6 })} ${chain.symbol}`, usd, mark: `${id}:${chain.symbol}:${bal.native}`, logo: this.walletCoinLogo(chain.symbol) });
           }
         }
         for (const t of bal.tokens || []) {
@@ -1283,7 +1305,7 @@ Object.assign(Tabora, {
               if (t.custom) {
                 w.customNotified[tkey] = Date.now();
               }
-              incoming.push({ chain, text: `${delta} ${t.symbol}${t.custom ? " (свой токен, без оценки)" : ""}`, usd, mark: `${id}:${t.symbol}:${now}` });
+              incoming.push({ chain, text: `${delta} ${t.symbol}${t.custom ? " (свой токен, без оценки)" : ""}`, usd, mark: `${id}:${t.symbol}:${now}`, logo: t.custom ? "" : t.logo });
             }
           }
         }
@@ -1304,14 +1326,66 @@ Object.assign(Tabora, {
     }
   },
 
-  walletNotifyIncoming({ chain, text, usd }) {
+  /**
+   * Картинка системного уведомления о поступлении: значок пришедшей монеты, а у токена и у
+   * монеты в другой сети (ETH в Base) — со значком сети в углу, как в списке активов.
+   * Движок сам картинку по адресу не загружает: уведомлению нужен готовый imgIContainer.
+   */
+  async walletAlertImage(logo, chainLogo) {
+    const load = src => new Promise((resolve, reject) => {
+      const img = this.html("img");
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`значок не загружен: ${src}`));
+      img.src = src;
+    });
+    const size = 128;
+    const canvas = this.html("canvas", { width: String(size), height: String(size) });
+    const ctx = canvas.getContext("2d");
+    const disc = (img, x, y, d) => {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x + d / 2, y + d / 2, d / 2, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(img, x, y, d, d);
+      ctx.restore();
+    };
+    disc(await load(logo || chainLogo), 0, 0, size);
+    if (logo && chainLogo && chainLogo !== logo) {
+      const d = 52;
+      const at = size - d;
+      // прозрачный ободок отделяет значок сети от значка монеты
+      ctx.save();
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.beginPath();
+      ctx.arc(at + d / 2, at + d / 2, d / 2 + 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      disc(await load(chainLogo), at, at, d);
+    }
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+    return Cc["@mozilla.org/image/tools;1"].getService(Ci.imgITools).decodeImageFromArrayBuffer(await blob.arrayBuffer(), "image/png");
+  },
+
+  /** Уведомление о поступлении (ещё не показанное): { alert, title, body }. */
+  async walletIncomingAlert({ chain, text, usd, logo }) {
     const title = `Пришло ${text}`;
     const body = `${chain.name}${usd ? ` · ${this.wFmtUsd(usd)}` : ""} · кошелёк Tabora`;
-    this.notice(`${title} · ${chain.name}`);
+    const alert = Cc["@mozilla.org/alert-notification;1"].createInstance(Ci.nsIAlertNotification);
+    alert.init(`tabora-wallet-${Date.now()}`, "", title, body, true, "", null, null, null, null, Services.scriptSecurityManager.getSystemPrincipal(), false, false);
     try {
+      alert.image = await this.walletAlertImage(logo, chain.logo);
+    } catch (e) {
+      console.warn("wallet alert image", e); // без картинки уведомление всё равно показывается
+    }
+    return { alert, title, body };
+  },
+
+  async walletNotifyIncoming(incoming) {
+    const { chain } = incoming;
+    this.notice(`Пришло ${incoming.text} · ${chain.name}`);
+    try {
+      const { alert } = await this.walletIncomingAlert(incoming);
       const alerts = Cc["@mozilla.org/alerts-service;1"].getService(Ci.nsIAlertsService);
-      const alert = Cc["@mozilla.org/alert-notification;1"].createInstance(Ci.nsIAlertNotification);
-      alert.init(`tabora-wallet-${Date.now()}`, chain.logo, title, body, true, "", null, null, null, null, Services.scriptSecurityManager.getSystemPrincipal(), false, false);
       alerts.showAlert(alert, (subject, topic) => {
         if (topic === "alertclickcallback") {
           window.focus();
