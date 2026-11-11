@@ -836,7 +836,7 @@ var Tabora = {
     if (item.header) {
       return this.html("div", { class: "header" }, item.header);
     }
-    const node = this.html("button", { class: `item${item.danger ? " danger" : ""}${item.caption ? " caption" : ""}`, role: "menuitem", type: "button", "data-index": String(index) }, null, [
+    const node = this.html("button", { class: `item${item.danger ? " danger" : ""}${item.caption ? " caption" : ""}${item.info ? " info" : ""}`, role: "menuitem", type: "button", "data-index": String(index) }, null, [
       this.html("span", { class: `icon${item.avatar ? " avatar" : ""}` }, null, item.avatar
         ? [this.accountAvatar(item.avatar.email, { size: "mini", color: item.avatar.color, empty: item.avatar.empty })]
         : item.icon
@@ -847,8 +847,8 @@ var Tabora = {
       this.html("span", { class: "label" }, item.label),
       item.note ? this.html("span", { class: "hint note" }, item.note) : item.hint ? this.html("span", { class: "hint" }, item.hint) : item.children ? this.html("span", { class: "chevron" }, null, [this.svg(["m9 6 6 6-6 6"], 13, 2.2)]) : this.html("span", { class: "hint" }),
     ]);
-    if (item.disabled || item.caption) {
-      node.setAttribute("disabled", "true");
+    if (item.disabled || item.caption || item.info) {
+      node.setAttribute("disabled", "true"); // info — строка-сведение: читается, но не нажимается
     }
     node.addEventListener("mouseenter", () => {
       if (inSub) {
@@ -864,7 +864,7 @@ var Tabora = {
     });
     node.addEventListener("click", e => {
       e.stopPropagation();
-      if (item.disabled || item.caption) {
+      if (item.disabled || item.caption || item.info) {
         return;
       }
       if (item.children) {
@@ -882,10 +882,25 @@ var Tabora = {
   },
 
   placeMenu(el, x, y) {
+    el.style.maxHeight = "";
     const w = el.offsetWidth;
     const h = el.offsetHeight;
     const left = Math.min(x, window.innerWidth - w - 8);
-    const top = y + h > window.innerHeight - 8 ? Math.max(8, y - h) : y;
+    const below = window.innerHeight - 8 - y;
+    const above = y - 8;
+    let top = y;
+    if (h > below) {
+      if (h <= above) {
+        top = y - h;
+      } else {
+        // не помещается ни вниз, ни вверх: остаётся с той стороны, где места больше, и прокручивается
+        const cs = getComputedStyle(el);
+        const frame = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+        const room = Math.max(below, above);
+        el.style.maxHeight = `${Math.max(120, room - frame)}px`;
+        top = below >= above ? y : 8;
+      }
+    }
     el.style.left = `${Math.max(8, left)}px`;
     el.style.top = `${Math.max(8, top)}px`;
   },
@@ -910,7 +925,7 @@ var Tabora = {
     const inSub = this.menu.subActive >= 0 || (!this.menu.sub.hidden && this.menu.subActive === -1 && delta > 0 && false);
     const list = inSub ? this.menu.subItems : this.menu.items;
     const current = inSub ? this.menu.subActive : this.menu.active;
-    const selectable = list.map((it, i) => (!it.separator && !it.header && !it.disabled && !it.caption ? i : -1)).filter(i => i >= 0);
+    const selectable = list.map((it, i) => (!it.separator && !it.header && !it.disabled && !it.caption && !it.info ? i : -1)).filter(i => i >= 0);
     if (!selectable.length) {
       return;
     }
@@ -2414,10 +2429,7 @@ var Tabora = {
     ]);
     const bar = this.html("div", { id: "tabora-topbar" }, null, [
       this.html("span", { class: "title", id: "tabora-title" }),
-      this.html("span", { class: "chip", id: "tabora-blocked", hidden: "true" }, null, [
-        this.svg(["M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"], 13, 2),
-        this.html("span", { id: "tabora-blocked-text" }),
-      ]),
+      this.buildBlockedChip(),
       reader,
       toggle,
       this.buildAccountButton(),
@@ -4000,23 +4012,97 @@ var Tabora = {
     this.updateBlocked();
   },
 
+  /* ---- Что заблокировано на странице ---------------------------------------------------
+   * Журнал блокировок движка записывает по каждому источнику события разных видов: не только
+   * блокировки, но и «куки загружены» или «сторонние куки изолированы». В счёт идут только
+   * настоящие блокировки слежения (биты nsIWebProgressListener.STATE_*). */
+  BLOCK_KINDS: [
+    // содержимое трекеров, их куки (заблокированы или изолированы), подменённые скрипты, трекеры в письмах
+    { key: "tracker", title: "Трекеры", mask: (1 << 12) | (1 << 29) | (1 << 1) | (1 << 4) | (1 << 22) },
+    { key: "social", title: "Трекеры соцсетей", mask: (1 << 16) | (1 << 24) },
+    { key: "fingerprint", title: "Сбор отпечатка браузера", mask: (1 << 6) | (1 << 2) },
+    { key: "miner", title: "Майнеры", mask: 1 << 11 },
+    { key: "bounce", title: "Трекеры-переадресации", mask: 1 << 3 },
+  ],
+
+  /** { count, groups: [{ key, title, count, items: [{ host, n }] }] } для страницы во вкладке. */
+  async blockedOnPage(browser) {
+    const kinds = new Map(this.BLOCK_KINDS.map(k => [k.key, new Map()]));
+    try {
+      const log = JSON.parse(await browser.getContentBlockingLog());
+      for (const [origin, entries] of Object.entries(log)) {
+        let host = "";
+        try {
+          host = new URL(origin).hostname.replace(/^www\./, "");
+        } catch (e) {}
+        host ||= "источник без адреса";
+        for (const [flag, blocked, n] of entries) {
+          if (!blocked) {
+            continue;
+          }
+          const kind = this.BLOCK_KINDS.find(k => flag & k.mask);
+          if (kind) {
+            const hosts = kinds.get(kind.key);
+            hosts.set(host, (hosts.get(host) || 0) + n);
+          }
+        }
+      }
+    } catch (e) {}
+    const groups = this.BLOCK_KINDS.map(k => {
+      const items = [...kinds.get(k.key)].map(([host, n]) => ({ host, n })).sort((a, b) => b.n - a.n || a.host.localeCompare(b.host));
+      return { key: k.key, title: k.title, items, count: items.reduce((sum, it) => sum + it.n, 0) };
+    }).filter(g => g.count);
+    return { groups, count: groups.reduce((sum, g) => sum + g.count, 0) };
+  },
+
+  buildBlockedChip() {
+    const chip = this.html("span", { class: "chip", id: "tabora-blocked", role: "button", tabindex: "0", "aria-haspopup": "menu", hidden: "true" }, null, [
+      this.svg(["M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"], 13, 2),
+      this.html("span", { id: "tabora-blocked-text" }),
+    ]);
+    chip.addEventListener("click", () => this.showBlocked());
+    chip.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        this.showBlocked();
+      }
+    });
+    return chip;
+  },
+
+  /** Список заблокированного под фишкой: по видам, внутри — адреса и сколько раз каждый остановлен. */
+  async showBlocked() {
+    if (this.menuJustClosed("blocked")) {
+      return; // повторное нажатие на фишку закрывает список
+    }
+    const chip = document.getElementById("tabora-blocked");
+    const browser = gBrowser.selectedBrowser;
+    const { count, groups } = await this.blockedOnPage(browser);
+    if (!count || browser !== gBrowser.selectedBrowser) {
+      return;
+    }
+    let host = "";
+    try {
+      host = browser.currentURI.host.replace(/^www\./, "");
+    } catch (e) {}
+    const items = [{ label: host ? `Заблокировано на ${host}` : "Заблокировано на странице", hint: String(count), caption: true }];
+    for (const g of groups) {
+      items.push({ header: g.title });
+      for (const it of g.items) {
+        items.push({ label: it.host, hint: it.n > 1 ? `×${it.n}` : "", info: true });
+      }
+    }
+    const r = chip.getBoundingClientRect();
+    this.showMenu(items, r.left, r.bottom + 6, { owner: "blocked" });
+  },
+
   async updateBlocked() {
     const chip = document.getElementById("tabora-blocked");
     const browser = gBrowser.selectedBrowser;
     if (!chip || !browser) {
       return;
     }
-    let count = 0;
-    try {
-      const log = JSON.parse(await browser.getContentBlockingLog());
-      for (const entries of Object.values(log)) {
-        for (const [, blocked, n] of entries) {
-          if (blocked) {
-            count += n;
-          }
-        }
-      }
-    } catch (e) {}
+    const { count } = await this.blockedOnPage(browser);
     if (browser !== gBrowser.selectedBrowser) {
       return;
     }

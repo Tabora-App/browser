@@ -1698,6 +1698,22 @@ sidebar-main {
   display: none;
 }
 
+/* фишка-кнопка: по нажатию открывает список заблокированного */
+#tabora-topbar .chip[role="button"] {
+  cursor: default;
+  outline: none;
+  transition: background-color var(--tabora-ease), color var(--tabora-ease);
+}
+
+#tabora-topbar .chip[role="button"]:hover {
+  background: var(--tabora-raised);
+  color: var(--tabora-text-strong);
+}
+
+#tabora-topbar .chip[role="button"]:focus-visible {
+  box-shadow: 0 0 0 1px var(--tabora-accent);
+}
+
 #tabora-topbar .icon-btn {
   width: 36px;
   height: 36px;
@@ -3673,6 +3689,15 @@ toolbarseparator {
   animation: tabora-cmd-in var(--tabora-t) var(--tabora-curve);
   -moz-window-dragging: no-drag;
   user-select: none;
+  max-height: calc(100vh - 30px); /* точнее ограничивает placeMenu: по месту под точкой вызова */
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+/* в длинном списке строки не сжимаются, а прокручиваются */
+#tabora-menu > *,
+#tabora-submenu > * {
+  flex-shrink: 0;
 }
 
 #tabora-menu[hidden],
@@ -3773,6 +3798,21 @@ toolbarseparator {
 #tabora-menu .item.caption[disabled] {
   color: var(--tabora-text-strong);
   font-weight: 700;
+}
+
+/* строка-сведение (адрес в списке заблокированного): читается как обычный текст, не нажимается */
+#tabora-menu .item.info[disabled] {
+  height: 28px;
+  color: var(--tabora-text-2);
+}
+
+#tabora-menu .item.info .icon:empty,
+#tabora-menu .item.caption .icon:empty {
+  display: none;
+}
+
+#tabora-menu .item.caption .hint {
+  color: var(--tabora-text-3);
 }
 
 /* пометка словами (не сочетание клавиш) набирается шрифтом интерфейса */
