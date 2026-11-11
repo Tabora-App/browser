@@ -108,7 +108,7 @@
     }
     const card = h("moz-card", { id: "tabora-dock-card", heading: "Быстрые кнопки", class: "tabora-card" });
     const body = h("div", { class: "tabora-card-body" });
-    body.append(h("p", { class: "tabora-card-sub" }, "Кнопки под списком вкладок, а при вкладках сверху — рядом с адресной строкой. Отметьте те, что нужны под рукой: остальное открывается сочетанием клавиш."));
+    body.append(h("p", { class: "tabora-card-sub" }, "Значки рядом с адресной строкой при вкладках сверху. Отметьте те, что нужны под рукой: остальное открывается сочетанием клавиш. При вкладках сбоку те же разделы открывает кнопка «Разделы» внизу колонки."));
     const grid = h("div", { class: "tabora-dock-grid" });
     const boxes = new Map();
     const sync = () => {

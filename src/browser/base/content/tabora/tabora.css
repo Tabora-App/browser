@@ -241,14 +241,19 @@
 #navigator-toolbox > #tabora-memory { order: 4; }
 #navigator-toolbox > #tabora-dock { order: 5; }
 
-/* Быстрые кнопки: один контейнер на обе раскладки. Сбоку — колонка строк под списком вкладок
-   (при пяти и более кнопках или низком окне — плитки, см. «Плитки быстрых кнопок»), сверху —
-   группа значков в строке адреса. Порядок кнопок задаёт разметка (список DOCK в tabora.js). */
+/* Быстрые кнопки — группа значков в строке адреса при вкладках сверху. При вкладках сбоку их
+   нет: разделы открывает кнопка «Разделы» внизу колонки (рейка ящика). Закреплённая рейка
+   заменяет группу и при вкладках сверху. Порядок кнопок задаёт разметка (список DOCK в tabora.js). */
 #tabora-dock {
   display: flex;
   flex-direction: column;
   gap: 14px;
   flex-shrink: 0;
+}
+
+:root:not([tabora-tabs="horizontal"]) #tabora-dock,
+:root[tabora-rail-held] #tabora-dock {
+  display: none !important;
 }
 
 :is(#tabora-wallet-card, #tabora-mail, #tabora-downloads, .tabora-quick, #tabora-dock)[hidden] {
@@ -652,31 +657,31 @@ sidebar-main {
   border-radius: 4px;
 }
 
-/* Сайт без фавиконки: нейтральный глобус вместо яркой коробки */
-#tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://global/skin/icons/defaultFavicon.svg"],
-#tabbrowser-tabs[orient="vertical"] .tab-icon-image:not([src]) {
+/* Сайт без фавиконки: нейтральный глобус вместо яркой коробки (в обеих раскладках) */
+#tabbrowser-tabs .tab-icon-image[src="chrome://global/skin/icons/defaultFavicon.svg"],
+#tabbrowser-tabs .tab-icon-image:not([src]) {
   content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23868b95' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='8.5'/%3E%3Cpath d='M3.5 12h17M12 3.5c2.6 2.6 2.6 14.4 0 17M12 3.5c-2.6 2.6-2.6 14.4 0 17'/%3E%3C/svg%3E") !important;
   border-radius: 0;
 }
 
-:root[tabora-private] #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[tabora-start] .tab-icon-image {
+:root[tabora-private] #tabbrowser-tabs .tabbrowser-tab[tabora-start] .tab-icon-image {
   content: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23b9a6ff'><rect x='4' y='5' width='14' height='3.6' rx='1.8'/><rect x='9.2' y='5' width='3.6' height='14' rx='1.8'/><circle cx='18.2' cy='7.2' r='1.6'/></svg>") !important;
 }
 
 /* Вкладки наших страниц: контурные значки в цвете текста вместо лаймовых плашек
    (в свёрнутой колонке плашки выглядели тяжело) */
-#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[tabora-start] .tab-icon-image,
+#tabbrowser-tabs .tabbrowser-tab[tabora-start] .tab-icon-image,
 #tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://tabora/content/mail/icon.svg"],
 #tabbrowser-tabs[orient="vertical"] .tab-icon-image[src="chrome://tabora/content/downloads/icon.svg"] {
   border-radius: 0;
   opacity: 1;
 }
 
-#tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[tabora-start] .tab-icon-image {
+#tabbrowser-tabs .tabbrowser-tab[tabora-start] .tab-icon-image {
   content: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23c9ccd3'><rect x='4' y='5' width='14' height='3.6' rx='1.8'/><rect x='9.2' y='5' width='3.6' height='14' rx='1.8'/><circle cx='18.2' cy='7.2' r='1.6'/></svg>") !important;
 }
 
-:root[tabora-theme="light"] #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[tabora-start] .tab-icon-image {
+:root[tabora-theme="light"] #tabbrowser-tabs .tabbrowser-tab[tabora-start] .tab-icon-image {
   content: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%233d4047'><rect x='4' y='5' width='14' height='3.6' rx='1.8'/><rect x='9.2' y='5' width='3.6' height='14' rx='1.8'/><circle cx='18.2' cy='7.2' r='1.6'/></svg>") !important;
 }
 
@@ -1147,10 +1152,7 @@ sidebar-main {
 :root[tabora-sidebar-anim="collapse"] #tabbrowser-tabs[orient="vertical"] .tab-label-container,
 :root[tabora-sidebar-anim="collapse"] #tabbrowser-tabs[orient="vertical"] .tab-close-button,
 :root[tabora-sidebar-anim="collapse"] #tabora-tabs-head > span,
-:root[tabora-sidebar-anim="collapse"] #tabora-wallet-card > span,
-:root[tabora-sidebar-anim="collapse"] :is(#tabora-mail, .tabora-quick) > span,
-:root[tabora-sidebar-anim="collapse"] #tabora-downloads .title,
-:root[tabora-sidebar-anim="collapse"] #tabora-downloads .head .kbd,
+:root[tabora-sidebar-anim="collapse"] #tabora-sections .label,
 :root[tabora-sidebar-anim="collapse"] #tabora-spaces .tabora-space,
 :root[tabora-sidebar-anim="collapse"] #urlbar-container,
 :root[tabora-sidebar-anim="collapse"] #nav-bar > #nav-bar-customization-target > #back-button,
@@ -1164,10 +1166,7 @@ sidebar-main {
 :root[tabora-sidebar-anim="expand"] #tabbrowser-tabs[orient="vertical"] .tab-label-container,
 :root[tabora-sidebar-anim="expand"] #tabbrowser-tabs[orient="vertical"] .tab-close-button,
 :root[tabora-sidebar-anim="expand"] #tabora-tabs-head > span,
-:root[tabora-sidebar-anim="expand"] #tabora-wallet-card > span,
-:root[tabora-sidebar-anim="expand"] :is(#tabora-mail, .tabora-quick) > span,
-:root[tabora-sidebar-anim="expand"] #tabora-downloads .title,
-:root[tabora-sidebar-anim="expand"] #tabora-downloads .head .kbd,
+:root[tabora-sidebar-anim="expand"] #tabora-sections .label,
 :root[tabora-sidebar-anim="expand"] #tabora-spaces .tabora-space,
 :root[tabora-sidebar-anim="expand"] #urlbar-container,
 :root[tabora-sidebar-anim="expand"] #nav-bar > #nav-bar-customization-target > #back-button,
@@ -1182,10 +1181,7 @@ sidebar-main {
   :root[tabora-sidebar-anim="expand"] #tabbrowser-tabs[orient="vertical"] .tab-label-container,
   :root[tabora-sidebar-anim="expand"] #tabbrowser-tabs[orient="vertical"] .tab-close-button,
   :root[tabora-sidebar-anim="expand"] #tabora-tabs-head > span,
-  :root[tabora-sidebar-anim="expand"] #tabora-wallet-card > span,
-  :root[tabora-sidebar-anim="expand"] :is(#tabora-mail, .tabora-quick) > span,
-  :root[tabora-sidebar-anim="expand"] #tabora-downloads .title,
-  :root[tabora-sidebar-anim="expand"] #tabora-downloads .head .kbd,
+  :root[tabora-sidebar-anim="expand"] #tabora-sections .label,
   :root[tabora-sidebar-anim="expand"] #tabora-spaces .tabora-space,
   :root[tabora-sidebar-anim="expand"] #urlbar-container,
   :root[tabora-sidebar-anim="expand"] #nav-bar > #nav-bar-customization-target > #back-button,
@@ -1218,12 +1214,115 @@ sidebar-main {
   }
 }
 
+/* Низ колонки: «Разделы» во всю ширину и ручка сворачивания. Сетка, а не строка: при
+   сворачивании колонки кнопка сжимается до плитки явной шириной (applySidebarCompact). */
 #tabora-sidebar-foot {
-  display: flex;
-  justify-content: flex-end;
-  padding: 2px 2px 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 2px 0 0;
   flex-shrink: 0;
   -moz-window-dragging: no-drag;
+}
+
+/* «Разделы»: показывает рейку ящика. Пока рейка спрятана, на кнопке стоят число непрочитанных
+   писем и полоска хода загрузок; когда рейка на экране, они видны на её разделах. */
+#tabora-sections {
+  position: relative;
+  box-sizing: border-box;
+  min-width: 0;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--tabora-panel-border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--tabora-text);
+  font: 600 13px/1 var(--tabora-font);
+  text-align: start;
+  cursor: default;
+  transition: border-color var(--tabora-ease), background-color var(--tabora-ease), color var(--tabora-ease);
+}
+
+#tabora-sections:hover {
+  border-color: var(--tabora-line);
+  background: var(--tabora-panel);
+}
+
+#tabora-sections[aria-pressed="true"] {
+  border-color: transparent;
+  background: var(--tabora-raised);
+  color: var(--tabora-text-strong);
+}
+
+#tabora-sections:focus-visible {
+  outline: 1px solid var(--tabora-accent);
+  outline-offset: -1px;
+}
+
+#tabora-sections svg {
+  flex-shrink: 0;
+  color: var(--tabora-text-3);
+  transition: color var(--tabora-ease);
+}
+
+#tabora-sections[aria-pressed="true"] svg {
+  color: var(--tabora-accent-ink);
+}
+
+#tabora-sections .label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+#tabora-sections .pill {
+  flex: none;
+  padding: 4px 8px;
+  border-radius: 10px;
+  background: var(--tabora-accent);
+  color: var(--tabora-on-accent);
+  font: 800 11px/1 var(--tabora-font);
+  font-variant-numeric: tabular-nums;
+}
+
+#tabora-sections .bar {
+  position: absolute;
+  inset: auto 11px 5px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--tabora-panel-border);
+  overflow: hidden;
+}
+
+#tabora-sections .bar > span,
+#tabora-drawer .rail-bar > span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--tabora-accent);
+  transition: width 0.5s cubic-bezier(0.2, 0, 0, 1);
+}
+
+#tabora-sections .bar[paused] > span,
+#tabora-drawer .rail-bar[paused] > span {
+  background: var(--tabora-text-5);
+}
+
+#tabora-sections .bar > span.indeterminate,
+#tabora-drawer .rail-bar > span.indeterminate {
+  width: 30% !important;
+  animation: tabora-dl-slide 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+#tabora-sections :is(.pill, .bar)[hidden],
+#tabora-sections[aria-pressed="true"] :is(.pill, .bar) {
+  display: none;
 }
 
 #tabora-sidebar-toggle,
@@ -1268,7 +1367,37 @@ sidebar-main {
 }
 
 :root[tabora-sidebar="compact"] #tabora-sidebar-foot {
+  grid-template-columns: auto;
   justify-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding-inline: 0;
+}
+
+/* в свёрнутой колонке «Разделы» — плитка, как вкладки и поиск: число писем на углу */
+:root[tabora-sidebar="compact"] #tabora-sections {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+  border-radius: 10px;
+}
+
+:root[tabora-sidebar="compact"] #tabora-sections .label {
+  display: none;
+}
+
+:root[tabora-sidebar="compact"] #tabora-sections .pill {
+  position: absolute;
+  top: -5px;
+  inset-inline-end: -5px;
+  padding: 2px 5px;
+  font-size: 10px;
+}
+
+:root[tabora-sidebar="compact"] #tabora-sections .bar {
+  inset: auto 7px 4px;
 }
 
 /* Навигация: остаются кнопки окна и значок поиска */
@@ -1382,43 +1511,6 @@ sidebar-main {
   width: 100%;
 }
 
-/* Почта и загрузки: значок, бейдж, тонкая полоска прогресса */
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-wallet-card,
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) :is(#tabora-mail, .tabora-quick),
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads .head {
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  margin-inline: auto;
-  padding: 0;
-  gap: 0;
-}
-
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-wallet-card > span,
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) :is(#tabora-mail, .tabora-quick) > span,
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads .title,
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads .head .kbd,
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads .live .row {
-  display: none;
-}
-
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) :is(#tabora-downloads, #tabora-mail) {
-  position: relative;
-}
-
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) :is(#tabora-downloads, #tabora-mail) .pill {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  margin: 0;
-  padding: 2px 5px;
-  font-size: 10px;
-}
-
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads .live {
-  padding: 0 12px 10px;
-}
-
 /* Свёрнутый вид: всё квадратами по центру колонки */
 :root[tabora-sidebar="compact"] #navigator-toolbox {
   gap: 10px;
@@ -1486,60 +1578,6 @@ sidebar-main {
   font-size: 11px;
 }
 
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-wallet-card,
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) :is(#tabora-mail, .tabora-quick),
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads {
-  box-sizing: border-box;
-  width: 36px;
-  height: 36px;
-  margin: 0 auto;
-  border-radius: 10px;
-}
-
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads .head {
-  height: 100%;
-  width: 100%;
-}
-
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads .live {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 6px;
-  padding: 0;
-}
-
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) #tabora-downloads .bar {
-  height: 3px;
-}
-
-:root:is([tabora-sidebar="compact"], [tabora-dock="tiles"]) :is(#tabora-downloads, #tabora-mail) .pill {
-  top: -5px;
-  right: -5px;
-}
-
-:root[tabora-sidebar="compact"] #tabora-dock {
-  gap: 10px;
-}
-
-/* Плитки быстрых кнопок: в развёрнутой панели при пяти и более кнопках или низком окне строки
-   с подписями заняли бы место списка вкладок. Значки те же, что в свёрнутой панели, но в ряд
-   на ширину колонки, как закреплённые сайты; название и клавиши — в подсказке над плиткой. */
-:root[tabora-dock="tiles"]:not([tabora-sidebar="compact"]) #tabora-dock {
-  display: grid;
-  grid-template-columns: repeat(var(--tabora-dock-cols, 4), minmax(0, 1fr));
-  gap: 8px;
-}
-
-:root[tabora-dock="tiles"]:not([tabora-sidebar="compact"]) #tabora-dock > #tabora-wallet-card,
-:root[tabora-dock="tiles"]:not([tabora-sidebar="compact"]) #tabora-dock > :is(#tabora-mail, .tabora-quick),
-:root[tabora-dock="tiles"]:not([tabora-sidebar="compact"]) #tabora-dock > #tabora-downloads {
-  width: auto;
-  height: 40px;
-  margin: 0;
-  border-radius: 12px;
-}
-
 /* Подсказка справа от значка */
 #tabora-tip {
   position: fixed;
@@ -1567,15 +1605,6 @@ sidebar-main {
 #tabora-tip[shown] {
   opacity: 1;
   transform: translate(0, -50%);
-}
-
-/* над плиткой быстрой кнопки: по центру, выезжает снизу вверх */
-#tabora-tip[above] {
-  transform: translate(-50%, calc(-100% + 4px));
-}
-
-#tabora-tip[above][shown] {
-  transform: translate(-50%, -100%);
 }
 
 #tabora-tip b {
@@ -4048,9 +4077,49 @@ toolbarseparator {
   border-radius: 4px;
 }
 
+/* Firefox при вкладках сверху прячет значок у вкладки без картинки: у нас он есть у каждой
+   (новая вкладка — знак Tabora, сайт без значка — глобус), иначе сжатую вкладку не узнать */
+#tabbrowser-tabs[orient="horizontal"] .tabbrowser-tab:not([busy]) .tab-icon-image:not([src]) {
+  display: revert !important;
+}
+
 #tabbrowser-tabs[orient="horizontal"] .tab-close-button {
   border-radius: 6px;
   color: var(--tabora-text-3);
+}
+
+/* Теснота: вкладка сжимается до значка, как плитка свёрнутой колонки, и только когда не
+   помещаются и значки, полоса начинает прокручиваться. Ширину вкладки стили узнают контейнерным
+   запросом. У сжатой вкладки нет ни названия, ни крестика: закрывают её средней кнопкой, ⌘W или
+   из меню; выбранную — ещё и крестиком, который встаёт на место значка под указателем. */
+#tabbrowser-tabs[orient="horizontal"] .tabbrowser-tab[fadein]:not([pinned]) {
+  min-width: calc(40px + var(--tab-min-width-extra-icons)) !important;
+  container: tabora-tab / inline-size;
+}
+
+@container tabora-tab (max-width: 68px) {
+  .tab-content {
+    justify-content: center;
+    padding-inline: 0 !important;
+  }
+
+  .tab-label-container,
+  .tab-close-button {
+    display: none !important;
+  }
+
+  .tab-icon-stack > * {
+    margin-inline-end: 0 !important;
+  }
+
+  .tabbrowser-tab[selected]:hover .tab-icon-stack {
+    display: none;
+  }
+
+  .tabbrowser-tab[selected]:hover .tab-close-button {
+    display: flex !important;
+    margin: 0;
+  }
 }
 
 #tabbrowser-tabs[orient="horizontal"] .tab-close-button:hover {
@@ -4171,6 +4240,19 @@ toolbarseparator {
 
   :root[tabora-tabs="horizontal"] #nav-bar > #tabora-topbar {
     gap: 4px;
+  }
+}
+
+/* самое узкое окно: значки быстрых кнопок плотнее, адрес короче — аккаунт не уходит за край */
+@media (max-width: 560px) {
+  :root[tabora-tabs="horizontal"] #urlbar-container {
+    min-width: 72px !important;
+  }
+
+  :root[tabora-tabs="horizontal"] #tabora-dock > #tabora-wallet-card,
+  :root[tabora-tabs="horizontal"] #tabora-dock > :is(#tabora-mail, .tabora-quick),
+  :root[tabora-tabs="horizontal"] #tabora-dock > #tabora-downloads {
+    width: 30px;
   }
 }
 

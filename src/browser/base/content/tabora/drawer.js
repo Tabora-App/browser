@@ -4,7 +4,14 @@
 
 /* Ящик Tabora: выдвижная панель между сайдбаром и страницей.
  * Рейка разделов слева (редактируется: состав и порядок), панель содержимого справа.
- * Разделы: загрузки, история, почта, медиа, пространства (на всю ширину), закладки.
+ * Разделы: почта (страница во вкладке), загрузки, кошелёк, коды, история, медиа, пространства
+ * (на всю ширину), закладки.
+ *
+ * Три состояния: ничего не видно; видна одна рейка (drawer.rail); рейка с панелью раздела
+ * (drawer.open). Рейку без панели показывает кнопка «Разделы» внизу колонки: выбор раздела
+ * открывает панель, закрытие панели прячет и рейку. Закреплённая рейка (кнопка внизу рейки,
+ * настройка tabora.drawer.pinned) остаётся на месте и после закрытия панели, и после перезапуска;
+ * в узком окне она не держится, чтобы не отнимать место у страницы.
  * Подключается из tabora.js через loadSubScript и расширяет объект Tabora. */
 
 Object.assign(Tabora, {
@@ -12,17 +19,21 @@ Object.assign(Tabora, {
   DRAWER_RAIL: 64,
   SECTIONS_PREF: "tabora.drawer.sections",
   SECTION_PREF: "tabora.drawer.section",
+  RAIL_PINNED_PREF: "tabora.drawer.pinned",
 
+  // page — раздел без панели: имя метода, который открывает его страницу во вкладке (и возвращает
+  // с неё), current — стоит ли страница перед глазами; badge — отметка на значке раздела
   SECTIONS: {
-    downloads: { label: "Загрузки", key: "⌘⇧J", icon: ["M12 4v11", "M7 10l5 5 5-5", "M4 19h16"], search: "Имя файла или сайт", full: "Открыть страницу загрузок" },
+    mail: { label: "Почта", key: "⌘⇧M", icon: ["M3.5 6.5h17v11h-17z", "M3.5 7l8.5 6 8.5-6"], page: "toggleMail", current: () => Tabora.isMailUrl(gBrowser.selectedBrowser?.currentURI?.spec), badge: "unread" },
+    downloads: { label: "Загрузки", key: "⌘⇧J", icon: ["M12 4v11", "M7 10l5 5 5-5", "M4 19h16"], search: "Имя файла или сайт", full: "Открыть страницу загрузок", badge: "downloads" },
     history: { label: "История", key: "⌘⇧H", icon: ["M12 7v5l3 2", "M3.5 12a8.5 8.5 0 1 0 2.5-6", "M3 4v4h4"], search: "Поиск в истории" },
     media: { label: "Медиа", key: "⌘⇧I", icon: ["M4 5h16v14H4z", "M4 15l5-5 4 4 3-3 4 4", "M15.5 9.5h.01"], search: "Поиск по медиа" },
     spaces: { label: "Пространства", short: "Простран\u00adства", key: "⌘⇧S", icon: ["M8 8h12v12H8z", "M4 4h12v12", "M4 4v12h12"], wide: true },
     bookmarks: { label: "Закладки", key: "⌘⇧B", icon: ["M6 4h12v16l-6-4-6 4z"], search: "Поиск по закладкам" },
   },
-  SECTION_ORDER: ["downloads", "history", "media", "spaces", "bookmarks"],
+  SECTION_ORDER: ["mail", "downloads", "history", "media", "spaces", "bookmarks"],
 
-  drawer: { open: false, section: "downloads", editing: false, query: "", filter: "all", el: null, inner: null, body: null, timer: null, cache: {} },
+  drawer: { open: false, rail: false, section: "downloads", editing: false, query: "", filter: "all", el: null, inner: null, body: null, timer: null, cache: {} },
 
   /* ---- Каркас ------------------------------------------------------------ */
 
@@ -30,7 +41,7 @@ Object.assign(Tabora, {
     const h = (tag, attrs, text, children) => this.html(tag, attrs, text, children);
     const d = this.drawer;
     d.section = Services.prefs.getStringPref(this.SECTION_PREF, "downloads");
-    if (!this.SECTIONS[d.section]) {
+    if (!this.SECTIONS[d.section] || this.SECTIONS[d.section].page) {
       d.section = "downloads";
     }
 
@@ -38,9 +49,20 @@ Object.assign(Tabora, {
       h("div", { class: "rail-items", id: "tabora-rail-items" }),
       h("div", { class: "rail-foot" }, null, [
         this.iconButton("tabora-rail-back", "Готово", ["M19 12H5", "m11 6-6 6 6 6"], () => this.setDrawerEditing(false)),
+        this.iconButton("tabora-rail-pin", "Закрепить рейку", ["M12 17v5", "M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.8a2 2 0 0 0-1.1-1.8l-1.8-.9a2 2 0 0 1-1.1-1.8V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"], () => this.setRailPinned(!this.railPinned())),
         this.iconButton("tabora-rail-edit", "Настроить разделы", ["M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z", "M13.5 6.5l3 3"], () => this.setDrawerEditing(!d.editing)),
       ]),
     ]);
+    rail.addEventListener("keydown", e => {
+      // стрелки переходят по разделам рейки
+      const step = { ArrowDown: 1, ArrowUp: -1 }[e.key];
+      const items = [...rail.querySelectorAll(".rail-item:not([data-hidden])")];
+      const at = items.indexOf(document.activeElement);
+      if (step && at >= 0 && !d.editing) {
+        items[(at + step + items.length) % items.length].focus();
+        e.preventDefault();
+      }
+    });
 
     const search = h("div", { class: "dsearch" }, null, [
       this.svg(["M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z", "M20 20l-4-4"], 15, 2),
@@ -94,7 +116,12 @@ Object.assign(Tabora, {
     });
     el.addEventListener("keydown", e => {
       if (e.key === "Escape" && !e.defaultPrevented) {
-        this.closeDrawer();
+        if (d.open) {
+          this.closeDrawer();
+        } else {
+          this.hideRail();
+          gBrowser.selectedBrowser?.focus();
+        }
         e.stopPropagation();
       } else if (e.key === "/" && e.target.localName !== "input") {
         search.querySelector("input").focus();
@@ -102,13 +129,26 @@ Object.assign(Tabora, {
       }
     });
     el.addEventListener("transitionend", e => {
-      if (e.target === el && e.propertyName === "width" && !d.open) {
+      if (e.target === el && e.propertyName === "width" && !d.open && !d.rail) {
         el.hidden = true;
       }
     });
     window.addEventListener("resize", () => this.sizeDrawer());
 
     this.renderRail();
+    const pinned = () => this.syncRail();
+    Services.prefs.addObserver(this.RAIL_PINNED_PREF, pinned);
+    window.addEventListener("unload", () => Services.prefs.removeObserver(this.RAIL_PINNED_PREF, pinned), { once: true });
+    this.syncRail({ animate: false });
+    // раздел-страница отмечен на рейке, пока его страница перед глазами
+    gBrowser.tabContainer.addEventListener("TabSelect", () => this.syncRailCurrent());
+    gBrowser.addTabsProgressListener({
+      onLocationChange: browser => {
+        if (browser === gBrowser.selectedBrowser) {
+          this.syncRailCurrent();
+        }
+      },
+    });
 
     // Все пути к «Библиотеке» ведут в ящик
     BrowserCommands.downloadsUI = () => this.openDrawer("downloads");
@@ -213,12 +253,30 @@ Object.assign(Tabora, {
     box.replaceChildren();
     const make = (id, isHidden) => {
       const s = this.SECTIONS[id];
-      const b = this.html("button", { class: "rail-item", type: "button", "data-section": id, title: `${s.label} (${s.key})`, "aria-selected": String(d.section === id && !isHidden) }, null, [
+      const b = this.html("button", { class: "rail-item", type: "button", "data-section": id, title: `${s.label} (${s.key})`, "aria-selected": String(!isHidden && this.railCurrent(id)) }, null, [
         this.svg(s.icon, 18, 1.7),
         this.html("span", {}, s.short || s.label),
       ]);
       if (isHidden) {
         b.setAttribute("data-hidden", "true");
+      } else if (s.badge) {
+        b.append(this.html("span", { class: "rail-pill", "data-badge": s.badge, hidden: "true" }));
+        if (s.badge === "downloads") {
+          b.append(this.html("span", { class: "rail-bar", "data-badge": "progress", "aria-hidden": "true", hidden: "true" }, null, [this.html("span")]));
+          // ссылку можно бросить на раздел: она скачается, как раньше с карточки загрузок
+          b.addEventListener("dragover", e => {
+            if (e.dataTransfer.types.includes("text/uri-list") || e.dataTransfer.types.includes("text/plain")) {
+              e.preventDefault();
+              b.toggleAttribute("drop", true);
+            }
+          });
+          b.addEventListener("dragleave", () => b.removeAttribute("drop"));
+          b.addEventListener("drop", e => {
+            e.preventDefault();
+            b.removeAttribute("drop");
+            this.downloadFromDrop(e.dataTransfer);
+          });
+        }
       }
       const ctl = this.html("span", { class: "rail-ctl", title: isHidden ? "Вернуть раздел" : "Убрать раздел" }, null, [
         this.svg(isHidden ? ["M12 5v14", "M5 12h14"] : ["M6 6l12 12", "M18 6 6 18"], 11, 2.4),
@@ -233,7 +291,15 @@ Object.assign(Tabora, {
             return;
           }
           if (d.section === id) {
-            this.setDrawerSection(rest[0]);
+            // панель переходит к первому оставшемуся разделу с панелью
+            const next = rest.find(x => !this.SECTIONS[x].page);
+            if (next) {
+              this.setDrawerSection(next);
+              this.renderDrawer();
+            } else if (d.open) {
+              d.open = false;
+              this.applyDrawer();
+            }
           }
           this.saveSections(rest);
         }
@@ -243,11 +309,7 @@ Object.assign(Tabora, {
         if (d.editing || this._railDragged) {
           return;
         }
-        if (d.open && d.section === id) {
-          this.closeDrawer();
-        } else {
-          this.openDrawer(id);
-        }
+        this.toggleDrawer(id);
       });
       // Перестановка в режиме правки: тянем указателем, соседи раздвигаются
       b.addEventListener("pointerdown", e => {
@@ -261,6 +323,163 @@ Object.assign(Tabora, {
     visible.forEach(id => box.append(make(id, false)));
     if (d.editing) {
       hidden.forEach(id => box.append(make(id, true)));
+    }
+    this.paintBadges();
+  },
+
+  /** Раздел отмечен на рейке: открыта его панель или его страница стоит перед глазами. */
+  railCurrent(id) {
+    const d = this.drawer;
+    const s = this.SECTIONS[id];
+    return s.page ? !d.open && !!s.current?.() : d.open && d.section === id;
+  },
+
+  syncRailCurrent() {
+    for (const b of document.querySelectorAll("#tabora-rail-items .rail-item:not([data-hidden])")) {
+      b.setAttribute("aria-selected", String(this.railCurrent(b.dataset.section)));
+    }
+  },
+
+  /* ---- Отметки: непрочитанные письма и идущие загрузки --------------------------------
+   * Стоят на разделах рейки и, пока рейка спрятана, на кнопке «Разделы». Элемент с атрибутом
+   * data-badge получает значение: unread и downloads — число, progress — полоску хода. */
+  badges: { unread: 0, downloads: 0, progress: null, running: false },
+
+  setBadges(patch) {
+    Object.assign(this.badges, patch);
+    this.paintBadges();
+  },
+
+  paintBadges() {
+    const b = this.badges;
+    const text = n => (n > 99 ? "99+" : String(n));
+    for (const el of document.querySelectorAll("[data-badge]")) {
+      const kind = el.dataset.badge;
+      if (kind === "progress") {
+        el.hidden = !b.downloads;
+        el.toggleAttribute("paused", !b.running);
+        const fill = el.firstElementChild;
+        fill.style.width = `${b.progress ?? 100}%`;
+        fill.classList.toggle("indeterminate", b.progress === null && b.running);
+      } else {
+        const n = b[kind] || 0;
+        el.textContent = text(n);
+        el.hidden = !n;
+      }
+    }
+    const button = document.getElementById("tabora-sections");
+    if (button) {
+      const parts = [];
+      if (b.unread) {
+        parts.push(`${b.unread} ${this.plural(b.unread, "новое письмо", "новых письма", "новых писем")}`);
+      }
+      if (b.downloads) {
+        parts.push(`${b.downloads} ${this.plural(b.downloads, "загрузка", "загрузки", "загрузок")}${b.progress === null ? "" : `, ${b.progress}%`}`);
+      }
+      button.dataset.note = parts.join(" · ");
+      button.title = parts.length ? `Разделы: ${parts.join(" · ")}` : "Разделы";
+    }
+  },
+
+  /* ---- Рейка без панели и закрепление --------------------------------------------------- */
+
+  // методы, а не свойства с get: Object.assign скопировал бы значение, вычисленное один раз
+  railPinned() {
+    return Services.prefs.getBoolPref(this.RAIL_PINNED_PREF, false);
+  },
+
+  /** Закреплённая рейка держится на экране, пока окно не узкое: там место нужнее странице. */
+  railHeld() {
+    return this.railPinned() && !this.narrowQuery.matches;
+  },
+
+  setRailPinned(on) {
+    if (on) {
+      this.drawer.rail = true; // рейка уже на экране: остаётся и после закрытия панели
+    }
+    Services.prefs.setBoolPref(this.RAIL_PINNED_PREF, on);
+  },
+
+  /** Приводит рейку к настройке и ширине окна (запуск, смена настройки, узкое окно). */
+  syncRail({ animate = true } = {}) {
+    const d = this.drawer;
+    const held = this.railHeld();
+    document.documentElement.toggleAttribute("tabora-rail-held", held);
+    const pin = document.getElementById("tabora-rail-pin");
+    if (pin) {
+      const title = this.railPinned() ? "Открепить рейку" : "Закрепить рейку";
+      pin.title = title;
+      pin.setAttribute("aria-label", title);
+      pin.setAttribute("aria-pressed", String(this.railPinned()));
+    }
+    if (this.railPinned()) {
+      d.rail = held;
+    }
+    this.applyDrawer({ animate });
+  },
+
+  showRail() {
+    const d = this.drawer;
+    d.rail = true;
+    this.applyDrawer();
+    this.syncRailCurrent();
+    document.querySelector("#tabora-rail-items .rail-item")?.focus({ preventScroll: true });
+  },
+
+  /** Прячет рейку вместе с открытой панелью. Закреплённая рейка остаётся. */
+  hideRail() {
+    const d = this.drawer;
+    if (d.open) {
+      this.closeDrawer();
+    }
+    if (this.railHeld() || !d.rail) {
+      return;
+    }
+    d.rail = false;
+    d.editing = false;
+    d.el.removeAttribute("editing");
+    this.applyDrawer();
+    this.renderRail();
+  },
+
+  /** Кнопка «Разделы»: показывает рейку; повторное нажатие прячет её (закреплённую — открепляет). */
+  toggleRail() {
+    const d = this.drawer;
+    if (!d.open && !d.rail) {
+      this.showRail();
+      return;
+    }
+    if (this.railPinned()) {
+      Services.prefs.setBoolPref(this.RAIL_PINNED_PREF, false);
+    }
+    this.hideRail();
+    gBrowser.selectedBrowser?.focus();
+  },
+
+  /** Показывает то, что задано состоянием: ничего, одну рейку или рейку с панелью. */
+  applyDrawer({ animate = true } = {}) {
+    const d = this.drawer;
+    const shown = d.open || d.rail;
+    if (shown && d.el.hidden) {
+      d.el.hidden = false;
+      d.el.getBoundingClientRect(); // кадр на раскладку, затем движение
+    }
+    if (!animate) {
+      d.el.setAttribute("still", "true");
+    }
+    d.el.toggleAttribute("open", shown);
+    d.el.toggleAttribute("panel", d.open);
+    const panel = d.el.querySelector(".dpanel");
+    panel.inert = !d.open;
+    document.getElementById("browser").toggleAttribute("tabora-drawer-open", d.open);
+    document.getElementById("tabora-sections")?.setAttribute("aria-pressed", String(shown));
+    this.sizeDrawer();
+    if (!animate) {
+      d.el.getBoundingClientRect();
+      d.el.removeAttribute("still");
+      if (!shown) {
+        d.el.hidden = true;
+      }
     }
   },
 
@@ -327,11 +546,12 @@ Object.assign(Tabora, {
   },
 
   setDrawerEditing(on) {
-    this.drawer.editing = on;
-    this.drawer.el.toggleAttribute("editing", on);
+    const d = this.drawer;
+    d.editing = on;
+    d.el.toggleAttribute("editing", on);
     this.renderRail();
-    if (on && !this.drawer.open) {
-      this.openDrawer(this.drawer.section);
+    if (on && !d.open && !d.rail) {
+      this.showRail();
     }
   },
 
@@ -344,7 +564,11 @@ Object.assign(Tabora, {
     const d = this.drawer;
     const browser = document.getElementById("browser");
     if (!d.open) {
-      d.el.style.width = "0px";
+      // панели нет: рейка сама по себе или ничего
+      d.el.style.width = d.rail ? `${this.DRAWER_RAIL}px` : "0px";
+      d.el.removeAttribute("wide");
+      d.el.removeAttribute("full");
+      browser.removeAttribute("tabora-drawer-wide");
       browser.removeAttribute("tabora-drawer-full");
       return;
     }
@@ -377,21 +601,27 @@ Object.assign(Tabora, {
 
   openDrawer(section) {
     const d = this.drawer;
-    if (section && this.SECTIONS[section]) {
-      if (!this.visibleSections().includes(section)) {
-        this.saveSections([...this.visibleSections(), section]);
+    const s = section && this.SECTIONS[section];
+    if (s?.page) {
+      // у раздела нет панели: открывается его страница
+      if (!s.current?.()) {
+        this[s.page]();
       }
-      this.setDrawerSection(section);
+      return;
+    }
+    if (s && !this.visibleSections().includes(section)) {
+      this.saveSections([...this.visibleSections(), section]);
     }
     if (!d.open) {
       d.open = true;
-      d.el.hidden = false;
-      // кадр на раскладку, затем анимация выдвижения
-      d.el.getBoundingClientRect();
-      d.el.setAttribute("open", "true");
-      document.getElementById("browser").setAttribute("tabora-drawer-open", "true");
+      this.applyDrawer();
     }
-    this.sizeDrawer();
+    if (s) {
+      this.setDrawerSection(section);
+    } else {
+      this.renderRail();
+      this.sizeDrawer();
+    }
     this.renderDrawer();
     const input = document.getElementById("tabora-drawer-search");
     if (input && !this.SECTIONS[d.section].wide && !this.SECTIONS[d.section].noSearch) {
@@ -399,28 +629,32 @@ Object.assign(Tabora, {
     }
   },
 
+  /** Закрывает панель. Рейка остаётся, только если закреплена. */
   closeDrawer() {
     const d = this.drawer;
     if (!d.open) {
       return;
     }
     d.open = false;
+    d.rail = this.railHeld();
     d.editing = false;
     d.el.removeAttribute("editing");
-    d.el.removeAttribute("open");
-    d.el.removeAttribute("wide");
-    const browser = document.getElementById("browser");
-    browser.removeAttribute("tabora-drawer-open");
-    browser.removeAttribute("tabora-drawer-wide");
-    browser.removeAttribute("tabora-drawer-full");
-    d.el.removeAttribute("full");
-    this.sizeDrawer();
+    this.applyDrawer();
     this.renderRail();
     gBrowser.selectedBrowser?.focus();
   },
 
   toggleDrawer(section) {
     const d = this.drawer;
+    const s = this.SECTIONS[section];
+    if (s?.page) {
+      this[s.page]();
+      // рейку показывали, чтобы выбрать раздел: выбран — она уходит
+      if (!d.open) {
+        this.hideRail();
+      }
+      return;
+    }
     if (d.open && d.section === section) {
       this.closeDrawer();
     } else {

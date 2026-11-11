@@ -1251,7 +1251,17 @@ var Tabora = {
       this.svg(["m11 17-5-5 5-5", "m18 17-5-5 5-5"], 15, 2),
     ]);
     toggle.addEventListener("click", () => this.toggleSidebar());
-    toolbox.append(this.html("div", { id: "tabora-sidebar-foot" }, null, [toggle]));
+    // «Разделы» показывает рейку ящика (drawer.js): почта, загрузки, кошелёк, коды и остальное.
+    // Пока рейка спрятана, на кнопке стоят число непрочитанных писем и ход загрузок.
+    const sections = this.html("button", { id: "tabora-sections", type: "button", title: "Разделы", "aria-pressed": String(!!(this.drawer?.open || this.drawer?.rail)) }, null, [
+      this.svg(["M4 4h6.5v6.5H4z", "M13.5 4H20v6.5h-6.5z", "M4 13.5h6.5V20H4z", "M13.5 13.5H20V20h-6.5z"], 16, 1.8),
+      this.html("span", { class: "label" }, "Разделы"),
+      this.html("span", { class: "pill", "data-badge": "unread", hidden: "true" }),
+      this.html("span", { class: "bar", "data-badge": "progress", "aria-hidden": "true", hidden: "true" }, null, [this.html("span")]),
+    ]);
+    sections.addEventListener("click", () => this.toggleRail());
+    toolbox.append(this.html("div", { id: "tabora-sidebar-foot" }, null, [sections, toggle]));
+    this.paintBadges?.();
     // Подсказка
     this.tipEl = this.html("div", { id: "tabora-tip", role: "tooltip", hidden: "true" });
     document.getElementById("browser").append(this.tipEl);
@@ -1290,6 +1300,7 @@ var Tabora = {
       this.applySidebarCompact(this.sidebarCompactWanted);
     }
     this.syncTopbarInset();
+    this.syncRail?.();
     if (this.drawer?.open) {
       this.sizeDrawer();
     }
@@ -1339,10 +1350,9 @@ var Tabora = {
       }
       items.push(tab.pinned ? { el: tab, kind: "size", anchor, round: tab.querySelector(".tab-background") } : { el: tab, kind: "clip", anchor });
     }
-    for (const el of this.dockEls()) {
-      if (shown(el)) {
-        items.push({ el, kind: "size", anchor: el.querySelector("svg"), pad: el.id === "tabora-downloads" ? el.querySelector(".head") : el, round: el });
-      }
+    const sections = document.getElementById("tabora-sections");
+    if (shown(sections)) {
+      items.push({ el: sections, kind: "size", anchor: sections.querySelector("svg"), pad: sections, round: sections });
     }
     for (const id of ["vertical-tabs-newtab-button", "tabora-sidebar-toggle"]) {
       const el = document.getElementById(id);
@@ -1604,9 +1614,8 @@ var Tabora = {
       root.setAttribute("tabora-tabs-switching", "true");
       setTimeout(() => root.removeAttribute("tabora-tabs-switching"), this.MOTION.slow + 60);
     }
-    this.syncDockMode();
     this.syncTopbarInset();
-    if (this.drawer?.open) {
+    if (this.drawer?.open || this.drawer?.rail) {
       this.sizeDrawer();
     }
     // адресная строка и переполнение панелей считают свои размеры по событию окна
@@ -1874,11 +1883,8 @@ var Tabora = {
     const map = [
       ["#tabora-compact-search", "Адрес или поиск", "⌘K"],
       ["#vertical-tabs-newtab-button", "Новая вкладка", "⌘T"],
-      ["#tabora-wallet-card", "Кошелёк", document.getElementById("tabora-wallet-total")?.textContent || "⌘⇧W"],
-      ["#tabora-mail", "Почта и алиасы", "⌘⇧M"],
-      ["#tabora-downloads", "Загрузки", document.getElementById("tabora-downloads-note")?.textContent || "⌘⇧J"],
-      ...this.DOCK.filter(it => !it.el).map(it => [`#${this.dockElId(it)}`, it.label, it.key]),
       ["#tabora-memory", `Память · ${document.getElementById("tabora-memory-value")?.textContent || ""}`, document.getElementById("tabora-memory-note")?.textContent || ""],
+      ["#tabora-sections", "Разделы", document.getElementById("tabora-sections")?.dataset.note || "почта, загрузки, кошелёк, коды"],
       ["#tabora-sidebar-toggle", "Развернуть панель", "⌘B"],
     ];
     for (const [sel, title, sub] of map) {
@@ -1892,13 +1898,11 @@ var Tabora = {
   tipMaybe(e) {
     const root = document.documentElement;
     const compact = root.getAttribute("tabora-sidebar") === "compact";
-    // плитки быстрых кнопок в развёрнутой панели без подписей: название — в подсказке над плиткой
-    const tile = !compact && root.getAttribute("tabora-dock") === "tiles" ? e.target.closest("#tabora-dock > *") : null;
-    if (!compact && !tile) {
+    if (!compact) {
       return;
     }
     const info = this.tipTextFor(e.target);
-    const el = tile || (info ? e.target.closest(".tabbrowser-tab, .tabora-space, #tabora-compact-search, #vertical-tabs-newtab-button, #tabora-wallet-card, #tabora-mail, #tabora-downloads, .tabora-quick, #tabora-memory, #tabora-sidebar-toggle") : null);
+    const el = info ? e.target.closest(".tabbrowser-tab, .tabora-space, #tabora-compact-search, #vertical-tabs-newtab-button, #tabora-memory, #tabora-sections, #tabora-sidebar-toggle") : null;
     if (!info || !el || el === this.tipTarget) {
       return;
     }
@@ -1908,17 +1912,9 @@ var Tabora = {
       const r = el.getBoundingClientRect();
       const tip = this.tipEl;
       tip.replaceChildren(this.html("b", {}, info.title), info.sub ? this.html("span", {}, info.sub) : this.html("span"));
-      tip.toggleAttribute("above", !!tile);
       tip.hidden = false;
-      if (tile) {
-        // по центру плитки, но не за краем окна
-        const half = tip.offsetWidth / 2;
-        tip.style.left = `${Math.round(Math.min(window.innerWidth - half - 8, Math.max(half + 8, r.left + r.width / 2)))}px`;
-        tip.style.top = `${Math.round(r.top - 8)}px`;
-      } else {
-        tip.style.left = `${Math.round(r.right + 10)}px`;
-        tip.style.top = `${Math.round(r.top + r.height / 2)}px`;
-      }
+      tip.style.left = `${Math.round(r.right + 10)}px`;
+      tip.style.top = `${Math.round(r.top + r.height / 2)}px`;
       requestAnimationFrame(() => tip.setAttribute("shown", "true"));
     }, 220);
   },
@@ -2023,14 +2019,12 @@ var Tabora = {
   },
 
   /* ---- Быстрые кнопки --------------------------------------------------------------------
-   * Контейнер #tabora-dock: под списком вкладок, при вкладках сверху — в строке адреса
-   * (переносит applyTabsLayout). Какие кнопки показывать, выбирает пользователь: «Настройки →
-   * Вкладки и просмотр → Быстрые кнопки» или меню по правой кнопке на любой из них. Порядок кнопок —
-   * порядок списка DOCK. До DOCK_ROWS кнопок в боковой панели стоят строками с подписями;
-   * если их больше или окно ниже DOCK_ROWS_HEIGHT — плитками (стили: tabora-dock="tiles"). */
-
-  DOCK_ROWS: 4,
-  DOCK_ROWS_HEIGHT: 720,
+   * Контейнер #tabora-dock — группа значков в строке адреса при вкладках сверху (переносит
+   * applyTabsLayout). При вкладках сбоку его нет: карточки под списком вкладок убраны по решению
+   * пользователя (11 ноября 2026), те же разделы открывает рейка ящика по кнопке «Разделы» внизу
+   * колонки. Закреплённая рейка заменяет группу и при вкладках сверху. Какие кнопки показывать,
+   * выбирает пользователь: «Настройки → Вкладки и просмотр → Быстрые кнопки» или меню по правой
+   * кнопке на любой из них. Порядок кнопок — порядок списка DOCK. */
 
   DOCK_PREF: "tabora.dock.items",
   DOCK_DEFAULT: "wallet,mail,codes,downloads",
@@ -2101,33 +2095,9 @@ var Tabora = {
     if (dock) {
       dock.hidden = !on.size;
     }
-    this.syncDockMode();
     this.tipHide?.();
     // адресная строка считает свою ширину по событию окна (при вкладках сверху ряд стоит рядом с ней)
     window.dispatchEvent(new Event("resize"));
-  },
-
-  /** Строки или плитки. Признак стоит на корне и при свёрнутой панели: раскладку под него
-   * переключают стили вместе с tabora-sidebar, поэтому сворачивание и разворачивание идут
-   * между верными состояниями без пересчёта посреди движения. */
-  syncDockMode() {
-    const root = document.documentElement;
-    const dock = document.getElementById("tabora-dock");
-    if (!dock) {
-      return;
-    }
-    const n = this.dockEnabled().length;
-    const tiles = !this.horizontalTabs && n > 0 && (n > this.DOCK_ROWS || window.innerHeight < this.DOCK_ROWS_HEIGHT);
-    if (tiles !== (root.getAttribute("tabora-dock") === "tiles")) {
-      this.sidebarMorphEnd?.();
-      if (tiles) {
-        root.setAttribute("tabora-dock", "tiles");
-      } else {
-        root.removeAttribute("tabora-dock");
-      }
-    }
-    // до пяти кнопок — в один ряд, больше — в два поровну
-    dock.style.setProperty("--tabora-dock-cols", String(n <= 5 ? Math.max(n, 1) : Math.ceil(n / 2)));
   },
 
   initDock() {
@@ -2146,7 +2116,6 @@ var Tabora = {
     const observer = () => this.applyDock();
     Services.prefs.addObserver(this.DOCK_PREF, observer);
     window.addEventListener("unload", () => Services.prefs.removeObserver(this.DOCK_PREF, observer), { once: true });
-    window.addEventListener("resize", () => this.syncDockMode());
     this.applyDock();
   },
 
@@ -2233,6 +2202,7 @@ var Tabora = {
     if (!all.length) {
       clearInterval(this._dl.timer);
       this._dl.timer = null;
+      this.setBadges?.({ downloads: 0, progress: null, running: false });
       return;
     }
     if (!this._dl.timer) {
@@ -2251,6 +2221,7 @@ var Tabora = {
     pctEl.textContent = pct === null ? "" : `${pct}%`;
     bar.style.width = `${pct ?? 100}%`;
     bar.classList.toggle("indeterminate", pct === null && !!running.length);
+    this.setBadges?.({ downloads: all.length, progress: pct, running: !!running.length });
     const parts = [];
     const bytes = total ? `${fmt(done)} из ${fmt(total)}` : fmt(done);
     if (running.length) {
@@ -2599,6 +2570,7 @@ var Tabora = {
       const n = MailStore.available ? MailStore.unreadInbox() : 0;
       pill.textContent = n > 99 ? "99+" : String(n);
       pill.hidden = !n;
+      this.setBadges?.({ unread: n });
       const button = document.getElementById("tabora-mail");
       button.title = n ? `Почта и алиасы: ${n} ${this.plural(n, "новое письмо", "новых письма", "новых писем")} (⌘⇧M)` : "Почта и алиасы (⌘⇧M)";
     };
@@ -3353,15 +3325,28 @@ var Tabora = {
    * открывает командную строку с текущим адресом, как в Arc. */
   routeUrlbarToCommandBar() {
     const field = gURLBar.inputField;
+    // Щелчок по строке отличаем от фокуса, который ставит сам браузер (новая вкладка, ⌘L)
+    let byPointer = false;
+    document.getElementById("urlbar-container")?.addEventListener("mousedown", e => {
+      if (e.button === 0) {
+        byPointer = true;
+        setTimeout(() => (byPointer = false), 0);
+      }
+    }, true);
     field.addEventListener("focus", () => {
       if (!document.getElementById("tabora-cmd")?.hidden) {
         return;
       }
       const spec = gBrowser.selectedBrowser?.currentURI?.spec || "";
       if (this.isStartUrl(spec)) {
-        // Новая вкладка: показываем стартовую страницу, набор текста откроет бар.
         gURLBar.blur();
-        document.getElementById("tabora-start-input")?.focus();
+        if (byPointer) {
+          // по строке щёлкнули: командная строка открывается и на новой вкладке
+          this.openCommandBar();
+        } else {
+          // фокус поставил браузер: остаёмся на стартовой странице, набор текста откроет бар
+          document.getElementById("tabora-start-input")?.focus();
+        }
         return;
       }
       let prefill = this.displayUrl(spec);
