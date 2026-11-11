@@ -3935,14 +3935,32 @@ var Tabora = {
     this.applySpace();
   },
 
+  /** Показать вкладку или спрятать её. Закреплённую движок прятать отказывается (hideTab её
+   * пропускает), поэтому признак ей ставится здесь тем же порядком, что в hideTab: спрятанная
+   * вкладка не видна в карточках и не участвует в переборе вкладок с клавиатуры. */
+  setTabShown(tab, shown) {
+    if (shown) {
+      gBrowser.showTab(tab);
+    } else if (!tab.pinned) {
+      gBrowser.hideTab(tab);
+    } else if (!tab.hidden && !tab.selected && !tab.closing) {
+      tab.setAttribute("hidden", "true");
+      gBrowser.tabContainer._invalidateCachedVisibleTabs();
+      gBrowser.tabContainer._updateCloseButtons();
+      tab.dispatchEvent(new Event("TabHide", { bubbles: true }));
+    }
+  },
+
   applySpace() {
     const space = this.activeSpace();
     for (const b of document.querySelectorAll("#tabora-spaces .tabora-space")) {
       b.setAttribute("aria-selected", String(b.dataset.space === space.id));
     }
-    const inSpace = tab => tab.pinned || this.contextOf(tab) === space.userContextId;
+    // вкладка принадлежит пространству, в котором открыта; закреплённая — тому, где её закрепили
+    const inSpace = tab => this.contextOf(tab) === space.userContextId;
 
     if (!inSpace(gBrowser.selectedTab)) {
+      // сначала обычная вкладка пространства; если в нём остались только закреплённые — новая
       const candidate = gBrowser.tabs.find(t => !t.closing && !t.pinned && inSpace(t));
       if (candidate) {
         gBrowser.selectedTab = candidate;
@@ -3954,13 +3972,8 @@ var Tabora = {
       }
     }
     for (const tab of gBrowser.tabs) {
-      if (tab.closing) {
-        continue;
-      }
-      if (inSpace(tab)) {
-        gBrowser.showTab(tab);
-      } else {
-        gBrowser.hideTab(tab);
+      if (!tab.closing) {
+        this.setTabShown(tab, inSpace(tab));
       }
     }
     this.updateMemory();
@@ -3971,7 +3984,7 @@ var Tabora = {
   initTabHooks() {
     gBrowser.tabContainer.addEventListener("TabSelect", () => {
       const space = this.activeSpaceFor(gBrowser.selectedTab);
-      if (space && space.id !== this.activeSpaceId && !gBrowser.selectedTab.pinned) {
+      if (space && space.id !== this.activeSpaceId) {
         this.activeSpaceId = space.id;
         Services.prefs.setStringPref("tabora.spaces.active", space.id);
         this.applySpace();
@@ -3997,8 +4010,30 @@ var Tabora = {
     });
     gBrowser.tabContainer.addEventListener("TabOpen", e => {
       const space = this.activeSpace();
-      if (space && !e.target.pinned && this.contextOf(e.target) !== space.userContextId) {
-        gBrowser.hideTab(e.target);
+      const tab = e.target;
+      if (!space || this.contextOf(tab) === space.userContextId) {
+        return;
+      }
+      if (gBrowser.tabs.some(t => t !== tab && !t.closing && !t.hidden)) {
+        this.setTabShown(tab, false);
+        return;
+      }
+      // Закрыта последняя вкладка пространства, и движок открыл взамен вкладку без контейнера.
+      // Спрятать её нельзя: видимых вкладок не осталось бы вовсе, и окно осталось бы без выбранной
+      // вкладки. Взамен открывается вкладка этого же пространства, а подставленная убирается.
+      gBrowser.addTab(BROWSER_NEW_TAB_URL, { userContextId: space.userContextId, triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(), skipAnimation: true });
+      this.setTabShown(tab, false);
+      setTimeout(() => {
+        if (tab.isConnected && !tab.selected && !tab.closing) {
+          gBrowser.removeTab(tab, { animate: false });
+        }
+      }, 0);
+    });
+    // вкладку закрепили или восстановили закреплённой уже после раскладки по пространствам
+    gBrowser.tabContainer.addEventListener("TabPinned", e => {
+      const space = this.activeSpace();
+      if (space && this.contextOf(e.target) !== space.userContextId) {
+        this.setTabShown(e.target, false);
       }
     });
   },
