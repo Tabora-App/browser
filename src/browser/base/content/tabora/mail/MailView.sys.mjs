@@ -52,7 +52,7 @@ const BASE_STYLE = `
 :where(a:not([href])) { color: inherit; text-decoration: none; cursor: default; }
 :where(pre) { white-space: pre-wrap; }
 :where(blockquote) { margin: 0.6em 0; padding-inline-start: 12px; border-inline-start: 3px solid #dcdce2; color: #5e626b; }
-html { overflow-x: hidden; scrollbar-width: none; }
+html { overflow: hidden; scrollbar-width: none; }
 img { max-width: 100%; height: auto; }
 img[data-tabora-blocked] { background: #f1f1f4; outline: 1px dashed #d4d4dc; outline-offset: -1px; color: #868b95; font-size: 11px; }
 img[data-tabora-blocked="tiny"] { display: none; }

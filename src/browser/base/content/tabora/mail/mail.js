@@ -1124,6 +1124,10 @@ const App = {
     const body = el("div", { class: "thread-body" });
     // элемент просмотра письма живёт в другом процессе: после прокрутки ему сообщается новое место
     body.addEventListener("scroll", () => {
+      // под курсором уже другое место письма: подпись со ссылкой неактуальна
+      for (const status of body.querySelectorAll(".html-status:not([hidden])")) {
+        status.hidden = true;
+      }
       clearTimeout(this._viewNudge);
       this._viewNudge = setTimeout(() => {
         for (const b of body.querySelectorAll("browser")) {
@@ -1346,7 +1350,8 @@ const App = {
     const wrap = el("div", { class: "html-wrap" });
     const host = el("div", { class: "html-view", dataset: { state: "loading" } });
     host.style.height = `${this.htmlHeights.get(m.id) || 200}px`;
-    const status = el("div", { class: "html-status", hidden: true });
+    const statusText = el("span");
+    const status = el("div", { class: "html-status", hidden: true }, statusText);
     const browser = document.createXULElement("browser");
     for (const [name, value] of Object.entries({ type: "content", remote: "true", remoteType: "web", disableglobalhistory: "true", messagemanagergroup: "tabora-mail" })) {
       browser.setAttribute(name, value);
@@ -1436,9 +1441,23 @@ const App = {
       lastWidth = w;
     }).observe(host);
     browser.addEventListener("tabora-mail-link", e => openMailHref(e.detail.href));
+    // Адрес ссылки под курсором. Письмо узнаёт об уходе курсора только по его движению внутри
+    // себя, поэтому подпись прячется и здесь: курсор ушёл с листа или переписку прокрутили
+    // (см. renderReader). Курсор снова двинулся над той же ссылкой — подпись возвращается.
+    let hovered = "";
     browser.addEventListener("tabora-mail-hover", e => {
-      status.textContent = e.detail.href;
-      status.hidden = !e.detail.href;
+      hovered = e.detail.href;
+      statusText.textContent = hovered;
+      status.hidden = !hovered;
+    });
+    host.addEventListener("mouseleave", () => {
+      hovered = "";
+      status.hidden = true;
+    });
+    host.addEventListener("mousemove", () => {
+      if (hovered && status.hidden) {
+        status.hidden = false;
+      }
     });
     load();
     return wrap;
