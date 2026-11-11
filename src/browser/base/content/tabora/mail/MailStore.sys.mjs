@@ -72,7 +72,10 @@ const PRESETS = [
 ];
 
 function accessError(code) {
-  const text = code === "signed-out" ? "Почта доступна после входа в аккаунт Tabora" : "Сейф заблокирован: разблокируйте его, чтобы открыть почту";
+  const text = {
+    "signed-out": "Почта доступна после входа в аккаунт Tabora",
+    "vault-busy": "Сейф заканчивает смену ключа: почта откроется через несколько секунд",
+  }[code] || "Сейф заблокирован: разблокируйте его, чтобы открыть почту";
   return Object.assign(new Error(text), { code });
 }
 
@@ -140,7 +143,7 @@ export const MailStore = {
     Services.obs.addObserver((s, t, what) => {
       if (what === "locked" || what === "reset") {
         this.forget();
-      } else if (what === "unlocked" && this._started && !this.data) {
+      } else if ((what === "unlocked" || what === "rekeyed") && this._started && !this.data) {
         this.ready().catch(() => {});
       }
     }, Vault.TOPIC);
@@ -219,17 +222,29 @@ export const MailStore = {
       throw accessError("vault-locked");
     }
     let data = null;
+    let unreadable = null;
     try {
       const raw = await IOUtils.readJSON(FILE());
       if (raw?.v === FORMAT && raw.enc) {
         const bytes = await Vault.decrypt("mail", raw.enc);
         data = JSON.parse(new TextDecoder().decode(bytes));
         bytes.fill(0);
+      } else if (raw?.v > FORMAT) {
+        unreadable = new Error("файл записан более новой версией"); // прежние форматы хранили демонстрационные письма
       }
     } catch (e) {
       if (e.name !== "NotFoundError") {
-        console.error("Tabora mail: кэш не читается, начинаем заново", e);
+        unreadable = e;
       }
+    }
+    if (unreadable) {
+      if (Vault.rekeyPending) {
+        // смена ключа сейфа не доведена до конца: файл ещё зашифрован прежним ключом, его
+        // перешифрует Vault.resumeRekey, после чего загрузка повторится (сообщение "rekeyed")
+        throw accessError("vault-busy");
+      }
+      console.error("Tabora mail: кэш не читается, начинаем заново", unreadable);
+      await this._setAside();
     }
     // прежний кэш (v: 3) хранил демонстрационные письма: настоящая почта начинается с пустого
     if (data?.v !== DATA || !Array.isArray(data.messages) || !Array.isArray(data.accounts)) {
@@ -254,7 +269,27 @@ export const MailStore = {
     }
     this.data = data;
     this._seq = data.messages.reduce((n, m) => (/^m\d+$/.test(m.id) ? Math.max(n, Number(m.id.slice(1))) : n), 0);
+    if (unreadable) {
+      this._fail(new Error("Сохранённая почта не прочиталась и начата заново: письма вернутся с сервера, внешние ящики нужно подключить ещё раз"), "чтение кэша");
+    }
     this.syncSoon(0);
+  },
+
+  /** Файл кэша есть, но не читается (ключ сейфа сменился, а перешифровка не прошла; файл
+   * повреждён). В нём могли быть внешние ящики и черновики, которых больше нигде нет, поэтому
+   * первая же запись не должна его затереть: файл откладывается рядом под именем со временем.
+   * Хранятся три последних. */
+  async _setAside() {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    try {
+      await IOUtils.move(FILE(), PathUtils.join(PathUtils.profileDir, `tabora-mail.unreadable-${stamp}.json`));
+      const kept = (await IOUtils.getChildren(PathUtils.profileDir)).filter(path => /tabora-mail\.unreadable-[^/\\]*\.json$/.test(path)).sort();
+      for (const path of kept.slice(0, -3)) {
+        await IOUtils.remove(path);
+      }
+    } catch (e) {
+      console.error("Tabora mail: не удалось отложить нечитаемый кэш", e);
+    }
   },
 
   /** Код подтверждения записи пересчитывается по сохранённому тексту: правила распознавания
@@ -1448,8 +1483,9 @@ export const MailStore = {
   },
 };
 
-/* Смена ключа сейфа: кэш перешифровывается новым подключом. Не обязательна: если не
- * удалась, кэш начнётся заново и наполнится с сервера (пароли внешних ящиков придётся ввести снова). */
+/* Смена ключа сейфа: кэш перешифровывается новым подключом. Не обязательна: если не удалась,
+ * кэш начнётся заново и наполнится с сервера, внешние ящики придётся подключить снова; прежний
+ * файл при этом не затирается, а откладывается (_setAside). */
 Vault.registerRekey("mail", async ({ decryptOld, encryptNew }) => {
   if (MailStore.data) {
     await MailStore._writeNow(); // Vault.encrypt уже работает новым ключом
