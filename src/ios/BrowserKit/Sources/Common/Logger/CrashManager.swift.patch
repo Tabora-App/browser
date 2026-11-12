@@ -1,0 +1,24 @@
+diff --git a/BrowserKit/Sources/Common/Logger/CrashManager.swift b/BrowserKit/Sources/Common/Logger/CrashManager.swift
+index 63889a7..d465707 100644
+--- a/BrowserKit/Sources/Common/Logger/CrashManager.swift
++++ b/BrowserKit/Sources/Common/Logger/CrashManager.swift
+@@ -34,6 +34,8 @@ public protocol CustomCrashReport {
+ /// **Note**: This class is safely `@unchecked Sendable` because we protect the mutable state (`enabled` and
+ /// `featureBranches`) with a manual synchronization method (a lock).
+ public final class DefaultCrashManager: CrashManager, @unchecked Sendable {
++    private static let taboraSendsCrashReports = false
++
+     enum Environment: String {
+         case nightly = "Nightly"
+         case production = "Production"
+@@ -126,7 +128,9 @@ public final class DefaultCrashManager: CrashManager, @unchecked Sendable {
+     }
+ 
+     public func setup(sendCrashReports: Bool) {
+-        guard shouldSetup,
++        // Tabora: отчёты о сбоях в Mozilla (Sentry) не отправляются
++        guard Self.taboraSendsCrashReports,
++              shouldSetup,
+               sendCrashReports,
+               let dsn = sentryWrapper.dsn else {
+             return

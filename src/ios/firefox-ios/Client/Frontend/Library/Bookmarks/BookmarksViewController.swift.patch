@@ -1,0 +1,15 @@
+diff --git a/firefox-ios/Client/Frontend/Library/Bookmarks/BookmarksViewController.swift b/firefox-ios/Client/Frontend/Library/Bookmarks/BookmarksViewController.swift
+index 85b8be3..3810789 100644
+--- a/firefox-ios/Client/Frontend/Library/Bookmarks/BookmarksViewController.swift
++++ b/firefox-ios/Client/Frontend/Library/Bookmarks/BookmarksViewController.swift
+@@ -432,8 +432,9 @@ final class BookmarksViewController: SiteTableViewController,
+             a11yEmptyStateScrollView.isHidden = !showEmptyState
+         }
+ 
++        // Tabora: пустой список закладок не предлагает войти в аккаунт Mozilla
+         emptyStateView.configure(isRoot: viewModel.isRootNode,
+-                                 isSignedIn: profile.hasAccount())
++                                 isSignedIn: true)
+ 
+         // Depending on empty state, show/hide the search bar in the library panel's toolbar
+         sendPanelChangeNotification()

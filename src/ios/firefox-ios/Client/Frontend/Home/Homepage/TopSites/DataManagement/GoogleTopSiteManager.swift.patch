@@ -1,0 +1,15 @@
+diff --git a/firefox-ios/Client/Frontend/Home/Homepage/TopSites/DataManagement/GoogleTopSiteManager.swift b/firefox-ios/Client/Frontend/Home/Homepage/TopSites/DataManagement/GoogleTopSiteManager.swift
+index 18cd5e0..ab581f4 100644
+--- a/firefox-ios/Client/Frontend/Home/Homepage/TopSites/DataManagement/GoogleTopSiteManager.swift
++++ b/firefox-ios/Client/Frontend/Home/Homepage/TopSites/DataManagement/GoogleTopSiteManager.swift
+@@ -119,8 +119,8 @@ final class GoogleTopSiteManager: GoogleTopSiteManagerProvider {
+     // Once Google top site is added, we don't remove unless it's explicitly unpinned
+     // Add it when pinned websites are less than max pinned sites
+     func shouldAddGoogleTopSite(hasSpace: Bool) -> Bool {
+-        let shouldShow = !isHidden && pinnedSiteData != nil
+-        return shouldShow && (hasAdded || hasSpace)
++        // Tabora: закреплённого ярлыка Google с партнёрским кодом Firefox нет
++        return false
+     }
+ 
+     func removeGoogleTopSite(site: Site) {

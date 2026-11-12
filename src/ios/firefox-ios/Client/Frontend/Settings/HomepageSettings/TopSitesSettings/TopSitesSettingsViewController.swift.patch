@@ -1,0 +1,36 @@
+diff --git a/firefox-ios/Client/Frontend/Settings/HomepageSettings/TopSitesSettings/TopSitesSettingsViewController.swift b/firefox-ios/Client/Frontend/Settings/HomepageSettings/TopSitesSettings/TopSitesSettingsViewController.swift
+index 3cf8791..a8abf17 100644
+--- a/firefox-ios/Client/Frontend/Settings/HomepageSettings/TopSitesSettings/TopSitesSettingsViewController.swift
++++ b/firefox-ios/Client/Frontend/Settings/HomepageSettings/TopSitesSettings/TopSitesSettingsViewController.swift
+@@ -49,30 +49,8 @@ final class TopSitesSettingsViewController: SettingsTableViewController, UserFea
+                             actionType: TopSitesActionType.toggleShowSectionSetting
+                         )
+                     )
+-                },
+-                BoolSetting(
+-                    prefs: profile.prefs,
+-                    theme: currentTheme(),
+-                    prefKey: PrefsKeys.FeatureFlags.SponsoredShortcuts,
+-                    defaultValue: userPreferences.getPreferenceFor(.hntSponsoredShortcuts),
+-                    titleText: .Settings.Homepage.Shortcuts.SponsoredShortcutsToggle
+-                ) { [windowUUID, weak self] _ in
+-                    store.dispatch(
+-                        TopSitesAction(
+-                            windowUUID: windowUUID,
+-                            actionType: TopSitesActionType.toggleShowSponsoredSettings
+-                        )
+-                    )
+-
+-                    // If sponsored shortcuts are turned off, request to delete the user data
+-                    let isSponsoredShortcutsEnabled = profile.prefs.boolForKey(
+-                        PrefsKeys.FeatureFlags.SponsoredShortcuts
+-                    ) ?? true
+-                    if !isSponsoredShortcutsEnabled,
+-                       let contextId = TelemetryContextualIdentifier.contextId {
+-                        self?.deleteUserRequest(contextId: contextId)
+-                    }
+                 }
++                // Tabora: переключателя спонсорских ярлыков Mozilla нет — их нет совсем
+             ]
+             let toggleSection = SettingSection(title: nil, children: toggleSettings)
+             sections.append(toggleSection)

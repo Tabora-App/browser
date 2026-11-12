@@ -12,8 +12,10 @@ Firefox для iOS. Запускать нужно только при смене
 
     python3 tools/ios/assets.py
 """
+import base64
 import io
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -22,6 +24,8 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 OUT = ROOT / "src" / "ios"
+TREE = ROOT / ".build" / "ios" / "firefox-ios"  # исходники Firefox для iOS: по ним берутся размеры картинок
+FONT = ROOT / "src" / "browser" / "base" / "content" / "tabora" / "fonts" / "Manrope-latin.woff2"
 CLIENT = "firefox-ios/Client/Assets/"
 LIME = "#c8f25a"
 INK = "#0b0c0e"
@@ -103,6 +107,111 @@ def splash(browser) -> None:
         save(render(browser, mark, 134, scale), f"{CLIENT}Images.xcassets/splash.imageset/splash{suffix}.png")
 
 
+# Картинки Firefox в интерфейсе (логотип, лиса): каждая заменяется знаком Tabora в поле того же
+# размера, чтобы раскладка экранов не менялась. Пути относительно исходников Firefox для iOS.
+IMG = "firefox-ios/Client/Assets/Images.xcassets/"
+KIT = "BrowserKit/Sources/OnboardingKit/Media.xcassets/"
+MARKS = [
+    IMG + "fxHomeHeaderLogoBall.imageset/fxLogo.pdf",
+    KIT + "fxHomeHeaderLogoBall.imageset/fxLogo.pdf",
+    KIT + "firefoxLoader.imageset/firefoxLoader.pdf",
+    IMG + "logoFirefoxLarge.imageset/logoFirefoxLarge.pdf",
+    "firefox-ios/Extensions/ShareTo/Images.xcassets/logoFirefoxLarge.imageset/logoFirefoxLarge.pdf",
+    IMG + "foxConfirmation.imageset/foxConfirmation.pdf",
+    IMG + "foxWithStars.imageset/foxWithStars.pdf",
+    IMG + "foxDefaultBrowser.imageset/Illu.png",
+    IMG + "faviconFox.imageset/back-panel-home.png",
+    IMG + "faviconFox.imageset/back-panel-home@2x.png",
+    IMG + "faviconFox.imageset/back-panel-home@3x.png",
+    IMG + "Onboarding/Headers/onboardingWelcome.imageset/onboardingWelcome.pdf",
+    IMG + "Onboarding/Headers/onboardingFoxyWindow.imageset/buildABetterWeb.pdf",
+    IMG + "Onboarding/Headers/signin-sync.imageset/signin-sync-glow.pdf",
+    IMG + "Onboarding/Headers/onboardingSync.imageset/onboardingSync.pdf",
+    IMG + "Onboarding/Headers/onboardingDock.imageset/onboardingDock.pdf",
+    IMG + "Onboarding/Headers/onboardingNotification.imageset/onboardingNotifications.pdf",
+    IMG + "Onboarding/Headers/onboardingSearchWidget.imageset/onboardingSearchWidget.pdf",
+    IMG + "Onboarding/Headers/onboardingSetDefaultSteps.imageset/onboardingSetDefaultSteps.pdf",
+    IMG + "Onboarding/ContinuousOnboarding/kitCircle.imageset/kitCircle.pdf",
+    IMG + "Onboarding/ContinuousOnboarding/kitOnboardingNotifications.imageset/kitOnboardingNotifications.pdf",
+    IMG + "Onboarding/ContinuousOnboarding/kitOnboardingNotifications.imageset/kitOnboardingNotificationsDark.pdf",
+    IMG + "Onboarding/ContinuousOnboarding/kitOnboardingSync.imageset/kitOnboardingSync.pdf",
+    IMG + "Onboarding/ContinuousOnboarding/kitOnboardingSync.imageset/kitOnboardingSyncDark.pdf",
+    KIT + "onboardingSyncWithIcons.imageset/syncWithIcons.pdf",
+    KIT + "onboardingSyncWithIconsBrandRefresh.imageset/onboardingSyncWithIconsBrandRefresh.pdf",
+    KIT + "onboardingSyncWithIconsJapan.imageset/onboardingSyncWithIconsJapan.pdf",
+    KIT + "onboardingTrackers.imageset/trackers.pdf",
+    KIT + "onboardingTrackersBrandRefresh.imageset/onboardingTrackersBrandRefresh.pdf",
+    KIT + "onboardingTrackersJapan.imageset/onboardingTrackersJapan.pdf",
+    KIT + "onboardingWelcomeBrandRefresh.imageset/onboardingWelcomeBrandRefresh.pdf",
+    KIT + "onboardingWelcomeJapan.imageset/Firefox_Marco_Icons_x2.pdf",
+    "firefox-ios/Client/Assets/kitHeroGif.gif",
+    "firefox-ios/Client/Assets/easterEggGif.gif",
+]
+WORDMARK = IMG + "fxHomeHeaderLogoText.imageset/fxHomeHeaderLogoText.pdf"
+
+
+def original_size(rel: str) -> tuple[float, float]:
+    """Размер исходной картинки: у PDF — в пунктах, у растровых — в пикселях."""
+    path = TREE / rel
+    if not path.exists():
+        sys.exit(f"нет исходной картинки {rel}: tools/ios/build.py fetch")
+    if path.suffix == ".pdf":
+        out = subprocess.run(["sips", "-g", "pixelWidth", "-g", "pixelHeight", str(path)], capture_output=True, text=True, check=True).stdout
+        values = [float(line.split(":")[1]) for line in out.splitlines() if "pixel" in line]
+        return values[0], values[1]
+    with Image.open(path) as im:
+        return im.size
+
+
+def mark_in(width: float, height: float) -> str:
+    """Знак по центру поля: квадрат со скруглением занимает меньшую сторону целиком."""
+    side = min(width, height)
+    scale = side / 256
+    x, y = (width - side) / 2, (height - side) / 2
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}">'
+            f'<g transform="translate({x} {y}) scale({scale})"><rect width="256" height="256" rx="58" fill="{LIME}"/>{t_shapes(INK, LIME)}</g></svg>')
+
+
+def pdf(browser, markup: str, width: float, height: float) -> bytes:
+    """Векторный PDF точно заданного размера в пунктах (CSS-единица pt совпадает с пунктом PDF)."""
+    page = browser.new_page()
+    page.set_content(f'<!doctype html><style>@page{{size:{width}pt {height}pt;margin:0}}html,body{{margin:0;background:transparent}}'
+                     f'#box{{width:{width}pt;height:{height}pt;overflow:hidden;display:flex;align-items:center}}svg{{display:block;width:{width}pt;height:{height}pt}}</style>'
+                     f'<div id="box">{markup}</div>')
+    page.evaluate("document.fonts.ready")
+    data = page.pdf(width=f"{width / 72}in", height=f"{height / 72}in", print_background=False, page_ranges="1")
+    page.close()
+    return data
+
+
+def logos(browser) -> None:
+    for rel in MARKS:
+        width, height = original_size(rel)
+        out = OUT / rel
+        out.parent.mkdir(parents=True, exist_ok=True)
+        if rel.endswith(".pdf"):
+            out.write_bytes(pdf(browser, mark_in(width, height), width, height))
+        else:
+            im = render(browser, mark_in(width, height), max(int(width), int(height)), 1).crop((0, 0, int(width), int(height)))
+            if rel.endswith(".gif"):
+                # анимация с лисой заменяется неподвижным знаком на белом поле
+                flat = Image.new("RGB", im.size, "#ffffff")
+                flat.paste(im, mask=im.getchannel("A"))
+                flat.save(out, "GIF")
+            else:
+                im.save(out, "PNG", optimize=True)
+        print(f"  {rel}  {width:g}×{height:g}")
+    # надпись в шапке домашней страницы: рисуется как шаблон, цвет даёт тема
+    width, height = original_size(WORDMARK)
+    font = base64.b64encode(FONT.read_bytes()).decode()
+    text = (f'<style>@font-face{{font-family:"Manrope";font-weight:200 800;src:url(data:font/woff2;base64,{font}) format("woff2")}}</style>'
+            f'<span style="font:800 {height * 1.02}pt/1 Manrope;letter-spacing:-0.035em;color:#000;white-space:nowrap;display:block;height:{height}pt;line-height:{height}pt">Tabora</span>')
+    out = OUT / WORDMARK
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(pdf(browser, text, width, height))
+    print(f"  {WORDMARK}  {width:g}×{height:g}")
+
+
 def main() -> None:
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
@@ -111,6 +220,8 @@ def main() -> None:
         glass_icons()
         print("заставка")
         splash(browser)
+        print("логотипы в интерфейсе")
+        logos(browser)
         browser.close()
 
 

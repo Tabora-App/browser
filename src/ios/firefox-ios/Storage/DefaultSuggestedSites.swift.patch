@@ -1,0 +1,65 @@
+diff --git a/firefox-ios/Storage/DefaultSuggestedSites.swift b/firefox-ios/Storage/DefaultSuggestedSites.swift
+index 2d48d17..e6816da 100644
+--- a/firefox-ios/Storage/DefaultSuggestedSites.swift
++++ b/firefox-ios/Storage/DefaultSuggestedSites.swift
+@@ -38,13 +38,15 @@ open class DefaultSuggestedSites {
+ 
+     private static let sites = [
+         "default": [
++            // Tabora: первым идёт почта Tabora; ярлыков Facebook и Amazon нет (значок Amazon
++            // загружался с рекламного сервера Mozilla)
+             Site.createSuggestedSite(
+-                url: "https://m.facebook.com/",
+-                title: .DefaultSuggestedFacebook,
+-                trackingId: 632,
++                url: "https://app.tabora.app/",
++                title: DefaultSuggestedSites.taboraMailTitle,
++                trackingId: 0,
+                 faviconResource: .bundleAsset(
+-                    name: "facebook",
+-                    forRemoteResource: URL(string: "https://static.xx.fbcdn.net/rsrc.php/v3/yi/r/4Kv5U5b1o3f.png")!
++                    name: "tabora",
++                    forRemoteResource: URL(string: "https://app.tabora.app/icons/icon-192.png")!
+                 )
+             ),
+             Site.createSuggestedSite(
+@@ -56,17 +58,6 @@ open class DefaultSuggestedSites {
+                     forRemoteResource: URL(string: "https://m.youtube.com/static/apple-touch-icon-180x180-precomposed.png")!
+                 )
+             ),
+-            Site.createSuggestedSite(
+-                url: "https://www.amazon.com/",
+-                title: .DefaultSuggestedAmazon,
+-                trackingId: 630,
+-                // NOTE: Amazon does not host a high quality favicon. We are falling back to the one hosted in our
+-                // UnifiedAdsProvider.prodResourceEndpoint (https://ads.mozilla.org/v1/ads).
+-                faviconResource: .bundleAsset(
+-                    name: "amazon",
+-                    forRemoteResource: URL(string: "https://tiles-cdn.prod.ads.prod.webservices.mozgcp.net/CAP5k4gWqcBGwir7bEEmBWveLMtvldFu-y_kyO3txFA=.9991.jpg")!
+-                )
+-            ),
+             Site.createSuggestedSite(
+                 url: "https://www.wikipedia.org/",
+                 title: .DefaultSuggestedWikipedia,
+@@ -161,9 +152,20 @@ open class DefaultSuggestedSites {
+          ],
+     ]
+ 
++    /// Название ярлыка почты на языке телефона (русский, украинский, испанский; остальным — английское).
++    private static var taboraMailTitle: String {
++        switch Locale.preferredLanguages.first?.prefix(2) {
++        case "ru": return "Почта Tabora"
++        case "uk": return "Пошта Tabora"
++        case "es": return "Correo de Tabora"
++        default: return "Tabora Mail"
++        }
++    }
++
+     public static func defaultSites() -> [Site] {
+         let locale = Locale.current
+-        let defaultSites = sites[locale.identifier] ?? sites["default"]
++        // Tabora: один список ярлыков для всех стран
++        let defaultSites = sites["default"]
+         return defaultSites?.map { site in
+             // Override default suggested site URLs with a localized URL for domains in `urlMap` (e.g. localized Amazon)
+             if let domainMap = DefaultSuggestedSites.urlMap[site.url],

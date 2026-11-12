@@ -1,0 +1,22 @@
+diff --git a/firefox-ios/Client/Application/SceneDelegate.swift b/firefox-ios/Client/Application/SceneDelegate.swift
+index 2fc8afe..750bdcb 100644
+--- a/firefox-ios/Client/Application/SceneDelegate.swift
++++ b/firefox-ios/Client/Application/SceneDelegate.swift
+@@ -55,6 +55,17 @@ class SceneDelegate: UIResponder,
+         self.window = sceneCoordinator.window
+         sceneCoordinator.start()
+         handle(connectionOptions: connectionOptions)
++        #if MOZ_CHANNEL_developer
++        // Tabora: в сборке для разработки нужный экран можно открыть при запуске — так проверки
++        // снимают экраны в симуляторе без нажатий (ссылку снаружи система просит подтвердить):
++        //   SIMCTL_CHILD_TABORA_OPEN="tabora://deep-link?url=/settings/general" xcrun simctl launch …
++        if let string = ProcessInfo.processInfo.environment["TABORA_OPEN"], let url = URL(string: string) {
++            Task { @MainActor [weak self] in
++                try? await Task.sleep(nanoseconds: 3_000_000_000)
++                self?.handleOpenURL(url)
++            }
++        }
++        #endif
+         if !sessionManager.launchSessionProvider.openedFromExternalSource {
+             shareTelemetry.cancelOpenURLTimeRecord()
+         }

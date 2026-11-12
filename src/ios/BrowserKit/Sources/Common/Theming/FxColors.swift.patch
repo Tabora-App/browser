@@ -1,0 +1,61 @@
+diff --git a/BrowserKit/Sources/Common/Theming/FxColors.swift b/BrowserKit/Sources/Common/Theming/FxColors.swift
+index ec7ed47..bfe6166 100644
+--- a/BrowserKit/Sources/Common/Theming/FxColors.swift
++++ b/BrowserKit/Sources/Common/Theming/FxColors.swift
+@@ -37,16 +37,19 @@ final class FXColors {
+     static let DarkGrey90 = UIColor(rgb: 0x15141a)
+ 
+     // MARK: - Blue
+-    static let Blue05 = UIColor(rgb: 0xaaf2ff)
+-    static let Blue10 = UIColor(rgb: 0x80ebff)
+-    static let Blue20 = UIColor(rgb: 0x00ddff)
+-    static let Blue30 = UIColor(rgb: 0x00b3f4)
+-    static let Blue40 = UIColor(rgb: 0x0090ed)
+-    static let Blue50 = UIColor(rgb: 0x0060df)
+-    static let Blue60 = UIColor(rgb: 0x0250bb)
+-    static let Blue70 = UIColor(rgb: 0x054096)
+-    static let Blue80 = UIColor(rgb: 0x073072)
+-    static let Blue90 = UIColor(rgb: 0x09204d)
++    // Tabora: синяя и фиолетовая шкалы Firefox заменены лаймовой шкалой Tabora (те же значения,
++    // что Violet в NovaColors) — по этим шкалам красятся акценты, которые новое оформление берёт
++    // из старой палитры
++    static let Blue05 = UIColor(rgb: 0xf4fbdc)
++    static let Blue10 = UIColor(rgb: 0xe8f7b7)
++    static let Blue20 = UIColor(rgb: 0xc8f25a)
++    static let Blue30 = UIColor(rgb: 0xb4e040)
++    static let Blue40 = UIColor(rgb: 0x93bd22)
++    static let Blue50 = UIColor(rgb: 0x6f9310)
++    static let Blue60 = UIColor(rgb: 0x56750a)
++    static let Blue70 = UIColor(rgb: 0x486309)
++    static let Blue80 = UIColor(rgb: 0x2c3d07)
++    static let Blue90 = UIColor(rgb: 0x161d08)
+ 
+     // MARK: - Green
+     static let Green05 = UIColor(rgb: 0xe3fff3)
+@@ -97,16 +100,16 @@ final class FXColors {
+     static let Red90 = UIColor(rgb: 0x440306)
+ 
+     // MARK: - Violet
+-    static let Violet05 = UIColor(rgb: 0xe7dfff)
+-    static let Violet10 = UIColor(rgb: 0xd9bfff)
+-    static let Violet20 = UIColor(rgb: 0xcb9eff)
+-    static let Violet30 = UIColor(rgb: 0xc689ff)
+-    static let Violet40 = UIColor(rgb: 0xab71ff)
+-    static let Violet50 = UIColor(rgb: 0x9059ff)
+-    static let Violet60 = UIColor(rgb: 0x7542e5)
+-    static let Violet70 = UIColor(rgb: 0x592acb)
+-    static let Violet80 = UIColor(rgb: 0x45278d)
+-    static let Violet90 = UIColor(rgb: 0x321c64)
++    static let Violet05 = UIColor(rgb: 0xf4fbdc)
++    static let Violet10 = UIColor(rgb: 0xe8f7b7)
++    static let Violet20 = UIColor(rgb: 0xc8f25a)
++    static let Violet30 = UIColor(rgb: 0xb4e040)
++    static let Violet40 = UIColor(rgb: 0x93bd22)
++    static let Violet50 = UIColor(rgb: 0x6f9310)
++    static let Violet60 = UIColor(rgb: 0x56750a)
++    static let Violet70 = UIColor(rgb: 0x486309)
++    static let Violet80 = UIColor(rgb: 0x2c3d07)
++    static let Violet90 = UIColor(rgb: 0x161d08)
+ 
+     // MARK: - Pink
+     static let Pink05 = UIColor(rgb: 0xffdef0)

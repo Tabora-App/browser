@@ -1,0 +1,24 @@
+diff --git a/firefox-ios/Client/Coordinators/LaunchView/LaunchScreenViewModel.swift b/firefox-ios/Client/Coordinators/LaunchView/LaunchScreenViewModel.swift
+index cb2c60c..d7b3233 100644
+--- a/firefox-ios/Client/Coordinators/LaunchView/LaunchScreenViewModel.swift
++++ b/firefox-ios/Client/Coordinators/LaunchView/LaunchScreenViewModel.swift
+@@ -90,14 +90,11 @@ class LaunchScreenViewModel {
+         }
+ 
+         if introScreenManager.shouldShowIntroScreen {
+-            // Day 1 keeps normal onboarding
+-            if introScreenManager.shouldShowVideoIntro {
+-                order.append(.videoIntro)
+-            }
+-            if termsOfServiceManager.shouldShowScreen {
+-                order.append(.termsOfService(manager: termsOfServiceManager))
+-            }
+-            order.append(.intro(manager: introScreenManager))
++            // Tabora: приветствия Firefox нет — оно состоит из условий использования Mozilla,
++            // согласия на отправку данных в Mozilla и входа в аккаунт Mozilla. Браузер открывается
++            // сразу; отметка «приветствие пройдено» ставится, чтобы остальной код не считал
++            // каждый запуск первым.
++            introScreenManager.didSeeIntroScreen()
+         } else if surveySurfaceManager.shouldShowSurveySurface {
+             order.append(.survey(manager: surveySurfaceManager))
+         }

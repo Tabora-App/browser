@@ -1,0 +1,21 @@
+diff --git a/firefox-ios/Client/Application/AppLaunchUtil.swift b/firefox-ios/Client/Application/AppLaunchUtil.swift
+index 3413154..f7ce0f2 100644
+--- a/firefox-ios/Client/Application/AppLaunchUtil.swift
++++ b/firefox-ios/Client/Application/AppLaunchUtil.swift
+@@ -46,6 +46,16 @@ final class AppLaunchUtil: FeatureFlaggable, Sendable {
+             AppleIntelligenceUtil().processAvailabilityState()
+         }
+ 
++        // Tabora: ничего не отправляется в Mozilla. Настройки отправки данных, отчётов о сбоях и
++        // участия в исследованиях читаются в десятке мест со значением «включено», если настройки
++        // ещё нет, — поэтому при первом запуске они записываются выключенными.
++        let taboraDefaults = NSUserDefaultsPrefs(prefix: "profile")
++        for key in [AppConstants.prefSendUsageData, AppConstants.prefSendCrashReports,
++                    AppConstants.prefSendDailyUsagePing, AppConstants.prefStudiesToggle,
++                    AppConstants.prefRolloutsToggle] where taboraDefaults.boolForKey(key) == nil {
++            taboraDefaults.setBool(false, forKey: key)
++        }
++
+         // Need to get "settings.sendCrashReports" this way so that Sentry can be initialized before getting the Profile.
+         let sendCrashReports = NSUserDefaultsPrefs(prefix: "profile").boolForKey(AppConstants.prefSendCrashReports) ?? true
+ 

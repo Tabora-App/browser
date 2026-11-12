@@ -1,0 +1,43 @@
+diff --git a/firefox-ios/Client/Frontend/Settings/Main/AppSettingsTableViewController.swift b/firefox-ios/Client/Frontend/Settings/Main/AppSettingsTableViewController.swift
+index 2b3d210..f16edec 100644
+--- a/firefox-ios/Client/Frontend/Settings/Main/AppSettingsTableViewController.swift
++++ b/firefox-ios/Client/Frontend/Settings/Main/AppSettingsTableViewController.swift
+@@ -325,11 +325,11 @@ class AppSettingsTableViewController: SettingsTableViewController,
+     override func generateSettings() -> [SettingSection] {
+         setupDataSettings()
+         var settings = [SettingSection]()
+-        settings += getDefaultBrowserSetting()
+-        settings += getAccountSetting()
++        // Tabora: без разделов Mozilla — аккаунта и синхронизации Firefox, отправки данных,
++        // отзывов и справки Mozilla. «Браузер по умолчанию» вернётся, когда Apple выдаст приложению
++        // право быть браузером по умолчанию (без него этого выбора в настройках системы нет).
+         settings += getGeneralSettings()
+         settings += getPrivacySettings()
+-        settings += getSupportSettings()
+         settings += getAboutSettings()
+ 
+         if showDebugSettings {
+@@ -461,8 +461,7 @@ class AppSettingsTableViewController: SettingsTableViewController,
+                                                         settingsDelegate: parentCoordinator))
+         }
+ 
+-        privacySettings.append(PrivacyPolicySetting(theme: currentTheme(),
+-                                                    settingsDelegate: parentCoordinator))
++        // Tabora: ссылка на уведомление о конфиденциальности Mozilla не показывается
+ 
+         return [SettingSection(title: NSAttributedString(string: .AppSettingsPrivacyTitle),
+                                children: privacySettings)]
+@@ -513,11 +512,10 @@ class AppSettingsTableViewController: SettingsTableViewController,
+     }
+ 
+     private func getAboutSettings() -> [SettingSection] {
++        // Tabora: без оценки Firefox в App Store и без страницы «Ваши права» Mozilla
+         let aboutSettings = [
+-            AppStoreReviewSetting(settingsDelegate: parentCoordinator),
+             VersionSetting(settingsDelegate: self),
+-            LicenseAndAcknowledgementsSetting(settingsDelegate: parentCoordinator),
+-            YourRightsSetting(settingsDelegate: parentCoordinator)
++            LicenseAndAcknowledgementsSetting(settingsDelegate: parentCoordinator)
+         ]
+ 
+         return [SettingSection(title: NSAttributedString(string: .AppSettingsAbout),

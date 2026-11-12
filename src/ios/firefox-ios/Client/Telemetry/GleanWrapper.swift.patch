@@ -1,0 +1,14 @@
+diff --git a/firefox-ios/Client/Telemetry/GleanWrapper.swift b/firefox-ios/Client/Telemetry/GleanWrapper.swift
+index db5f0be..53cc06a 100644
+--- a/firefox-ios/Client/Telemetry/GleanWrapper.swift
++++ b/firefox-ios/Client/Telemetry/GleanWrapper.swift
+@@ -54,7 +54,8 @@ struct DefaultGleanWrapper: GleanWrapper {
+     }
+ 
+     func setUpload(isEnabled: Bool) {
+-        glean.setCollectionEnabled(isEnabled)
++        // Tabora: включить сбор нельзя ни из настроек, ни из приветствия
++        glean.setCollectionEnabled(false)
+     }
+ 
+     func enableTestingMode() {

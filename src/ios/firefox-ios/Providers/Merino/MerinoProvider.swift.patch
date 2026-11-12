@@ -1,0 +1,17 @@
+diff --git a/firefox-ios/Providers/Merino/MerinoProvider.swift b/firefox-ios/Providers/Merino/MerinoProvider.swift
+index 8e86f50..d68093e 100644
+--- a/firefox-ios/Providers/Merino/MerinoProvider.swift
++++ b/firefox-ios/Providers/Merino/MerinoProvider.swift
+@@ -77,9 +77,9 @@ final class MerinoProvider: MerinoStoriesProviding, FeatureFlaggable, @unchecked
+     }
+ 
+     static func isLocaleSupported(_ locale: String) -> Bool {
+-        return allCuratedRecommendationLocales().contains(
+-            locale.replacingOccurrences(of: "_", with: "-")
+-        )
++        // Tabora: ленты историй Mozilla нет ни для одного языка — раздел, его переключатель в
++        // настройках и загрузка с сервера Mozilla выключаются этим одним условием
++        return false
+     }
+ 
+     private func createTask() -> Task<CuratedRecommendationsResponse?, Never> {

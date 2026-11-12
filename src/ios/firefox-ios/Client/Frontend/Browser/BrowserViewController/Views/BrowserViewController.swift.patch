@@ -1,0 +1,23 @@
+diff --git a/firefox-ios/Client/Frontend/Browser/BrowserViewController/Views/BrowserViewController.swift b/firefox-ios/Client/Frontend/Browser/BrowserViewController/Views/BrowserViewController.swift
+index 88eb7b0..d769916 100644
+--- a/firefox-ios/Client/Frontend/Browser/BrowserViewController/Views/BrowserViewController.swift
++++ b/firefox-ios/Client/Frontend/Browser/BrowserViewController/Views/BrowserViewController.swift
+@@ -26,6 +26,9 @@ import enum MozillaAppServices.BookmarkRoots
+ import struct MozillaAppServices.VisitObservation
+ import enum MozillaAppServices.VisitType
+ 
++// Tabora: аккаунта Mozilla в приложении нет
++private let taboraMozillaAccount = false
++
+ class BrowserViewController: UIViewController,
+                              SearchBarLocationProvider,
+                              Themeable,
+@@ -3395,6 +3398,8 @@ class BrowserViewController: UIViewController,
+     func presentSignInViewController(_ fxaOptions: FxALaunchParams,
+                                      flowType: FxAPageType = .emailLoginFlow,
+                                      referringPage: ReferringPage = .none) {
++        // Tabora: экрана входа в аккаунт Mozilla нет, откуда бы его ни вызвали (ссылка, старое меню)
++        guard taboraMozillaAccount else { return }
+         let windowManager: WindowManager = AppContainer.shared.resolve()
+         windowManager.postWindowEvent(event: .syncMenuOpened, windowUUID: windowUUID)
+         let vcToPresent = FirefoxAccountSignInViewController.getSignInOrFxASettingsVC(

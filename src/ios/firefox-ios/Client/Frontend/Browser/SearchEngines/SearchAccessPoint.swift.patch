@@ -1,0 +1,16 @@
+diff --git a/firefox-ios/Client/Frontend/Browser/SearchEngines/SearchAccessPoint.swift b/firefox-ios/Client/Frontend/Browser/SearchEngines/SearchAccessPoint.swift
+index 6c90151..974ba2c 100644
+--- a/firefox-ios/Client/Frontend/Browser/SearchEngines/SearchAccessPoint.swift
++++ b/firefox-ios/Client/Frontend/Browser/SearchEngines/SearchAccessPoint.swift
+@@ -39,7 +39,10 @@ enum SearchPartnerResolver {
+                         accessPoint: SearchAccessPoint) -> SearchPartnerResolution {
+         let partner = partners?[accessPoint.rawValue] ?? partners?[SearchAccessPoint.default.rawValue]
+ 
+-        let partnerCode = partner?.code.flatMap { $0.isEmpty ? nil : $0 }
++        // Tabora: партнёрские коды Firefox к поисковым запросам не добавляются — это коды договоров
++        // Mozilla с поисковиками, и запросы Tabora не должны идти под ними. Без кода параметр
++        // просто убирается из адреса запроса.
++        let partnerCode: String? = nil
+ 
+         let telemetryID: String
+         if let suffix = partner?.telemetrySuffix, !suffix.isEmpty {

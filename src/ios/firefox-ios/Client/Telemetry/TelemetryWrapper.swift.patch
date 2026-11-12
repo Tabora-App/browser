@@ -1,0 +1,36 @@
+diff --git a/firefox-ios/Client/Telemetry/TelemetryWrapper.swift b/firefox-ios/Client/Telemetry/TelemetryWrapper.swift
+index 786750b..fc9596a 100644
+--- a/firefox-ios/Client/Telemetry/TelemetryWrapper.swift
++++ b/firefox-ios/Client/Telemetry/TelemetryWrapper.swift
+@@ -93,7 +93,9 @@ class TelemetryWrapper: TelemetryWrapperProtocol,
+         migratePathComponentInDocumentsDirectory("MozTelemetry-Default-mobile-event", to: .cachesDirectory)
+         migratePathComponentInDocumentsDirectory("eventArray-MozTelemetry-Default-mobile-event.json", to: .cachesDirectory)
+ 
+-        let sendUsageData = profile.prefs.boolForKey(AppConstants.prefSendUsageData) ?? true
++        // Tabora: данные об использовании в Mozilla не отправляются. Glean остаётся в коде
++        // (на него завязаны сотни вызовов), но сбор выключен: ничего не копится и не уходит.
++        let sendUsageData = false
+ 
+         // Initialize Glean
+         initGlean(profile, sendUsageData: sendUsageData)
+@@ -101,7 +103,7 @@ class TelemetryWrapper: TelemetryWrapperProtocol,
+ 
+     /// Never follows `prefSendUsageData`: `usage-reporting` is `follows_collection_enabled: false`.
+     func shouldSendDailyUsagePing(prefs: Prefs) -> Bool {
+-        return prefs.boolForKey(AppConstants.prefSendDailyUsagePing) ?? AppConstants.defaultSendDailyUsagePing
++        return false // Tabora: ежедневный отчёт об использовании не отправляется
+     }
+ 
+     @MainActor
+@@ -130,8 +132,9 @@ class TelemetryWrapper: TelemetryWrapperProtocol,
+             GleanMetrics.LegacyIds.clientId.set(uuid)
+         }
+ 
+-        GleanMetrics.Pings.shared.usageDeletionRequest.setEnabled(enabled: true)
+-        GleanMetrics.Pings.shared.onboardingOptOut.setEnabled(enabled: true)
++        // Tabora: служебные отчёты, которые уходят и при выключенном сборе, тоже не отправляются
++        GleanMetrics.Pings.shared.usageDeletionRequest.setEnabled(enabled: false)
++        GleanMetrics.Pings.shared.onboardingOptOut.setEnabled(enabled: false)
+ 
+         if shouldSendDailyUsagePing(prefs: profile.prefs) {
+             gleanUsageReportingMetricsService.start()

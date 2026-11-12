@@ -1,0 +1,32 @@
+diff --git a/firefox-ios/Client/Application/AppDelegate.swift b/firefox-ios/Client/Application/AppDelegate.swift
+index 355d786..c45dce4 100644
+--- a/firefox-ios/Client/Application/AppDelegate.swift
++++ b/firefox-ios/Client/Application/AppDelegate.swift
+@@ -128,12 +128,12 @@ class AppDelegate: UIResponder,
+         // Fix iOS simulator builds for Fennec after running unit tests locally [FXIOS-10712]
+         fixSimulatorDevBuild(application)
+ 
+-        pushNotificationSetup()
++        // Tabora: уведомления Firefox приходят через сервер Mozilla и аккаунт Mozilla — не настраиваются
+         appLaunchUtil?.setUpPostLaunchDependencies()
+         backgroundWorkUtility = BackgroundFetchAndProcessingUtility()
+         backgroundWorkUtility?.registerUtility(BackgroundSyncUtility(profile: profile, application: application))
+         backgroundWorkUtility?.registerUtility(BackgroundNotificationSurfaceUtility())
+-        suggestBackgroundUtility = BackgroundFirefoxSuggestIngestUtility(firefoxSuggest: profile.firefoxSuggest)
++        // Tabora: подсказки Firefox Suggest (сервер Mozilla) в фоне не загружаются
+ 
+         metricKitWrapper.beginObservingMXPayloads()
+ 
+@@ -217,11 +217,9 @@ class AppDelegate: UIResponder,
+             profile?.pollCommands(forcePoll: false)
+         }
+ 
+-        verifyAutopushSubscriptions()
+-        prefetchMerinoStories()
++        // Tabora: без подписки на уведомления Mozilla, ленты историй Mozilla и подсказок Firefox Suggest
+         updateWallpaperMetadata()
+         loadBackgroundTabs()
+-        ingestFirefoxSuggestions(in: application)
+ 
+         logger.log("applicationDidBecomeActive end",
+                    level: .info,
