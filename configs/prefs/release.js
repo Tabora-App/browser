@@ -222,9 +222,10 @@ pref("tabora.shield.enabled", true);
 pref("tabora.shield.lists", "easylist,ruadlist,easyprivacy,lowe");
 pref("tabora.shield.allow", "[]");
 
-// Синхронизация между компьютерами аккаунта (sync/Sync.sys.mjs): включает пользователь в
-// настройках аккаунта; наборы включены все, каждый можно выключить отдельно.
-pref("tabora.sync.enabled", false);
+// Синхронизация между устройствами аккаунта (sync/Sync.sys.mjs): включена с момента входа в
+// аккаунт — данные шифруются на устройстве ключом аккаунта; человек может выключить её целиком
+// или отдельные наборы в настройках аккаунта.
+pref("tabora.sync.enabled", true);
 pref("tabora.sync.passwords", true);
 pref("tabora.sync.codes", true);
 pref("tabora.sync.bookmarks", true);
