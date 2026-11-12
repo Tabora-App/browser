@@ -1085,12 +1085,20 @@ def build_android(config: dict, brand: str) -> None:
     if not TABORA_VERSION_RE.match(version):
         die(f"displayVersion бренда {brand} должна быть вида X.Y.Z, сейчас {version!r}")
     rebrand_android_strings()
+    # Демон gradle, запущенный в начале сборки движка (зависимости), иначе висит в памяти все
+    # полтора часа компиляции: через две минуты простоя он выходит сам.
+    os.environ.setdefault("GRADLE_OPTS", "-Dorg.gradle.daemon.idletimeout=120000")
     log(f"полная сборка android/{target_arch()}, бренд «{brand}»: движок")
     mach(["build"], config, brand)
     android_multilocale(config, brand)
     log(f"сборка приложения Tabora {version} для Android")
+    # Память: по умолчанию gradle берёт до 7 ГБ кучи и 6 ГБ метаданных, демон Kotlin — ещё столько же;
+    # на машине с 15 ГБ это кончается остановкой сборки. Куча остаётся (её требует R8), остальное
+    # ограничено.
     mach(["gradle", f"fenix:assemble{ANDROID_BUILD_TYPE.capitalize()}", f"-PtaboraVersionName={version}",
-          "-PdisableDebugSigning"], config, brand)
+          "-PdisableDebugSigning",
+          "-Dorg.gradle.jvmargs=-Xmx7g -XX:MaxMetaspaceSize=2g -XX:+UseParallelGC",
+          "-Pkotlin.daemon.jvmargs=-Xmx3g", "--max-workers=3"], config, brand)
     apks = android_apks()
     if not apks:
         die(f"приложение не собрано: в {android_apk_dir()} нет файлов .apk")

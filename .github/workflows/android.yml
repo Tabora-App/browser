@@ -96,10 +96,23 @@ jobs:
           python3 tools/build.py bootstrap
           df -h /
 
+      # На раннере 15 ГБ памяти: компоновка движка и сборка приложения (R8, lint, демоны gradle
+      # и Kotlin) временами берут больше, и тогда систему останавливает GitHub — шаг обрывается
+      # без ошибки («The operation was canceled»). Файл подкачки даёт запас.
+      - name: Add swap
+        run: |
+          sudo fallocate -l 16G /swapfile-tabora
+          sudo chmod 600 /swapfile-tabora
+          sudo mkswap /swapfile-tabora > /dev/null
+          sudo swapon /swapfile-tabora
+          free -g
+
       - name: Build engine and app
         run: |
           . "$HOME/.cargo/env" 2>/dev/null || true
           ulimit -n 4096
+          # расход памяти раз в две минуты — в журнал, чтобы обрыв было чем объяснить
+          ( while true; do echo "[память] $(free -m | awk '/^Mem:/ {printf "занято %d МБ, доступно %d МБ", $3, $7} /^Swap:/ {printf ", подкачка %d МБ", $3}')"; sleep 120; done ) &
           python3 tools/build.py build
 
       - name: Package
