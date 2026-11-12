@@ -26,11 +26,14 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.concept.engine.EngineSession
 import mozilla.components.concept.engine.webextension.MessageHandler
 import mozilla.components.concept.engine.webextension.Port
 import mozilla.components.concept.engine.webextension.WebExtensionRuntime
+import mozilla.components.concept.storage.LoginEntry
+import mozilla.components.concept.storage.LoginsStorage
 import mozilla.components.lib.dataprotect.SecureAbove22Preferences
 import mozilla.components.lib.state.ext.flow
 import mozilla.components.support.base.log.logger.Logger
@@ -50,13 +53,15 @@ import org.mozilla.fenix.R
  *  - модулю передаётся список открытых вкладок (без приватных);
  *  - от модуля приходит состояние: кто вошёл, вкладки других устройств аккаунта, сколько кодов входа;
  *  - по просьбе модуля приложение спрашивает у человека отпечаток, лицо или код блокировки (перед
- *    показом и вставкой кодов входа) и открывает экраны модуля.
+ *    показом и вставкой кодов входа) и открывает экраны модуля;
+ *  - модуль читает и меняет хранилище паролей приложения, чтобы слить его с паролями аккаунта.
  *
  * Сообщения описаны в web/src/phone/bridge.js.
  */
 class TaboraAccount(
     private val context: Context,
     private val scope: CoroutineScope,
+    private val logins: () -> LoginsStorage,
 ) {
     /** Вкладка другого устройства. */
     data class Tab(val title: String, val url: String)
@@ -126,6 +131,8 @@ class TaboraAccount(
     /** Экран приложения, поверх которого показываются запрос отпечатка и экраны модуля. */
     fun attach(activity: FragmentActivity) {
         host = WeakReference(activity)
+        // человек вернулся в приложение: сверить сейчас (в том числе пароли, сохранённые с прошлого раза)
+        syncNow()
     }
 
     /** Экран закрыт: запросы к нему больше не идут. */
@@ -174,6 +181,15 @@ class TaboraAccount(
                         authenticate { ok -> port.postMessage(JSONObject().put("type", "reply").put("rid", rid).put("ok", ok)) }
                     }
                     "open" -> openPage(json.optString("page"))
+                    "logins-list", "logins-add", "logins-update", "logins-delete" -> {
+                        val rid = json.optInt("rid")
+                        scope.launch(Dispatchers.Main) {
+                            val reply =
+                                runCatching { withContext(Dispatchers.IO) { loginsRequest(json) } }
+                                    .getOrElse { JSONObject().put("error", it.message ?: it.javaClass.simpleName) }
+                            port.postMessage(reply.put("type", "reply").put("rid", rid))
+                        }
+                    }
                 }
             }
 
@@ -210,6 +226,52 @@ class TaboraAccount(
                 return reply.toString()
             }
         }
+
+    /** Просьба модуля к хранилищу паролей приложения: список, добавление, правка, удаление. */
+    private suspend fun loginsRequest(json: JSONObject): JSONObject {
+        val storage = logins()
+        return when (json.optString("type")) {
+            "logins-list" -> {
+                val list = JSONArray()
+                storage.list().forEach { login ->
+                    list.put(
+                        JSONObject()
+                            .put("guid", login.guid)
+                            .put("origin", login.origin)
+                            .put("formActionOrigin", login.formActionOrigin ?: JSONObject.NULL)
+                            .put("httpRealm", login.httpRealm ?: JSONObject.NULL)
+                            .put("username", login.username)
+                            .put("password", login.password)
+                            .put("usernameField", login.usernameField)
+                            .put("passwordField", login.passwordField)
+                            .put("created", login.timeCreated)
+                            .put("changed", login.timePasswordChanged)
+                    )
+                }
+                JSONObject().put("logins", list)
+            }
+            "logins-add" -> JSONObject().put("ok", true).put("guid", storage.add(json.getJSONObject("entry").toLoginEntry()).guid)
+            "logins-update" -> {
+                storage.update(json.getString("guid"), json.getJSONObject("entry").toLoginEntry())
+                JSONObject().put("ok", true)
+            }
+            "logins-delete" -> JSONObject().put("ok", storage.delete(json.getString("guid")))
+            else -> JSONObject()
+        }
+    }
+
+    private fun JSONObject.toLoginEntry(): LoginEntry {
+        fun text(key: String): String? = if (isNull(key)) null else getString(key)
+        return LoginEntry(
+            origin = getString("origin"),
+            formActionOrigin = text("formActionOrigin"),
+            httpRealm = text("httpRealm"),
+            usernameField = optString("usernameField"),
+            passwordField = optString("passwordField"),
+            username = optString("username"),
+            password = getString("password"),
+        )
+    }
 
     /** Имя записи с копией данных в защищённом хранилище; чужие имена не принимаются. */
     private fun dataKey(json: JSONObject): String? =

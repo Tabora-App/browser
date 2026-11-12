@@ -49,6 +49,7 @@ export class SyncClient {
   reset() {
     this.rev = 0;
     this.gen = null;
+    this.keyId = "";
     this.items = new Map(); // набор → Map(номер → { rev, data })
     // Удалённые записи: набор → Map(номер → rev). Сервер хранит на месте удалённой записи отметку
     // со своим номером версии, и записать под тем же номером заново можно только зная его
@@ -154,6 +155,16 @@ export class SyncClient {
     return this.items.get(name)?.get(id)?.data || null;
   }
 
+  /** Удалённые записи набора: [[номер, версия отметки об удалении]]. */
+  tombstones(name) {
+    return [...(this.gone.get(name) || [])];
+  }
+
+  /** Версия записи на сервере, как её видит клиент (0 — записи нет). */
+  revOf(name, id) {
+    return this.items.get(name)?.get(id)?.rev || 0;
+  }
+
   _set(state, error = "") {
     const changed = this.status !== state || this.error !== error;
     this.status = state;
@@ -187,6 +198,11 @@ export class SyncClient {
         }
         if (res.keyId && res.keyId !== keys.id) {
           throw fail(t`Данные на сервере зашифрованы другим ключом аккаунта`, "sync-key");
+        }
+        if (this.gen !== null && res.gen !== this.gen && this.keyId && !res.keyId) {
+          // данные стёрты с сервера с другого устройства («Стереть с сервера»): заливать их обратно
+          // нельзя — синхронизация выключается и здесь
+          throw fail(t`Данные синхронизации стёрты с сервера с другого устройства`, "sync-erased");
         }
         if (this.gen !== null && res.gen !== this.gen) {
           // данные на сервере начаты заново (сброс или стирание): читаем с начала
@@ -239,6 +255,8 @@ export class SyncClient {
     } catch (e) {
       if (e.code === "sync-key") {
         this._set("key", e.message);
+      } else if (e.code === "sync-erased") {
+        this._set("erased", e.message);
       } else if (e.code === "offline") {
         this._set("offline");
       } else if (e.code !== "session-expired" && e.code !== "signed-out") {

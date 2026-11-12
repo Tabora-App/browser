@@ -3037,12 +3037,21 @@
  "Код «{0}» исчезнет на всех ваших устройствах. Если вход в два шага на сайте ещё включён, без этого кода вы можете не войти: сначала отключите его на сайте или убедитесь, что есть резервные коды.": "El código «{0}» desaparecerá de todos tus dispositivos. Si el acceso en dos pasos sigue activado en ese sitio, quizá no puedas entrar sin él: desactívalo antes en el sitio o asegúrate de tener códigos de respaldo.",
  "Картинка не открылась": "No se pudo abrir la imagen",
  "Кода больше нет в списке": "Este código ya no está en la lista",
- "Войдите, чтобы вкладки и коды входа были общими для этого телефона и других ваших устройств.": "Inicia sesión para compartir pestañas y códigos de acceso entre este teléfono y tus otros dispositivos.",
  "Вставить код": "Introducir el código",
  "Код не вставлен": "No se introdujo el código",
  "Не подтверждено": "No confirmado",
  "Выключена: на этом телефоне ничего не синхронизируется.": "Desactivada: en este teléfono no se sincroniza nada.",
  "Коды второго шага для сайтов — те же, что в Tabora на компьютере. На привязанных сайтах Tabora сам предложит вставить код.": "Códigos de dos pasos para sitios web, los mismos que en Tabora en el ordenador. En los sitios vinculados, Tabora te ofrecerá introducir el código.",
  "Открыть коды": "Abrir los códigos",
- "Синхронизация на этом телефоне остановится: список его вкладок исчезнет с других устройств, а коды входа сотрутся с телефона (в аккаунте и на других устройствах они останутся). Вкладки, закладки и пароли на самом телефоне останутся.": "La sincronización se detendrá en este teléfono: su lista de pestañas desaparecerá de tus otros dispositivos y los códigos de acceso se borrarán del teléfono (seguirán en tu cuenta y en tus otros dispositivos). Las pestañas, los marcadores y las contraseñas del teléfono se conservarán."
+ "Синхронизация на этом телефоне остановится: список его вкладок исчезнет с других устройств, а коды входа сотрутся с телефона (в аккаунте и на других устройствах они останутся). Вкладки, закладки и пароли на самом телефоне останутся.": "La sincronización se detendrá en este teléfono: su lista de pestañas desaparecerá de tus otros dispositivos y los códigos de acceso se borrarán del teléfono (seguirán en tu cuenta y en tus otros dispositivos). Las pestañas, los marcadores y las contraseñas del teléfono se conservarán.",
+ "Данные синхронизации стёрты с сервера с другого устройства": "Los datos de sincronización se borraron del servidor desde otro dispositivo",
+ "Войдите, чтобы вкладки, пароли и коды входа были общими для этого телефона и других ваших устройств.": "Inicia sesión para compartir pestañas, contraseñas y códigos de acceso entre este teléfono y tus otros dispositivos.",
+ "Выключена: данные синхронизации стёрли с сервера с другого устройства. Данные на самом телефоне на месте.": "Desactivada: los datos de sincronización se borraron del servidor desde otro dispositivo. Los datos de este teléfono siguen aquí.",
+ "Пароли из Tabora на компьютере появляются в паролях этого телефона и подставляются на сайтах, а сохранённые здесь — на компьютере.": "Las contraseñas de Tabora en el ordenador aparecen en las contraseñas de este teléfono y se rellenan en los sitios web, y las guardadas aquí aparecen en el ordenador.",
+ "С телефона разом пропало много паролей: {0} из {1}. На других устройствах они пока не удалены.": "Muchas contraseñas desaparecieron de este teléfono a la vez: {0} de {1}. Aún no se han eliminado de tus otros dispositivos.",
+ "Вернуть на телефон": "Devolver al teléfono",
+ "Пароли не сверены: {0}": "Las contraseñas no se sincronizaron: {0}",
+ "Паролей пока нет": "Aún no hay contraseñas",
+ "Удалить пароли везде?": "¿Eliminar las contraseñas en todas partes?",
+ "Пароли, пропавшие с этого телефона, будут удалены из аккаунта и с остальных ваших устройств.": "Las contraseñas que desaparecieron de este teléfono se eliminarán de tu cuenta y de tus otros dispositivos."
 }

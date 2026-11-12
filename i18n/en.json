@@ -3037,12 +3037,21 @@
  "Код «{0}» исчезнет на всех ваших устройствах. Если вход в два шага на сайте ещё включён, без этого кода вы можете не войти: сначала отключите его на сайте или убедитесь, что есть резервные коды.": "The code “{0}” will disappear from all your devices. If two-step sign-in is still on for that website, you may not be able to sign in without it: turn it off on the website first, or make sure you have backup codes.",
  "Картинка не открылась": "The image didn’t open",
  "Кода больше нет в списке": "This code is no longer in the list",
- "Войдите, чтобы вкладки и коды входа были общими для этого телефона и других ваших устройств.": "Sign in to share tabs and sign-in codes between this phone and your other devices.",
  "Вставить код": "Fill in the code",
  "Код не вставлен": "The code wasn’t filled in",
  "Не подтверждено": "Not confirmed",
  "Выключена: на этом телефоне ничего не синхронизируется.": "Off: nothing is synced on this phone.",
  "Коды второго шага для сайтов — те же, что в Tabora на компьютере. На привязанных сайтах Tabora сам предложит вставить код.": "Two-step codes for websites, the same ones as in Tabora on your computer. On linked websites Tabora will offer to fill in the code.",
  "Открыть коды": "Open codes",
- "Синхронизация на этом телефоне остановится: список его вкладок исчезнет с других устройств, а коды входа сотрутся с телефона (в аккаунте и на других устройствах они останутся). Вкладки, закладки и пароли на самом телефоне останутся.": "Sync will stop on this phone: its tab list will disappear from your other devices, and sign-in codes will be erased from the phone (they stay in your account and on your other devices). Tabs, bookmarks and passwords on the phone itself will stay."
+ "Синхронизация на этом телефоне остановится: список его вкладок исчезнет с других устройств, а коды входа сотрутся с телефона (в аккаунте и на других устройствах они останутся). Вкладки, закладки и пароли на самом телефоне останутся.": "Sync will stop on this phone: its tab list will disappear from your other devices, and sign-in codes will be erased from the phone (they stay in your account and on your other devices). Tabs, bookmarks and passwords on the phone itself will stay.",
+ "Данные синхронизации стёрты с сервера с другого устройства": "Sync data was erased from the server on another device",
+ "Войдите, чтобы вкладки, пароли и коды входа были общими для этого телефона и других ваших устройств.": "Sign in to share tabs, passwords and sign-in codes between this phone and your other devices.",
+ "Выключена: данные синхронизации стёрли с сервера с другого устройства. Данные на самом телефоне на месте.": "Off: sync data was erased from the server on another device. The data on this phone is still here.",
+ "Пароли из Tabora на компьютере появляются в паролях этого телефона и подставляются на сайтах, а сохранённые здесь — на компьютере.": "Passwords from Tabora on your computer show up in this phone’s passwords and are filled in on websites, and the ones saved here show up on your computer.",
+ "С телефона разом пропало много паролей: {0} из {1}. На других устройствах они пока не удалены.": "Many passwords disappeared from this phone at once: {0} of {1}. They haven’t been deleted from your other devices yet.",
+ "Вернуть на телефон": "Bring back to the phone",
+ "Пароли не сверены: {0}": "Passwords weren’t synced: {0}",
+ "Паролей пока нет": "No passwords yet",
+ "Удалить пароли везде?": "Delete the passwords everywhere?",
+ "Пароли, пропавшие с этого телефона, будут удалены из аккаунта и с остальных ваших устройств.": "The passwords that disappeared from this phone will be deleted from your account and from your other devices."
 }

@@ -6,8 +6,9 @@
  * встроенного модуля всё время, пока запущено приложение; экраны модуля (аккаунт, коды) берут
  * этот же объект и ничего своего не хранят.
  *
- * Синхронизируются вкладки и коды входа — каждое включается отдельно. Записи остальных наборов
- * аккаунта (пароли сайтов, закладки) модуль не расшифровывает и в памяти не держит.
+ * Синхронизируются вкладки, коды входа и пароли сайтов — каждое включается отдельно. Записи
+ * остальных наборов аккаунта (закладки) модуль не расшифровывает и в памяти не держит. Пароли
+ * лежат в хранилище паролей приложения; модуль сливает его с сервером (logins.js).
  *
  * Сверка с сервером: сразу после входа и запуска, через несколько секунд после перемены во
  * вкладках телефона, по просьбе приложения (открыли список вкладок) и раз в десять минут.
@@ -20,6 +21,7 @@ import { Account } from "../core/account.js";
 import { SyncClient } from "../core/sync.js";
 import { t } from "../core/i18n.js";
 import { Codes } from "./codes.js";
+import { Logins } from "./logins.js";
 import { TabSync } from "./tabs.js";
 
 const QUIET_MS = 5000; // пауза после перемены во вкладках перед сверкой
@@ -31,7 +33,7 @@ const CACHE = "sync";
 export class Service {
   /**
    * @param {{ bridge: import("./bridge.js").Bridge, store: import("./store.js").NativeStore,
-   *   api: import("../core/api.js").Api, settings?: { tabs?: { get(): boolean, set(on: boolean): void }, codes?: { get(): boolean, set(on: boolean): void } },
+   *   api: import("../core/api.js").Api, settings?: { tabs?: { get(): boolean, set(on: boolean): void }, codes?: { get(): boolean, set(on: boolean): void }, logins?: { get(): boolean, set(on: boolean): void } },
    *   fillTestOrigin?: string }} deps
    *   fillTestOrigin — адрес проверочной страницы, которой автоввод разрешён без https (только в
    *   сборке для проверок; в выпуске пусто).
@@ -45,6 +47,9 @@ export class Service {
     this.sync = new SyncClient(this.account, { only: [] });
     this.tabs = new TabSync({ account: this.account, sync: this.sync, store, ...(settings.tabs ? { settings: settings.tabs } : {}) });
     this.codes = new Codes({ account: this.account, sync: this.sync, ...(settings.codes ? { settings: settings.codes } : {}) });
+    this.logins = new Logins({ account: this.account, sync: this.sync, bridge, store, ...(settings.logins ? { settings: settings.logins } : {}) });
+    /** Данные синхронизации стёрли с сервера с другого устройства: синхронизация здесь выключена. */
+    this.erased = false;
     this._listeners = new Set();
     this._timer = null;
     this._period = null;
@@ -96,7 +101,7 @@ export class Service {
 
   /** Наборы синхронизации, которые нужны при нынешних настройках. */
   _wanted() {
-    return [this.tabs.enabled && "tabs", this.codes.enabled && "otp"].filter(Boolean);
+    return [this.tabs.enabled && "tabs", this.codes.enabled && "otp", this.logins.enabled && "logins"].filter(Boolean);
   }
 
   /* ---- события ---- */
@@ -122,6 +127,8 @@ export class Service {
       clearTimeout(this._saveTimer);
       this.sync.reset();
       this.codes.forget();
+      this.logins.forget();
+      this.erased = false;
       this._dirty = false;
       this._fails = 0;
       this.store.clearData(CACHE).catch(() => {});
@@ -189,15 +196,33 @@ export class Service {
       }
       await this.sync.refresh();
       await this.tabs.push();
+      await this.logins.merge();
       this._fails = 0;
     } catch (e) {
-      if (e.code !== "session-expired" && e.code !== "signed-out" && e.code !== "sync-key") {
+      if (e.code === "sync-erased") {
+        await this._erased();
+      } else if (e.code !== "session-expired" && e.code !== "signed-out" && e.code !== "sync-key") {
         this._fails++;
         this.soon(RETRY_MS[Math.min(this._fails, RETRY_MS.length) - 1]);
       }
     } finally {
       this._changed();
     }
+  }
+
+  /** Данные стёрли с сервера с другого устройства («Стереть с сервера»): заливать свои обратно
+   * нельзя. Синхронизация на телефоне выключается; пароли и вкладки на самом телефоне остаются
+   * как были, пока человек не включит синхронизацию снова. */
+  async _erased() {
+    this.tabs.enabled = false;
+    this.codes.enabled = false;
+    this.logins.enabled = false;
+    await this.logins.forget();
+    this.sync.reset();
+    this.sync.setOnly([]);
+    this.erased = true;
+    this._dirty = false;
+    await this.store.clearData(CACHE).catch(() => {});
   }
 
   /* ---- действия экранов ---- */
@@ -218,7 +243,27 @@ export class Service {
     this._applyWanted(on);
   }
 
+  /** Включить или выключить синхронизацию паролей сайтов. Выключение ничего не стирает: пароли
+   * остаются и в хранилище телефона, и в аккаунте. */
+  async setLogins(on) {
+    this.logins.enabled = !!on;
+    if (!on) {
+      await this.logins.forget();
+    }
+    this._applyWanted(on);
+  }
+
+  /** Решение о паролях, пропавших с телефона разом: "delete" или "restore" (см. logins.js). */
+  async resolveLoginsHold(what) {
+    await this.logins.resolveHold(what);
+    this._changed();
+    this.soon(0);
+  }
+
   _applyWanted(on) {
+    if (on) {
+      this.erased = false;
+    }
     const again = this.sync.setOnly(this._wanted());
     this._dirty = true;
     this._saveSoon();
@@ -317,6 +362,11 @@ export class Service {
       tabsOn: this.tabs.enabled,
       codesOn: this.codes.enabled,
       codes: signedIn ? this.codes.list().length : 0,
+      loginsOn: this.logins.enabled,
+      logins: signedIn && this.logins.enabled ? this.logins.count : 0,
+      loginsHold: signedIn ? this.logins.hold : null,
+      loginsError: this.logins.error,
+      erased: this.erased,
       status: this.sync.status,
       error: this.sync.error,
       at: this.sync.at,
@@ -342,7 +392,7 @@ export class Service {
       }
     }
     const message = {
-      type: "state", signedIn: s.signedIn, email: s.email, tabsOn: s.tabsOn, codesOn: s.codesOn, codes: s.codes, status: s.status, at: s.at,
+      type: "state", signedIn: s.signedIn, email: s.email, tabsOn: s.tabsOn, codesOn: s.codesOn, codes: s.codes, loginsOn: s.loginsOn, status: s.status, at: s.at,
       devices: s.devices.map(d => ({ id: d.id, name: d.name || t`Другое устройство`, at: d.at, tabs: d.tabs.map(x => ({ t: x.t, u: x.u })) })),
     };
     const mark = JSON.stringify(message);

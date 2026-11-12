@@ -23,8 +23,10 @@ export function mountPhoneAccount(root, { service }) {
   const off = service.subscribe(() => alive && draw());
 
   function status(s) {
-    if (!s.tabsOn && !s.codesOn) {
-      return { text: t`Выключена: на этом телефоне ничего не синхронизируется.` };
+    if (!s.tabsOn && !s.codesOn && !s.loginsOn) {
+      return s.erased
+        ? { tone: "warn", text: t`Выключена: данные синхронизации стёрли с сервера с другого устройства. Данные на самом телефоне на месте.` }
+        : { text: t`Выключена: на этом телефоне ничего не синхронизируется.` };
     }
     if (s.keys === "locked" || s.status === "locked") {
       return {
@@ -69,10 +71,31 @@ export function mountPhoneAccount(root, { service }) {
       s.codesOn && h("div", { class: "kv" },
         h("div", { class: "kv-text" }, h("small", { class: "wrap" }, s.loaded ? (s.codes ? plural(s.codes, t`код|кода|кодов`) : t`Кодов пока нет`) : t`Идёт сверка…`)),
         h("div", { class: "kv-actions buttons" }, h("button", { class: "btn small", onclick: () => service.open("codes") }, t`Открыть коды`))),
+      h("div", { class: "kv tall" },
+        h("div", { class: "kv-text" },
+          h("span", {}, t`Пароли сайтов`),
+          h("small", { class: "wrap" }, t`Пароли из Tabora на компьютере появляются в паролях этого телефона и подставляются на сайтах, а сохранённые здесь — на компьютере.`)),
+        h("div", { class: "kv-actions" }, toggle(s.loginsOn, on => service.setLogins(on), t`Пароли сайтов`))),
+      s.loginsOn && s.loginsHold && h("div", { class: "kv tall sync-status warn" },
+        h("div", { class: "kv-text" }, h("small", { class: "wrap" }, t`С телефона разом пропало много паролей: ${s.loginsHold.missing} из ${s.loginsHold.of}. На других устройствах они пока не удалены.`)),
+        h("div", { class: "kv-actions buttons" },
+          h("button", { class: "btn small", onclick: () => service.resolveLoginsHold("restore").catch(e => toast(errorText(e), { tone: "bad" })) }, t`Вернуть на телефон`),
+          h("button", { class: "btn small", onclick: forgetLogins }, t`Удалить везде`))),
+      s.loginsOn && !s.loginsHold && h("div", { class: "kv" },
+        h("div", { class: "kv-text" }, h("small", { class: "wrap" }, s.loginsError ? t`Пароли не сверены: ${s.loginsError}` : s.loaded ? (s.logins ? plural(s.logins, t`пароль|пароля|паролей`) : t`Паролей пока нет`) : t`Идёт сверка…`))),
       h("div", { class: `kv tall sync-status${st.tone ? ` ${st.tone}` : ""}` },
         h("div", { class: "kv-text" }, h("small", { class: "wrap" }, st.text)),
-        h("div", { class: "kv-actions buttons" }, st.action || ((s.tabsOn || s.codesOn) && now))),
+        h("div", { class: "kv-actions buttons" }, st.action || ((s.tabsOn || s.codesOn || s.loginsOn) && now))),
       h("p", { class: "card-note" }, t`Данные шифруются на телефоне ключом вашего аккаунта. Сервер хранит их зашифрованными и прочитать не может.`));
+  }
+
+  function forgetLogins() {
+    confirmDialog({
+      title: t`Удалить пароли везде?`,
+      text: t`Пароли, пропавшие с этого телефона, будут удалены из аккаунта и с остальных ваших устройств.`,
+      confirm: t`Удалить везде`,
+      danger: true,
+    }).then(yes => yes && service.resolveLoginsHold("delete").catch(e => toast(errorText(e), { tone: "bad" })));
   }
 
   function devicesCard(s) {
