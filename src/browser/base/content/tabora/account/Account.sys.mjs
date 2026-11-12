@@ -1837,7 +1837,17 @@ export const Account = {
     }
     const P = ChromeUtils.importESModule("chrome://tabora/content/account/Pair.sys.mjs");
     const mine = await P.pairKeys();
-    const { id, expiresAt } = await this.backend.pairStart({ session });
+    let started;
+    try {
+      started = await this.backend.pairStart({ session });
+    } catch (e) {
+      if (e.status === 404) {
+        // сервер старше браузера: адреса входа по коду на нём ещё нет
+        throw Object.assign(new Error(tt`Сервер Tabora пока не умеет вход по коду: это появится после его обновления. Повторите позже.`), { code: "unsupported" });
+      }
+      throw e;
+    }
+    const { id, expiresAt } = started;
     let stopped = false;
     const joined = async () => {
       for (;;) {

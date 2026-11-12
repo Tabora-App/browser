@@ -966,12 +966,14 @@ Object.assign(Tabora, {
     const waiting = text => box.replaceChildren(h("span", { class: "ta-spinner", "aria-hidden": "true" }), h("span", {}, text));
     const failed = e => {
       note.textContent = "";
+      box.classList.add("failed");
       box.replaceChildren(
         h("p", { class: "ta-error" }, e.code === "pair-gone" ? tt`Код устарел: он действует три минуты.` : e.message || String(e)),
         this.taButton(tt`Показать новый код`, "primary", show)
       );
     };
     const show = async () => {
+      box.classList.remove("failed");
       waiting(tt`Готовим код…`);
       let offer = null;
       try {

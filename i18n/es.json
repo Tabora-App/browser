@@ -3098,5 +3098,6 @@
  "закладка|закладки|закладок": "marcador|marcadores",
  "Удалить закладки везде?": "¿Eliminar los marcadores en todas partes?",
  "Закладки, пропавшие с этого телефона, будут удалены из аккаунта и с остальных ваших устройств.": "Los marcadores que faltan en este teléfono se eliminarán de la cuenta y de tus otros dispositivos.",
- "Пока пусто. Вкладки появятся, когда вы откроете Tabora на другом устройстве и войдёте там в этот аккаунт.": "Aún no hay nada. Las pestañas aparecerán cuando abras Tabora en otro dispositivo e inicies sesión allí en esta cuenta."
+ "Пока пусто. Вкладки появятся, когда вы откроете Tabora на другом устройстве и войдёте там в этот аккаунт.": "Aún no hay nada. Las pestañas aparecerán cuando abras Tabora en otro dispositivo e inicies sesión allí en esta cuenta.",
+ "Сервер Tabora пока не умеет вход по коду: это появится после его обновления. Повторите позже.": "El servidor de Tabora aún no admite el acceso con código: estará disponible cuando se actualice. Inténtalo más tarde."
 }

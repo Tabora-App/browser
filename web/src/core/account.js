@@ -266,7 +266,15 @@ export class Account {
     const mine = await pairKeys();
     const { secret, claim } = await pairClaim();
     const secrets = await pairSecrets(mine.privateKey, offer.public, { id: offer.id, starter: offer.public, joiner: mine.public });
-    await this.api.pairJoin({ id: offer.id, public: mine.public, claim, deviceId: this.store.deviceId(), deviceName: this.deviceName() });
+    try {
+      await this.api.pairJoin({ id: offer.id, public: mine.public, claim, deviceId: this.store.deviceId(), deviceName: this.deviceName() });
+    } catch (e) {
+      if (e.status === 404 && e.code !== "pair-gone") {
+        // сервер старше приложения: адреса входа по коду на нём ещё нет
+        throw fail(t`Сервер Tabora пока не умеет вход по коду: это появится после его обновления. Повторите позже.`, "unsupported");
+      }
+      throw e;
+    }
     let stopped = false;
     const wait = async () => {
       const until = Date.now() + PAIR_LIFE;

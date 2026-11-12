@@ -3098,5 +3098,6 @@
  "закладка|закладки|закладок": "bookmark|bookmarks",
  "Удалить закладки везде?": "Delete bookmarks everywhere?",
  "Закладки, пропавшие с этого телефона, будут удалены из аккаунта и с остальных ваших устройств.": "The bookmarks missing from this phone will be deleted from the account and from your other devices.",
- "Пока пусто. Вкладки появятся, когда вы откроете Tabora на другом устройстве и войдёте там в этот аккаунт.": "Nothing here yet. Tabs will appear once you open Tabora on another device and sign in to this account there."
+ "Пока пусто. Вкладки появятся, когда вы откроете Tabora на другом устройстве и войдёте там в этот аккаунт.": "Nothing here yet. Tabs will appear once you open Tabora on another device and sign in to this account there.",
+ "Сервер Tabora пока не умеет вход по коду: это появится после его обновления. Повторите позже.": "The Tabora server doesn’t support code sign-in yet: it will appear after the server is updated. Try again later."
 }

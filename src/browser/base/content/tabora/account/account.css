@@ -427,6 +427,12 @@
   align-self: stretch;
 }
 
+/* код не показан: место под него не держим, сообщение и кнопка идут сразу под текстом */
+#tabora-account-dialog .ta-pair-box.failed {
+  min-height: 0;
+  align-items: stretch;
+}
+
 #tabora-account-dialog .ta-pair-code {
   display: flex;
   justify-content: center;
