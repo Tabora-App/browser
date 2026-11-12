@@ -1,13 +1,21 @@
-// Заголовки безопасности веб-версии заданы в двух местах: tools/web/headers.mjs (сервер разработки)
-// и infra/nginx/app-*.inc (рабочий nginx). Они обязаны совпадать: иначе на рабочем сервере страница
-// получит не ту политику содержимого, с которой её проверяли.
-import { readFileSync } from "node:fs";
+// The security headers of the web app are defined in two places: tools/web/headers.mjs (development
+// server) and infra/nginx/app-*.inc in the server repository (production nginx, Tabora-App/server).
+// They must match: otherwise the production page gets a content policy it was not tested with.
+// The server repository is looked for next to this one (../tabora-server or ../server) or at
+// TABORA_SERVER_REPO; without it the check is skipped.
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { headersFor } from "../headers.mjs";
 import { check, summary } from "./lib.mjs";
 
 const repo = process.env.TABORA_REPO || join(process.cwd(), "../..");
-const read = p => readFileSync(join(repo, p), "utf8");
+const server = [process.env.TABORA_SERVER_REPO, join(repo, "../tabora-server"), join(repo, "../server")].find(d => d && existsSync(join(d, "infra/nginx/app.conf")));
+if (!server) {
+  console.log("SKIP nginx headers: no checkout of Tabora-App/server found (set TABORA_SERVER_REPO)");
+  summary();
+  process.exit(0);
+}
+const read = p => readFileSync(join(server, p), "utf8");
 const parse = text => Object.fromEntries([...text.matchAll(/^\s*add_header\s+(\S+)\s+"((?:[^"\\]|\\.)*)"\s+always;/gm)].map(m => [m[1], m[2]]));
 const without = (h, ...names) => Object.fromEntries(Object.entries(h).filter(([k]) => !names.includes(k)));
 

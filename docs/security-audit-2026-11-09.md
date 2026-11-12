@@ -1,145 +1,145 @@
-# Аудит безопасности Tabora, 9 ноября 2026
+# Tabora security audit, November 9, 2026
 
-Шесть независимых проверок (кошелёк; сейф, пароли и 2FA; оболочка, почта и аккаунт; обновления и цепочка
-поставки; сервер Hetzner; патчи движка и настройки). Находки уровня critical и high перепроверены по коду
-вручную.
+Six independent reviews (wallet; vault, passwords and 2FA; shell, mail and account; updates and supply
+chain; the Hetzner server; engine patches and preferences). Findings of critical and high severity were re-verified against the code
+by hand.
 
-## Статус после исправлений (9 ноября 2026)
+## Status after fixes (November 9, 2026)
 
-Исправлены все находки critical, high, medium и low, кроме перечисленных ниже. Проверено на полной сборке:
-сквозной тест в браузере (подпись дополнений обязательна, selfxss 0, адрес обновлений только из default branch,
-сайт не может загрузить код оболочки, агент не открывает file:/about:/chrome:, акторы только на http(s),
-блокировка сейфа закрывает пароли и не снимается сама, коды мигрировали, ослабление кошелька без пароля
-запрещено, неизвестная цена требует пароль, почта без входа закрыта); сервер проверен снаружи (открыты только
-22, 25, 443, 465, 587, 993; голый IP отклоняет TLS; вход только по ключу, пароль root заблокирован).
-GitHub: сканирование секретов и защита от пуша секретов, Dependabot, main без force-push и удаления,
-окружение `release` только из main с подтверждением владельца, токен Actions по умолчанию только на чтение.
-Дополнительно найдено и закрыто при исправлении: агент мог прикрепить к форме сайта любой файл с диска через
-`<input type=file>`; скрипт `tools/dev_inject.py` убивал все процессы Tabora через pkill (удалён).
+All critical, high, medium and low findings are fixed, except those listed below. Verified on a full build:
+an end-to-end test in the browser (add-on signing is mandatory, selfxss 0, the update address comes only from the default branch,
+a site cannot load shell code, the agent does not open file:/about:/chrome:, actors only on http(s),
+locking the vault closes passwords and is not lifted on its own, codes have migrated, weakening the wallet without the password
+is forbidden, an unknown price requires the password, mail is closed without a sign-in); the server was checked from outside (only
+22, 25, 443, 465, 587, 993 are open; the bare IP rejects TLS; login by key only, the root password is locked).
+GitHub: secret scanning and push protection for secrets, Dependabot, main without force-push and deletion,
+the `release` environment only from main with the owner's approval, the Actions token read-only by default.
+Additionally found and closed during the fixes: the agent could attach any file from disk to a site's form through
+`<input type=file>`; the `tools/dev_inject.py` script killed all Tabora processes through pkill (removed).
 
-Остаётся открытым или требует владельца:
-- Safe Browsing: нужен ключ Google Safe Browsing / Web Risk (`~/.config/tabora/safebrowsing.key`, в CI секрет
-  `SAFEBROWSING_API_KEY`), без него фишинг и вредоносные загрузки не проверяются.
-- Ключи подписи: поставить пароль на обе NSS-базы (`certutil -W`), запасную базу
-  `~/.config/tabora/mar-keys-secondary` унести на зашифрованный носитель; секрет `TABORA_MAR_KEYS` для CI
-  создавать только в окружении `release`.
-- Кошелёк: обмены через Uniswap Universal Router, агрегаторы и программы Solana вне белого списка показываются
-  как нерасшифрованные (опасные); нужна расшифровка их команд.
-- Агент: обычные видимые поля и не-submit кнопки на текущем сайте заполняются и нажимаются без вопроса; защита от
-  утечки через заполненное поле держится на пометке данных как недоверенных.
-- Пароли: пока сейф разблокирован, ключ хранилища живёт в памяти Rust; синхронизация паролей Firefox при
-  заблокированном сейфе не работает.
-- Аккаунт: серверные эндпоинты (prelogin, upgrade, recovery, reset с подписью) нужно реализовать в tabora-server
-  по контракту из `Account.sys.mjs`.
-- Сервер: TLS, туннель и DNS включаются после покупки домена; TLSA (DANE) и CAA не публикуются.
-- Старые установки из dmg от 8 ноября не примут новые MAR (обновлятор Mozilla): нужна одна переустановка.
+Remains open or needs the owner:
+- Safe Browsing: a Google Safe Browsing / Web Risk key is needed (`~/.config/tabora/safebrowsing.key`, in CI the secret
+  `SAFEBROWSING_API_KEY`); without it phishing and malicious downloads are not checked.
+- Signing keys: set a password on both NSS databases (`certutil -W`), move the secondary database
+  `~/.config/tabora/mar-keys-secondary` to encrypted media; create the `TABORA_MAR_KEYS` secret for CI
+  only in the `release` environment.
+- Wallet: swaps through the Uniswap Universal Router, aggregators and Solana programs outside the allowlist are shown
+  as undecoded (dangerous); decoding of their commands is needed.
+- Agent: ordinary visible fields and non-submit buttons on the current site are filled in and clicked without asking; protection against
+  leakage through a filled-in field relies on marking the data as untrusted.
+- Passwords: while the vault is unlocked, the storage key lives in Rust memory; Firefox password sync does not work while
+  the vault is locked.
+- Account: the server endpoints (prelogin, upgrade, recovery, reset with a signature) need to be implemented in tabora-server
+  according to the contract from `Account.sys.mjs`.
+- Server: TLS, the tunnel and DNS are enabled after the domain is purchased; TLSA (DANE) and CAA are not published.
+- Old installations from the November 8 dmg will not accept new MARs (Mozilla updater): one reinstall is needed.
 
 ## Critical
 
-1. **ИИ-агент выполняет привилегированные действия по указке страницы.** `agent.js:52,97-108,375-385`,
-   `tabora.js:2152-2158` (`looksLikeUrl` пропускает `about:`, `chrome:`, `file:`, `moz-extension:`),
-   `drawer.js:129-137` (актор TaboraMedia без `matches`/`remoteTypes`), `TaboraMediaChild.sys.mjs:13-30`.
-   Инструменты выполняются без подтверждения, `open_url` открывает вкладку с системным принципалом.
-   Текст страницы может велеть агенту открыть `file:///…/.ssh/id_ed25519`, прочитать и отправить на свой сервер,
-   нажимать и заполнять about:config, читать коды из почты, историю и чужие вкладки.
-   Исправление: `open_url` только http(s) с контентным принципалом; актору `matches` http(s) и проверку
-   `isContentPrincipal`; подтверждение пользователя для перехода на новый origin, отправки форм, чтения почты,
-   истории и других вкладок, `save_login`; заголовки вкладок и вывод инструментов передавать модели как данные.
-2. **Инъекция в shell в `release.yml:60`.** `${{ inputs.notes }}` и `${{ inputs.minimum }}` подставляются в
-   текст скрипта, рядом распакованы ключи MAR и `GH_TOKEN` с `contents: write`. Тот, кто может запустить workflow,
-   крадёт ключи подписи и выпускает вредоносное обновление всем клиентам.
-   Исправление: inputs через `env:` и `"$NOTES"`, проверка `minimum` регулярным выражением.
-3. **В собранном Tabora.app обновлятор с сертификатами Mozilla.** `dist/Tabora.app/Contents/MacOS/updater.app`
-   и dmg от 8 ноября содержат DER Mozilla, `UpdateSettings.framework` без `tabora-release`; наши сертификаты только в
-   `dist/bin`. Выпуск из этого пакета: наши MAR не примутся, подписанные Mozilla примутся.
-   Исправление: полная сборка и упаковка; в `release.py`/`build.py` проверка байтов наших сертификатов и канала в
-   упакованном обновляторе с падением при несовпадении.
+1. **The AI agent performs privileged actions at a page's direction.** `agent.js:52,97-108,375-385`,
+   `tabora.js:2152-2158` (`looksLikeUrl` lets through `about:`, `chrome:`, `file:`, `moz-extension:`),
+   `drawer.js:129-137` (the TaboraMedia actor without `matches`/`remoteTypes`), `TaboraMediaChild.sys.mjs:13-30`.
+   Tools run without confirmation; `open_url` opens a tab with the system principal.
+   Page text can tell the agent to open `file:///…/.ssh/id_ed25519`, read it and send it to its own server,
+   to click and fill in about:config, to read codes from mail, history and other tabs.
+   Fix: `open_url` only http(s) with a content principal; `matches` http(s) and an
+   `isContentPrincipal` check for the actor; user confirmation for navigating to a new origin, submitting forms, reading mail,
+   history and other tabs, `save_login`; pass tab titles and tool output to the model as data.
+2. **Shell injection in `release.yml:60`.** `${{ inputs.notes }}` and `${{ inputs.minimum }}` are substituted into
+   the script text, next to the unpacked MAR keys and a `GH_TOKEN` with `contents: write`. Anyone who can start the workflow
+   steals the signing keys and ships a malicious update to all clients.
+   Fix: inputs through `env:` and `"$NOTES"`, validation of `minimum` with a regular expression.
+3. **The built Tabora.app contains an updater with Mozilla certificates.** `dist/Tabora.app/Contents/MacOS/updater.app`
+   and the November 8 dmg contain Mozilla's DER, `UpdateSettings.framework` without `tabora-release`; our certificates are only in
+   `dist/bin`. A release from this package: our MARs will not be accepted, ones signed by Mozilla will be.
+   Fix: a full build and packaging; in `release.py`/`build.py`, a check of the bytes of our certificates and of the channel in
+   the packaged updater, failing on a mismatch.
 
 ## High
 
-4. **SSH: root входит по паролю** (`sshd -T`: `permitrootlogin yes`, `passwordauthentication yes` из
-   `50-cloud-init.conf`); боты перебирают постоянно. Пароль root к тому же проходил через чат.
-   Исправление: `/etc/ssh/sshd_config.d/00-tabora.conf` (`PasswordAuthentication no`, `PermitRootLogin
-   prohibit-password`, `MaxAuthTries 3`), `passwd -l root`, внести в `setup.sh`.
-5. **2FA-код отдаётся по http и на любом поддомене, хост берётся из сообщения страницы.**
+4. **SSH: root logs in with a password** (`sshd -T`: `permitrootlogin yes`, `passwordauthentication yes` from
+   `50-cloud-init.conf`); bots brute-force it constantly. The root password also passed through a chat.
+   Fix: `/etc/ssh/sshd_config.d/00-tabora.conf` (`PasswordAuthentication no`, `PermitRootLogin
+   prohibit-password`, `MaxAuthTries 3`), `passwd -l root`, add to `setup.sh`.
+5. **The 2FA code is given out over http and on any subdomain; the host is taken from the page's message.**
    `TaboraVaultChild.sys.mjs:122,137`, `TaboraVaultParent.sys.mjs:16-23`, `vault.js:602,608,727-740`,
-   `Otp.sys.mjs:426-428,563-569`. MITM на `http://x.bank.com` или XSS на поддомене получают код bank.com;
-   взломанный контент-процесс шлёт `OtpField{host:"google.com"}` + `OtpAccept` и получает код без пользователя;
-   фокус на OTP-поле тихо разблокирует сейф.
-   Исправление: только https и secure context; хост из `manager.documentPrincipal` в родителе; точный origin
-   записи, поддомены только явно; вставка только по клику с задержкой; не разблокировать сейф по фокусу.
-6. **Кошелёк: пароль подписи снимается без пароля и не срабатывает при сбое цен.**
-   `WalletStore.sys.mjs:317-324` (`setSignPassword` проверяет только `unlocked`), `wallet.js:868-889`
-   (автоблокировка и ноды тоже), `WalletStore.sys.mjs:1239-1250` (`prices()` при ошибке `{}` → `usd = 0`),
+   `Otp.sys.mjs:426-428,563-569`. A MITM on `http://x.bank.com` or an XSS on a subdomain gets the bank.com code;
+   a compromised content process sends `OtpField{host:"google.com"}` + `OtpAccept` and gets the code without the user;
+   focusing an OTP field silently unlocks the vault.
+   Fix: https and secure context only; the host from `manager.documentPrincipal` in the parent; the exact origin
+   of the record, subdomains only explicitly; insertion only on click with a delay; do not unlock the vault on focus.
+6. **Wallet: the signing password is removed without the password and does not trigger when prices fail.**
+   `WalletStore.sys.mjs:317-324` (`setSignPassword` checks only `unlocked`), `wallet.js:868-889`
+   (auto-lock and nodes too), `WalletStore.sys.mjs:1239-1250` (`prices()` on error `{}` → `usd = 0`),
    `provider.js:779-787,1066-1076,1271-1276`, `send.js:540-544`.
-   Исправление: смена режима подписи, автоблокировки, нод, `acceptFile`, `addWallet` только через пароль;
-   неизвестная цена и токены вне списка считаются выше порога.
-7. **Кошелёк: опасные операции определяются списком исключений.** `WalletSigner.sys.mjs:104-146`,
-   `provider.js:595-608,646-649,727-736`. Permit2 `approve` (`0x87517c45`), неизвестные EIP-712 (Blur, LooksRare,
-   0x), вызовы неизвестных контрактов не помечаются опасными; `deposit()` показывается как «обёртка ETH» для любого
-   адреса и отключает предупреждение о сумме.
-   Исправление: всё нерасшифрованное и EIP-712 вне белого списка считать опасным; Permit2 и multicall
-   расшифровывать; `deposit`/`withdraw` только для WETH этой сети.
-8. **Safe Browsing не работает.** Нет ключа (`MOZ_GOOGLE_SAFEBROWSING_API_KEY='no-google-safebrowsing-api-key'`),
-   провайдеры Google отключены, фишинг и вредоносные загрузки не проверяются, хотя галочка включена.
-   Исправление: ключ Safe Browsing через секрет CI (решение владельца).
-9. **Снято обязательное требование подписи дополнений.** `configs/common/mozconfig:59-61`
-   (`MOZ_REQUIRE_SIGNING=`), `release.js:75`. `xpinstall.signatures.required` стал обычной настройкой.
-   Исправление: вернуть требование, русский язык встроить через multi-locale или l10n-репак.
-10. **Ключи подписи MAR и CI.** Оба ключа в одной NSS-базе без пароля внутри дерева репо (`.build/mar-keys`);
-    секрет не привязан к environment с ревьюером; main не защищена; `jlumbroso/free-disk-space@main` и прочие
-    actions не закреплены по SHA; `release.yml` принимает любой `build_run_id`; `release.py:100` копирует артефакт
-    с разыменованием ссылок; `tools/wallet-vendor/package-lock.json` в `.gitignore`, `npm install` со скриптами.
-11. **Откат и заморозка версий.** update.xml и channel.json не подписаны; защита от понижения сравнивает только
-    версию Firefox, той же appVersion с другим buildID клиент доверяет; адрес обновлений читается из
-    пользовательской настройки (`UpdateService.sys.mjs.patch:11-14`, `TaboraUpdate.sys.mjs:115-123` без https).
-    Исправление: монотонный номер сборки Tabora в версии продукта; адреса только из default branch; подписанные
-    манифесты с датой истечения.
-12. **Сброс пароля без доказательства.** `Account.sys.mjs:515` шлёт `recoveryProof: null`. Сервер обязан
-    требовать доказательство владения ключом восстановления, иначе email достаточно для захвата почты.
-13. **Повторный `setup.sh` откатывает схему TLS и туннеля** (`setup.sh:50,216-220` против `enable-tls.sh:27-29`):
-    открывает порт 80, сайт отдаётся на публичном IP в обход Cloudflare, 443 почты пропадает.
+   Fix: changing the signing mode, auto-lock, nodes, `acceptFile`, `addWallet` only with the password;
+   an unknown price and tokens outside the list count as above the threshold.
+7. **Wallet: dangerous operations are defined by a list of exceptions.** `WalletSigner.sys.mjs:104-146`,
+   `provider.js:595-608,646-649,727-736`. Permit2 `approve` (`0x87517c45`), unknown EIP-712 (Blur, LooksRare,
+   0x), calls to unknown contracts are not marked as dangerous; `deposit()` is shown as an "ETH wrap" for any
+   address and turns off the amount warning.
+   Fix: treat everything undecoded and EIP-712 outside the allowlist as dangerous; decode Permit2 and
+   multicall; `deposit`/`withdraw` only for the WETH of this network.
+8. **Safe Browsing does not work.** No key (`MOZ_GOOGLE_SAFEBROWSING_API_KEY='no-google-safebrowsing-api-key'`),
+   the Google providers are disabled, phishing and malicious downloads are not checked although the checkbox is on.
+   Fix: a Safe Browsing key through a CI secret (the owner's decision).
+9. **The mandatory add-on signing requirement was removed.** `configs/common/mozconfig:59-61`
+   (`MOZ_REQUIRE_SIGNING=`), `release.js:75`. `xpinstall.signatures.required` became an ordinary preference.
+   Fix: restore the requirement, build Russian in through multi-locale or an l10n repack.
+10. **MAR signing keys and CI.** Both keys are in one NSS database without a password inside the repo tree (`.build/mar-keys`);
+    the secret is not bound to an environment with a reviewer; main is not protected; `jlumbroso/free-disk-space@main` and other
+    actions are not pinned by SHA; `release.yml` accepts any `build_run_id`; `release.py:100` copies the artifact
+    dereferencing links; `tools/wallet-vendor/package-lock.json` is in `.gitignore`, `npm install` runs with scripts.
+11. **Rollback and version freeze.** update.xml and channel.json are not signed; downgrade protection compares only
+    the Firefox version, and the client trusts the same appVersion with a different buildID; the update address is read from
+    a user preference (`UpdateService.sys.mjs.patch:11-14`, `TaboraUpdate.sys.mjs:115-123` without https).
+    Fix: a monotonic Tabora build number in the product version; addresses only from the default branch; signed
+    manifests with an expiry date.
+12. **Password reset without proof.** `Account.sys.mjs:515` sends `recoveryProof: null`. The server must
+    require proof of possession of the recovery key; otherwise the email address alone is enough to take over the mailbox.
+13. **A repeated `setup.sh` rolls back the TLS and tunnel scheme** (`setup.sh:50,216-220` versus `enable-tls.sh:27-29`):
+    it opens port 80, the site is served on the public IP bypassing Cloudflare, and mail's 443 disappears.
 
 ## Medium
 
-- Сервер: админ-API Stalwart доступно через публичный `/jmap` с Basic-auth после включения `mx.conf`; доверие
-  к `X-Forwarded-For` (`proxy.inc:4`); Stalwart не пишет журнал, fail2ban не защищает SMTP/IMAP, nginx-jail'ы не
-  читают файлы логов; токен Cloudflare и секреты видны в `ps` (`setup-tunnel.sh:12,26`, `dns.sh:10`,
-  `setup.sh:131`), права `cloudflare.env` не задаются, один токен с Tunnel Edit живёт вечно; `tabora-server` знает
-  полный пароль администратора почты; `dns.sh:8` берёт IP через `http://ifconfig.me`; TXT-записи только
-  добавляются (два SPF ломают проверку).
-- Сейф и пароли: «заблокировать сейф» не блокирует хранилище паролей (ключ остаётся в Rust, `isLoggedIn` всегда
-  true); основной пароль NSS молча пропадает при перешифровке; копии под NSS остаются в `logins-backup.json`;
-  перешифровка неатомарна (сбой посередине = потеря паролей); повреждённый `tabora-vault.json` молча заменяется
-  новым ключом (потеря данных); K не меняется при смене пароля, отзыве ключа восстановления и перепривязке к
-  другому аккаунту; секреты копируются без флага «чувствительно».
-- Аккаунт: хеш для входа на дешёвом Argon2 (16 МиБ) при общем с сейфом пароле, минимум 6 символов; выход не
-  блокирует сейф, почта открывается без входа, кэш почты не зашифрован; счётчик неудачных попыток в памяти.
-- Оболочка: медиа-ящик грузит адреса со страниц с системным принципалом (`TaboraMediaChild.sys.mjs:62`,
+- Server: the Stalwart admin API is reachable through the public `/jmap` with Basic auth once `mx.conf` is enabled; trust
+  in `X-Forwarded-For` (`proxy.inc:4`); Stalwart writes no log, fail2ban does not protect SMTP/IMAP, the nginx jails do not
+  read the log files; the Cloudflare token and secrets are visible in `ps` (`setup-tunnel.sh:12,26`, `dns.sh:10`,
+  `setup.sh:131`), permissions of `cloudflare.env` are not set, a single token with Tunnel Edit lives forever; `tabora-server` knows
+  the full password of the mail administrator; `dns.sh:8` gets the IP through `http://ifconfig.me`; TXT records are only
+  added (two SPF records break verification).
+- Vault and passwords: "Lock vault" does not lock the password storage (the key stays in Rust, `isLoggedIn` is always
+  true); the NSS primary password silently disappears on re-encryption; copies under NSS remain in `logins-backup.json`;
+  re-encryption is not atomic (a failure midway = loss of passwords); a damaged `tabora-vault.json` is silently replaced
+  with a new key (data loss); K does not change on a password change, on revoking the recovery key or on rebinding to
+  another account; secrets are copied without the "sensitive" flag.
+- Account: the login hash uses cheap Argon2 (16 MiB) while the password is shared with the vault, minimum 6 characters; signing out does not
+  lock the vault, mail opens without a sign-in, the mail cache is not encrypted; the failed attempt counter is in memory.
+- Shell: the media drawer loads addresses from pages with the system principal (`TaboraMediaChild.sys.mjs:62`,
   `drawer.js:844-886`).
-- Кошелёк: отравление адреса через исходящие нулевые переводы в истории; подменённому файлу кошелька доверяют
-  адреса приёма и контакты.
-- Обновления: обязательное обновление без проверки полей манифеста и без выхода при отключённых политикой
-  обновлениях; один channel.json на все платформы.
-- Настройки: `devtools.selfxss.count=5` (`build.py:354`), ping usage-reporting не выключен; исходники Firefox и
-  языковые пакеты скачиваются без проверки хешей.
+- Wallet: address poisoning through outgoing zero-value transfers in history; a tampered wallet file is trusted for
+  receiving addresses and contacts.
+- Updates: a mandatory update without validation of the manifest fields and with no way out when updates are disabled
+  by policy; one channel.json for all platforms.
+- Preferences: `devtools.selfxss.count=5` (`build.py:354`), the usage-reporting ping is not turned off; Firefox sources and
+  language packs are downloaded without hash verification.
 
 ## Low
 
-Файлы `chrome://browser/content/tabora/` читаемы сайтами (пакет browser с `contentaccessible=yes`) и выдают
-Tabora; акторы без `matches`; SIWE допускает домен верхнего документа; адреса TRON и Solana отдаются при
-заблокированном кошельке; лист Permit2 показывает не тот срок; программа SPL-токена берётся от RPC; задержка
-кнопки подписи 0,9 с; секреты в памяти и лист с фразой после блокировки; метаданные кодов не аутентифицированы;
-гонка создания сейфа; SVG страниц декодируется в родительском процессе; клик по кнопке cookie-баннера доверенный;
-имя файла при перетаскивании в «Загрузки» не очищается; падение при перетаскивании неизвестного пространства;
-ключ агента открытым текстом в prefs; нет CSP у mail.html и downloads.html; nginx `server_tokens`, нет
-default_server, `add_header` отменяет заголовки безопасности; бинарник Stalwart перезаписываем службой; слабое
-ограничение служб systemd; cloudflared и Stalwart не обновляются сами; ManageSieve открыт лишним.
+Files under `chrome://browser/content/tabora/` are readable by sites (the browser package with `contentaccessible=yes`) and reveal
+Tabora; actors without `matches`; SIWE allows the domain of the top document; TRON and Solana addresses are given out while
+the wallet is locked; the Permit2 sheet shows the wrong deadline; the SPL token program is taken from the RPC; the delay of
+the signing button is 0.9 s; secrets in memory and the sheet with the phrase after locking; code metadata is not authenticated;
+a race in vault creation; page SVG is decoded in the parent process; the click on a cookie banner button is trusted;
+the file name is not sanitized when dragging into "Downloads"; a crash when dragging an unknown space;
+the agent key in plaintext in prefs; no CSP on mail.html and downloads.html; nginx `server_tokens`, no
+default_server, `add_header` cancels security headers; the Stalwart binary is writable by the service; weak
+restriction of systemd services; cloudflared and Stalwart do not update themselves; ManageSieve is open unnecessarily.
 
-## Что проверено и надёжно
+## What was checked and is sound
 
-Открытого релея нет; PostgreSQL только localhost; MAR проверяется нашим ключом в правильно собранном
-обновляторе; origin кошелька из `documentPrincipal`, только HTTPS; EIP-712, `personal_sign`, TRON и Solana
-разбираются строго; AES-GCM со случайными nonce, границы KDF; почта и оболочка выводят текст через textContent;
-стартовая страница принимает только http(s); `javascript:` в системном контексте не выполняется; песочница,
-Remote Settings, CRLite, HTTPS-only не тронуты.
+No open relay; PostgreSQL is localhost only; the MAR is verified with our key in a correctly built
+updater; the wallet origin comes from `documentPrincipal`, HTTPS only; EIP-712, `personal_sign`, TRON and Solana
+are parsed strictly; AES-GCM with random nonces, KDF bounds; mail and the shell output text through textContent;
+the start page accepts only http(s); `javascript:` is not executed in the system context; the sandbox,
+Remote Settings, CRLite, HTTPS-only are untouched.

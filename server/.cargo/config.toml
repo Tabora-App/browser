@@ -1,4 +1,0 @@
-# Сборка для сервера (Linux x86_64, статически с musl) прямо с Mac: зависимости только на Rust,
-# поэтому хватает линкера из поставки Rust. Запуск: cargo build --release --target x86_64-unknown-linux-musl
-[target.x86_64-unknown-linux-musl]
-linker = "rust-lld"

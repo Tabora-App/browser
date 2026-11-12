@@ -95,11 +95,11 @@ const app = await build({
 // 2а. скрипт автоввода для страниц сайтов: один небольшой файл без зависимостей и с постоянным именем
 await build({ ...common, entryPoints: { fill: join(src, "src/phone/fill.js") }, format: "iife", outdir: join(out, "assets"), entryNames: "[name]", absWorkingDir: root, define: { __FILL_TEST_ORIGIN__: JSON.stringify(fillTest) } });
 
-// 3. шрифты — те же файлы, что у сайта и веб-версии
+// 3. fonts: the same files as the web app uses (web/fonts)
 mkdirSync(join(out, "assets/fonts"), { recursive: true });
-for (const f of readdirSync(join(root, "site/assets/fonts"))) {
+for (const f of readdirSync(join(src, "fonts"))) {
   if (f.endsWith(".woff2")) {
-    cpSync(join(root, "site/assets/fonts", f), join(out, "assets/fonts", f));
+    cpSync(join(src, "fonts", f), join(out, "assets/fonts", f));
   }
 }
 

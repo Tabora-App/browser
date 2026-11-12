@@ -1,57 +1,59 @@
-# Языки интерфейса
+# Interface languages
 
-Tabora есть на русском, английском, украинском и испанском. Язык берётся у системы (сайт и веб-версия —
-у браузера посетителя); для любого другого языка показывается английский.
+Tabora is available in Russian, English, Ukrainian and Spanish. The language is taken from the system (the website and the web app
+take it from the visitor's browser); for any other language English is shown.
 
-Исходный язык — русский: надписи пишутся в коде по-русски, для остальных языков есть словари
-«русская надпись → перевод». Ключ словаря — сама русская надпись, отдельных идентификаторов нет.
+The source language is Russian: strings are written in code in Russian, and the other languages have
+"Russian string → translation" dictionaries. The dictionary key is the Russian string itself; there are no separate identifiers.
 
-| Где | Как помечена надпись | Словари | Кто выбирает язык |
+| Where | How a string is marked | Dictionaries | Who chooses the language |
 | --- | --- | --- | --- |
-| Оболочка браузера (`src/browser/base/content/tabora`) | ``tt`…` `` из `i18n/I18n.sys.mjs` | `i18n/<язык>.json` → `tabora/i18n/<язык>.json` | язык интерфейса браузера |
-| Веб-версия (`web/`) | ``t`…` `` из `src/core/i18n.js` | `i18n/<язык>.json` | язык браузера, выбор на экране входа |
-| Сервер (`server/`) | обычные строки, перевод на выходе (`src/i18n.rs`) | `i18n/server/<язык>.json` | `Accept-Language` запроса, язык аккаунта для писем |
-| Сайт (`tools/site/pages`) | русский шаблон страницы | `i18n/site/<язык>.json` | адрес `/ru/`, `/en/`, `/uk/`, `/es/`; «/» — по `Accept-Language` |
-| Android (`src/mobile/android`) | ресурсы `tabora_strings.xml` | `values-<язык>/` | язык телефона |
-| Аккаунт в приложении Android (`web/src/phone`) | ``t`…` ``, как в веб-версии | `i18n/<язык>.json` | язык приложения; после смены — со следующего запуска |
-| Сам движок (меню, настройки, страницы ошибок) | Fluent | firefox-l10n, список в `configs/browser.json` (`locales`) | язык системы |
+| Browser shell (`src/browser/base/content/tabora`) | ``tt`…` `` from `i18n/I18n.sys.mjs` | `i18n/<lang>.json` → `tabora/i18n/<lang>.json` | the browser's interface language |
+| Web app (`web/`) | ``t`…` `` from `src/core/i18n.js` | `i18n/<lang>.json` | the browser's language, the choice on the sign-in screen |
+| Server (the server repository, Tabora-App/server) | plain strings, translated on output (`src/i18n.rs` there) | `i18n/<lang>.json` in the server repository | the request's `Accept-Language`, the account language for emails |
+| Website (the site repository, Tabora-App/site: `pages/index.html`) | a Russian page template | `i18n/<lang>.json` in the site repository | the address `/ru/`, `/en/`, `/uk/`, `/es/`; "/" — by `Accept-Language` |
+| Android (`src/mobile/android`) | `tabora_strings.xml` resources | `values-<lang>/` | the phone's language |
+| Account in the Android app (`web/src/phone`) | ``t`…` ``, as in the web app | `i18n/<lang>.json` | the app language; after a change — from the next launch |
+| The engine itself (menus, settings, error pages) | Fluent | firefox-l10n, the list in `browser.json` (`locales`) | the system language |
 
-## Оболочка браузера
+## Browser shell
 
-- ``tt`Отмена` `` — надпись; ``tt`Письмо от ${name}` `` — с подстановкой (в словаре «Письмо от {0}»).
-- `ttForm(n, tt`письмо|письма|писем`)` — форма слова для числа: в словаре у каждого языка столько
-  форм, сколько ему нужно (английский и испанский — две, украинский — три).
-- `ttr(text)` — перевод текста, пришедшего готовым: сообщения сервера и кода, общего с веб-версией
-  (оценка пароля, разбор писем, OpenPGP — он не помечается, чтобы копии совпадали буква в букву).
-- Надписи в разметке страниц (`mail.html`, `downloads.html`, `about.xhtml`) переводит
-  `translateDocument(document)` при загрузке.
-- Даты и числа — `ttLocale()`.
-- Одно русское слово бывает двумя разными на другом языке. Такое место помечается смыслом в конце
-  надписи: ``tt`Открыть@@сейф` `` (Unlock), ``tt`Вставить@@буфер` `` (Paste),
-  ``tt`Отменить@@действие` `` (Undo). Пометка — часть ключа, на экран не попадает.
-- Логика не должна зависеть от текста надписи: сравнивать коды и признаки, а не сообщения.
+- ``tt`Отмена` `` (Cancel) — a string; ``tt`Письмо от ${name}` `` (Message from …) — with a substitution (in the dictionary: `Письмо от {0}`).
+- `ttForm(n, tt`письмо|письма|писем`)` (message/messages) — the word form for a number: in the dictionary each language has as many
+  forms as it needs (English and Spanish — two, Ukrainian — three).
+- `ttr(text)` — translation of text that arrived ready-made: messages from the server and from code shared with the web app
+  (password strength estimation, message parsing, OpenPGP — that code is not tagged, so that the copies match letter for letter).
+- Strings in page markup (`mail.html`, `downloads.html`, `about.xhtml`) are translated by
+  `translateDocument(document)` on load.
+- Dates and numbers — `ttLocale()`.
+- One Russian word can be two different words in another language. Such a place is marked with a meaning at the end
+  of the string: ``tt`Открыть@@сейф` `` (Unlock), ``tt`Вставить@@буфер` `` (Paste),
+  ``tt`Отменить@@действие` `` (Undo). The mark is part of the key and never reaches the screen.
+- Logic must not depend on the text of a string: compare codes and flags, not messages.
 
-Язык надписей Tabora — язык интерфейса браузера (`intl.locale.requested` пуст, то есть «как в
-системе»; меняется в «Настройки → Языки», после перезапуска). Для проверки язык надписей Tabora
-можно задать настройкой `tabora.lang` (`en`, `uk`, `es`).
+The language of Tabora strings is the browser's interface language (`intl.locale.requested` is empty, that is, "same as
+the system"; it is changed in "Settings → Languages", after a restart). For checks, the language of Tabora strings
+can be set with the `tabora.lang` preference (`en`, `uk`, `es`).
 
-## Новая надпись
+## New string
 
-1. Написать по-русски с тегом. Пометить надписи в новом файле:
-   `node tools/i18n/wrap.mjs --write --tag=tt --import-spec=chrome://tabora/content/i18n/I18n.sys.mjs <файл>`
-   (для скриптов окна — `--script`, для веб-версии — `--import=web/src/core/i18n.js`).
-2. `node tools/i18n/extract.mjs <desktop|web|server> --todo` — список непереведённого в
-   `.build/i18n-todo-<набор>.json`.
-3. Перевести и принять: `node tools/i18n/merge.mjs <en|uk|es> <файл.json>` — проверяет подстановки
-   и число форм слова.
-4. `node tools/i18n/desktop.mjs` — пересобрать словари оболочки (они закоммичены; `--check` скажет,
-   если устарели). `node tools/i18n/prune.mjs` убирает надписи, которых больше нет в коде.
-5. `node tools/i18n/extract.mjs <набор> --strict` не пропускает непереведённое; выкладка веб-версии
-   и сборка сайта делают это сами.
+1. Write it in Russian with the tag. To tag the strings in a new file:
+   `node tools/i18n/wrap.mjs --write --tag=tt --import-spec=chrome://tabora/content/i18n/I18n.sys.mjs <file>`
+   (for window scripts — `--script`, for the web app — `--import=web/src/core/i18n.js`).
+2. `node tools/i18n/extract.mjs <desktop|web> --todo` — the list of untranslated strings in
+   `.build/i18n-todo-<set>.json`. Server strings have their own tool: `tools/i18n.mjs` in the server
+   repository (Tabora-App/server).
+3. Translate and accept: `node tools/i18n/merge.mjs <en|uk|es> <file.json>` — checks the substitutions
+   and the number of word forms.
+4. `node tools/i18n/desktop.mjs` — rebuild the shell dictionaries (they are committed; `--check` tells
+   if they are stale). `node tools/i18n/prune.mjs` removes strings that are no longer in the code.
+5. `node tools/i18n/extract.mjs <set> --strict` does not let untranslated strings through; the web app deployment
+   and the website build do this themselves.
 
-## Новый язык
+## New language
 
-Добавить код языка в `LANGS` (`tools/i18n/catalog.mjs`, `I18n.sys.mjs`, `web/src/core/i18n.js`,
-`server/src/i18n.rs`), порядок форм числа в `FORMS`, словари `i18n/<язык>.json`,
-`i18n/server/<язык>.json`, `i18n/site/<язык>.json`, язык движка в `configs/browser.json` и
-ресурсы Android (`docs/ANDROID.md`).
+Add the language code to `LANGS` (`tools/i18n/catalog.mjs`, `I18n.sys.mjs`, `web/src/core/i18n.js`,
+`src/i18n.rs` in the server repository), the order of number forms to `FORMS`, the dictionaries `i18n/<lang>.json`,
+`i18n/<lang>.json` in the server repository (Tabora-App/server), `i18n/<lang>.json` in the site repository
+(Tabora-App/site), the engine language to `browser.json` and
+the Android resources (`docs/ANDROID.md`).

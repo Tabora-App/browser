@@ -1,16 +1,16 @@
-# Обновления Tabora
+# Tabora updates
 
-- `<канал>/<цель сборки>/manifest.json` — подписанный (Ed25519) манифест цели: последняя версия,
-  минимально допустимая (ниже неё обновление обязательное; `0.0.0` — не обязательное), заметки, время
-  подписи (`issued`: клиент не примет манифест старее уже виденного), срок действия (`expires`:
-  просроченный манифест отвергается) и пакет для этой платформы (адрес, sha512, размер, buildID).
-- `<канал>/<цель сборки>/update.xml` — манифест штатного обновлятора движка (полный MAR в GitHub Releases).
-  Клиент принимает его, только если он совпадает с пакетом из `manifest.json`.
-- `channel.json` — общий манифест для старых сборок (до подписанных манифестов); `minimum` в нём не поднимается.
+- `<channel>/<build target>/manifest.json` — the signed (Ed25519) target manifest: the latest version,
+  the minimum allowed version (below it the update is mandatory; `0.0.0` — not mandatory), notes, the signing
+  time (`issued`: the client will not accept a manifest older than one it has already seen), the validity period (`expires`:
+  an expired manifest is rejected) and the package for this platform (address, sha512, size, buildID).
+- `<channel>/<build target>/update.xml` — the manifest of the engine's stock updater (a full MAR in GitHub Releases).
+  The client accepts it only if it matches the package from `manifest.json`.
+- `channel.json` — the shared manifest for old builds (before signed manifests); `minimum` in it is not raised.
 
-Файлы создаёт `tools/release.py` после упаковки сборки (вручную не править: подпись перестанет сходиться,
-и `release.py` откажется продлевать или использовать такой манифест); срок действия продлевает
-`tools/release.py refresh` (меняет только `issued` и `expires`). Пакеты подписываются ключом Tabora (вне репозитория,
-`TABORA_MAR_KEYS_DIR`), открытые сертификаты в `src/toolkit/mozapps/update/updater/`. Клиент читает
-манифесты по raw-адресам GitHub из настроек по умолчанию (`tabora.update.manifestUrl`, `tabora.update.url`).
-Подробно: `docs/UPDATES.md`.
+The files are created by `tools/release.py` after the build is packaged (do not edit them by hand: the signature will no longer match,
+and `release.py` will refuse to extend or use such a manifest); the validity period is extended by
+`tools/release.py refresh` (it changes only `issued` and `expires`). Packages are signed with the Tabora key (outside the repository,
+`TABORA_MAR_KEYS_DIR`); the public certificates are in `src/toolkit/mozapps/update/updater/`. The client reads
+the manifests from GitHub raw addresses taken from default preferences (`tabora.update.manifestUrl`, `tabora.update.url`).
+Details: `docs/UPDATES.md`.

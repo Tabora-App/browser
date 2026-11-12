@@ -84,9 +84,9 @@ const css = outName(app, cssEntry);
 // 3. статика
 cpSync(join(src, "static"), out, { recursive: true });
 mkdirSync(join(out, "assets/fonts"), { recursive: true });
-for (const f of readdirSync(join(root, "site/assets/fonts"))) {
+for (const f of readdirSync(join(src, "fonts"))) {
   if (f.endsWith(".woff2")) {
-    cpSync(join(root, "site/assets/fonts", f), join(out, "assets/fonts", f));
+    cpSync(join(src, "fonts", f), join(out, "assets/fonts", f));
   }
 }
 

@@ -1,36 +1,36 @@
-# Обновления Tabora
+# Tabora updates
 
-## Как устроено
+## How it works
 
-Скачивание и установку делает штатный обновлятор движка: полный MAR-пакет, проверка подписи,
-установка при перезапуске (staging в фоне). Своего загрузчика нет. Поверх него три уровня проверки.
+Downloading and installation are done by the engine's stock updater: a full MAR package, signature verification,
+installation on restart (staging in the background). There is no downloader of our own. On top of it there are three levels of verification.
 
-### 1. Пакет (MAR) — проверяет обновлятор
+### 1. Package (MAR) — verified by the updater
 
-- **Подпись.** MAR подписывается RSA-ключом Tabora (`tools/release.py` → `signmar`). Открытые
-  сертификаты `release_primary.der` и `release_secondary.der` из `src/toolkit/mozapps/update/updater/`
-  зашиваются в обновлятор вместо сертификатов Mozilla. Их SHA-256 закреплены в `tools/build.py`
-  (`MAR_CERT_SHA256`): `import`, `build`, `package` и `release.py` останавливаются, если файлы в `src/`
-  подменены (например, через PR).
-- **Канал.** `MAR_CHANNEL_ID=tabora-release` (`configs/common/mozconfig`): пакет другого канала
-  обновлятор отвергнет.
-- **Версия Tabora.** В MAR записывается версия продукта = `displayVersion` из `browser.json`
-  (а не версия Firefox). Обновлятор сравнивает её с версией Tabora, вшитой в него при сборке
+- **Signature.** The MAR is signed with Tabora's RSA key (`tools/release.py` → `signmar`). The public
+  certificates `release_primary.der` and `release_secondary.der` from `src/toolkit/mozapps/update/updater/`
+  are embedded into the updater instead of Mozilla's certificates. Their SHA-256 hashes are pinned in `tools/build.py`
+  (`MAR_CERT_SHA256`): `import`, `build`, `package` and `release.py` stop if the files in `src/`
+  have been replaced (for example, through a PR).
+- **Channel.** `MAR_CHANNEL_ID=tabora-release` (`configs/common/mozconfig`): the updater rejects a package
+  from another channel.
+- **Tabora version.** The MAR records the product version = `displayVersion` from `browser.json`
+  (not the Firefox version). The updater compares it with the Tabora version built into it at build time
   (`TABORA_APP_VERSION`: `browser/moz.configure.patch`, `updater-common.build.patch`, `updater.cpp.patch`),
-  и не ставит пакет с версией ниже установленной — даже если он собран на той же версии Firefox
-  и правильно подписан. Поэтому `displayVersion` поднимается при каждом выпуске; `release.py` не даст
-  выпустить версию ниже или равную уже опубликованной для этой платформы (кроме `--replace`).
-- **Проверка сборки перед выпуском.** `build.py package` и `release.py` проверяют упакованное
-  приложение: в `updater.app/…/org.mozilla.updater` и `Library/LaunchServices/org.mozilla.updater`
-  (Linux: `updater`) есть байты обоих наших DER, в `UpdateSettings.framework` (Linux: `update-settings.ini`)
-  есть `tabora-release`, в `application.ini` нет адреса Mozilla, `tabora.version` в omni.ja совпадает с
-  `browser.json`. Любое расхождение останавливает выпуск. Проверить вручную:
+  and does not install a package with a version lower than the installed one — even if it is built on the same Firefox version
+  and correctly signed. Therefore `displayVersion` is raised with every release; `release.py` will not allow
+  releasing a version lower than or equal to the one already published for this platform (except with `--replace`).
+- **Build check before release.** `build.py package` and `release.py` check the packaged
+  app: `updater.app/…/org.mozilla.updater` and `Library/LaunchServices/org.mozilla.updater`
+  (Linux: `updater`) contain the bytes of both our DER files, `UpdateSettings.framework` (Linux: `update-settings.ini`)
+  contains `tabora-release`, `application.ini` has no Mozilla address, `tabora.version` in omni.ja matches
+  `browser.json`. Any mismatch stops the release. To check manually:
   `python3 tools/release.py check`.
 
-### 2. Метаданные — подписанный манифест цели
+### 2. Metadata — the signed target manifest
 
-Для каждой цели (канал + `%BUILD_TARGET%`, например `release/Darwin_aarch64-gcc3`) свой файл
-`updates/<канал>/<цель>/manifest.json`:
+For each target (channel + `%BUILD_TARGET%`, for example `release/Darwin_aarch64-gcc3`) there is a separate file
+`updates/<channel>/<target>/manifest.json`:
 
 ```json
 {
@@ -39,222 +39,222 @@
 }
 ```
 
-`signed` — JSON-текст, подпись Ed25519 считается по его байтам UTF-8 (без канонизации). Поля:
-`format` (1), `channel`, `target`, `version`, `minimum` (`0.0.0` — обязательности нет), `notes` (до 2000
-символов), `notesUrl` (https), `published` (дата), `issued` (время подписи, UTC; растёт с каждой
-подписью), `expires` (UTC, по умолчанию `issued` + 90 дней, не больше 366), `update` — пакет для этой
-цели: `url` (https), `sha512`, `size`, `buildID`, `appVersion`.
+`signed` is JSON text; the Ed25519 signature is computed over its UTF-8 bytes (no canonicalization). Fields:
+`format` (1), `channel`, `target`, `version`, `minimum` (`0.0.0` — nothing is mandatory), `notes` (up to 2000
+characters), `notesUrl` (https), `published` (date), `issued` (signing time, UTC; grows with every
+signature), `expires` (UTC, by default `issued` + 90 days, at most 366), `update` — the package for this
+target: `url` (https), `sha512`, `size`, `buildID`, `appVersion`.
 
-- Клиент (`TaboraUpdate.sys.mjs`) проверяет подпись открытыми ключами из `MANIFEST_KEYS` (основной и
-  запасной; заменяются только новой сборкой), затем поля: формат версий `X.Y.Z`, длины, https,
-  `minimum ≤ version`, совпадение канала и цели, `issued` и `expires`. Текст с одиночными суррогатами
-  отвергается (иначе подпись сошлась бы на другом тексте).
-- **Срок действия.** Просроченный манифест (`now > expires`) отвергается целиком: обновления по нему
-  не ставятся, обязательность не включается. Манифест с `issued` дальше суток в будущем тоже не
-  принимается. Уже проверенная запись в памяти действует только до своего `expires`.
-- **Защита от отката.** Клиент хранит наибольший виденный `issued` в настройке профиля
-  `tabora.update.manifestIssued.<канал>.<цель>` (и в памяти сеанса) и отвергает манифест с меньшим
-  значением — в том числе правильно подписанный старый с прежней версией или `minimum`. Значение из
-  профиля дальше суток в будущем считается испорченным и не учитывается (порча «вперёд» не отключит
-  обновления навсегда; в пределах суток — до следующей подписи). Поэтому каждая подпись (`manifest`,
-  `refresh`) ставит `issued` строго больше прежнего.
-- **Устаревшие сведения.** Если сервер отдаёт просроченный манифест, срок проверенного истёк или
-  действительного манифеста нет больше 14 дней (`tabora.update.manifestOkAt.<канал>.<цель>`), «О программе»
-  при любом состоянии обновлятора (в том числе «обновлений нет») показывает «Сведения об обновлениях
-  устарели…», а внизу окна появляется красная плашка с кнопками «Открыть сайт», «Проверить снова»,
-  «Позже». Манифесты нужно переподписывать не реже, чем раз в срок, даже без выпуска:
-  `python3 tools/release.py refresh` и пуш `updates/`.
-- `update.xml` (`updates/<канал>/<цель>/update.xml`) сам не подписан. UpdateService
-  (`UpdateService.sys.mjs.patch`) до разбора оставляет в `<update>` только атрибуты `taboraVersion`,
-  `appVersion`, `buildID`, а в `<patch>` — `type`, `URL`, `size`, `hashFunction`, `hashValue`
+- The client (`TaboraUpdate.sys.mjs`) verifies the signature with the public keys from `MANIFEST_KEYS` (primary and
+  secondary; replaced only by a new build), then the fields: the `X.Y.Z` version format, lengths, https,
+  `minimum ≤ version`, matching channel and target, `issued` and `expires`. Text with lone surrogates
+  is rejected (otherwise the signature would match a different text).
+- **Validity period.** An expired manifest (`now > expires`) is rejected entirely: no updates
+  are installed from it, and mandatory status is not turned on. A manifest with `issued` more than a day in the future is not
+  accepted either. An already verified record in memory is valid only until its `expires`.
+- **Rollback protection.** The client stores the largest `issued` it has seen in the profile preference
+  `tabora.update.manifestIssued.<channel>.<target>` (and in session memory) and rejects a manifest with a smaller
+  value — including a correctly signed old one with a previous version or `minimum`. A value from
+  the profile that is more than a day in the future is considered corrupted and is ignored (corruption "forward" will not disable
+  updates forever; within a day — until the next signature). Therefore every signature (`manifest`,
+  `refresh`) sets `issued` strictly greater than the previous one.
+- **Stale information.** If the server serves an expired manifest, the verified one has expired, or
+  there has been no valid manifest for more than 14 days (`tabora.update.manifestOkAt.<channel>.<target>`), the "About" window
+  shows "Update information is out of date…" in any updater state (including "no updates"),
+  and a red banner appears at the bottom of the window with the buttons "Open website", "Check again",
+  "Later". Manifests must be re-signed at least once per validity period, even without a release:
+  `python3 tools/release.py refresh` and a push of `updates/`.
+- `update.xml` (`updates/<channel>/<target>/update.xml`) is not signed itself. Before parsing, UpdateService
+  (`UpdateService.sys.mjs.patch`) leaves in `<update>` only the attributes `taboraVersion`,
+  `appVersion`, `buildID`, and in `<patch>` — `type`, `URL`, `size`, `hashFunction`, `hashValue`
   (`sanitizeUpdateElement`): `actions`, `openURL`, `promptWaitTime`, `detailsURL`, `name`, `unsupported`
-  и любые другие до обновлятора не доходят. Затем принимается только `<update>` с одним полным
-  патчем, совпадающий с `update` из проверенного манифеста: `taboraVersion`, `buildID`, `appVersion`,
-  адрес, размер и sha512 пакета. `displayVersion`, `type` (`minor`), адрес заметок и имя обновления
-  подставляются из манифеста. Обновление с версией Tabora не выше установленной отбрасывается. Без
-  действительного манифеста обновлений нет.
-- **sha512 пакета.** После скачивания `Downloader._verifyDownload` считает SHA-512 файла и сверяет с
-  `hashValue` патча (он равен `update.sha512` из подписанного манифеста); при расхождении файл
-  удаляется, патч без sha512 не принимается. Так пакет проверен ещё до передачи обновлятору
-  (который отдельно проверяет подпись MAR).
-- `updates/channel.json` — старый общий манифест для сборок до этой схемы. Их обновлятор не принимает
-  наши пакеты (старые сертификаты), поэтому `release.py` пишет туда только версию и заметки, а
-  `minimum` не поднимает: старые копии видят новую версию и ставятся с сайта, но не блокируются.
+  and any others never reach the updater. Then only an `<update>` with a single complete
+  patch is accepted, and only if it matches `update` from the verified manifest: `taboraVersion`, `buildID`, `appVersion`,
+  the package address, size and sha512. `displayVersion`, `type` (`minor`), the notes address and the update name
+  are filled in from the manifest. An update whose Tabora version is not higher than the installed one is discarded. Without
+  a valid manifest there are no updates.
+- **Package sha512.** After the download, `Downloader._verifyDownload` computes the SHA-512 of the file and compares it with
+  the patch's `hashValue` (it equals `update.sha512` from the signed manifest); on a mismatch the file
+  is deleted; a patch without sha512 is not accepted. So the package is verified even before it is handed to the updater
+  (which separately verifies the MAR signature).
+- `updates/channel.json` is the old shared manifest for builds made before this scheme. Their updater does not accept
+  our packages (old certificates), so `release.py` writes only the version and notes there and
+  does not raise `minimum`: old copies see the new version and are installed from the website, but are not blocked.
 
-### 3. Адреса
+### 3. Addresses
 
-`tabora.update.url` (шаблон update.xml) и `tabora.update.manifestUrl` (шаблон манифеста) читаются
-только из **настроек по умолчанию** (`Services.prefs.getDefaultBranch("")`): значение, заданное
-пользователем, в about:config или user.js, не действует. Только https; ответ с другого хоста
-(перенаправление) не принимается. `%CHANNEL%` в обоих адресах подставляет `TaboraUpdate.fixChannel`:
-это `app.update.channel` из настроек по умолчанию, без пользовательских `app.partner.*`, которые
-штатный `UpdateUtils.UpdateChannel` дописал бы в адрес. Адрес из `application.ini` не используется вовсе (там теперь
-`https://tabora.app/…` вместо aus5.mozilla.org, `updateHost` в `browser.json`); запасного адреса нет.
-Политика `AppUpdateURL` учитывается, только если это https, и всё равно проходит сверку с манифестом.
+`tabora.update.url` (the update.xml template) and `tabora.update.manifestUrl` (the manifest template) are read
+only from **default preferences** (`Services.prefs.getDefaultBranch("")`): a value set by
+the user, in about:config or user.js, has no effect. https only; a response from another host
+(a redirect) is not accepted. `%CHANNEL%` in both addresses is filled in by `TaboraUpdate.fixChannel`:
+it is `app.update.channel` from default preferences, without the user's `app.partner.*` values, which
+the stock `UpdateUtils.UpdateChannel` would append to the address. The address from `application.ini` is not used at all (it now holds
+`https://tabora.app/…` instead of aus5.mozilla.org, `updateHost` in `browser.json`); there is no fallback address.
+The `AppUpdateURL` policy is honored only if it is https, and it still goes through the comparison with the manifest.
 
-### Обязательное обновление
+### Mandatory update
 
-Текущая версия ниже `minimum` из проверенного непросроченного манифеста — обновление обязательное, но
-экран-стена показывается, только если: для этой цели в манифесте есть пакет с версией ≥ `minimum`; обновления не
-отключены политикой; есть обновлятор и права на установку (`canUsuallyApplyUpdates`); штатный обновлятор
-не ответил «обновлений нет», «только вручную», «система не поддерживается». Иначе — плашка, при
-недоступном обновляторе с кнопкой «Скачать с сайта». На стене всегда есть «Скачать с сайта»
-(адрес `app.update.url.manual`, только https из настроек по умолчанию), «Повторить», «Выйти»; ⌘Q / Ctrl+Q
-работают, кнопки стены доступны с клавиатуры.
+If the current version is lower than `minimum` from a verified, unexpired manifest, the update is mandatory, but
+the wall screen is shown only if: the manifest has a package for this target with a version ≥ `minimum`; updates are not
+disabled by policy; there is an updater and permission to install (`canUsuallyApplyUpdates`); the stock updater
+has not answered "no updates", "manual only", "system not supported". Otherwise — a banner, with
+a "Download from website" button when the updater is unavailable. The wall always has "Download from website"
+(the address `app.update.url.manual`, https only, from default preferences), "Try again", "Quit"; ⌘Q / Ctrl+Q
+work, and the wall's buttons are reachable from the keyboard.
 
-### Интерфейс
+### Interface
 
-`src/browser/base/content/tabora/update/`: необязательное — плашка внизу окна «Доступна версия … ·
-Позже · Обновить/Перезапустить», напоминание раз в сутки; обязательное — экран поверх окна с прогрессом;
-устаревшие сведения — красная плашка (см. выше), «Позже» скрывает её на сутки.
-Проверка через 8 с после запуска и раз в час, вручную — в окне «О программе».
+`src/browser/base/content/tabora/update/`: optional — a banner at the bottom of the window "Version … is available ·
+Later · Update/Restart", a reminder once a day; mandatory — a screen over the window with progress;
+stale information — a red banner (see above), "Later" hides it for a day.
+A check runs 8 s after startup and once an hour; manually — in the "About" window.
 
-## Ключи
+## Keys
 
-Ключи лежат **вне репозитория**:
+Keys are kept **outside the repository**:
 
-| Что | Где (по умолчанию) | Переменная |
+| What | Where (default) | Variable |
 |---|---|---|
-| Основной ключ MAR (NSS: cert9.db, key4.db, pkcs11.txt) и ключ манифестов `manifest-ed25519.pem` | `~/.config/tabora/mar-keys` | `TABORA_MAR_KEYS_DIR` |
-| Запасной ключ MAR и запасной ключ манифестов | `~/.config/tabora/mar-keys-secondary` | `TABORA_MAR_SECONDARY_KEYS_DIR` |
-| Пароль NSS-базы и PEM (если задан) | — | `TABORA_MAR_KEYS_PASSWORD_FILE` |
+| Primary MAR key (NSS: cert9.db, key4.db, pkcs11.txt) and the manifest key `manifest-ed25519.pem` | `~/.config/tabora/mar-keys` | `TABORA_MAR_KEYS_DIR` |
+| Secondary MAR key and secondary manifest key | `~/.config/tabora/mar-keys-secondary` | `TABORA_MAR_SECONDARY_KEYS_DIR` |
+| Password of the NSS database and the PEM (if set) | — | `TABORA_MAR_KEYS_PASSWORD_FILE` |
 
-`release.py` откажется работать с базой внутри репозитория или с каталогом, доступным другим
-пользователям (нужны `chmod 700` на каталог и `600` на файлы).
+`release.py` refuses to work with a database inside the repository or with a directory accessible to other
+users (the directory needs `chmod 700` and the files `600`).
 
-- **Пароль.** signmar поддерживает NSS-базу с паролем: без `TABORA_MAR_KEYS_PASSWORD_FILE` он спросит
-  пароль в терминале, в CI пароль подаётся из секрета через файл. Задать пароль (один раз, обе базы):
+- **Password.** signmar supports a password-protected NSS database: without `TABORA_MAR_KEYS_PASSWORD_FILE` it asks for
+  the password in the terminal; in CI the password is supplied from a secret through a file. To set the password (once, both databases):
   ```sh
   DYLD_LIBRARY_PATH=engine/obj-darwin-aarch64/dist/bin engine/obj-darwin-aarch64/dist/bin/certutil -W -d sql:$HOME/.config/tabora/mar-keys
   DYLD_LIBRARY_PATH=engine/obj-darwin-aarch64/dist/bin engine/obj-darwin-aarch64/dist/bin/certutil -W -d sql:$HOME/.config/tabora/mar-keys-secondary
-  # PEM-ключ манифестов — тем же паролем:
+  # the manifest PEM key — with the same password:
   openssl pkcs8 -topk8 -v2 aes-256-cbc -in ~/.config/tabora/mar-keys/manifest-ed25519.pem -out /tmp/m.pem && mv /tmp/m.pem ~/.config/tabora/mar-keys/manifest-ed25519.pem && chmod 600 ~/.config/tabora/mar-keys/manifest-ed25519.pem
   ```
-- **Запасной ключ — офлайн.** Каталог `mar-keys-secondary` нужен только при утрате или компрометации
-  основного (`release.py … --key secondary`). Храните его вне этой машины: зашифрованный носитель
-  (например, образ APFS с шифрованием или VeraCrypt) в двух физических местах, с паролем; после переноса
-  удалите копию с диска. В CI он не нужен и в секреты не кладётся.
-- **Потеря обоих ключей** означает, что установленные копии не примут новые пакеты: только переустановка
-  с сайта.
-- **CI.** Секреты окружения `release`: `TABORA_MAR_KEYS` = `tar -cz -C ~/.config/tabora mar-keys | base64`
-  (только основной каталог), при пароле — `TABORA_MAR_KEYS_PASSWORD`.
-- **Смена ключа манифестов**: сгенерировать новый Ed25519, добавить его открытый ключ в `MANIFEST_KEYS`
-  (`TaboraUpdate.sys.mjs`), выпустить сборку, и только когда она разойдётся — подписывать новым.
-  `release.py` проверяет, что ключ, которым подписывается манифест, зашит в клиент.
+- **The secondary key is offline.** The `mar-keys-secondary` directory is needed only if the primary key is lost or
+  compromised (`release.py … --key secondary`). Keep it off this machine: on encrypted media
+  (for example, an encrypted APFS image or VeraCrypt) in two physical locations, with a password; after moving it,
+  delete the copy from the disk. It is not needed in CI and is not put into secrets.
+- **Losing both keys** means that installed copies will not accept new packages: only a reinstall
+  from the website.
+- **CI.** Secrets of the `release` environment: `TABORA_MAR_KEYS` = `tar -cz -C ~/.config/tabora mar-keys | base64`
+  (the primary directory only), and with a password — `TABORA_MAR_KEYS_PASSWORD`.
+- **Changing the manifest key**: generate a new Ed25519 key, add its public key to `MANIFEST_KEYS`
+  (`TaboraUpdate.sys.mjs`), release a build, and only once it has spread — sign with the new key.
+  `release.py` checks that the key signing the manifest is embedded in the client.
 
-## Выпуск версии
+## Releasing a version
 
-### Локально (macOS)
+### Locally (macOS)
 
-1. Поднять `displayVersion` в `browser.json`, собрать и упаковать:
+1. Raise `displayVersion` in `browser.json`, build and package:
    `python3 tools/build.py import && python3 tools/build.py build && python3 tools/build.py package`
-   (package проверит обновлятор).
-2. `python3 tools/release.py publish --notes "Что нового"` — соберёт MAR из
-   `engine/obj-*/dist/tabora/Tabora.app` (символические ссылки не разыменовываются и запрещены),
-   подпишет основным ключом, проверит подпись по DER из `src/`, канал и версию в MAR, напишет
-   `manifest.json`, `update.xml`, `channel.json`, создаст релиз `vX.Y.Z` на GitHub с MAR и dmg (тег —
-   на текущий коммит, если он уже отправлен на GitHub).
-3. Закоммитить и запушить `updates/`: только после этого клиенты увидят обновление. Чтобы сделать
-   обновление обязательным задним числом: `python3 tools/release.py manifest --minimum X.Y.Z` и пуш.
+   (package checks the updater).
+2. `python3 tools/release.py publish --notes "What's new"` — builds the MAR from
+   `engine/obj-*/dist/tabora/Tabora.app` (symbolic links are not dereferenced and are forbidden),
+   signs it with the primary key, verifies the signature against the DER from `src/`, the channel and the version in the MAR, writes
+   `manifest.json`, `update.xml`, `channel.json`, creates the `vX.Y.Z` release on GitHub with the MAR and the dmg (the tag is
+   on the current commit, if it has already been pushed to GitHub).
+3. Commit and push `updates/`: only after that do clients see the update. To make
+   an update mandatory after the fact: `python3 tools/release.py manifest --minimum X.Y.Z` and a push.
 
-Правила `release.py` для уже лежащих в `updates/` файлов (их можно изменить коммитом, поэтому сами по
-себе они не доверенные):
+`release.py` rules for files already in `updates/` (they can be changed by a commit, so by
+themselves they are not trusted):
 
-- прежний `manifest.json` используется, только если его подпись проверена ключами `MANIFEST_KEYS` и
-  канал с целью совпадают с каталогом; иначе `mar`, `manifest`, `publish` и `refresh` останавливаются
-  (восстановить файл из git или удалить его, если цель выпускается заново);
-- `--minimum`: без флага берётся `minimum` из проверенного прежнего манифеста (об этом печатается
-  строка), а при первом выпуске цели — `0.0.0`, то есть обновление не обязательное. Обязательным его
-  делает только явный `--minimum`; понижение печатается предупреждением;
-- `--notes`: без флага заметки наследуются только при переподписи той же версии, для новой версии — пусто;
-- версия ниже уже выпущенной не подписывается (манифест отката);
-- `refresh` сначала проверяет подписи всех манифестов (не проверен хоть один — не переподписывается
-  ни один), меняет только `issued` и `expires` и печатает, что изменилось.
+- the previous `manifest.json` is used only if its signature is verified with the `MANIFEST_KEYS` keys and
+  its channel and target match the directory; otherwise `mar`, `manifest`, `publish` and `refresh` stop
+  (restore the file from git, or delete it if the target is being released anew);
+- `--minimum`: without the flag, `minimum` is taken from the verified previous manifest (a line is printed
+  about this), and on the first release of a target — `0.0.0`, that is, the update is not mandatory. Only
+  an explicit `--minimum` makes it mandatory; a decrease is printed as a warning;
+- `--notes`: without the flag, notes are inherited only when re-signing the same version; for a new version — empty;
+- a version lower than the one already released is not signed (a rollback manifest);
+- `refresh` first verifies the signatures of all manifests (if even one is not verified, none
+  is re-signed), changes only `issued` and `expires`, and prints what changed.
 
-Релизы GitHub **неизменяемы** (в репозитории включены immutable releases): после публикации файлы
-релиза и тег нельзя заменить или удалить. Повторный выпуск той же версии (`--replace`) в
-опубликованный релиз невозможен — поднимайте `displayVersion`. Следствие: все платформы одной версии
-нужно загрузить до публикации релиза; сейчас выпускается одна цель (`Darwin_aarch64-gcc3`), для
-нескольких целей публикацию придётся разделить (общий черновик → публикация после последней цели).
+GitHub releases are **immutable** (immutable releases are enabled in the repository): after publication, the release
+files and the tag cannot be replaced or deleted. Re-releasing the same version (`--replace`) into
+a published release is impossible — raise `displayVersion`. Consequence: all platforms of one version
+must be uploaded before the release is published; currently one target is released (`Darwin_aarch64-gcc3`); for
+several targets, publication will have to be split (a shared draft → publication after the last target).
 
-### В CI
+### In CI
 
-1. Workflow **Build** (ветка main, раннер `ubuntu-24.04`) → артефакт `tabora-<платформа>` с dmg и
-   `tabora-app-<платформа>.tar` (упакованное приложение для MAR). Перед сборкой проверяется
-   воспроизводимость вендорных бандлов (`tools/wallet-vendor/verify.sh`, `tools/vault-vendor/verify.sh`);
-   то же делает лёгкий workflow **Verify vendor bundles** на push в main и в PR (без секретов,
-   `contents: read`). Сборка на Blacksmith годится для проверки, но не для выпуска.
-2. Workflow **Release** (только из main) с ID этого запуска:
-   - `verify` — проверяет входные данные (minimum `^[0-9]+\.[0-9]+\.[0-9]+$`, notes до 2000) и через
-     `gh api`, что запуск — успешный Build из main этого репозитория, коммит входит в main, артефакт
-     есть, все задания запуска (во всех попытках) выполнены на раннерах GitHub (`runner_group_name`
-     «GitHub Actions», метки `ubuntu-24.04`/`ubuntu-24.04-arm`), а релиз этой версии ещё не опубликован;
-   - `sign` (environment `release`) — скрипты (`tools/release.py`, `tools/build.py`), сертификаты MAR и
-     `MANIFEST_KEYS` берутся из **текущего main** (коммит, с которого запущен Release), а из коммита
-     сборки — только версия Tabora и версия/хеш исходников Firefox (подставляются в `browser.json`);
-     собирает signmar из исходников Firefox и системной NSS, распаковывает приложение без ссылок,
-     собирает и подписывает MAR, пишет манифесты; бинарники из артефакта не запускаются, ключи лежат
-     в `$RUNNER_TEMP` с правами 600 и удаляются в конце. Если сертификаты в main сменились после
-     сборки, проверка приложения остановит выпуск (нужна новая сборка);
-   - `publish` (без ключей) — готовит коммит манифестов этой цели и проверяет, что он ложится на
-     актуальный main (`fetch`, `rebase`, `push --dry-run`); создаёт **черновик** релиза с тегом на
-     коммите сборки (`--target <head_sha>`; существующий тег версии должен указывать на него же);
-     пушит манифесты в main (до трёх попыток с rebase); при сбое пуша черновик удаляется; после
-     пуша релиз публикуется и проверяется, что тег стоит на коммите сборки. Если публикация не
-     удалась после пуша, задание падает с подсказкой `gh release edit vX.Y.Z --draft=false`.
-   Все inputs передаются в скрипты только через `env:`. Без `minimum` обновление не обязательное.
-3. Настройки репозитория (делает владелец): environment `release` с обязательным ревьюером и
-   правилом «Deployment branches: только main»; секреты `TABORA_MAR_KEYS` (и `TABORA_MAR_KEYS_PASSWORD`)
-   — секретами этого environment, а не репозитория. Если main защищена, разрешить `github-actions`
-   пуш в `updates/` (или убрать шаг коммита и пушить вручную). Immutable releases включены
-   (`gh api repos/Tabora-App/browser/immutable-releases`; выключить — `-X DELETE`).
+1. The **Build** workflow (main branch, `ubuntu-24.04` runner) → the `tabora-<platform>` artifact with the dmg and
+   `tabora-app-<platform>.tar` (the packaged app for the MAR). Before the build,
+   the reproducibility of the vendor bundles is verified (`tools/wallet-vendor/verify.sh`, `tools/vault-vendor/verify.sh`);
+   the lightweight **Verify vendor bundles** workflow does the same on push to main and in PRs (no secrets,
+   `contents: read`). A build on Blacksmith is fine for checking, but not for release.
+2. The **Release** workflow (from main only) with the ID of that run:
+   - `verify` — checks the inputs (minimum `^[0-9]+\.[0-9]+\.[0-9]+$`, notes up to 2000) and, through
+     `gh api`, that the run is a successful Build from main of this repository, the commit is part of main, the artifact
+     exists, all jobs of the run (in all attempts) ran on GitHub runners (`runner_group_name`
+     "GitHub Actions", labels `ubuntu-24.04`/`ubuntu-24.04-arm`), and the release of this version is not published yet;
+   - `sign` (environment `release`) — the scripts (`tools/release.py`, `tools/build.py`), the MAR certificates and
+     `MANIFEST_KEYS` are taken from the **current main** (the commit from which Release was started), and from the build
+     commit — only the Tabora version and the version/hash of the Firefox sources (they are substituted into `browser.json`);
+     it builds signmar from the Firefox sources and the system NSS, unpacks the app without links,
+     builds and signs the MAR, writes the manifests; binaries from the artifact are not executed, the keys are kept
+     in `$RUNNER_TEMP` with mode 600 and deleted at the end. If the certificates in main have changed since
+     the build, the app check stops the release (a new build is needed);
+   - `publish` (no keys) — prepares the commit with this target's manifests and checks that it applies onto
+     the current main (`fetch`, `rebase`, `push --dry-run`); creates a **draft** release with the tag on
+     the build commit (`--target <head_sha>`; an existing version tag must point to the same commit);
+     pushes the manifests to main (up to three attempts with rebase); if the push fails, the draft is deleted; after
+     the push the release is published and it is verified that the tag is on the build commit. If publication
+     fails after the push, the job fails with the hint `gh release edit vX.Y.Z --draft=false`.
+   All inputs are passed to scripts only through `env:`. Without `minimum` the update is not mandatory.
+3. Repository settings (done by the owner): the `release` environment with a required reviewer and
+   the rule "Deployment branches: main only"; the secrets `TABORA_MAR_KEYS` (and `TABORA_MAR_KEYS_PASSWORD`)
+   — as secrets of this environment, not of the repository. If main is protected, allow `github-actions`
+   to push to `updates/` (or remove the commit step and push manually). Immutable releases are enabled
+   (`gh api repos/Tabora-App/browser/immutable-releases`; to disable — `-X DELETE`).
 
-### Исходники Firefox
+### Firefox sources
 
-`build.py update` и `download` (когда `firefox.sha512` не закреплён) берут хеш из `SHA512SUMS`
-archive.mozilla.org и проверяют его подпись ключом Mozilla через gpg. Без gpg это ошибка: хеш не
-закрепляется. Осознанный пропуск — общий флаг `python3 tools/build.py --no-gpg update` (хеш тогда
-нужно сверить на машине с gpg до коммита).
+`build.py update` and `download` (when `firefox.sha512` is not pinned) take the hash from `SHA512SUMS` on
+archive.mozilla.org and verify its signature with Mozilla's key through gpg. Without gpg this is an error: the hash is not
+pinned. A deliberate skip is the global flag `python3 tools/build.py --no-gpg update` (the hash must then
+be checked on a machine with gpg before committing).
 
 ## Safe Browsing
 
-Без ключа Google Safe Browsing провайдеры Google не работают (фишинг и вредоносные загрузки не
-проверяются), а в настройках выводится предупреждение. Ключ подключается при сборке из файла:
-`$TABORA_SAFEBROWSING_KEYFILE` или `~/.config/tabora/safebrowsing.key` (`configs/common/mozconfig`), в CI —
-из секрета `SAFEBROWSING_API_KEY`.
+Without a Google Safe Browsing key, the Google providers do not work (phishing and malicious downloads are not
+checked), and a warning is shown in settings. The key is supplied at build time from a file:
+`$TABORA_SAFEBROWSING_KEYFILE` or `~/.config/tabora/safebrowsing.key` (`configs/common/mozconfig`), in CI —
+from the `SAFEBROWSING_API_KEY` secret.
 
-Как получить ключ (владелец): Google Cloud Console → новый проект → «APIs & Services» → включить
-**Safe Browsing API** → «Credentials» → «Create credentials» → API key → ограничить ключ этим API.
-Ключ попадает в сборку открыто (как у Firefox), поэтому ограничение по API обязательно. Для
-коммерческого продукта у Google есть отдельные условия (Web Risk API); Mozilla использует ключ по
-договорённости с Google — проверьте условия перед выпуском. Сохранить:
-`umask 077; printf '%s' 'КЛЮЧ' > ~/.config/tabora/safebrowsing.key` и добавить секрет в GitHub.
+How to get a key (the owner): Google Cloud Console → a new project → "APIs & Services" → enable
+**Safe Browsing API** → "Credentials" → "Create credentials" → API key → restrict the key to this API.
+The key ends up in the build in the clear (as with Firefox), so the API restriction is mandatory. For
+a commercial product Google has separate terms (Web Risk API); Mozilla uses its key under
+an agreement with Google — check the terms before release. To save:
+`umask 077; printf '%s' 'KEY' > ~/.config/tabora/safebrowsing.key` and add the secret on GitHub.
 
-## Подпись дополнений и русский интерфейс
+## Add-on signing and the Russian interface
 
-Обязательная подпись дополнений включена (`MOZ_REQUIRE_SIGNING` по умолчанию для релиза, неподписанные
-области `app,system` не разрешаются). Раньше её снимали ради языкового пакета с нашим брендингом
-(подпись Mozilla при замене файлов становится недействительной). Теперь перевод встраивается в саму
-сборку: `build.py download`/`package` берут `ru` из монорепозитория `mozilla-l10n/firefox-l10n` на
-ревизии из `browser/locales/l10n-changesets.json` (частичная выборка в `.build/l10n-central`, путь
-передаётся `--with-l10n-base`), а `build.py package` вызывает `mach package-multi-locale --locales en-US ru`.
-Брендинг для ru берётся из нашего `browser/branding/release/locales/en-US` (Tabora). В профилях, где
-стоял старый неподписанный пакет `langpack-ru@firefox.mozilla.org`, он станет «неподтверждённым» и
-отключится; интерфейс при этом остаётся русским из самой сборки.
+Mandatory add-on signing is enabled (`MOZ_REQUIRE_SIGNING` is the default for release; the unsigned
+scopes `app,system` are not allowed). Previously it was removed for the sake of a language pack with our branding
+(the Mozilla signature becomes invalid when files are replaced). Now the translation is built into the
+build itself: `build.py download`/`package` take `ru` from the `mozilla-l10n/firefox-l10n` monorepo at
+the revision from `browser/locales/l10n-changesets.json` (a partial checkout in `.build/l10n-central`; the path
+is passed with `--with-l10n-base`), and `build.py package` calls `mach package-multi-locale --locales en-US ru`.
+Branding for ru is taken from our `browser/branding/release/locales/en-US` (Tabora). In profiles that
+had the old unsigned package `langpack-ru@firefox.mozilla.org`, it will become "unverified" and
+be disabled; the interface stays Russian from the build itself.
 
-## Переход со старых сборок
+## Migrating from old builds
 
-Сборки до этой схемы (dmg от 8 ноября и ранее) содержат обновлятор с сертификатами Mozilla и
-`UpdateSettings` без канала — MAR Tabora они не примут (а `UpdateSettings.framework` пакет не
-перезаписывает). Их нужно один раз переустановить из нового dmg; дальше обновления идут через MAR.
+Builds made before this scheme (the dmg of November 8 and earlier) contain an updater with Mozilla certificates and
+`UpdateSettings` without a channel — they will not accept a Tabora MAR (and the package does not
+overwrite `UpdateSettings.framework`). They need to be reinstalled once from the new dmg; after that updates go through MAR.
 
-## Проверка
+## Verification
 
-- Модуль: `node` + заглушки (подпись, поля, срок действия и откат манифеста, белый список атрибутов и
-  фильтр update.xml, адреса только из настроек по умолчанию); `release.py` — с временным ключом Ed25519
-  (подмена `updates/`, `refresh`, `minimum`).
-- Упакованное приложение: `python3 tools/release.py check`.
-- Подпись MAR: `signmar -T <mar>` (канал, версия), `signmar -D src/toolkit/mozapps/update/updater/release_primary.der -v <mar>`.
-- Сквозная проверка установки возможна только на упакованном приложении (в сборке для разработки
-  `canApplyUpdates = false`): установить dmg, выпустить тестовую версию, дождаться плашки.
-- Вендорные бандлы: `sh tools/wallet-vendor/verify.sh`, `sh tools/vault-vendor/verify.sh`.
+- Module: `node` + stubs (signature, fields, manifest expiry and rollback, the attribute allowlist and
+  the update.xml filter, addresses only from default preferences); `release.py` — with a temporary Ed25519 key
+  (tampering with `updates/`, `refresh`, `minimum`).
+- Packaged app: `python3 tools/release.py check`.
+- MAR signature: `signmar -T <mar>` (channel, version), `signmar -D src/toolkit/mozapps/update/updater/release_primary.der -v <mar>`.
+- An end-to-end installation check is possible only with a packaged app (in a development build
+  `canApplyUpdates = false`): install the dmg, release a test version, wait for the banner.
+- Vendor bundles: `sh tools/wallet-vendor/verify.sh`, `sh tools/vault-vendor/verify.sh`.

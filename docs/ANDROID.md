@@ -1,266 +1,266 @@
-# Tabora для Android
+# Tabora for Android
 
-Приложение для Android собирается из того же дерева исходников Firefox, что и браузер для
-компьютера: движок GeckoView и приложение `mobile/android/fenix`. Наши изменения лежат там же,
-где и остальные, — в `src/` (зеркало дерева движка, `tools/build.py import`).
+The Android app is built from the same Firefox source tree as the desktop browser: the GeckoView
+engine and the `mobile/android/fenix` app. Our changes live in the same place as all the others:
+in `src/` (a mirror of the engine tree, `tools/build.py import`).
 
-Состояние: браузер под именем Tabora со встроенным блокировщиком рекламы и без сервисов Mozilla;
-вход в аккаунт Tabora (паролем или по QR-коду с компьютера), синхронизация вкладок, закладок и
-паролей сайтов с другими устройствами аккаунта, коды входа (второй шаг на сайтах) с автовводом,
-почта аккаунта, пространства (свои вкладки и входы на сайтах у каждого). Кошелька в приложении пока нет.
+Status: a browser named Tabora with a built-in ad blocker and without Mozilla services;
+sign-in to a Tabora account (with a password or with a QR code from a computer), sync of tabs, bookmarks and
+site passwords with the other devices of the account, sign-in codes (the second step on websites) with autofill,
+account mail, spaces (each has its own tabs and its own site sign-ins). The app has no wallet yet.
 
-## Что изменено
+## What is changed
 
-| Что | Где |
+| What | Where |
 | --- | --- |
-| Имя пакета `app.tabora.browser`, без общего пользователя с Firefox, ссылки `tabora://` | `src/mobile/android/fenix/app/build.gradle.patch`, `src/release/AndroidManifest.xml.patch`, `src/release/res/xml/shortcuts.xml.patch` |
-| Название в надписях («Firefox» → «Tabora» во всех переводах) | `rebrand_android_strings` в `tools/build.py` — по месту, только для цели android |
-| Значок, заставка, знак в уведомлениях, знак и надпись на стартовой странице | `src/mobile/android/fenix/app/src/{main,release}/res/…`; рисует `tools/android/assets.py` |
-| Картинки с лисой и логотипом Firefox (плашки, пустые экраны, ошибки) — знак Tabora того же размера | список `MASCOTS` в `tools/android/assets.py` |
-| Цвета оформления: нейтральный фон и лаймовый/оливковый акцент вместо фиолетовой палитры | `NovaColors.kt.patch`, `nova_colors.xml.patch` (меняются только числа палитры), `colors.xml.patch` |
-| Выключатель блокировщика рекламы в настройках | `preferences.xml.patch`, `SettingsFragment.kt.patch`, надписи — `res/values*/tabora_strings.xml` |
-| Названия для движка (страницы ошибок) | `src/mobile/android/branding/tabora/` |
-| Блокировщик рекламы — те же модули, что на компьютере | `src/mobile/shared/tabora/jar.mn`, запуск в `GeckoViewStartup.sys.mjs.patch` |
-| Аккаунт Tabora: вход, синхронизация вкладок, коды входа с автовводом | модуль `web/src/phone` (собирается в `assets/extensions/tabora`), `…/fenix/tabora/*.kt`, патчи `Core.kt`, `HomeActivity.kt`, `nav_graph.xml`, `preferences.xml`, `SettingsFragment.kt`, `tabstray/…`, `components/menu/…` |
-| Ярлыки стартовой страницы | `src/main/res/raw/default_shortcuts.json`, `default_pinned_shortcuts.json` |
+| Package name `app.tabora.browser`, no shared user with Firefox, `tabora://` links | `src/mobile/android/fenix/app/build.gradle.patch`, `src/release/AndroidManifest.xml.patch`, `src/release/res/xml/shortcuts.xml.patch` |
+| Name in UI strings ("Firefox" → "Tabora" in all translations) | `rebrand_android_strings` in `tools/build.py` — in place, only for the android target |
+| Icon, splash screen, notification mark, mark and wordmark on the start page | `src/mobile/android/fenix/app/src/{main,release}/res/…`; drawn by `tools/android/assets.py` |
+| Images with the fox and the Firefox logo (banners, empty screens, errors) — the Tabora mark of the same size | the `MASCOTS` list in `tools/android/assets.py` |
+| Theme colors: a neutral background and a lime/olive accent instead of the purple palette | `NovaColors.kt.patch`, `nova_colors.xml.patch` (only the palette numbers change), `colors.xml.patch` |
+| Ad blocker switch in settings | `preferences.xml.patch`, `SettingsFragment.kt.patch`, strings — `res/values*/tabora_strings.xml` |
+| Names for the engine (error pages) | `src/mobile/android/branding/tabora/` |
+| Ad blocker — the same modules as on desktop | `src/mobile/shared/tabora/jar.mn`, started in `GeckoViewStartup.sys.mjs.patch` |
+| Tabora account: sign-in, tab sync, sign-in codes with autofill | the `web/src/phone` module (built into `assets/extensions/tabora`), `…/fenix/tabora/*.kt`, patches to `Core.kt`, `HomeActivity.kt`, `nav_graph.xml`, `preferences.xml`, `SettingsFragment.kt`, `tabstray/…`, `components/menu/…` |
+| Start page shortcuts | `src/main/res/raw/default_shortcuts.json`, `default_pinned_shortcuts.json` |
 
-### Блокировщик рекламы и языки движка
+### Ad blocker and engine languages
 
-Блокировщик запускается вместе с движком, до первого окна, и сразу собирает правила из списков
-в профиле. Пока они собираются (доли секунды), запросы страниц ждут решения: первая страница
-после запуска — ссылка из другого приложения, восстановленная вкладка — открывается уже без
-рекламы. Проверка: `am force-stop`, затем открыть ссылкой страницу, которая сразу просит рекламный
-адрес, — первый же запрос должен быть отменён. При самом первом запуске списков ещё нет: они
-скачиваются сразу, блокировка включается через несколько секунд.
+The blocker starts together with the engine, before the first window, and immediately compiles rules from the lists
+in the profile. While they are being compiled (fractions of a second), page requests wait for a decision: the first page
+after launch — a link from another app, a restored tab — already opens without
+ads. To check: `am force-stop`, then open by link a page that immediately requests an ad
+address — the very first request must be cancelled. On the very first launch there are no lists yet: they
+are downloaded right away, and blocking turns on a few seconds later.
 
-В движок вложены русский, украинский и испанский (`res/multilocale.txt`): от языка приложения
-зависят формат дат и чисел на страницах и язык служебных страниц движка. Стандартные надписи самих
-страниц («Submit Query», «Browse…», сообщения проверки полей) остаются английскими на любом
-языке — так устроен и Firefox для Android: движок берёт их из общего английского набора.
+Russian, Ukrainian and Spanish are bundled into the engine (`res/multilocale.txt`): the app language
+determines the format of dates and numbers on pages and the language of the engine's internal pages. The standard strings of
+pages themselves ("Submit Query", "Browse…", field validation messages) stay English in any
+language — Firefox for Android works the same way: the engine takes them from the shared English set.
 
-### Аккаунт Tabora и синхронизация
+### Tabora account and sync
 
-Вход в аккаунт и синхронизация работают во встроенном модуле — расширении движка, которое
-приложение ставит само при запуске (`assets/extensions/tabora`). Модуль собирается из того же
-кода, что веб-версия (`web/src/core`: вход, вывод ключей из пароля, ключ данных аккаунта, клиент
-синхронизации) и своей части `web/src/phone`; сборка — `tools/web/build-phone.mjs`, её вызывает
-`tools/build.py import` (и `tools/android/local.sh setup`). В репозитории собранного модуля нет.
-У модуля два права: связь с приложением и запросы к серверу аккаунтов; чужим страницам он
-недоступен.
+Account sign-in and sync run in a built-in module — an engine extension that
+the app installs itself at startup (`assets/extensions/tabora`). The module is built from the same
+code as the web app (`web/src/core`: sign-in, key derivation from the password, the account data key, the sync
+client) and its own part, `web/src/phone`; the build is `tools/web/build-phone.mjs`, called by
+`tools/build.py import` (and `tools/android/local.sh setup`). The built module is not in the repository.
+The module has two permissions: communication with the app and requests to the account server; it is not
+accessible to other pages.
 
-Что где лежит:
+What lives where:
 
-- **Экран «Аккаунт Tabora»** (Настройки, первый пункт) — страница модуля `index.html` внутри экрана
-  приложения (`TaboraAccountFragment`): вход, регистрация, второй шаг, сброс пароля; после входа —
-  выключатели синхронизации (вкладки, коды входа, пароли сайтов, закладки), состояние сверки, выход.
-- **Вход** (токен сессии и ключ данных аккаунта) хранится не в хранилище страницы, а у приложения:
-  в `SecureAbove22Preferences`, зашифрованный ключом из хранилища ключей Android
-  (`TaboraAccount.kt`). Вход не завершается сам; выход стирает запись и убирает список вкладок
-  телефона с сервера.
-- **Вкладки телефона → другие устройства:** приложение передаёт модулю открытые вкладки (без
-  приватных, только адреса http и https, не больше 200), модуль шифрует список ключом аккаунта и
-  кладёт на сервер одной записью под номером телефона — в том же виде, что браузер на компьютере.
-- **Вкладки других устройств → телефон:** модуль отдаёт приложению расшифрованные списки, они
-  показываются на последней странице списка вкладок (`TaboraSyncedTabsIntegration`): родной экран
-  приложения, раньше занятый синхронизацией Mozilla. Без входа там приглашение войти.
-- Сверка: после входа и запуска, через несколько секунд после перемены во вкладках, при открытии
-  списка вкладок и раз в десять минут. На компьютере синхронизация включена с момента входа в
-  аккаунт; выключается там же: «Настройки → Аккаунт → Синхронизация».
-- Модуль расшифровывает только те наборы аккаунта, которыми пользуется и которые включены на
-  экране аккаунта (вкладки, коды, пароли сайтов, закладки); остальные на телефон в открытом виде
-  не попадают.
-- **Закладки** сливаются с хранилищем закладок приложения в обе стороны (`web/src/phone/marks.js`,
-  поведение повторяет `marks` из `sync/SyncSources.sys.mjs`): закладки компьютера появляются на
-  экране «Закладки» в папке «Закладки на компьютере» (меню, панель, «Другие»), сделанные на
-  телефоне — на компьютере в папке «С телефона». Четыре корня общие, у них синхронизируется
-  только порядок. Номер новой закладке даёт хранилище телефона, поэтому модуль ведёт таблицу
-  «номер записи ↔ номер в хранилище»; одинаковая закладка, заведённая и там и здесь до сверки
-  (или до повторного входа), остаётся одна. Дерево закладок читается при полной сверке (запуск,
-  возврат в приложение, список вкладок, «Сверить сейчас», раз в десять минут); после перемены
-  во вкладках — только если на сервере есть новое или прошло две минуты.
-- **Пароли сайтов** сливаются с хранилищем паролей приложения в обе стороны (`web/src/phone/logins.js`,
-  правила слияния — `merge.js`, те же, что на компьютере): пароль с компьютера подставляется на
-  сайте в телефоне, сохранённый в телефоне появляется на компьютере. Если с телефона разом пропало
-  много паролей, удаления не отправляются, пока человек не решит, что с ними делать.
-- **Пространства** — у каждого свои вкладки и свои данные сайтов (входы, cookies), как на
-  компьютере. Движок умеет держать данные сайтов вкладки отдельно («контекст» вкладки), в
-  приложении не было только списка пространств и интерфейса:
-  - список и текущее пространство — `tabora/TaboraSpaces.kt`; «Личное» есть всегда и живёт без
-    контекста (в нём все прежние вкладки), остальные приходят из аккаунта (`web/src/phone/spaces.js`,
-    набор `spaces`: названия, цвета, значки, порядок). Номер пространства в аккаунте и контекст на
-    телефоне — разные вещи: контекст с пространством не расстаётся;
-  - правила для вкладок — `TaboraSpacesMiddleware`: новая вкладка открывается в текущем
-    пространстве, вкладка из ссылки — в пространстве своей вкладки (для окон, которые открывает
-    сама страница, поправлен `GeckoEngineSession`), текущим становится пространство выбранной
-    вкладки, закрытие последней вкладки пространства оставляет человека в нём на домашнем экране,
-    «закрыть все вкладки» закрывает вкладки текущего пространства;
-  - переключатель — ряд над обычными вкладками в списке вкладок (`TaboraSpacesRow.kt`); список
-    вкладок, счётчик на панели, перелистывание жестом и полоса вкладок показывают только текущее
-    пространство. Хранение и восстановление вкладок по-прежнему видят все вкладки: общий перечень
-    вкладок не тронут, чтобы пустое пространство не стёрло сохранённые вкладки остальных;
-  - приватные вкладки к пространствам не относятся; пространство с открытыми вкладками чужим
-    удалением не стирается. Создание и правка пространств с телефона — следующий шаг.
-- **Почта** — экран «Почта Tabora» (главное меню, ярлык на домашнем экране), страница модуля
-  `mail.html`: тот же код, что у веб-версии, с тем же входом, что у синхронизации. Письма с
-  вёрсткой показываются в рамках без скриптов, чужие картинки грузятся только по кнопке, ссылка из
-  письма открывается обычной вкладкой.
-- **Вход по QR-коду.** На экране входа кнопка «Войти по QR-коду» открывает сканер приложения
-  (`QrScanActivity`, запускает `TaboraAccount.scanQr`); код показывает браузер на компьютере:
-  «Настройки → Аккаунт → Синхронизация → Войти на телефоне». Телефон и компьютер показывают
-  один и тот же код сверки из шести цифр, человек разрешает вход на компьютере, а на телефоне
-  видит адрес аккаунта и подтверждает вход. Ключ данных аккаунта приходит зашифрованным общим
-  секретом двух устройств (X25519, `web/src/core/pair.js` — копия `account/Pair.sys.mjs`); сервер
-  только передаёт сообщения и выдаёт сессию (`server/src/pair.rs`). Считанный текст приложение не
-  разбирает: ссылка `tabora://pair` из чужого приложения или со страницы вход не начинает —
-  только сканер, открытый человеком на экране входа.
-- **Копия данных** (коды и вкладки других устройств) лежит у приложения в том же защищённом
-  хранилище, что и вход: после запуска они видны сразу и без сети. Выход её стирает.
+- **The "Tabora account" screen** (Settings, first item) — the module page `index.html` inside an app
+  screen (`TaboraAccountFragment`): sign-in, sign-up, the second step, password reset; after sign-in —
+  sync switches (tabs, sign-in codes, site passwords, bookmarks), sync status, sign-out.
+- **The sign-in** (the session token and the account data key) is stored not in the page's storage but by the app:
+  in `SecureAbove22Preferences`, encrypted with a key from the Android keystore
+  (`TaboraAccount.kt`). The sign-in never ends on its own; signing out erases the record and removes the phone's
+  tab list from the server.
+- **Phone tabs → other devices:** the app passes the open tabs to the module (no
+  private tabs, only http and https addresses, at most 200); the module encrypts the list with the account key and
+  puts it on the server as a single record under the phone's device ID — in the same form as the desktop browser.
+- **Tabs of other devices → phone:** the module gives the app the decrypted lists; they
+  are shown on the last page of the tab list (`TaboraSyncedTabsIntegration`): a native app
+  screen formerly used by Mozilla sync. Without a sign-in it shows an invitation to sign in.
+- A sync runs: after sign-in and at startup, a few seconds after a change in tabs, when the
+  tab list is opened and every ten minutes. On desktop, sync is on from the moment of account
+  sign-in; it is turned off there too: "Settings → Account → Sync".
+- The module decrypts only those account collections that it uses and that are turned on on the
+  account screen (tabs, codes, site passwords, bookmarks); the others never reach the phone in
+  plaintext.
+- **Bookmarks** are merged with the app's bookmark storage in both directions (`web/src/phone/marks.js`,
+  the behavior mirrors `marks` from `sync/SyncSources.sys.mjs`): desktop bookmarks appear on
+  the "Bookmarks" screen in the "Desktop Bookmarks" folder (menu, toolbar, "Other"), those made on
+  the phone appear on desktop in the "From phone" folder. The four roots are shared; only their
+  order is synced. A new bookmark gets its ID from the phone's storage, so the module keeps a
+  "record ID ↔ storage ID" table; an identical bookmark created both there and here before a sync
+  (or before signing in again) remains a single one. The bookmark tree is read on a full sync (startup,
+  return to the app, the tab list, "Sync now", every ten minutes); after a change
+  in tabs — only if the server has something new or two minutes have passed.
+- **Site passwords** are merged with the app's password storage in both directions (`web/src/phone/logins.js`,
+  merge rules — `merge.js`, the same as on desktop): a password from the computer is filled in on
+  the site on the phone, one saved on the phone appears on the computer. If many passwords disappear
+  from the phone at once, the deletions are not sent until the person decides what to do with them.
+- **Spaces** — each has its own tabs and its own site data (sign-ins, cookies), as on
+  desktop. The engine can keep a tab's site data separate (the tab's "context"); the
+  app lacked only the list of spaces and the interface:
+  - the list and the current space — `tabora/TaboraSpaces.kt`; "Personal" always exists and lives without
+    a context (it holds all earlier tabs), the others come from the account (`web/src/phone/spaces.js`,
+    the `spaces` collection: names, colors, icons, order). A space's ID in the account and the context on
+    the phone are different things: a context never parts with its space;
+  - tab rules — `TaboraSpacesMiddleware`: a new tab opens in the current
+    space, a tab opened from a link — in the space of the tab it came from (for windows that the page
+    itself opens, `GeckoEngineSession` is patched), the space of the selected tab becomes
+    current, closing the last tab of a space leaves the person in it on the home screen,
+    "Close all tabs" closes the tabs of the current space;
+  - the switcher — a row above the regular tabs in the tab list (`TaboraSpacesRow.kt`); the tab
+    list, the counter on the toolbar, swipe switching and the tab strip show only the current
+    space. Tab storage and restoration still see all tabs: the common list of
+    tabs is left untouched so that an empty space does not erase the saved tabs of the others;
+  - private tabs do not belong to spaces; a space with open tabs is not erased by a
+    deletion made on another device. Creating and editing spaces from the phone is the next step.
+- **Mail** — the "Tabora Mail" screen (main menu, shortcut on the home screen), the module page
+  `mail.html`: the same code as the web app, with the same sign-in as sync. Messages with
+  HTML layout are shown in frames without scripts, third-party images load only on a button press, a link from
+  a message opens in a regular tab.
+- **Sign-in with a QR code.** On the sign-in screen the "Sign in with QR code" button opens the app's scanner
+  (`QrScanActivity`, launched by `TaboraAccount.scanQr`); the code is shown by the desktop browser:
+  "Settings → Account → Sync → Sign in on a phone". The phone and the computer show
+  the same six-digit verification code, the person allows the sign-in on the computer, and on the phone
+  sees the account address and confirms the sign-in. The account data key arrives encrypted with the shared
+  secret of the two devices (X25519, `web/src/core/pair.js` — a copy of `account/Pair.sys.mjs`); the server
+  only relays messages and issues the session (`src/pair.rs` in the server repository, Tabora-App/server). The app does
+  not parse the scanned text: a `tabora://pair` link from another app or from a page does not start a sign-in —
+  only the scanner opened by the person on the sign-in screen does.
+- **A copy of the data** (codes and tabs of other devices) is kept by the app in the same protected
+  storage as the sign-in: after startup they are visible immediately and without a network. Signing out erases it.
 
-**Коды входа** (второй шаг на сайтах) — те же записи, что в сейфе браузера на компьютере (набор
-`otp` синхронизации), расчёт кода — тот же код (`web/src/core/otp.js`, сверяется с
-`vault/Otp.sys.mjs` проверкой `parity`):
+**Sign-in codes** (the second step on websites) — the same records as in the vault of the desktop browser (the
+`otp` sync collection); the code calculation is the same code (`web/src/core/otp.js`, checked against
+`vault/Otp.sys.mjs` by the `parity` check):
 
-- **Экран «Коды входа»** (главное меню, Настройки, экран аккаунта) — страница модуля `codes.html`:
-  список с отсчётом времени, копирование по нажатию, добавление по ключу, ссылке `otpauth://`,
-  снимку QR-кода, переносу из Google Authenticator и файлам Aegis и 2FAS, правка сайтов, удаление.
-  Перемены сразу уходят в аккаунт и появляются на компьютере.
-- **Автоввод.** На каждой странице https работает небольшой скрипт модуля (`web/src/phone/fill.js`):
-  замечает поле кода (правила распознавания и способы вставки перенесены из
-  `actors/TaboraVaultChild.sys.mjs`) и, если к сайту привязан код, показывает под полем кнопку
-  «Вставить код». Сайт определяется по адресу документа, который сообщает движок; поле в рамке
-  чужого сайта кнопку не получает; код привязывается к точному хосту (поддомены — только если это
-  разрешено в записи). Кнопка живёт в закрытом теневом дереве и срабатывает только от настоящего
-  нажатия; сам код приходит на страницу после нажатия, секрет — никогда.
-- **Подтверждение владельца.** Перед показом экрана кодов и перед вставкой приложение просит
-  отпечаток, лицо или код блокировки экрана (`BiometricPrompt` в `TaboraAccount.kt`); подтверждение
-  помнится пять минут. Если блокировки экрана на телефоне нет, подтверждать нечем и доступ открыт —
-  так же ведут себя сохранённые пароли приложения.
-- Камера странице модуля не выдаётся: QR-код снимается системной камерой телефона (выбор файла),
-  распознаётся в модуле.
+- **The "Sign-in codes" screen** (main menu, Settings, account screen) — the module page `codes.html`:
+  a list with a countdown, copy on tap, adding by key, by an `otpauth://` link,
+  by a photo of a QR code, by transfer from Google Authenticator and from Aegis and 2FAS files, editing sites, deletion.
+  Changes go to the account right away and appear on the computer.
+- **Autofill.** On every https page a small module script runs (`web/src/phone/fill.js`):
+  it notices a code field (the detection rules and insertion methods are ported from
+  `actors/TaboraVaultChild.sys.mjs`) and, if a code is linked to the site, shows a
+  "Fill in the code" button under the field. The site is determined by the document address reported by the engine; a field in a frame
+  of another site gets no button; a code is bound to the exact host (subdomains — only if
+  the record allows it). The button lives in a closed shadow tree and fires only on a real
+  tap; the code itself reaches the page after the tap, the secret — never.
+- **Owner confirmation.** Before showing the codes screen and before filling in, the app asks for
+  a fingerprint, face or screen lock code (`BiometricPrompt` in `TaboraAccount.kt`); the confirmation
+  is remembered for five minutes. If the phone has no screen lock, there is nothing to confirm with and access is open —
+  saved passwords in the app behave the same way.
+- The module page is not given the camera: a QR code is photographed with the phone's system camera (file chooser)
+  and recognized in the module.
 
-Движок запускает фоновые страницы расширений только после открытия первой страницы; чтобы модуль
-работал и на домашнем экране, сигнал запуска даётся через несколько секунд после старта
+The engine starts extension background pages only after the first page is opened; so that the module
+also works on the home screen, the startup signal is sent a few seconds after start
 (`GeckoViewStartup.sys.mjs.patch`).
 
-Сообщения между модулем и приложением описаны в `web/src/phone/bridge.js`. Ответ на запрос модуля
-приложение отдаёт строкой JSON: объект движок в ответе не принимает.
+Messages between the module and the app are described in `web/src/phone/bridge.js`. The app returns the reply to a module
+request as a JSON string: the engine does not accept an object in a reply.
 
-### Что не уходит в Mozilla
+### What is not sent to Mozilla
 
-- Движок: без сборщика отчётов о сбоях и без телеметрии (`configs/android/mozconfig`), выгрузка
-  Glean из движка выключена тем же патчем, что на компьютере.
-- Приложение: `TELEMETRY` и `CRASH_REPORTING` выключены сборкой (`build.gradle.patch`) — службы
-  сбора данных, Adjust и сведения об источнике установки не запускаются; отправка данных по
-  умолчанию выключена (`Settings.kt.patch`); отчёты о сбоях не собираются и не предлагаются
+- Engine: no crash reporter and no telemetry (`configs/android/mozconfig`); Glean
+  upload from the engine is turned off by the same patch as on desktop.
+- App: `TELEMETRY` and `CRASH_REPORTING` are turned off at build time (`build.gradle.patch`) — data
+  collection services, Adjust and install source attribution do not start; data submission is
+  off by default (`Settings.kt.patch`); crash reports are neither collected nor offered
   (`Analytics.kt.patch`).
-- Эксперименты и удалённые изменения Mozilla (Nimbus) не загружаются, вшитый список пуст
+- Mozilla experiments and remote changes (Nimbus) are not loaded; the bundled list is empty
   (`NimbusSetup.kt.patch`, `initial_experiments.json`).
-- Первый экран с условиями Mozilla не показывается (`FeatureFlags.kt.patch`).
-- Рекомендации и рекламные материалы на стартовой странице, рекламные ярлыки выключены
+- The first screen with Mozilla's terms is not shown (`FeatureFlags.kt.patch`).
+- Recommendations and promotional content on the start page and sponsored shortcuts are turned off
   (`nimbus.fml.yaml.patch`, `Settings.kt.patch`).
-- Уведомления через Firebase не работают: в сборке нет его настроек.
-- Настройки движка (`src/mobile/android/app/geckoview-prefs.js.patch`): телеметрия, проверка
-  «портала авторизации», определение страны, отправка списка дополнений и VPN Mozilla выключены —
-  те же решения, что в `configs/prefs/release.js` для компьютера.
+- Notifications via Firebase do not work: the build has no Firebase configuration.
+- Engine preferences (`src/mobile/android/app/geckoview-prefs.js.patch`): telemetry, captive
+  portal detection, country detection, sending the add-on list and Mozilla VPN are turned off —
+  the same decisions as in `configs/prefs/release.js` for desktop.
 
-### Что убрано из интерфейса
+### What is removed from the interface
 
-Войти в аккаунт Mozilla в приложении негде: пункт входа убран из настроек, главного меню, списка
-вкладок (страница «Синхронизированные вкладки»), пустого экрана закладок, «Поделиться» («Отправить
-на устройство») и настроек паролей, карт и адресов. Скрыты «Сбор данных», «Оценить в Google Play»,
-лаборатория, «Удалённые улучшения», выбор значка приложения (значки Firefox), VPN Mozilla и пересказ
-страницы (требует аккаунт Mozilla). В «О приложении» остались лицензии и список библиотек.
-Встроенные сообщения «сделайте браузером по умолчанию» выключены.
+There is nowhere in the app to sign in to a Mozilla account: the sign-in item is removed from settings, the main menu, the tab
+list (the "Synced tabs" page), the empty bookmarks screen, "Share" ("Send
+to device") and the settings for passwords, cards and addresses. Hidden: "Data collection", "Rate on Google Play",
+the labs section, "Remote improvements", the app icon chooser (Firefox icons), Mozilla VPN and page
+summaries (requires a Mozilla account). "About" keeps the licenses and the list of libraries.
+The built-in "make this your default browser" messages are turned off.
 
-Правки Kotlin сделаны так, чтобы менять как можно меньше: значение по умолчанию, условие показа,
-элемент списка. Сборка идёт с «предупреждения = ошибки», а проверить её можно только на GitHub.
+Kotlin edits are made to change as little as possible: a default value, a visibility condition,
+a list item. The build runs with "warnings = errors", and it can only be checked on GitHub.
 
-Ещё не сделано (следующие шаги): создание и правка пространств с телефона,
-добавление кода по ссылке `otpauth://` на странице сайта; ссылки «Подробнее» в
-настройках и «Кто может видеть мои действия» в приватном режиме ведут в справку Mozilla;
-библиотеки Google (Firebase, Play Services) в составе приложения; картинки прежних значков Firefox
-(выбор значка скрыт, но файлы остались внутри приложения).
+Not done yet (next steps): creating and editing spaces from the phone,
+adding a code from an `otpauth://` link on a website page; the "Learn more" links in
+settings and "Who might be able to see my activity?" in private mode lead to Mozilla help;
+Google libraries (Firebase, Play Services) are part of the app; images of the former Firefox icons
+(the icon chooser is hidden, but the files remain inside the app).
 
-## Сборка
+## Build
 
-Локально нужна машина с ~40 ГБ свободного места; обычно сборка идёт на GitHub: workflow
-**Android** (`.github/workflows/android.yml`), запуск вручную, около двух часов.
+A local build needs a machine with ~40 GB of free space; usually the build runs on GitHub: the
+**Android** workflow (`.github/workflows/android.yml`), started manually, about two hours.
 
 ```sh
 export TARGET_PLATFORM=android TARGET_ARCH=aarch64 BROWSER_RELEASE=1
 python3 tools/build.py download
-python3 tools/build.py import      # патчи, файлы src/, название в надписях
-python3 tools/build.py bootstrap   # тулчейны Mozilla, Android SDK, NDK, JDK в ~/.mozbuild
-python3 tools/build.py build       # движок, затем приложение (gradle fenix:assembleRelease)
-python3 tools/build.py package     # проверка и dist/tabora-<версия>-android-arm64-v8a-unsigned.apk
+python3 tools/build.py import      # patches, src/ files, the name in UI strings
+python3 tools/build.py bootstrap   # Mozilla toolchains, Android SDK, NDK, JDK in ~/.mozbuild
+python3 tools/build.py build       # the engine, then the app (gradle fenix:assembleRelease)
+python3 tools/build.py package     # checks and dist/tabora-<version>-android-arm64-v8a-unsigned.apk
 ```
 
-`package` проверяет готовый файл: имя пакета, отсутствие общего пользователя с Firefox, наличие
-движка и модулей блокировщика внутри `omni.ja`, отсутствие чужой подписи.
+`package` checks the finished file: the package name, no shared user with Firefox, the
+engine and the blocker modules present inside `omni.ja`, no foreign signature.
 
-Версия приложения — `displayVersion` из `browser.json` (та же, что у браузера для компьютера).
-Номер сборки (versionCode) растёт со временем сам.
+The app version is `displayVersion` from `browser.json` (the same as the desktop browser's).
+The build number (versionCode) grows over time on its own.
 
-## Местная сборка приложения (без движка)
+## Local app build (without the engine)
 
-Правки интерфейса не требуют пересборки движка. `tools/android/local.sh` собирает одно
-приложение поверх готового движка за несколько минут — так проверяются Kotlin (сборка идёт с
-«предупреждения = ошибки») и внешний вид в эмуляторе:
+UI changes do not require rebuilding the engine. `tools/android/local.sh` builds only the
+app on top of a ready engine in a few minutes — this is how Kotlin (the build runs with
+"warnings = errors") and the look in the emulator are checked:
 
 ```sh
-tools/android/local.sh setup <файл с GitHub>.apk              # движок из нашей сборки
-tools/android/local.sh setup geckoview-omni-arm64-v8a-….aar --mozilla   # или готовый движок Mozilla той же версии
-tools/android/local.sh build       # приложение: engine/obj-android-local/gradle/…/outputs/apk/release/
-tools/android/local.sh compile     # только проверить, что Kotlin собирается
+tools/android/local.sh setup <file from GitHub>.apk              # the engine from our build
+tools/android/local.sh setup geckoview-omni-arm64-v8a-….aar --mozilla   # or a ready Mozilla engine of the same version
+tools/android/local.sh build       # the app: engine/obj-android-local/gradle/…/outputs/apk/release/
+tools/android/local.sh compile     # only check that Kotlin compiles
 ```
 
-С движком Mozilla нет блокировщика рекламы и наших настроек движка: он годится, чтобы смотреть
-интерфейс, пока нет своей сборки. Такой файл никуда не выкладывается. Для эмулятора его
-подписывают отдельным проверочным ключом (`TABORA_ANDROID_KEYS_DIR=<каталог> tools/android/sign.sh init`),
-а не ключом выпуска.
+With the Mozilla engine there is no ad blocker and none of our engine preferences: it is good for looking at
+the interface while there is no build of our own. Such a file is never published. For the emulator it
+is signed with a separate test key (`TABORA_ANDROID_KEYS_DIR=<directory> tools/android/sign.sh init`),
+not with the release key.
 
-### Проверка аккаунта с местным сервером
+### Checking the account with a local server
 
-Для проверок модуль собирается с адресом местного сервера аккаунтов; такая сборка помечена в
-`build.json`, и `tools/build.py package` её в выпуск не пропустит:
+For checks, the module is built with the address of a local account server; such a build is marked in
+`build.json`, and `tools/build.py package` will not let it into a release:
 
 ```sh
 node tools/web/build-phone.mjs engine/mobile/android/fenix/app/src/main/assets/extensions/tabora \
   --api http://127.0.0.1:7711 --fill-test http://127.0.0.1:8797
 tools/android/local.sh build
-adb reverse tcp:7711 tcp:7711    # сервер на этой машине виден эмулятору как 127.0.0.1
+adb reverse tcp:7711 tcp:7711    # the server on this machine is visible to the emulator as 127.0.0.1
 ```
 
-`--fill-test` разрешает автоввод кодов на одной проверочной странице без https (в выпуске — только
-https). В такой сборке «Войти по QR-коду» сначала спрашивает текст кода у того же проверочного
-адреса (файл `qr.txt`): камера эмулятора настоящий код не снимет. Если файла нет, открывается
-обычный сканер. Подтверждение владельца в эмуляторе проверяется с кодом блокировки:
-`adb shell locksettings set-pin 1234`, в конце `locksettings clear --old 1234`.
+`--fill-test` allows code autofill on one test page without https (in a release — https
+only). In such a build "Sign in with QR code" first asks the same test
+address for the code text (the `qr.txt` file): the emulator's camera cannot capture a real code. If the file is missing,
+the regular scanner opens. Owner confirmation is checked in the emulator with a lock code:
+`adb shell locksettings set-pin 1234`, and at the end `locksettings clear --old 1234`.
 
-Адрес — именно 127.0.0.1 через `adb reverse`: к `10.0.2.2` по http страница модуля не обращается
-(она считается защищённой). Логика модуля без эмулятора проверяется на том же сервере:
-`TABORA_API=http://127.0.0.1:7711 node tools/web/test/run.mjs phone`; второе устройство для
-сквозной проверки — `tools/web/test/tabs-cli.mjs`; вход по QR-коду — `run.mjs pair`, закладки —
-`run.mjs marks`, пространства — `run.mjs spaces`.
+The address must be exactly 127.0.0.1 through `adb reverse`: the module page does not make http requests to `10.0.2.2`
+(the page counts as secure). The module logic is checked without an emulator against the same server:
+`TABORA_API=http://127.0.0.1:7711 node tools/web/test/run.mjs phone`; a second device for an
+end-to-end check — `tools/web/test/tabs-cli.mjs`; QR sign-in — `run.mjs pair`, bookmarks —
+`run.mjs marks`, spaces — `run.mjs spaces`.
 
-В выпускной сборке консоль движка в журнал не попадает. В эмуляторе её включает файл настроек
-движка (`adb shell am set-debug-app --persistent app.tabora.browser`, затем файл
-`/data/local/tmp/app.tabora.browser-geckoview-config.yaml` с `prefs: { geckoview.console.enabled: true,
-consoleservice.logcat: true }`); сообщения Kotlin-части идут с меткой `TaboraAccount`.
+In a release build the engine console does not go to the log. In the emulator it is enabled by an engine
+config file (`adb shell am set-debug-app --persistent app.tabora.browser`, then the file
+`/data/local/tmp/app.tabora.browser-geckoview-config.yaml` with `prefs: { geckoview.console.enabled: true,
+consoleservice.logcat: true }`); messages of the Kotlin part carry the `TaboraAccount` tag.
 
-## Подпись
+## Signing
 
-Сборка отдаёт неподписанный файл; ключа подписи в CI нет. Подпись — на своей машине:
+The build produces an unsigned file; there is no signing key in CI. Signing is done on your own machine:
 
 ```sh
-tools/android/sign.sh init                       # один раз: создать ключ
-tools/android/sign.sh dist/tabora-…-unsigned.apk # выровнять, подписать, проверить
+tools/android/sign.sh init                       # once: create the key
+tools/android/sign.sh dist/tabora-…-unsigned.apk # align, sign, verify
 ```
 
-Ключ: `~/.config/tabora/android-keys` (`TABORA_ANDROID_KEYS_DIR`). Телефон принимает обновление
-только с той же подписью, поэтому ключ один на всю жизнь приложения — держите его копию отдельно.
+Key: `~/.config/tabora/android-keys` (`TABORA_ANDROID_KEYS_DIR`). A phone accepts an update
+only with the same signature, so there is one key for the whole life of the app — keep a copy of it separately.
 
-## Проверка в эмуляторе
+## Checking in the emulator
 
 ```sh
 adb install -r dist/tabora-…-android-arm64-v8a.apk

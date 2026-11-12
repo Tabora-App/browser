@@ -5,11 +5,12 @@
 // Перевод считается испорченным, если в нём другой набор подстановок {0}, {1}… чем в исходной надписи.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { LANGS, ROOT, collect, desktopSet, serverKeys, webSet } from "./catalog.mjs";
+import { LANGS, ROOT, collect, desktopSet, webSet } from "./catalog.mjs";
 
-// web — надписи веб-версии (i18n/<язык>.json); server — сообщения и письма сервера (i18n/server/<язык>.json)
+// web: strings of the web app (i18n/<lang>.json). Server messages have their own dictionaries and
+// tool in the server repository (Tabora-App/server, tools/i18n.mjs).
 // desktop — оболочка браузера (те же i18n/<язык>.json, что у веб-версии: общие надписи переводятся один раз)
-const SETS = { web: webSet, desktop: desktopSet, server: () => ({ keys: serverKeys(), dir: "i18n/server" }) };
+const SETS = { web: webSet, desktop: desktopSet };
 const [name, ...flags] = process.argv.slice(2);
 if (!SETS[name]) {
   console.error(`набор: ${Object.keys(SETS).join(" | ")}`);

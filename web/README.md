@@ -1,80 +1,80 @@
-# Веб-версия Tabora
+# Tabora web app
 
-Почта аккаунта Tabora в любом браузере, в том числе на телефоне: https://app.tabora.app.
-В веб-версии только почта и настройки аккаунта (пароль, двухфакторная защита, резервный адрес,
-ключ восстановления, устройства). Пароли сайтов, коды входа, закладки и кошелёк живут в браузере
-Tabora: секретам хранилища не место на странице, код которой каждый раз приходит с сервера.
+Tabora account mail in any browser, including on a phone: https://app.tabora.app.
+The web app has only mail and account settings (password, two-factor protection, backup email,
+recovery key, devices). Site passwords, sign-in codes, bookmarks and the wallet live in the Tabora
+browser: vault secrets do not belong on a page whose code comes from the server every time.
 
-## Как устроена защита
+## How the protection works
 
-- **Пароль не покидает страницу.** Из него выводятся хеш входа (уходит на сервер) и ключ обёртки
-  (остаётся в браузере): Argon2id 64 МБ, та же схема, что в браузере Tabora (`src/core/kdf.js`).
-- **Почтового пароля у страницы нет.** К ящику она ходит через сервер аккаунтов по токену сессии
-  (`src/core/jmap.js`, `server/src/webmail.rs`): выход или завершение сеанса сразу закрывает почту,
-  а из методов доступны только почтовые.
-- **Шифрование писем (OpenPGP) — на странице.** Закрытый ключ приходит с сервера зашифрованным и
-  открывается ключом данных аккаунта, а тот — ключом обёртки из пароля. Письма между адресами Tabora
-  шифруются и подписываются; письмо собирается здесь же и уходит готовым исходником
-  (`src/core/mail.js`, `src/core/mime.js` — тот же код, что в браузере).
-- **Чужая вёрстка письма** очищается и показывается в отдельной рамке без скриптов и без сети;
-  картинки с чужих серверов — только по кнопке (`src/core/sanitize.js`, `src/views/mail-reader.js`).
-- **Сессия в хранилище браузера зашифрована** ключом, который браузер не отдаёт даже скрипту
-  страницы (`src/core/store.js`).
-- **Вход не завершается сам.** Запись сессии лежит в постоянном хранилище браузера: закрытие
-  вкладки, перезапуск браузера и перезагрузка телефона из аккаунта не выводят. Страница не
-  стирает вход ни по времени, ни при сбое хранилища (если ключ не прочитался, запись остаётся
-  до следующего открытия) и просит браузер не вычищать данные сайта. Выйти можно только
-  кнопкой «Выйти» — или завершив этот вход с другого устройства (список устройств, смена или
-  сброс пароля). Чего страница сделать не может: если человек сам очистит данные сайта или
-  пользуется приватным окном, вход пропадёт вместе с ними.
-- **Политика содержимого**: только свои скрипты и стили, ни одного стороннего адреса
-  (`tools/web/headers.mjs`, на сервере — `infra/nginx/app-*.inc`).
-- **Подбор пароля** упирается в пределы сервера: на адрес, на пару «аккаунт + адрес» и на аккаунт
-  целиком (`server/README.md`, «Ограничения»).
+- **The password never leaves the page.** A login hash (sent to the server) and a wrapping key
+  (stays in the browser) are derived from it: Argon2id 64 MB, the same scheme as in the Tabora browser (`src/core/kdf.js`).
+- **The page has no mail password.** It reaches the mailbox through the account server with the session token
+  (`src/core/jmap.js`; `src/webmail.rs` in the server repository, Tabora-App/server): signing out or ending the session closes the mail immediately,
+  and only mail methods are available.
+- **Message encryption (OpenPGP) is done on the page.** The private key comes from the server encrypted and
+  is unlocked with the account data key, which in turn is unlocked with the wrapping key derived from the password. Messages between Tabora addresses
+  are encrypted and signed; a message is assembled right here and leaves as ready-made source
+  (`src/core/mail.js`, `src/core/mime.js` — the same code as in the browser).
+- **Foreign message HTML** is sanitized and shown in a separate frame without scripts and without network access;
+  images from other servers — only on a button press (`src/core/sanitize.js`, `src/views/mail-reader.js`).
+- **The session in browser storage is encrypted** with a key that the browser does not hand out even to the page's
+  script (`src/core/store.js`).
+- **The sign-in never ends on its own.** The session record is in the browser's persistent storage: closing
+  the tab, restarting the browser and rebooting the phone do not sign the account out. The page does not
+  erase the sign-in either by time or on a storage failure (if the key could not be read, the record stays
+  until the next opening) and asks the browser not to evict the site's data. Signing out is possible only
+  with the "Sign out" button — or by ending this sign-in from another device (the device list, a password change or
+  reset). What the page cannot do: if the person clears the site's data themselves or
+  uses a private window, the sign-in disappears together with it.
+- **Content policy**: only our own scripts and styles, not a single third-party address
+  (`tools/web/headers.mjs`; on the server — `infra/nginx/app-*.inc` in the server repository).
+- **Password guessing** runs into the server's limits: per address, per "account + address" pair and per account
+  as a whole (`README.md` in the server repository, "Limits").
 
-Чего веб-версия не может: код страницы приходит с сервера, и тот, кто управляет сервером, способен
-его подменить. Приложение, установленное на компьютер, от этого защищено подписью — поэтому
-хранилище паролей и кошелёк есть только в нём.
+What the web app cannot do: the page code comes from the server, and whoever controls the server is able
+to replace it. An app installed on a computer is protected from this by a signature — that is why
+the password vault and the wallet exist only in it.
 
-## Модуль аккаунта для приложения на телефоне
+## Account module for the phone app
 
-Из этого же каталога собирается модуль аккаунта для приложения Android: вход в аккаунт,
-синхронизация вкладок и коды входа с автовводом. Он не веб-страница: приложение ставит его внутрь
-себя как встроенное расширение движка, код с сервера не приходит. Общее с веб-версией — `src/core`
-(вход, ключи, шифрование) и экран входа `src/views/auth.js`; своё — `src/phone` (фоновая служба,
-связь с приложением, хранение входа у приложения, учёт вкладок, коды входа и их экран, скрипт
-автоввода `fill.js`), `phone/` (страницы и описание расширения), `src/core/sync.js` (клиент
-синхронизации), `src/core/otp.js` и `codes.js` (расчёт кодов и записи кодов). На веб-странице
-синхронизации и кодов нет.
-Сборка — `node tools/web/build-phone.mjs`, проверка логики — `node test/run.mjs phone`. Как модуль
-встроен в приложение — `docs/ANDROID.md`.
+The account module for the Android app is built from this same directory: account sign-in,
+tab sync and sign-in codes with autofill. It is not a web page: the app installs it inside
+itself as a built-in engine extension; no code comes from the server. Shared with the web app — `src/core`
+(sign-in, keys, encryption) and the sign-in screen `src/views/auth.js`; its own — `src/phone` (background service,
+communication with the app, storing the sign-in in the app, tab tracking, sign-in codes and their screen, the
+autofill script `fill.js`), `phone/` (pages and the extension manifest), `src/core/sync.js` (sync
+client), `src/core/otp.js` and `codes.js` (code calculation and code records). The web page
+has no sync and no codes.
+Build — `node tools/web/build-phone.mjs`, logic check — `node test/run.mjs phone`. How the module
+is embedded in the app — `docs/ANDROID.md`.
 
-## Сборка и проверки
+## Build and checks
 
 ```sh
 cd tools/web && npm ci --ignore-scripts
-node build.mjs                    # → .build/web (имена файлов с хешем, build.json с суммами)
-node dev.mjs 8770                 # сервер разработки с теми же заголовками, что рабочий nginx
-node test/run.mjs core parity headers            # без сервера
-TABORA_API=http://127.0.0.1:7711 TABORA_OUTBOX=… node test/run.mjs account   # локальный tabora-server
+node build.mjs                    # → .build/web (file names with a hash, build.json with checksums)
+node dev.mjs 8770                 # development server with the same headers as the production nginx
+node test/run.mjs core parity headers            # without a server
+TABORA_API=http://127.0.0.1:7711 TABORA_OUTBOX=… node test/run.mjs account   # local tabora-server
 ```
 
-`parity` сверяет код, перенесённый из браузера без изменений (оценка пароля, операции OpenPGP,
-разбор писем), с его источником; `headers` — заголовки nginx с заголовками сервера разработки.
-Выкладка: `infra/deploy.sh web` (см. `infra/README.md`).
+`parity` compares the code ported from the browser without changes (password strength estimation, OpenPGP operations,
+message parsing) with its source; `headers` — the nginx headers with the development server's headers.
+Deployment: `tools/deploy.sh web` (see `infra/README.md` in the server repository, Tabora-App/server).
 
-## Языки
+## Languages
 
-Интерфейс есть на русском, английском, украинском и испанском. Язык берётся из языка браузера
-(если он не из этих четырёх — английский), выбор в настройках или на экране входа запоминается.
+The interface is available in Russian, English, Ukrainian and Spanish. The language is taken from the browser's language
+(if it is not one of these four — English); a choice made in settings or on the sign-in screen is remembered.
 
-- Исходный язык — русский: надписи пишутся в коде по-русски и помечаются тегом ``t`…` ``
-  (`src/core/i18n.js`: `t`, `plural`, `tr`). Переводы лежат в `i18n/<язык>.json` в корне
-  репозитория — «русская надпись → перевод»; подстановки в них записаны как `{0}`, `{1}`.
-- Сборка кладёт словарь каждого языка отдельным файлом: человек скачивает только свой.
-- Сообщения, которые приходят готовым текстом (сервер, рабочие потоки, код, общий с браузером),
-  переводятся при показе через `tr()` — целиком или по образцу с подстановками.
-- Новая надпись: написать по-русски с ``t`…` ``, затем `node tools/i18n/extract.mjs web --todo`
-  покажет, чего не хватает в словарях; `--strict` (его запускает выкладка) не пропустит
-  непереведённое. Пометить надписи в новом файле: `node tools/i18n/wrap.mjs --write --import=web/src/core/i18n.js <файл>`.
-- Местную переменную нельзя называть `t`: она перекроет тег перевода (`wrap.mjs` это находит).
+- The source language is Russian: strings are written in code in Russian and marked with the ``t`…` `` tag
+  (`src/core/i18n.js`: `t`, `plural`, `tr`). Translations are in `i18n/<lang>.json` at the repository
+  root — "Russian string → translation"; substitutions in them are written as `{0}`, `{1}`.
+- The build puts each language's dictionary in a separate file: a person downloads only their own.
+- Messages that arrive as ready-made text (the server, workers, code shared with the browser)
+  are translated on display through `tr()` — whole or by a pattern with substitutions.
+- New string: write it in Russian with ``t`…` ``, then `node tools/i18n/extract.mjs web --todo`
+  shows what is missing in the dictionaries; `--strict` (run by the deployment) does not let
+  untranslated strings through. To tag the strings in a new file: `node tools/i18n/wrap.mjs --write --import=web/src/core/i18n.js <file>`.
+- A local variable must not be named `t`: it would shadow the translation tag (`wrap.mjs` detects this).

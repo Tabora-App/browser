@@ -34,15 +34,5 @@
     "ru",
     "uk",
     "es-ES"
-  ],
-  "ios": {
-    "repository": "https://github.com/mozilla-mobile/firefox-ios.git",
-    "tag": "firefox-v160.0",
-    "commit": "7ed61911eadb87b9cc2a641f32d3a146adea5186",
-    "bundleId": "app.tabora.browser",
-    "nimbus": {
-      "commit": "21f8a0ac23cabe5d310bada7e6f4c1f84e85c075",
-      "sha256": "443a72235811e6367914f80b2eacc900d55913442cb9d594930170e0e2cc5da4"
-    }
-  }
+  ]
 }
