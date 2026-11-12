@@ -52,4 +52,7 @@
     <!-- Пространства: метка у адреса и пункт меню ссылки -->
     <string name="tabora_space_badge">Пространство «%1$s»</string>
     <string name="tabora_space_open_link">Открыть в пространстве «%1$s»</string>
+    <!-- "Send to device": a page another device of the account sent to this phone has been opened. %1$s is the device's name -->
+    <string name="tabora_sent_tab_opened">Открыта вкладка с устройства «%1$s»</string>
+    <string name="tabora_sent_tab_opened_unnamed">Открыта вкладка с другого устройства</string>
 </resources>

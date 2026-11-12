@@ -52,4 +52,7 @@
     <!-- Простори: позначка біля адреси та пункт меню посилання -->
     <string name="tabora_space_badge">Простір «%1$s»</string>
     <string name="tabora_space_open_link">Відкрити у просторі «%1$s»</string>
+    <!-- "Send to device": a page another device of the account sent to this phone has been opened. %1$s is the device's name -->
+    <string name="tabora_sent_tab_opened">Відкрито вкладку з пристрою «%1$s»</string>
+    <string name="tabora_sent_tab_opened_unnamed">Відкрито вкладку з іншого пристрою</string>
 </resources>

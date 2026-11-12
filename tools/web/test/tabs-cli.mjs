@@ -5,6 +5,7 @@
 //   node <сборка> <сервер аккаунтов> <имя> <файл с паролем> show
 //   node <сборка> <сервер аккаунтов> <имя> <файл с паролем> put <имя устройства> <адрес>…
 //   node <сборка> <сервер аккаунтов> <имя> <файл с паролем> otp <сервис> <аккаунт> <секрет Base32> [сайт…]
+//   node <сборка> <сервер аккаунтов> <имя> <файл с паролем> send <адрес> [заголовок]   — "send to device": to the first phone of the account
 import { readFileSync } from "node:fs";
 import "./setup.mjs";
 import { Account } from "../../../web/src/core/account.js";
@@ -32,6 +33,20 @@ try {
     const [device, ...urls] = rest;
     await sync.put("tabs", DEVICE, { name: device, at: Date.now(), tabs: urls.map((u, i) => ({ t: `Страница ${i + 1}`, u })) });
   }
+  if (mode === "send") {
+    const [url, title = ""] = rest;
+    const phone = sync.list("tabs").find(r => r.id.startsWith("and-"));
+    if (!phone) {
+      throw new Error("в аккаунте нет телефона со списком вкладок");
+    }
+    if (!sync.get("tabs", DEVICE)) {
+      await sync.put("tabs", DEVICE, { name: "Проверочный компьютер", at: Date.now(), tabs: [] });
+    }
+    const mine = sync.get("sent", DEVICE);
+    const item = { id: `s${Date.now().toString(36)}cli`, to: phone.id, u: url, t: title, at: Date.now() };
+    await sync.put("sent", DEVICE, { name: "Проверочный компьютер", items: [...(mine?.items || []), item].slice(-50) });
+    out.sentTo = phone.data.name;
+  }
   if (mode === "otp") {
     const [issuer, name2, secret, ...sites] = rest;
     const made = await newOtp({ issuer, account: name2, secret, sites: sites.length ? sites : null });
@@ -39,6 +54,7 @@ try {
   }
   out.codes = await Promise.all(sync.list("otp").map(async o => `${o.data.i} (${o.data.a}): ${await totp(base32Decode(o.data.s), { algorithm: o.data.al, digits: o.data.d, period: o.data.p })} — ${(o.data.w || []).map(w => w.host).join(", ")}`));
   out.tabs = sync.list("tabs").map(r => ({ id: r.id === DEVICE ? "(это устройство)" : r.id.slice(0, 8), name: r.data.name, at: new Date(r.data.at).toISOString(), tabs: r.data.tabs.map(x => `${x.t} — ${x.u}`) }));
+  out.sent = sync.list("sent").map(r => ({ from: r.id === DEVICE ? "(это устройство)" : r.data.name, items: (r.data.items || []).map(i => `${i.u} → ${i.to === DEVICE ? "(это устройство)" : i.to.slice(0, 8)}`) }));
   out.devices = (await account.api.devices(account.token)).map(d => `${d.name}${d.current ? " (это)" : ""}${d.active === false ? " [вышло]" : ""}`);
 } finally {
   await account.signOut();

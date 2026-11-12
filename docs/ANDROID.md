@@ -63,6 +63,13 @@ What lives where:
 - **Tabs of other devices → phone:** the module gives the app the decrypted lists; they
   are shown on the last page of the tab list (`TaboraSyncedTabsIntegration`): a native app
   screen formerly used by Mozilla sync. Without a sign-in it shows an invitation to sign in.
+- **Send to device:** "Share" → "Send to device" lists the other devices of the account (the
+  ones that sync tabs); the page goes into the phone's record in the `sent` collection and opens
+  on that device at its next sync. A page sent to the phone opens as a new tab of the current
+  space, with a note saying which device it came from; pages that were sent before the sign-in
+  are not opened. The rules are the same as on desktop (`web/src/phone/sent.js`,
+  `sync/SyncSources.sys.mjs`). The action is in the system share sheet, so for now it needs
+  Android 14 or newer; the in-app share screen of older versions does not have it yet.
 - A sync runs: after sign-in and at startup, a few seconds after a change in tabs, when the
   tab list is opened and every ten minutes. On desktop, sync is on from the moment of account
   sign-in; it is turned off there too: "Settings → Account → Sync".
@@ -174,8 +181,9 @@ request as a JSON string: the engine does not accept an object in a reply.
 ### What is removed from the interface
 
 There is nowhere in the app to sign in to a Mozilla account: the sign-in item is removed from settings, the main menu, the tab
-list (the "Synced tabs" page), the empty bookmarks screen, "Share" ("Send
-to device") and the settings for passwords, cards and addresses. Hidden: "Data collection", "Rate on Google Play",
+list (the "Synced tabs" page), the empty bookmarks screen and the settings for passwords, cards
+and addresses. "Send to device" in "Share" works through the Tabora account and is offered to
+those signed in to it. Hidden: "Data collection", "Rate on Google Play",
 the labs section, "Remote improvements", the app icon chooser (Firefox icons), Mozilla VPN and page
 summaries (requires a Mozilla account). "About" keeps the licenses and the list of libraries.
 The built-in "make this your default browser" messages are turned off.

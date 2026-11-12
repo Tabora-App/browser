@@ -13,6 +13,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.SystemClock
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricManager
@@ -23,6 +24,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.navigation.findNavController
 import java.lang.ref.WeakReference
 import java.security.SecureRandom
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -33,7 +37,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import mozilla.appservices.places.BookmarkRoot
+import mozilla.components.browser.state.selector.selectedTab
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.concept.engine.EngineSession
 import mozilla.components.concept.engine.webextension.MessageHandler
@@ -54,6 +60,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.mozilla.fenix.NavGraphDirections
 import org.mozilla.fenix.R
+import org.mozilla.fenix.ext.components
 
 /**
  * Аккаунт Tabora в приложении. Вход, ключи и синхронизация живут во встроенном модуле
@@ -85,6 +92,9 @@ class TaboraAccount(
     /** Устройство аккаунта и его открытые вкладки. */
     data class Device(val id: String, val name: String, val tabs: List<Tab>)
 
+    /** A device of the account a page can be sent to ("Share" → "Send to device"). */
+    data class Target(val id: String, val name: String)
+
     /** То, что модуль сообщил о себе в последний раз. */
     data class State(
         val signedIn: Boolean = false,
@@ -94,6 +104,7 @@ class TaboraAccount(
         val codes: Int = 0,
         val status: String = "idle",
         val devices: List<Device> = emptyList(),
+        val targets: List<Target> = emptyList(),
     )
 
     private val logger = Logger("TaboraAccount")
@@ -108,6 +119,8 @@ class TaboraAccount(
     private var browserStore: BrowserStore? = null
     private var host: WeakReference<FragmentActivity>? = null
     private var lastAuthAt = 0L
+    private val sends = ConcurrentHashMap<Int, CompletableDeferred<Boolean>>()
+    private val sendSeq = AtomicInteger(0)
 
     /** Состояние аккаунта для интерфейса приложения. */
     val state: StateFlow<State> = mutableState
@@ -173,6 +186,61 @@ class TaboraAccount(
         }
     }
 
+    /**
+     * Send pages to other devices of the account: each opens there on that device's next sync.
+     * True once the pages are on the server; false when there is no connection (nothing is kept
+     * for later then) or tab sync is turned off.
+     */
+    suspend fun sendTabs(to: List<String>, pages: List<Tab>): Boolean {
+        val sites = pages.filter { it.url.isWebUrl() }
+        if (!state.value.signedIn || to.isEmpty() || sites.isEmpty()) {
+            return false
+        }
+        val rid = sendSeq.incrementAndGet()
+        val done = CompletableDeferred<Boolean>()
+        sends[rid] = done
+        return try {
+            val asked =
+                withContext(Dispatchers.Main) {
+                    if (!controller.portConnected(null)) {
+                        false
+                    } else {
+                        val list = JSONArray()
+                        sites.forEach { list.put(JSONObject().put("url", it.url).put("title", it.title.take(MAX_TITLE))) }
+                        controller.sendBackgroundMessage(
+                            JSONObject().put("type", "send-tab").put("rid", rid).put("to", JSONArray(to)).put("pages", list)
+                        )
+                        true
+                    }
+                }
+            asked && (withTimeoutOrNull(SEND_TIMEOUT_MS) { done.await() } ?: false)
+        } finally {
+            sends.remove(rid)
+        }
+    }
+
+    /**
+     * A page another device of the account sent to this phone: a new tab in the current space.
+     * It becomes the selected one unless a private tab is open now. False if it cannot be opened
+     * (the module offers it again on the next sync).
+     */
+    private fun openSent(url: String, from: String): Boolean {
+        if (!url.isWebUrl()) {
+            return false
+        }
+        val private = browserStore?.state?.selectedTab?.content?.private == true
+        return runCatching {
+            context.components.useCases.tabsUseCases.addTab(url = url, selectTab = !private)
+            val text =
+                if (from.isNotEmpty()) {
+                    context.getString(R.string.tabora_sent_tab_opened, from)
+                } else {
+                    context.getString(R.string.tabora_sent_tab_opened_unnamed)
+                }
+            Toast.makeText(context, text, Toast.LENGTH_LONG).show()
+        }.onFailure { logger.error("sent tab is not opened", it) }.isSuccess
+    }
+
     private fun sendTabs() {
         if (!controller.portConnected(null)) {
             return // модуль ещё запускается: список уйдёт, когда он откроет канал
@@ -205,6 +273,11 @@ class TaboraAccount(
                         authenticate { ok -> port.postMessage(JSONObject().put("type", "reply").put("rid", rid).put("ok", ok)) }
                     }
                     "open" -> openPage(json.optString("page"))
+                    "sent-open" -> {
+                        val ok = openSent(json.optString("url"), json.optString("from").trim().take(MAX_DEVICE_NAME))
+                        port.postMessage(JSONObject().put("type", "reply").put("rid", json.optInt("rid")).put("ok", ok))
+                    }
+                    "sent-result" -> sends[json.optInt("rid")]?.complete(json.optBoolean("ok"))
                     "qr-scan" -> {
                         val rid = json.optInt("rid")
                         scanQr { text, denied ->
@@ -573,6 +646,15 @@ class TaboraAccount(
                 devices += Device(device.optString("id"), device.optString("name").take(MAX_DEVICE_NAME), tabs)
             }
         }
+        val targets = mutableListOf<Target>()
+        val to = optJSONArray("targets") ?: JSONArray()
+        for (i in 0 until minOf(to.length(), MAX_DEVICES)) {
+            val target = to.optJSONObject(i) ?: continue
+            val id = target.optString("id")
+            if (DEVICE_ID.matches(id)) {
+                targets += Target(id, target.optString("name").take(MAX_DEVICE_NAME))
+            }
+        }
         return State(
             signedIn = optBoolean("signedIn"),
             email = optString("email"),
@@ -581,6 +663,7 @@ class TaboraAccount(
             codes = optInt("codes", 0).coerceIn(0, MAX_CODES),
             status = optString("status", "idle"),
             devices = devices,
+            targets = targets,
         )
     }
 
@@ -600,6 +683,8 @@ class TaboraAccount(
         /** Адрес ярлыка почты на домашнем экране: вместо веб-почты он открывает почту в приложении. */
         const val MAIL_SHORTCUT_URL = "https://app.tabora.app"
         private val DATA_NAME = Regex("^[a-z]{1,16}$")
+        private val DEVICE_ID = Regex("^[A-Za-z0-9_-]{1,64}$")
+        private const val SEND_TIMEOUT_MS = 30_000L
         private const val MARK_ITEM = 1
         private const val MARK_FOLDER = 2
         private const val MARK_SEPARATOR = 3

@@ -53,4 +53,7 @@
     <!-- Spaces: the badge next to the address and the link menu item -->
     <string name="tabora_space_badge">Space “%1$s”</string>
     <string name="tabora_space_open_link">Open in the space “%1$s”</string>
+    <!-- "Send to device": a page another device of the account sent to this phone has been opened. %1$s is the device's name -->
+    <string name="tabora_sent_tab_opened">Opened a tab from “%1$s”</string>
+    <string name="tabora_sent_tab_opened_unnamed">Opened a tab from another device</string>
 </resources>

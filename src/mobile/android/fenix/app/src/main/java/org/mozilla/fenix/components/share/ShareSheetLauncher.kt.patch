@@ -1,20 +1,39 @@
 diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/share/ShareSheetLauncher.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/share/ShareSheetLauncher.kt
-index 23317d7044..c8c376132e 100644
+index 23317d7044..12164cae32 100644
 --- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/share/ShareSheetLauncher.kt
 +++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/share/ShareSheetLauncher.kt
-@@ -226,6 +226,7 @@ class DefaultShareSheetLauncher(
+@@ -29,6 +29,7 @@ import mozilla.components.support.ktx.kotlin.trimmed
+ import mozilla.components.ui.icons.R as iconsR
+ import org.mozilla.fenix.R
+ import org.mozilla.fenix.components.menu.share.QRCodeGenerator
++import org.mozilla.fenix.ext.components
+ 
+ internal const val SAVE_PDF_ACTION = "org.mozilla.fenix.ACTION_SAVE_TO_PDF"
+ internal const val PRINT_ACTION = "org.mozilla.fenix.ACTION_PRINT"
+@@ -191,6 +192,10 @@ class DefaultShareSheetLauncher(
+ 
+     private val logger = Logger("DefaultShareSheetLauncher")
+ 
++    /** Tabora: "Send to device" is offered to those signed in to the Tabora account. */
++    private fun taboraSignedIn(): Boolean =
++        runCatching { applicationContext.components.core.taboraAccount.state.value.signedIn }.getOrDefault(false)
++
+     companion object {
+         private const val PRINT_REQUEST_CODE_OFFSET = 1
+         private const val SEND_TO_DEVICES_REQUEST_CODE_OFFSET = 2
+@@ -226,6 +231,7 @@ class DefaultShareSheetLauncher(
                      subject = shareSubject,
                      actions =
                          chooserActions
-+                            .filterNot { it == ShareSheetChooserAction.SEND_TO_DEVICES }
++                            .filterNot { it == ShareSheetChooserAction.SEND_TO_DEVICES && !taboraSignedIn() }
                              .mapNotNull {
                                  it.toChooserAction(
                                      applicationContext = applicationContext,
-@@ -299,6 +300,7 @@ class DefaultShareSheetLauncher(
+@@ -299,6 +305,7 @@ class DefaultShareSheetLauncher(
                      subject = shareSubject,
                      actions =
                          chooserActions
-+                            .filterNot { it == ShareSheetChooserAction.SEND_TO_DEVICES }
++                            .filterNot { it == ShareSheetChooserAction.SEND_TO_DEVICES && !taboraSignedIn() }
                              .mapNotNull {
                                  it.toChooserAction(
                                      applicationContext = applicationContext,

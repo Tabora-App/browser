@@ -24,6 +24,7 @@ import { t } from "../core/i18n.js";
 import { Codes } from "./codes.js";
 import { Logins } from "./logins.js";
 import { Marks } from "./marks.js";
+import { SentTabs } from "./sent.js";
 import { Spaces } from "./spaces.js";
 import { TabSync } from "./tabs.js";
 
@@ -53,6 +54,8 @@ export class Service {
     this.logins = new Logins({ account: this.account, sync: this.sync, bridge, store, ...(settings.logins ? { settings: settings.logins } : {}) });
     this.marks = new Marks({ account: this.account, sync: this.sync, bridge, store, ...(settings.marks ? { settings: settings.marks } : {}) });
     this.spaces = new Spaces({ account: this.account, sync: this.sync, bridge, store, ...(settings.spaces ? { settings: settings.spaces } : {}) });
+    // "Send to device" is a part of tab sync: it is on and off together with it
+    this.sent = new SentTabs({ account: this.account, sync: this.sync, bridge, store, enabled: () => this.tabs.enabled });
     /** Данные синхронизации стёрли с сервера с другого устройства: синхронизация здесь выключена. */
     this.erased = false;
     this._listeners = new Set();
@@ -107,7 +110,7 @@ export class Service {
 
   /** Наборы синхронизации, которые нужны при нынешних настройках. */
   _wanted() {
-    return [this.tabs.enabled && "tabs", this.codes.enabled && "otp", this.logins.enabled && "logins", this.marks.enabled && "marks", this.spaces.enabled && "spaces"].filter(Boolean);
+    return [this.tabs.enabled && "tabs", this.tabs.enabled && "sent", this.codes.enabled && "otp", this.logins.enabled && "logins", this.marks.enabled && "marks", this.spaces.enabled && "spaces"].filter(Boolean);
   }
 
   /* ---- события ---- */
@@ -119,13 +122,36 @@ export class Service {
       }
     } else if (message.type === "sync") {
       this.soon(0);
+    } else if (message.type === "send-tab") {
+      this._sendTab(message);
     }
+  }
+
+  /** The app asks to send pages to devices of the account ("Share" → "Send to device"). The
+   * answer goes back by the channel: { type: "sent-result", rid, ok, count }. */
+  _sendTab(message) {
+    // one at a time: each request adds to the same record
+    this._sending = (this._sending || Promise.resolve()).then(async () => {
+      let count = 0;
+      let ok = true;
+      try {
+        const pages = (Array.isArray(message.pages) ? message.pages : []).slice(0, 20);
+        for (const to of (Array.isArray(message.to) ? message.to : []).slice(0, 10)) {
+          count += await this.sent.send(String(to), pages);
+        }
+      } catch (e) {
+        ok = false;
+      }
+      this.bridge.post({ type: "sent-result", rid: message.rid, ok: ok && count > 0, count });
+    });
   }
 
   _onAccount(what) {
     if (what === "signed-in") {
       this._fails = 0;
       if (!this._starting) {
+        // a sign-in made now, not the saved one read at start: pages sent before it are not opened
+        this.sent.skipExisting();
         this.soon(0);
       }
     } else if (what === "signed-out" || what === "expired") {
@@ -136,6 +162,7 @@ export class Service {
       this.logins.forget();
       this.marks.forget();
       this.spaces.forget();
+      this.sent.forget();
       this.erased = false;
       this._dirty = false;
       this._fails = 0;
@@ -214,6 +241,7 @@ export class Service {
       }
       await this.sync.refresh();
       await this.tabs.push();
+      await this.sent.deliver();
       await this.logins.merge();
       await this.marks.merge({ full });
       await this.spaces.merge().catch(e => {
@@ -260,6 +288,7 @@ export class Service {
   async setTabs(on) {
     if (!on) {
       await this.tabs.drop();
+      await this.sent.drop();
     }
     this.tabs.enabled = !!on;
     this._applyWanted(on);
@@ -413,6 +442,7 @@ export class Service {
     if (this.tabs.enabled) {
       try {
         await this.tabs.drop();
+        await this.sent.drop();
       } catch (e) {
         // нет связи: список останется у других устройств, пока не устареет
       }
@@ -449,6 +479,7 @@ export class Service {
       at: this.sync.at,
       loaded: this.sync.loaded,
       devices: signedIn && this.tabs.enabled ? this.tabs.others() : [],
+      targets: signedIn && this.tabs.enabled ? this.sent.targets() : [],
     };
   }
 
@@ -471,6 +502,8 @@ export class Service {
     const message = {
       type: "state", signedIn: s.signedIn, email: s.email, tabsOn: s.tabsOn, codesOn: s.codesOn, codes: s.codes, loginsOn: s.loginsOn, status: s.status, at: s.at,
       devices: s.devices.map(d => ({ id: d.id, name: d.name || t`Другое устройство`, at: d.at, tabs: d.tabs.map(x => ({ t: x.t, u: x.u })) })),
+      // devices a page can be sent to ("Share" → "Send to device")
+      targets: s.targets.map(d => ({ id: d.id, name: d.name || t`Другое устройство` })),
     };
     const mark = JSON.stringify(message);
     if (mark !== this._sent) {

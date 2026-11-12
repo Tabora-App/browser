@@ -482,8 +482,11 @@ export const Sync = {
     let clean = true;
     let pushed = 0;
     let lastRev = serverRev;
+    // nothing has been read from the server here yet (sync has just been turned on, or the server
+    // data was started anew): what arrives in this pass was there before this computer joined
+    const first = !Object.values(state.cur).some(rev => rev > 0);
     for (const c of active) {
-      const result = await this._collection(keys, state, c, incoming.get(c));
+      const result = await this._collection(keys, state, c, incoming.get(c), { first });
       clean &&= result.clean;
       pushed += result.saved;
       lastRev = Math.max(lastRev, result.rev);
@@ -500,13 +503,11 @@ export const Sync = {
     return clean;
   },
 
-  async _collection(keys, state, c, incoming) {
+  async _collection(keys, state, c, incoming, { first = false } = {}) {
     const src = lazy.SOURCES[c];
     const a = lazy.Account;
     const shadow = (state.items[c] ||= {});
     const owns = id => !src.owns || src.owns(id);
-    // nothing of this collection has been read here yet: what arrives now was there before
-    const first = !state.cur[c];
     if (src.restore && !src._restored) {
       src._restored = true;
       const saved = state.cache[c] ? await this._open(keys, "cache", c, state.cache[c]) : null;

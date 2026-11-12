@@ -1,0 +1,61 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/share/SendToDevicesDialogFragment.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/share/SendToDevicesDialogFragment.kt
+index 9a90b6ec90..b1fc82c911 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/share/SendToDevicesDialogFragment.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/share/SendToDevicesDialogFragment.kt
+@@ -48,6 +48,7 @@ import org.mozilla.fenix.settings.SupportUtils
+ import org.mozilla.fenix.settings.account.SignOutFragment
+ import org.mozilla.fenix.share.listadapters.SyncShareOption
+ import org.mozilla.fenix.snackbar.FenixSnackbarDelegate
++import org.mozilla.fenix.tabora.TaboraAccount
+ 
+ /** A [BottomSheetDialogFragment] that allows the user to send a tab to their other devices. */
+ class SendToDevicesDialogFragment : BottomSheetDialogFragment() {
+@@ -78,9 +79,10 @@ class SendToDevicesDialogFragment : BottomSheetDialogFragment() {
+                 uiState = uiState,
+                 onDismiss = { dismiss() },
+                 onSend = { devices: Set<SyncShareOption.SingleDevice> ->
+-                    sendAndDismiss {
+-                        sendTabUseCases.sendToDeviceAsync.invoke(devices.map { it.device }, tabs).await()
+-                    }
++                    // Tabora: the pages go through the Tabora account
++                    val account = requireComponents.core.taboraAccount
++                    val pages = tabs.map { TaboraAccount.Tab(it.title, it.url) }
++                    sendAndDismiss { account.sendTabs(devices.map { it.device.id }, pages) }
+                 },
+                 onDeviceSelectionToggle = { shareUiStore.dispatch(ShareUiAction.DeviceSelectionToggle(it)) },
+                 onSignInClicked = {
+@@ -106,6 +108,7 @@ class SendToDevicesDialogFragment : BottomSheetDialogFragment() {
+                 fxaAccountManager = requireComponents.backgroundServices.accountManager,
+                 connectivityManager = app.getSystemService<ConnectivityManager>(),
+                 scope = storeProvider.viewModelScope,
++                tabora = requireComponents.core.taboraAccount,
+             )
+         viewLifecycleOwner.lifecycle.addObserver(deviceObserver)
+     }
+@@ -160,12 +163,9 @@ class SendToDevicesDialogFragment : BottomSheetDialogFragment() {
+     }
+ 
+     private fun reconnectToSync(context: Context) {
+-        context.components.services.accountsAuthFeature.beginAuthentication(
+-            context,
+-            FenixFxAEntryPoint.ShareMenu,
+-            setOf(SCOPE_PROFILE, SCOPE_SYNC),
+-        )
+-        SyncAuth.useEmailProblem.record(NoExtras())
++        // Tabora: sending needs the Tabora account; its screen has the sign-in
++        dismissAllowingStateLoss()
++        context.components.core.taboraAccount.openPage(TaboraAccount.PAGE_ACCOUNT)
+     }
+ 
+     private fun removeAccountFromSync() {
+@@ -199,8 +199,8 @@ class SendToDevicesDialogFragment : BottomSheetDialogFragment() {
+     }
+ 
+     private fun openLearnMoreLink() {
+-        val url = SupportUtils.getGenericSumoURLForTopic(SupportUtils.SumoTopic.CONNECT_ADDITIONAL_DEVICES_TO_SYNC)
+-        SupportUtils.launchSandboxCustomTab(requireContext(), url)
++        // Tabora: another device is connected by installing Tabora there and signing in
++        SupportUtils.launchSandboxCustomTab(requireContext(), "https://tabora.app/")
+     }
+ 
+     /**
