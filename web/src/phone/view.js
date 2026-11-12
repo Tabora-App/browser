@@ -23,7 +23,7 @@ export function mountPhoneAccount(root, { service }) {
   const off = service.subscribe(() => alive && draw());
 
   function status(s) {
-    if (!s.tabsOn && !s.codesOn && !s.loginsOn) {
+    if (!s.tabsOn && !s.codesOn && !s.loginsOn && !s.marksOn) {
       return s.erased
         ? { tone: "warn", text: t`Выключена: данные синхронизации стёрли с сервера с другого устройства. Данные на самом телефоне на месте.` }
         : { text: t`Выключена: на этом телефоне ничего не синхронизируется.` };
@@ -83,9 +83,21 @@ export function mountPhoneAccount(root, { service }) {
           h("button", { class: "btn small", onclick: forgetLogins }, t`Удалить везде`))),
       s.loginsOn && !s.loginsHold && h("div", { class: "kv" },
         h("div", { class: "kv-text" }, h("small", { class: "wrap" }, s.loginsError ? t`Пароли не сверены: ${s.loginsError}` : s.loaded ? (s.logins ? plural(s.logins, t`пароль|пароля|паролей`) : t`Паролей пока нет`) : t`Идёт сверка…`))),
+      h("div", { class: "kv tall" },
+        h("div", { class: "kv-text" },
+          h("span", {}, t`Закладки`),
+          h("small", { class: "wrap" }, t`Закладки с компьютера появляются в закладках этого телефона, а сделанные здесь — на компьютере в папке «С телефона».`)),
+        h("div", { class: "kv-actions" }, toggle(s.marksOn, on => service.setMarks(on), t`Закладки`))),
+      s.marksOn && s.marksHold && h("div", { class: "kv tall sync-status warn" },
+        h("div", { class: "kv-text" }, h("small", { class: "wrap" }, t`С телефона разом пропало много закладок: ${s.marksHold.missing} из ${s.marksHold.of}. На других устройствах они пока не удалены.`)),
+        h("div", { class: "kv-actions buttons" },
+          h("button", { class: "btn small", onclick: () => service.resolveMarksHold("restore").catch(e => toast(errorText(e), { tone: "bad" })) }, t`Вернуть на телефон`),
+          h("button", { class: "btn small", onclick: forgetMarks }, t`Удалить везде`))),
+      s.marksOn && !s.marksHold && h("div", { class: "kv" },
+        h("div", { class: "kv-text" }, h("small", { class: "wrap" }, s.marksError ? t`Закладки не сверены: ${s.marksError}` : s.loaded ? (s.marks ? plural(s.marks, t`закладка|закладки|закладок`) : t`Закладок пока нет`) : t`Идёт сверка…`))),
       h("div", { class: `kv tall sync-status${st.tone ? ` ${st.tone}` : ""}` },
         h("div", { class: "kv-text" }, h("small", { class: "wrap" }, st.text)),
-        h("div", { class: "kv-actions buttons" }, st.action || ((s.tabsOn || s.codesOn || s.loginsOn) && now))),
+        h("div", { class: "kv-actions buttons" }, st.action || ((s.tabsOn || s.codesOn || s.loginsOn || s.marksOn) && now))),
       h("p", { class: "card-note" }, t`Данные шифруются на телефоне ключом вашего аккаунта. Сервер хранит их зашифрованными и прочитать не может.`));
   }
 
@@ -96,6 +108,15 @@ export function mountPhoneAccount(root, { service }) {
       confirm: t`Удалить везде`,
       danger: true,
     }).then(yes => yes && service.resolveLoginsHold("delete").catch(e => toast(errorText(e), { tone: "bad" })));
+  }
+
+  function forgetMarks() {
+    confirmDialog({
+      title: t`Удалить закладки везде?`,
+      text: t`Закладки, пропавшие с этого телефона, будут удалены из аккаунта и с остальных ваших устройств.`,
+      confirm: t`Удалить везде`,
+      danger: true,
+    }).then(yes => yes && service.resolveMarksHold("delete").catch(e => toast(errorText(e), { tone: "bad" })));
   }
 
   function devicesCard(s) {
@@ -109,7 +130,7 @@ export function mountPhoneAccount(root, { service }) {
         h("small", {}, t`${plural(d.tabs.length, t`вкладка|вкладки|вкладок`)}, обновлено ${shortDate(d.at)}`))));
     return h("section", { class: "card" },
       h("h2", { class: "card-title" }, t`Вкладки на других устройствах`),
-      rows.length ? rows : h("p", { class: "card-note" }, t`Пока пусто. На компьютере включите синхронизацию: «Настройки → Аккаунт → Синхронизация».`),
+      rows.length ? rows : h("p", { class: "card-note" }, t`Пока пусто. Вкладки появятся, когда вы откроете Tabora на другом устройстве и войдёте там в этот аккаунт.`),
       rows.length ? h("p", { class: "card-note" }, t`Открыть их можно в списке вкладок: значок с двумя экранами.`) : null);
   }
 

@@ -6,9 +6,9 @@
  * встроенного модуля всё время, пока запущено приложение; экраны модуля (аккаунт, коды) берут
  * этот же объект и ничего своего не хранят.
  *
- * Синхронизируются вкладки, коды входа и пароли сайтов — каждое включается отдельно. Записи
- * остальных наборов аккаунта (закладки) модуль не расшифровывает и в памяти не держит. Пароли
- * лежат в хранилище паролей приложения; модуль сливает его с сервером (logins.js).
+ * Синхронизируются вкладки, коды входа, пароли сайтов и закладки — каждое включается отдельно.
+ * Записи остальных наборов аккаунта модуль не расшифровывает и в памяти не держит. Пароли и
+ * закладки лежат в хранилищах приложения; модуль сливает их с сервером (logins.js, marks.js).
  *
  * Сверка с сервером: сразу после входа и запуска, через несколько секунд после перемены во
  * вкладках телефона, по просьбе приложения (открыли список вкладок) и раз в десять минут.
@@ -22,6 +22,7 @@ import { SyncClient } from "../core/sync.js";
 import { t } from "../core/i18n.js";
 import { Codes } from "./codes.js";
 import { Logins } from "./logins.js";
+import { Marks } from "./marks.js";
 import { TabSync } from "./tabs.js";
 
 const QUIET_MS = 5000; // пауза после перемены во вкладках перед сверкой
@@ -48,6 +49,7 @@ export class Service {
     this.tabs = new TabSync({ account: this.account, sync: this.sync, store, ...(settings.tabs ? { settings: settings.tabs } : {}) });
     this.codes = new Codes({ account: this.account, sync: this.sync, ...(settings.codes ? { settings: settings.codes } : {}) });
     this.logins = new Logins({ account: this.account, sync: this.sync, bridge, store, ...(settings.logins ? { settings: settings.logins } : {}) });
+    this.marks = new Marks({ account: this.account, sync: this.sync, bridge, store, ...(settings.marks ? { settings: settings.marks } : {}) });
     /** Данные синхронизации стёрли с сервера с другого устройства: синхронизация здесь выключена. */
     this.erased = false;
     this._listeners = new Set();
@@ -56,6 +58,7 @@ export class Service {
     this._saveTimer = null;
     this._running = null;
     this._again = false;
+    this._full = true; // следующая сверка полная; попутная (после перемены во вкладках) закладки читает реже
     this._fails = 0;
     this._sent = "";
     this._dirty = false;
@@ -101,7 +104,7 @@ export class Service {
 
   /** Наборы синхронизации, которые нужны при нынешних настройках. */
   _wanted() {
-    return [this.tabs.enabled && "tabs", this.codes.enabled && "otp", this.logins.enabled && "logins"].filter(Boolean);
+    return [this.tabs.enabled && "tabs", this.codes.enabled && "otp", this.logins.enabled && "logins", this.marks.enabled && "marks"].filter(Boolean);
   }
 
   /* ---- события ---- */
@@ -109,7 +112,7 @@ export class Service {
   _fromApp(message) {
     if (message.type === "tabs") {
       if (this.tabs.setLocal(message.tabs)) {
-        this.soon(QUIET_MS);
+        this.soon(QUIET_MS, { full: false });
       }
     } else if (message.type === "sync") {
       this.soon(0);
@@ -128,6 +131,7 @@ export class Service {
       this.sync.reset();
       this.codes.forget();
       this.logins.forget();
+      this.marks.forget();
       this.erased = false;
       this._dirty = false;
       this._fails = 0;
@@ -162,31 +166,40 @@ export class Service {
 
   /* ---- сверка ---- */
 
-  soon(ms = 0) {
+  soon(ms = 0, { full = true } = {}) {
     if (!this.account.signedIn || this._stopped) {
       return;
     }
+    if (full) {
+      this._full = true;
+    }
     clearTimeout(this._timer);
-    this._timer = setTimeout(() => this.run().catch(() => {}), ms);
+    this._timer = setTimeout(() => this.run({ full: false }).catch(() => {}), ms);
   }
 
   /** Сверить сейчас. Одновременных сверок не бывает: просьба во время сверки ставит следующую. */
-  run() {
+  /** Сверить сейчас. full: false — попутная сверка, если полной никто не просил (см. soon). */
+  run({ full = true } = {}) {
+    if (full) {
+      this._full = true;
+    }
     if (this._running) {
       this._again = true;
       return this._running;
     }
-    this._running = this._run().finally(() => {
+    const all = this._full;
+    this._full = false;
+    this._running = this._run(all).finally(() => {
       this._running = null;
       if (this._again) {
         this._again = false;
-        this.soon(QUIET_MS);
+        this.soon(QUIET_MS, { full: false });
       }
     });
     return this._running;
   }
 
-  async _run() {
+  async _run(full = true) {
     if (!this.account.signedIn || !this._wanted().length) {
       return;
     }
@@ -197,13 +210,15 @@ export class Service {
       await this.sync.refresh();
       await this.tabs.push();
       await this.logins.merge();
+      await this.marks.merge({ full });
       this._fails = 0;
     } catch (e) {
       if (e.code === "sync-erased") {
         await this._erased();
       } else if (e.code !== "session-expired" && e.code !== "signed-out" && e.code !== "sync-key") {
         this._fails++;
-        this.soon(RETRY_MS[Math.min(this._fails, RETRY_MS.length) - 1]);
+        this._full = this._full || full; // несостоявшаяся полная сверка остаётся полной при повторе
+        this.soon(RETRY_MS[Math.min(this._fails, RETRY_MS.length) - 1], { full: false });
       }
     } finally {
       this._changed();
@@ -218,6 +233,8 @@ export class Service {
     this.codes.enabled = false;
     this.logins.enabled = false;
     await this.logins.forget();
+    this.marks.enabled = false;
+    await this.marks.forget();
     this.sync.reset();
     this.sync.setOnly([]);
     this.erased = true;
@@ -256,6 +273,20 @@ export class Service {
   /** Решение о паролях, пропавших с телефона разом: "delete" или "restore" (см. logins.js). */
   async resolveLoginsHold(what) {
     await this.logins.resolveHold(what);
+    this._changed();
+    this.soon(0);
+  }
+
+  async setMarks(on) {
+    this.marks.enabled = !!on;
+    if (!on) {
+      await this.marks.forget();
+    }
+    this._applyWanted(on);
+  }
+
+  async resolveMarksHold(what) {
+    await this.marks.resolveHold(what);
     this._changed();
     this.soon(0);
   }
@@ -385,6 +416,10 @@ export class Service {
       logins: signedIn && this.logins.enabled ? this.logins.count : 0,
       loginsHold: signedIn ? this.logins.hold : null,
       loginsError: this.logins.error,
+      marksOn: this.marks.enabled,
+      marks: signedIn && this.marks.enabled ? this.marks.count : 0,
+      marksHold: signedIn ? this.marks.hold : null,
+      marksError: this.marks.error,
       erased: this.erased,
       status: this.sync.status,
       error: this.sync.error,

@@ -23,7 +23,13 @@
  *                                        (отпечаток, лицо или код блокировки) → reply { ok }
  *   { type: "open", page }               открыть экран модуля: "account" или "codes"
  *   { type: "qr-scan", rid }             открыть сканер QR-кодов → reply { text } (пусто — закрыли)
- *                                        или { denied: true } — нет доступа к камере */
+ *                                        или { denied: true } — нет доступа к камере
+ *   { type: "marks-tree", rid }          закладки приложения → reply { nodes: [{ g, p, k, n, u?, c, t, ch? }] }:
+ *                                        четыре корня и всё под ними; k: 1 закладка, 2 папка, 3 разделитель
+ *   { type: "marks-add", rid, parent, kind, title, url }      → reply { ok, guid }
+ *   { type: "marks-update", rid, guid, parent?, title?, url? } → reply { ok }
+ *   { type: "marks-order", rid, parent, order: [guid] }       порядок детей папки → reply { ok }
+ *   { type: "marks-delete", rid, guid }                       → reply { ok } */
 
 const APP = "tabora";
 

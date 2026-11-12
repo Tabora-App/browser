@@ -3089,5 +3089,14 @@
  "Ждём разрешения на компьютере": "Esperando el permiso en el ordenador",
  "Не входить": "No entrar",
  "Отменяем": "Cancelando",
- "Войти в этот аккаунт?": "¿Entrar en esta cuenta?"
+ "Войти в этот аккаунт?": "¿Entrar en esta cuenta?",
+ "Войдите, чтобы вкладки, закладки, пароли и коды входа были общими для этого телефона и других ваших устройств.": "Inicia sesión para compartir pestañas, marcadores, contraseñas y códigos de acceso entre este teléfono y tus otros dispositivos.",
+ "Вкладки, закладки, пароли и коды входа этого телефона станут общими с этим аккаунтом и другими его устройствами.": "Las pestañas, marcadores, contraseñas y códigos de acceso de este teléfono se compartirán con esta cuenta y sus otros dispositivos.",
+ "Закладки с компьютера появляются в закладках этого телефона, а сделанные здесь — на компьютере в папке «С телефона».": "Los marcadores del ordenador aparecen en los marcadores de este teléfono, y los creados aquí, en el ordenador en la carpeta «Del teléfono».",
+ "С телефона разом пропало много закладок: {0} из {1}. На других устройствах они пока не удалены.": "Han desaparecido muchos marcadores del teléfono a la vez: {0} de {1}. En tus otros dispositivos aún no se han eliminado.",
+ "Закладки не сверены: {0}": "Marcadores sin sincronizar: {0}",
+ "закладка|закладки|закладок": "marcador|marcadores",
+ "Удалить закладки везде?": "¿Eliminar los marcadores en todas partes?",
+ "Закладки, пропавшие с этого телефона, будут удалены из аккаунта и с остальных ваших устройств.": "Los marcadores que faltan en este teléfono se eliminarán de la cuenta y de tus otros dispositivos.",
+ "Пока пусто. Вкладки появятся, когда вы откроете Tabora на другом устройстве и войдёте там в этот аккаунт.": "Aún no hay nada. Las pestañas aparecerán cuando abras Tabora en otro dispositivo e inicies sesión allí en esta cuenta."
 }

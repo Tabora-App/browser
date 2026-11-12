@@ -10,7 +10,7 @@
     <string name="tabora_account_summary">Войдите, чтобы вкладки были видны на всех ваших устройствах</string>
     <!-- Список вкладок, страница вкладок других устройств -->
     <string name="tabora_synced_tabs_off">Синхронизация вкладок на этом телефоне выключена. Включить её можно в аккаунте Tabora.</string>
-    <string name="tabora_synced_tabs_empty">Вкладок с других устройств пока нет. На компьютере включите синхронизацию: «Настройки → Аккаунт → Синхронизация».</string>
+    <string name="tabora_synced_tabs_empty">Вкладок с других устройств пока нет. Они появятся, когда вы откроете Tabora на другом устройстве и войдёте там в этот аккаунт.</string>
     <string name="tabora_synced_tabs_signed_out_title">Вкладки с других устройств</string>
     <string name="tabora_synced_tabs_signed_out_text">Войдите в аккаунт Tabora, чтобы видеть здесь вкладки с компьютера и других устройств.</string>
     <string name="tabora_synced_tabs_sign_in">Войти</string>

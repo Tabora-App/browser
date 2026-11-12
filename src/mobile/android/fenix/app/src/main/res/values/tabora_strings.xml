@@ -14,7 +14,7 @@
     <string name="tabora_account_summary">Sign in to share tabs between your devices</string>
     <!-- Список вкладок, страница вкладок других устройств -->
     <string name="tabora_synced_tabs_off">Tab sync is turned off on this phone. Turn it on in your Tabora account.</string>
-    <string name="tabora_synced_tabs_empty">No tabs from your other devices yet. On your computer, turn on sync: Settings → Account → Sync.</string>
+    <string name="tabora_synced_tabs_empty">No tabs from your other devices yet. They will appear once you open Tabora on another device and sign in to this account there.</string>
     <string name="tabora_synced_tabs_signed_out_title">Tabs from your other devices</string>
     <string name="tabora_synced_tabs_signed_out_text">Sign in to your Tabora account to see tabs from your computer and other devices here.</string>
     <string name="tabora_synced_tabs_sign_in">Sign in</string>

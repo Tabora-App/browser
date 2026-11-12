@@ -3089,5 +3089,14 @@
  "Ждём разрешения на компьютере": "Waiting for approval on the computer",
  "Не входить": "Don’t sign in",
  "Отменяем": "Cancelling",
- "Войти в этот аккаунт?": "Sign in to this account?"
+ "Войти в этот аккаунт?": "Sign in to this account?",
+ "Войдите, чтобы вкладки, закладки, пароли и коды входа были общими для этого телефона и других ваших устройств.": "Sign in to share tabs, bookmarks, passwords and sign-in codes between this phone and your other devices.",
+ "Вкладки, закладки, пароли и коды входа этого телефона станут общими с этим аккаунтом и другими его устройствами.": "This phone’s tabs, bookmarks, passwords and sign-in codes will be shared with this account and its other devices.",
+ "Закладки с компьютера появляются в закладках этого телефона, а сделанные здесь — на компьютере в папке «С телефона».": "Bookmarks from your computer appear in this phone’s bookmarks, and the ones made here appear on the computer in the “From phone” folder.",
+ "С телефона разом пропало много закладок: {0} из {1}. На других устройствах они пока не удалены.": "Many bookmarks disappeared from the phone at once: {0} of {1}. They haven’t been deleted on your other devices yet.",
+ "Закладки не сверены: {0}": "Bookmarks not synced: {0}",
+ "закладка|закладки|закладок": "bookmark|bookmarks",
+ "Удалить закладки везде?": "Delete bookmarks everywhere?",
+ "Закладки, пропавшие с этого телефона, будут удалены из аккаунта и с остальных ваших устройств.": "The bookmarks missing from this phone will be deleted from the account and from your other devices.",
+ "Пока пусто. Вкладки появятся, когда вы откроете Tabora на другом устройстве и войдёте там в этот аккаунт.": "Nothing here yet. Tabs will appear once you open Tabora on another device and sign in to this account there."
 }

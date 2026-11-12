@@ -33,11 +33,16 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import mozilla.appservices.places.BookmarkRoot
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.concept.engine.EngineSession
 import mozilla.components.concept.engine.webextension.MessageHandler
 import mozilla.components.concept.engine.webextension.Port
 import mozilla.components.concept.engine.webextension.WebExtensionRuntime
+import mozilla.components.concept.storage.BookmarkInfo
+import mozilla.components.concept.storage.BookmarkNode
+import mozilla.components.concept.storage.BookmarkNodeType
+import mozilla.components.concept.storage.BookmarksStorage
 import mozilla.components.concept.storage.LoginEntry
 import mozilla.components.concept.storage.LoginsStorage
 import mozilla.components.feature.qr.QrScanActivity
@@ -62,7 +67,8 @@ import org.mozilla.fenix.R
  *  - по просьбе модуля приложение спрашивает у человека отпечаток, лицо или код блокировки (перед
  *    показом и вставкой кодов входа), открывает экраны модуля и сканер QR-кодов (вход по коду с
  *    другого устройства);
- *  - модуль читает и меняет хранилище паролей приложения, чтобы слить его с паролями аккаунта.
+ *  - модуль читает и меняет хранилища паролей и закладок приложения, чтобы слить их с данными
+ *    аккаунта.
  *
  * Сообщения описаны в web/src/phone/bridge.js.
  */
@@ -70,6 +76,7 @@ class TaboraAccount(
     private val context: Context,
     private val scope: CoroutineScope,
     private val logins: () -> LoginsStorage,
+    private val bookmarks: () -> BookmarksStorage,
 ) {
     /** Вкладка другого устройства. */
     data class Tab(val title: String, val url: String)
@@ -212,6 +219,15 @@ class TaboraAccount(
                             port.postMessage(reply.put("type", "reply").put("rid", rid))
                         }
                     }
+                    "marks-tree", "marks-add", "marks-update", "marks-order", "marks-delete" -> {
+                        val rid = json.optInt("rid")
+                        scope.launch(Dispatchers.Main) {
+                            val reply =
+                                runCatching { withContext(Dispatchers.IO) { marksRequest(json) } }
+                                    .getOrElse { JSONObject().put("error", it.message ?: it.javaClass.simpleName) }
+                            port.postMessage(reply.put("type", "reply").put("rid", rid))
+                        }
+                    }
                 }
             }
 
@@ -298,6 +314,86 @@ class TaboraAccount(
     /** Имя записи с копией данных в защищённом хранилище; чужие имена не принимаются. */
     private fun dataKey(json: JSONObject): String? =
         json.optString("name").takeIf { DATA_NAME.matches(it) }?.let { "data_$it" }
+
+    /**
+     * Просьба модуля к хранилищу закладок приложения: дерево четырёх корней, добавление, правка,
+     * порядок детей папки, удаление. Номер новой закладке даёт хранилище; модуль ведёт таблицу
+     * соответствия номерам записей аккаунта.
+     */
+    private suspend fun marksRequest(json: JSONObject): JSONObject {
+        val storage = bookmarks()
+        return when (json.optString("type")) {
+            "marks-tree" -> {
+                val nodes = JSONArray()
+                MARK_ROOTS.forEach { root ->
+                    storage.getTree(root, recursive = true).getOrThrow()?.let { putMark(nodes, it, null) }
+                }
+                JSONObject().put("nodes", nodes)
+            }
+            "marks-add" -> {
+                val parent = json.getString("parent")
+                val guid =
+                    when (json.getInt("kind")) {
+                        MARK_ITEM -> storage.addItem(parent, json.getString("url"), json.optString("title"), null)
+                        MARK_FOLDER -> storage.addFolder(parent, json.optString("title"), null)
+                        else -> storage.addSeparator(parent, null)
+                    }.getOrThrow()
+                JSONObject().put("ok", true).put("guid", guid)
+            }
+            "marks-update" -> {
+                val info =
+                    BookmarkInfo(
+                        parentGuid = json.textOrNull("parent"),
+                        position = null,
+                        title = json.textOrNull("title"),
+                        url = json.textOrNull("url"),
+                    )
+                storage.updateNode(json.getString("guid"), info).getOrThrow()
+                JSONObject().put("ok", true)
+            }
+            "marks-order" -> {
+                val order = json.getJSONArray("order")
+                for (i in 0 until order.length()) {
+                    storage.updateNode(order.getString(i), BookmarkInfo(null, i.toUInt(), null, null)).getOrThrow()
+                }
+                JSONObject().put("ok", true)
+            }
+            "marks-delete" -> {
+                storage.deleteNode(json.getString("guid")).getOrThrow()
+                JSONObject().put("ok", true)
+            }
+            else -> JSONObject()
+        }
+    }
+
+    private fun putMark(nodes: JSONArray, node: BookmarkNode, parent: String?) {
+        val kind =
+            when (node.type) {
+                BookmarkNodeType.ITEM -> MARK_ITEM
+                BookmarkNodeType.FOLDER -> MARK_FOLDER
+                BookmarkNodeType.SEPARATOR -> MARK_SEPARATOR
+            }
+        val item =
+            JSONObject()
+                .put("g", node.guid)
+                .put("p", parent ?: JSONObject.NULL)
+                .put("k", kind)
+                .put("n", node.title ?: "")
+                .put("c", node.dateAdded)
+                .put("t", node.lastModified)
+        if (kind == MARK_ITEM) {
+            item.put("u", node.url ?: "")
+        }
+        if (kind == MARK_FOLDER) {
+            val children = JSONArray()
+            node.children?.forEach { children.put(it.guid) }
+            item.put("ch", children)
+        }
+        nodes.put(item)
+        node.children?.forEach { putMark(nodes, it, node.guid) }
+    }
+
+    private fun JSONObject.textOrNull(key: String): String? = if (has(key) && !isNull(key)) getString(key) else null
 
     /**
      * Подтверждение, что телефон в руках владельца: отпечаток, лицо или код блокировки. Недавнее
@@ -482,6 +578,13 @@ class TaboraAccount(
         /** Адрес ярлыка почты на домашнем экране: вместо веб-почты он открывает почту в приложении. */
         const val MAIL_SHORTCUT_URL = "https://app.tabora.app"
         private val DATA_NAME = Regex("^[a-z]{1,16}$")
+        private const val MARK_ITEM = 1
+        private const val MARK_FOLDER = 2
+        private const val MARK_SEPARATOR = 3
+
+        /** Корни закладок, общие для телефона и компьютера: меню, панель, «Другие», телефон. */
+        private val MARK_ROOTS =
+            listOf(BookmarkRoot.Menu.id, BookmarkRoot.Toolbar.id, BookmarkRoot.Unfiled.id, BookmarkRoot.Mobile.id)
         private const val AUTH_GRACE_MS = 5 * 60 * 1000L
         private const val MAX_CODES = 5000
         private const val EXTENSION_ID = "account@tabora.app"
