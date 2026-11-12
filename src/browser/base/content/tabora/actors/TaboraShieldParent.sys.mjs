@@ -16,10 +16,15 @@ export class TaboraShieldParent extends JSWindowActorParent {
     if (message.name !== "Shield:Style") {
       return null;
     }
-    try {
-      return lazy.Shield.styleFor(this.manager);
-    } catch (e) {
-      return { off: true };
-    }
+    const answer = () => {
+      try {
+        return lazy.Shield.styleFor(this.manager);
+      } catch (e) {
+        return { off: true };
+      }
+    };
+    // правила ещё собираются (первые мгновения после запуска): документ получит стили, когда соберутся
+    const settling = lazy.Shield.settling();
+    return settling ? settling.then(answer) : answer();
   }
 }

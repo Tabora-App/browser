@@ -1,27 +1,20 @@
 diff --git a/mobile/shared/components/geckoview/GeckoViewStartup.sys.mjs b/mobile/shared/components/geckoview/GeckoViewStartup.sys.mjs
-index fb883b8efb..a06e0efe68 100644
+index fb883b8efb..9a908c615d 100644
 --- a/mobile/shared/components/geckoview/GeckoViewStartup.sys.mjs
 +++ b/mobile/shared/components/geckoview/GeckoViewStartup.sys.mjs
-@@ -383,6 +383,23 @@ export class GeckoViewStartup {
+@@ -383,6 +383,16 @@ export class GeckoViewStartup {
            "network:request-local-network-permission"
          );
  
-+        // Tabora: блокировщик рекламы работает в самом движке. Запуск с первым окном: ему
-+        // нужен документ, чтобы проверять селекторы из списков фильтров.
-+        const startShield = () => {
-+          Services.obs.removeObserver(
-+            startShield,
-+            "browser-delayed-startup-finished"
-+          );
-+          try {
-+            ChromeUtils.importESModule(
-+              "chrome://tabora/content/shield/Shield.sys.mjs"
-+            ).Shield.start();
-+          } catch (e) {
-+            console.error("Tabora shield", e);
-+          }
-+        };
-+        Services.obs.addObserver(startShield, "browser-delayed-startup-finished");
++        // Tabora: блокировщик рекламы работает в самом движке. Запуск сразу, не дожидаясь окна:
++        // к первой странице правила уже должны собираться, иначе она откроется с рекламой.
++        try {
++          ChromeUtils.importESModule(
++            "chrome://tabora/content/shield/Shield.sys.mjs"
++          ).Shield.start();
++        } catch (e) {
++          console.error("Tabora shield", e);
++        }
 +
          Services.obs.notifyObservers(null, "geckoview-startup-complete");
          break;

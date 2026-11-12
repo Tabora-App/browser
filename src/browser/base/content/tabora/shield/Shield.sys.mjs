@@ -16,6 +16,11 @@
  * сервер аккаунтов, обновления) не трогаются. Переход на страницу не блокируется никогда —
  * только то, что страница подгружает.
  *
+ * Запуск. Правила собираются из списков на диске сразу при запуске (доли секунды). Пока они
+ * собираются, запросы страниц не уходят мимо блокировщика, а ждут: иначе первая страница после
+ * запуска — восстановленная вкладка, ссылка из другого приложения — открывалась бы с рекламой.
+ * Ожидание ограничено HOLD_MS: если правила не собрались, запросы уходят без проверки.
+ *
  * Стили. Общие правила скрытия (их тысячи) собраны в одну таблицу стилей; её текст раздаётся
  * процессам страниц через общую память, и каждый процесс разбирает её один раз. Свои правила
  * сайта приходят документу отдельным небольшим листом (actors/TaboraShieldChild).
@@ -37,6 +42,7 @@ const CHECK_MS = 3 * 3600 * 1000;
 const RETRY_MS = 30 * 60 * 1000; // неудавшаяся загрузка списка повторяется не раньше
 const MAX_LIST = 40 * 1024 * 1024;
 const MAX_PAGES = 400;
+const HOLD_MS = 4000; // дольше запросы страниц сборку правил не ждут
 
 export const LISTS = [
   { id: "easylist", title: "EasyList", note: tt`Реклама на сайтах всего мира`, kind: "ads", url: "https://easylist.to/easylist/easylist.txt" },
@@ -53,6 +59,14 @@ const TYPE_BITS = new Map([
 ]);
 
 const idle = () => new Promise(resolve => ChromeUtils.idleDispatch(resolve, { timeout: 120 }));
+const turn = () => new Promise(resolve => Services.tm.dispatchToMainThread(resolve));
+
+// Проверка селектора разбором. Своему окну не привязана: правила собираются и до первого окна.
+let cssSupports = null;
+function validSelector(selector) {
+  cssSupports ||= new Cu.Sandbox(Services.scriptSecurityManager.getSystemPrincipal(), { wantGlobalProperties: ["CSS"] }).CSS;
+  return cssSupports.supports(`selector(${selector})`);
+}
 
 function baseDomain(host) {
   try {
@@ -74,6 +88,10 @@ export const Shield = {
   _customGeneric: new Map(),
   _building: null,
   _updating: null,
+  _holding: false, // правила собираются в первый раз: запросы страниц ждут
+  _holdTimer: null,
+  _held: [], // приостановленные запросы
+  _waiters: [], // документы, ждущие стили
 
   notify(what = "changed") {
     Services.obs.notifyObservers(null, this.TOPIC, what);
@@ -263,10 +281,14 @@ export const Shield = {
 
   /** Собрать движок из списков на диске. Разбор идёт кусками в свободное время потока. */
   _rebuild() {
-    this._building ||= this._build().finally(() => {
-      this._building = null;
-      this.notify("engine");
-    });
+    if (!this._building) {
+      this._hold();
+      this._building = this._build().finally(() => {
+        this._building = null;
+        this._release();
+        this.notify("engine");
+      });
+    }
     return this._building;
   },
 
@@ -282,13 +304,12 @@ export const Shield = {
       return;
     }
     // селектор проверяется разбором: негодный не попадает в таблицу стилей
-    // окно браузера на компьютере, окно GeckoView на Android
-    const css = (Services.wm.getMostRecentWindow("navigator:browser") || Services.wm.getMostRecentWindow("navigator:geckoview"))?.CSS;
-    const engine = new Engine({ validSelector: css ? s => css.supports(`selector(${s})`) : () => true });
+    const engine = new Engine({ validSelector });
     texts.forEach(([, text]) => engine.scanBadfilters(text));
     for (const [kind, text] of texts) {
       for (const _ of engine.feed(text, { kind, step: 1500 })) {
-        await idle();
+        // страницы ждут — не откладывать до свободного времени потока
+        await (this._holding ? turn() : idle());
       }
     }
     this._engine = engine;
@@ -304,6 +325,41 @@ export const Shield = {
     await this._readState();
     await this._rebuild();
     await this.update();
+  },
+
+  /* ---- ожидание правил ------------------------------------------------------------------------ */
+
+  /** Правил ещё нет, но они собираются: с этого момента запросы страниц ждут решения. */
+  _hold() {
+    if (this._holding || this._engine) {
+      return;
+    }
+    this._holding = true;
+    this._holdTimer = setTimeout(() => this._release(), HOLD_MS);
+  },
+
+  /** Правила собраны (или ждать больше нельзя): ждавшие запросы проверяются и идут дальше. */
+  _release() {
+    if (!this._holding) {
+      return;
+    }
+    this._holding = false;
+    clearTimeout(this._holdTimer);
+    const engine = this.enabled ? this._engine : null;
+    for (const channel of this._held.splice(0)) {
+      if (engine) {
+        this._check(channel, engine);
+      }
+      try {
+        channel.resume();
+      } catch (e) {}
+    }
+    this._waiters.splice(0).forEach(resolve => resolve());
+  },
+
+  /** Обещание «правила собраны» для документа, пришедшего за стилями раньше них; иначе null. */
+  settling() {
+    return this._holding && this.enabled ? new Promise(resolve => this._waiters.push(resolve)) : null;
   },
 
   /* ---- запросы -------------------------------------------------------------------------------- */
@@ -336,27 +392,52 @@ export const Shield = {
     return page;
   },
 
-  observe(subject) {
-    const engine = this._engine;
-    if (!engine || !this.enabled) {
-      return;
-    }
+  /** Запрос страницы во вкладке, который блокировщик вправе отменить: { channel, info, type, page }.
+   * Запросы самого браузера, служебных страниц и сайтов из исключений сюда не попадают. */
+  _request(subject) {
     try {
       const channel = subject.QueryInterface(Ci.nsIHttpChannel);
       const info = channel.loadInfo;
       const type = info.externalContentPolicyType;
       if (type === CP.TYPE_DOCUMENT || type === CP.TYPE_SAVEAS_DOWNLOAD) {
-        return; // переход на страницу и скачивание по просьбе пользователя не блокируются
+        return null; // переход на страницу и скачивание по просьбе пользователя не блокируются
       }
       const context = info.browsingContext || info.workerAssociatedBrowsingContext;
       const topGlobal = context?.top?.currentWindowGlobal;
       if (!topGlobal) {
-        return; // запрос не от страницы во вкладке
+        return null; // запрос не от страницы во вкладке
       }
       const page = this._page(topGlobal);
-      if (page.off) {
-        return;
+      return page.off ? null : { channel, info, type, page };
+    } catch (e) {
+      return null; // запрос без нужных сведений (служебный)
+    }
+  },
+
+  observe(subject) {
+    if (!this.enabled) {
+      return;
+    }
+    if (this._engine) {
+      this._check(subject, this._engine);
+    } else if (this._holding) {
+      const request = this._request(subject);
+      if (request) {
+        try {
+          request.channel.suspend();
+          this._held.push(request.channel);
+        } catch (e) {}
       }
+    }
+  },
+
+  _check(subject, engine) {
+    const request = this._request(subject);
+    if (!request) {
+      return;
+    }
+    try {
+      const { channel, info, type, page } = request;
       const uri = channel.URI;
       const host = uri.asciiHost.toLowerCase();
       const loader = info.loadingPrincipal;
@@ -371,7 +452,7 @@ export const Shield = {
       bucket.set(host, (bucket.get(host) || 0) + 1);
       page.total++;
     } catch (e) {
-      // запрос без нужных сведений (служебный): не наш
+      // страница уже ушла или у запроса нет адреса: не наш
     }
   },
 
@@ -448,11 +529,22 @@ export const Shield = {
     } catch (e) {
       // уже зарегистрирован
     }
-    setTimeout(() => {
-      if (this.enabled) {
-        this._load().catch(e => console.error("Tabora shield", e));
-      }
-    }, 3000);
+    if (this.enabled) {
+      // правила — сразу, из списков на диске; обновление списков по сети — позже, не мешая запуску
+      // (сразу, только когда списков ещё нет: первый запуск)
+      this._hold();
+      this._readState()
+        .then(() => this._rebuild())
+        .catch(e => console.error("Tabora shield", e))
+        .finally(() => {
+          this._release();
+          setTimeout(() => {
+            if (this.enabled) {
+              this.update().catch(() => {});
+            }
+          }, this._engine ? 3000 : 0);
+        });
+    }
     setInterval(() => {
       if (this.enabled) {
         this.update().catch(() => {});
