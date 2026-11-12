@@ -16,6 +16,7 @@
   export           превратить правки, сделанные прямо в исходниках, в патчи в ios/
   reset            вернуть исходники к чистому Firefox для iOS
   build [--device] собрать приложение: для симулятора (по умолчанию) или для телефона
+  build --device --sign   то же для телефона, с подписью разработки (для своего телефона)
   run              поставить в симулятор и запустить
   shot <файл.png>  снимок экрана симулятора
   status           версия, коммит, что наложено
@@ -202,6 +203,13 @@ def project_edits() -> None:
     sub(r"ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;", "ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;", "запасные значки")
     for name in DROPPED_EXTENSIONS:
         sub(rf"\n\t+[0-9A-F]{{24}} /\* {name}\.appex in Embed App Extensions \*/,", "", f"расширение {name}")
+        # и не собираются: иначе при подписи для телефона каждому понадобились бы свой идентификатор
+        # и профиль в аккаунте разработчика
+        deps = re.findall(rf"\n\t\t([0-9A-F]{{24}}) /\* PBXTargetDependency \*/ = \{{\n\t+isa = PBXTargetDependency;\n\t+target = [0-9A-F]{{24}} /\* {name} \*/;", text)
+        if not deps:
+            die(f"файл проекта: не найдена зависимость от расширения {name} — формат изменился")
+        for dep in deps:
+            text = re.sub(rf"\n\t+{dep} /\* PBXTargetDependency \*/,", "", text)
     pbx.write_text(text)
     log(f"файл проекта: только iPhone, без запасных значков, без расширений {', '.join(DROPPED_EXTENSIONS)}")
 
@@ -332,7 +340,18 @@ def cmd_build(args: argparse.Namespace) -> None:
         # строки окна нет — пакеты закреплены в Package.resolved
         "-skipMacroValidation", "-skipPackagePluginValidation",
     ]
-    if args.device:
+    if args.device and args.sign:
+        # Подпись разработки для своего телефона: идентификаторы приложения и расширений, группу
+        # приложений и профили Xcode заводит в аккаунте разработчика сам (-allowProvisioningUpdates,
+        # нужен вход в аккаунт в настройках Xcode). В файле проекта у целей записаны команда Mozilla
+        # и её профили, часть — с условием [sdk=iphoneos*]: оно сильнее обычной настройки, а в
+        # командной строке условие записать нельзя, поэтому настройки подписи идут файлом.
+        team = IOS.get("teamId") or CONFIG["macTeamId"]
+        settings = {"CODE_SIGN_STYLE": "Automatic", "DEVELOPMENT_TEAM": team, "CODE_SIGN_IDENTITY": "Apple Development", "PROVISIONING_PROFILE_SPECIFIER": ""}
+        sign = WORK / "sign.xcconfig"
+        sign.write_text("".join(f"{key} = {value}\n{key}[sdk=iphoneos*] = {value}\n" for key, value in settings.items()))
+        cmd += ["-configuration", "Firefox", "-destination", "generic/platform=iOS", "-allowProvisioningUpdates", "-xcconfig", str(sign)]
+    elif args.device:
         cmd += ["-configuration", "Firefox", "-destination", "generic/platform=iOS", "CODE_SIGNING_ALLOWED=NO"]
     else:
         # конфигурация Debug проекта — это сборка «Fennec» для разработки (Client/Configuration/Fennec.xcconfig)
@@ -397,7 +416,8 @@ def main() -> None:
         p.add_argument("--force", action="store_true", help="бросить правки исходников, не выгруженные в ios/")
         p.set_defaults(fn=fn)
     p = sub.add_parser("build")
-    p.add_argument("--device", action="store_true")
+    p.add_argument("--device", action="store_true", help="выпускная конфигурация для телефона (без подписи)")
+    p.add_argument("--sign", action="store_true", help="с --device: подписать для своего телефона (подпись разработки)")
     p.set_defaults(fn=cmd_build)
     p = sub.add_parser("run")
     p.add_argument("args", nargs="*")
