@@ -1,3 +1,4 @@
+import { tt } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -24,7 +25,7 @@ async function requireAccount() {
   const { Account } = ChromeUtils.importESModule("chrome://tabora/content/account/Account.sys.mjs");
   await Account.ready();
   if (!Account.signedIn) {
-    throw Object.assign(new Error("Кошелёк доступен после входа в аккаунт Tabora"), { code: "signed-out" });
+    throw Object.assign(new Error(tt`Кошелёк доступен после входа в аккаунт Tabora`), { code: "signed-out" });
   }
 }
 const KDF = { t: 3, m: 65536, p: 1, dkLen: 32 }; // Argon2id: 64 МБ памяти, 3 прохода (старые файлы хранят свои параметры)
@@ -118,7 +119,7 @@ function slip10Ed25519(seed, path) {
 /** Сигнал отмены по таймауту (в sys.mjs нет AbortSignal.timeout). */
 function timeoutSignal(ms) {
   const c = new AbortController();
-  setTimeout(() => c.abort(new Error(`таймаут ${ms / 1000} с`)), ms);
+  setTimeout(() => c.abort(new Error(tt`таймаут ${ms / 1000} с`)), ms);
   return c.signal;
 }
 
@@ -133,13 +134,13 @@ async function fetchJson(url, init = {}, { timeout = 12000, maxBytes = 4 << 20, 
     throw new Error(`${host}: HTTP ${res.status}`);
   }
   if (Number(res.headers.get("content-length") || 0) > maxBytes) {
-    throw new Error(`${host}: ответ слишком большой`);
+    throw new Error(tt`${host}: ответ слишком большой`);
   }
   const reader = res.body?.getReader?.();
   if (!reader) {
     const text = await res.text();
     if (text.length > maxBytes) {
-      throw new Error(`${host}: ответ слишком большой`);
+      throw new Error(tt`${host}: ответ слишком большой`);
     }
     return JSON.parse(text);
   }
@@ -153,7 +154,7 @@ async function fetchJson(url, init = {}, { timeout = 12000, maxBytes = 4 << 20, 
     total += value.length;
     if (total > maxBytes) {
       reader.cancel().catch(() => {});
-      throw new Error(`${host}: ответ слишком большой`);
+      throw new Error(tt`${host}: ответ слишком большой`);
     }
     chunks.push(value);
   }
@@ -178,7 +179,7 @@ function safeDecimals(v, fallback = null) {
     if (fallback !== null) {
       return fallback;
     }
-    throw new Error("Недопустимое число десятичных знаков");
+    throw new Error(tt`Недопустимое число десятичных знаков`);
   }
   return n;
 }
@@ -251,7 +252,7 @@ async function deriveKey(password, salt, kdf) {
   const dkLen = Number(kdf?.dkLen);
   // параметры приходят из файла: вне границ это либо повреждение, либо попытка подвесить браузер
   if (!(t >= 1 && t <= 10) || !(m >= 8192 && m <= 1 << 20) || !(p >= 1 && p <= 4) || dkLen !== 32 || !(salt?.length >= 8)) {
-    throw new Error("Файл кошелька повреждён: параметры KDF вне допустимых границ");
+    throw new Error(tt`Файл кошелька повреждён: параметры KDF вне допустимых границ`);
   }
   return argon2idAsync(utf8ToBytes(password.normalize("NFKC")), salt, { t, m, p, dkLen });
 }
@@ -382,10 +383,10 @@ export const WalletStore = {
   /** Изменения настроек, контактов и разрешений возможны только в доверенном (подписанном) файле. */
   assertTrusted() {
     if (!this.unlocked) {
-      throw new Error("Кошелёк заблокирован");
+      throw new Error(tt`Кошелёк заблокирован`);
     }
     if (this.tampered) {
-      throw new Error("Файл кошелька изменён вне Tabora: сначала подтвердите правки паролем");
+      throw new Error(tt`Файл кошелька изменён вне Tabora: сначала подтвердите правки паролем`);
     }
   },
 
@@ -562,14 +563,14 @@ export const WalletStore = {
     const d = this.data || {};
     const s = d.settings && typeof d.settings === "object" ? d.settings : {};
     const lines = [];
-    const few = (list, n = 6) => list.slice(0, n).join(", ") + (list.length > n ? ` и ещё ${list.length - n}` : "");
+    const few = (list, n = 6) => list.slice(0, n).join(", ") + (list.length > n ? tt` и ещё ${list.length - n}` : "");
     const contacts = Array.isArray(d.contacts) ? d.contacts : [];
     if (contacts.length) {
-      lines.push(`Контакты (${contacts.length}): ${few(contacts.map(c => `${cleanText(c?.name, 24) || "без имени"} → ${Object.values(c?.addresses || {}).map(a => cleanText(a, 64)).join(" / ")}`), 4)}`);
+      lines.push(tt`Контакты (${contacts.length}): ${few(contacts.map(c => `${cleanText(c?.name, 24) || tt`без имени`} → ${Object.values(c?.addresses || {}).map(a => cleanText(a, 64)).join(" / ")}`), 4)}`);
     }
     const sites = Object.keys(d.permissions && typeof d.permissions === "object" ? d.permissions : {});
     if (sites.length) {
-      lines.push(`Подключённые сайты (${sites.length}): ${few(sites.map(o => cleanText(o, 60)))}`);
+      lines.push(tt`Подключённые сайты (${sites.length}): ${few(sites.map(o => cleanText(o, 60)))}`);
     }
     const nodes = [];
     for (const [id, entry] of Object.entries(s.nodes && typeof s.nodes === "object" ? s.nodes : {})) {
@@ -584,7 +585,7 @@ export const WalletStore = {
       }
     }
     if (nodes.length) {
-      lines.push(`Свои ноды (${nodes.length}): ${few(nodes, 4)}`);
+      lines.push(tt`Свои ноды (${nodes.length}): ${few(nodes, 4)}`);
     }
     const tokens = [];
     for (const [id, list] of Object.entries(s.customTokens && typeof s.customTokens === "object" ? s.customTokens : {})) {
@@ -593,25 +594,25 @@ export const WalletStore = {
       }
     }
     if (tokens.length) {
-      lines.push(`Свои токены (${tokens.length}): ${few(tokens, 4)}`);
+      lines.push(tt`Свои токены (${tokens.length}): ${few(tokens, 4)}`);
     }
     if (s.signPassword?.skip) {
       const t = Number(s.signPassword.thresholdUsd ?? 500);
-      lines.push(`Пароль при подписи: ${t > 0 ? `только от ${t} $` : "не спрашивать до автоблокировки"}`);
+      lines.push(tt`Пароль при подписи: ${t > 0 ? tt`только от ${t} $` : tt`не спрашивать до автоблокировки`}`);
     }
     const lockMin = s.autolockMinutes;
     if (lockMin !== undefined && !(Number.isInteger(lockMin) && lockMin > 0 && lockMin <= DEFAULT_AUTOLOCK)) {
-      lines.push(`Автоблокировка: ${lockMin === 0 ? "выключена" : `${cleanText(lockMin, 8)} мин`}`);
+      lines.push(tt`Автоблокировка: ${lockMin === 0 ? tt`выключена` : tt`${cleanText(lockMin, 8)} мин`}`);
     }
     const sent = (Array.isArray(d.activity) ? d.activity : []).filter(a => a?.to);
     if (sent.length) {
-      lines.push(`Локальная история: ${sent.length} отправок, их получатели будут считаться знакомыми адресами`);
+      lines.push(tt`Локальная история: ${sent.length} отправок, их получатели будут считаться знакомыми адресами`);
     }
     if (Array.isArray(s.hiddenChains) && s.hiddenChains.length) {
-      lines.push(`Скрытые сети: ${few(s.hiddenChains.map(c => CHAINS[c]?.name || cleanText(c, 16)))}`);
+      lines.push(tt`Скрытые сети: ${few(s.hiddenChains.map(c => CHAINS[c]?.name || cleanText(c, 16)))}`);
     }
     if (this._bad.size) {
-      lines.push(`Кошельков с нечитаемым шифроблоком: ${this._bad.size} — они будут удалены из файла (копия останется рядом: tabora-wallet.json.before-accept.bak)`);
+      lines.push(tt`Кошельков с нечитаемым шифроблоком: ${this._bad.size} — они будут удалены из файла (копия останется рядом: tabora-wallet.json.before-accept.bak)`);
     }
     return lines;
   },
@@ -620,10 +621,10 @@ export const WalletStore = {
    * Адреса к этому моменту уже пересчитаны из seed, поэтому подписываются настоящие. */
   async acceptFile(password) {
     if (!this.unlocked) {
-      throw new Error("Кошелёк заблокирован");
+      throw new Error(tt`Кошелёк заблокирован`);
     }
     if (this.unverified) {
-      throw new Error("Ни один кошелёк файла не удалось проверить по фразе: принять такой файл нельзя. Восстановите кошелёк по seed-фразе.");
+      throw new Error(tt`Ни один кошелёк файла не удалось проверить по фразе: принять такой файл нельзя. Восстановите кошелёк по seed-фразе.`);
     }
     await this.verifyPassword(password);
     await this.backupFile(".before-accept.bak");
@@ -714,11 +715,11 @@ export const WalletStore = {
   async _write() {
     if (!this._key) {
       // Запись без ключа невозможна: иначе подпись файла разойдётся с содержимым.
-      throw new Error("Кошелёк заблокирован");
+      throw new Error(tt`Кошелёк заблокирован`);
     }
     if (this.unverified) {
       // в памяти нет ни одного проверенного кошелька: запись стёрла бы шифроблоки с диска
-      throw new Error("Файл кошелька не удалось проверить: запись запрещена до восстановления");
+      throw new Error(tt`Файл кошелька не удалось проверить: запись запрещена до восстановления`);
     }
     if (!this.tampered) {
       this.data.rev = (Number(this.data.rev) || 0) + 1;
@@ -751,7 +752,7 @@ export const WalletStore = {
   },
 
   /** Первичная настройка: пароль (или без него) и первая фраза. */
-  async create({ mnemonic, password, name = "Кошелёк 1" }) {
+  async create({ mnemonic, password, name = tt`Кошелёк 1` }) {
     await requireAccount();
     const passwordless = !password;
     const salt = randomBytes(16);
@@ -795,17 +796,17 @@ export const WalletStore = {
 
   async _addWallet({ mnemonic, name }) {
     if (!this.unlocked) {
-      throw new Error("Кошелёк заблокирован");
+      throw new Error(tt`Кошелёк заблокирован`);
     }
     const phrase = this.normalize(mnemonic);
     if (!this.validateMnemonic(phrase)) {
-      throw new Error("Фраза не проходит проверку BIP-39");
+      throw new Error(tt`Фраза не проходит проверку BIP-39`);
     }
     const seed = bip39.mnemonicToSeedSync(phrase);
     const fingerprint = bytesToHex(sha256(HDKey.fromMasterSeed(seed).publicKey)).slice(0, 8);
     if (this.wallets.some(w => w.fingerprint === fingerprint)) {
       wipe(seed);
-      throw new Error("Этот кошелёк уже добавлен");
+      throw new Error(tt`Этот кошелёк уже добавлен`);
     }
     // фраза (для показа) и seed (для подписи) лежат в разных шифртекстах:
     // seed расшифровывается сразу в Uint8Array и не проходит через строки JS
@@ -819,13 +820,13 @@ export const WalletStore = {
     const vaultSeed = await this._seal(seed, AAD.seed(id));
     const wallet = {
       id,
-      name: name || `Кошелёк ${this.wallets.length + 1}`,
+      name: name || tt`Кошелёк ${this.wallets.length + 1}`,
       fingerprint,
       createdAt: new Date().toISOString(),
       words: phrase.split(" ").length,
       vault,
       vaultSeed,
-      accounts: [{ index: 0, name: "Адрес 1", addresses: this.deriveAll(seed, 0) }],
+      accounts: [{ index: 0, name: tt`Адрес 1`, addresses: this.deriveAll(seed, 0) }],
     };
     wipe(seed);
     this.data.wallets.push(wallet);
@@ -839,14 +840,14 @@ export const WalletStore = {
   async addAccount(walletId, name) {
     const wallet = this.wallets.find(w => w.id === walletId);
     if (!wallet) {
-      throw new Error("Кошелёк не найден");
+      throw new Error(tt`Кошелёк не найден`);
     }
     // seed сразу байтами: фраза строкой JS здесь не нужна
     const seed = await this.seedOf(wallet);
     let account;
     try {
       const index = Math.max(-1, ...wallet.accounts.map(a => a.index)) + 1;
-      account = { index, name: name || `Адрес ${index + 1}`, addresses: this.deriveAll(seed, index) };
+      account = { index, name: name || tt`Адрес ${index + 1}`, addresses: this.deriveAll(seed, index) };
     } finally {
       wipe(seed);
     }
@@ -909,7 +910,7 @@ export const WalletStore = {
     await this.ready();
     await requireAccount(); // ключ кошелька не выводится, пока в аккаунт не вошли
     if (!this.data) {
-      throw new Error("Кошелька нет");
+      throw new Error(tt`Кошелька нет`);
     }
     if (this.data.passwordless) {
       let seen = false;
@@ -928,7 +929,7 @@ export const WalletStore = {
         }
         wipe(raw);
       }
-      throw new Error(seen ? "Неверный пароль" : "Ключ хранилища не найден");
+      throw new Error(seen ? tt`Неверный пароль` : tt`Ключ хранилища не найден`);
     }
     let raw;
     try {
@@ -937,12 +938,12 @@ export const WalletStore = {
       if (/KDF/.test(e?.message || "")) {
         throw e;
       }
-      throw new Error("Файл кошелька повреждён: параметры KDF вне допустимых границ");
+      throw new Error(tt`Файл кошелька повреждён: параметры KDF вне допустимых границ`);
     }
     const ver = await this._openCheck(raw);
     if (!ver) {
       wipe(raw);
-      throw new Error("Неверный пароль");
+      throw new Error(tt`Неверный пароль`);
     }
     return { raw, ver };
   },
@@ -1025,7 +1026,7 @@ export const WalletStore = {
         }
         out.push({ w, phrase, seed });
         if (seed.length !== 64) {
-          throw new Error("Seed повреждён: ожидалось 64 байта");
+          throw new Error(tt`Seed повреждён: ожидалось 64 байта`);
         }
       }
     } catch (e) {
@@ -1140,7 +1141,7 @@ export const WalletStore = {
       let seed;
       try {
         if (!wallet || typeof wallet !== "object" || typeof wallet.id !== "string" || ids.has(wallet.id)) {
-          throw new Error("запись кошелька повреждена");
+          throw new Error(tt`запись кошелька повреждена`);
         }
         ids.add(wallet.id);
         seed = await this.seedOf(wallet);
@@ -1157,7 +1158,7 @@ export const WalletStore = {
         }
         const accounts = (Array.isArray(wallet.accounts) ? wallet.accounts : []).filter(a => Number.isInteger(a?.index) && a.index >= 0 && a.index < 0x80000000);
         if (!accounts.length) {
-          accounts.push({ index: 0, name: "Адрес 1" });
+          accounts.push({ index: 0, name: tt`Адрес 1` });
         }
         for (const a of accounts) {
           const real = this.deriveAll(seed, a.index);
@@ -1165,10 +1166,10 @@ export const WalletStore = {
             fixed++;
           }
           a.addresses = real;
-          a.name = cleanText(a.name, 40) || `Адрес ${a.index + 1}`;
+          a.name = cleanText(a.name, 40) || tt`Адрес ${a.index + 1}`;
         }
         wallet.accounts = accounts;
-        wallet.name = cleanText(wallet.name, 40) || "Кошелёк";
+        wallet.name = cleanText(wallet.name, 40) || tt`Кошелёк`;
         good++;
       } catch (e) {
         fixed++;
@@ -1252,7 +1253,7 @@ export const WalletStore = {
     this.assertTrusted();
     minutes = Number(minutes);
     if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) {
-      throw new Error("Недопустимое время автоблокировки");
+      throw new Error(tt`Недопустимое время автоблокировки`);
     }
     const limit = v => (v > 0 ? v : Infinity);
     if (limit(minutes) > limit(this.autolockMinutes)) {
@@ -1327,7 +1328,7 @@ export const WalletStore = {
 
   async mnemonicOf(wallet) {
     if (!this.unlocked) {
-      throw new Error("Кошелёк заблокирован");
+      throw new Error(tt`Кошелёк заблокирован`);
     }
     const plain = await this._open(wallet.vault, AAD.vault(wallet.id));
     const { mnemonic } = JSON.parse(new TextDecoder().decode(plain));
@@ -1338,7 +1339,7 @@ export const WalletStore = {
   /** Seed BIP-39 для подписи: ровно 64 байта, иначе блок считается подставленным. Вызывающий обязан обнулить. */
   async seedOf(wallet) {
     if (!this.unlocked) {
-      throw new Error("Кошелёк заблокирован");
+      throw new Error(tt`Кошелёк заблокирован`);
     }
     let seed;
     if (wallet.vaultSeed) {
@@ -1350,11 +1351,11 @@ export const WalletStore = {
       wipe(plain);
       seed = parsed.seed ? hexToBytes(parsed.seed) : bip39.mnemonicToSeedSync(parsed.mnemonic);
     } else {
-      throw new Error("У кошелька нет шифроблока seed");
+      throw new Error(tt`У кошелька нет шифроблока seed`);
     }
     if (!(seed instanceof Uint8Array) || seed.length !== 64) {
       wipe(seed);
-      throw new Error("Seed повреждён: ожидалось 64 байта");
+      throw new Error(tt`Seed повреждён: ожидалось 64 байта`);
     }
     return seed;
   },
@@ -1368,7 +1369,7 @@ export const WalletStore = {
 
   async verifyPassword(password) {
     if (!this.unlocked) {
-      throw new Error("Кошелёк заблокирован");
+      throw new Error(tt`Кошелёк заблокирован`);
     }
     if (this.data.passwordless) {
       return true;
@@ -1414,7 +1415,7 @@ export const WalletStore = {
   /** Непроверяемый файл убирается в сторону (не удаляется), чтобы кошелёк можно было создать заново по фразе. */
   async quarantine(password) {
     if (!this.unverified) {
-      throw new Error("Файл кошелька проверен: убирать его не нужно");
+      throw new Error(tt`Файл кошелька проверен: убирать его не нужно`);
     }
     await this.verifyPassword(password);
     this.lock();
@@ -1484,7 +1485,7 @@ export const WalletStore = {
   async privateKeyFor(walletId, index, chainId) {
     const wallet = this.wallets.find(w => w.id === walletId);
     if (!wallet) {
-      throw new Error("Кошелёк не найден");
+      throw new Error(tt`Кошелёк не найден`);
     }
     const chain = CHAINS[chainId];
     const seed = await this.seedOf(wallet);
@@ -1543,11 +1544,11 @@ export const WalletStore = {
     try {
       u = new URL(url);
     } catch (e) {
-      throw new Error("Это не адрес");
+      throw new Error(tt`Это не адрес`);
     }
     const local = ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname) || u.hostname.endsWith(".localhost");
     if (u.protocol !== "https:" && !(u.protocol === "http:" && local)) {
-      throw new Error("Нода должна быть по https (http допустим только для localhost)");
+      throw new Error(tt`Нода должна быть по https (http допустим только для localhost)`);
     }
     return u.href.replace(/\/$/, "");
   },
@@ -1557,12 +1558,12 @@ export const WalletStore = {
   async setNodes(chainId, list, index, { quiet = false, password } = {}) {
     this.assertTrusted();
     if (!CHAINS[chainId]) {
-      throw new Error("Неизвестная сеть");
+      throw new Error(tt`Неизвестная сеть`);
     }
     list = list.map(u => this.validateNodeUrl(u));
     index = Number(index);
     if (!list.length || !Number.isInteger(index) || index < 0 || index >= list.length) {
-      throw new Error("Неверный выбор ноды");
+      throw new Error(tt`Неверный выбор ноды`);
     }
     const current = new Set(this.nodesFor(chainId).list);
     const weaker = list.some(u => !this.isBuiltinNode(chainId, u) && !current.has(u)) || !this.isBuiltinNode(chainId, list[index]);
@@ -1604,7 +1605,7 @@ export const WalletStore = {
         lastError = e;
       }
     }
-    throw lastError || new Error("нода недоступна");
+    throw lastError || new Error(tt`нода недоступна`);
   },
 
   async evm(chainId, method, params, opts = {}) {
@@ -1684,7 +1685,7 @@ export const WalletStore = {
       delete this._sessionPerms[origin];
     }
     if (!this.unlocked) {
-      throw new Error("Кошелёк заблокирован: отключение сайта доступно после разблокировки");
+      throw new Error(tt`Кошелёк заблокирован: отключение сайта доступно после разблокировки`);
     }
     if (chain) {
       delete map[origin][chain];
@@ -1768,7 +1769,7 @@ export const WalletStore = {
         continue;
       }
       if (!this.CONTACT_ADDRESS[k] || !this.CONTACT_ADDRESS[k].test(value)) {
-        throw new Error(`Адрес для ${k} имеет неверный формат`);
+        throw new Error(tt`Адрес для ${k} имеет неверный формат`);
       }
       out[k] = value;
     }
@@ -1781,7 +1782,7 @@ export const WalletStore = {
     const clean = this.cleanAddresses(addresses);
     const cleanName = cleanText(name, 40);
     if (!cleanName || !Object.keys(clean).length) {
-      throw new Error("Нужны имя и хотя бы один адрес");
+      throw new Error(tt`Нужны имя и хотя бы один адрес`);
     }
     await this.verifyPassword(password);
     this.data.contacts ||= [];
@@ -1795,13 +1796,13 @@ export const WalletStore = {
     this.assertTrusted();
     const c = this.contacts.find(x => x.id === id);
     if (!c) {
-      throw new Error("Контакт не найден");
+      throw new Error(tt`Контакт не найден`);
     }
     let clean = null;
     if (patch.addresses) {
       clean = this.cleanAddresses(patch.addresses);
       if (!Object.keys(clean).length) {
-        throw new Error("Нужен хотя бы один адрес");
+        throw new Error(tt`Нужен хотя бы один адрес`);
       }
       if (canonical(clean) !== canonical(c.addresses || {})) {
         await this.verifyPassword(password);
@@ -1901,7 +1902,7 @@ export const WalletStore = {
     const addr = String(token.address || token.mint || "");
     const okAddr = kind === "evm" ? /^0x[0-9a-fA-F]{40}$/.test(addr) : kind === "tron" ? /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(addr) : kind === "sol" ? /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr) : false;
     if (!okAddr) {
-      throw new Error("Неверный адрес контракта токена");
+      throw new Error(tt`Неверный адрес контракта токена`);
     }
     const key = addr.toLowerCase();
     if (!list.some(t => (t.address || t.mint || "").toLowerCase() === key)) {
@@ -1951,7 +1952,7 @@ export const WalletStore = {
         const { list } = this.nodesFor(chainId);
         const url = list.find(u => this.tronIsJsonRpc(u));
         if (!url) {
-          throw new Error("Нужна JSON-RPC нода TRON");
+          throw new Error(tt`Нужна JSON-RPC нода TRON`);
         }
         to = this.tronHex(address);
         opts = { url };
@@ -1962,18 +1963,18 @@ export const WalletStore = {
         this.evm(chainId, "eth_call", [{ to, data: "0x313ce567" }, "latest"], opts),
       ]);
       if (!decimals || decimals === "0x") {
-        throw new Error("По этому адресу нет токена");
+        throw new Error(tt`По этому адресу нет токена`);
       }
       return { symbol: cleanText(this.decodeAbiString(symbol), 12) || "TOKEN", name: cleanText(this.decodeAbiString(name), 40), decimals: safeDecimals(BigInt(decimals) > 36n ? 99 : Number(BigInt(decimals))), address };
     }
     if (chain.kind === "sol") {
       const r = await this.rpc(chainId, { jsonrpc: "2.0", id: 1, method: "getTokenSupply", params: [address] });
       if (!r.result) {
-        throw new Error("По этому адресу нет SPL-токена");
+        throw new Error(tt`По этому адресу нет SPL-токена`);
       }
       return { symbol: "", name: "", decimals: safeDecimals(r.result.value.decimals), mint: address };
     }
-    throw new Error("В этой сети нет токенов");
+    throw new Error(tt`В этой сети нет токенов`);
   },
 
   /* ---------- балансы ---------- */
@@ -2121,7 +2122,7 @@ export const WalletStore = {
           continue;
         }
         const dir = dirOf(t.from?.hash, t.to?.hash);
-        raw.push({ hash: t.hash, at: Date.parse(t.timestamp), dir, from: t.from?.hash, to: t.to?.hash, rawAmount: value, decimals: chain.decimals, symbol: chain.symbol, logo: chain.logo, kind: "native", status: t.status === "ok" ? "ok" : t.status === null ? "pending" : "failed", scam: t.from?.is_scam || (t.from?.reputation && t.from.reputation !== "ok"), call: value === 0n && dir !== "in" ? cleanText(t.method, 40) || "Вызов контракта" : null, mine: dir !== "in" ? t.from?.hash?.toLowerCase() === me : undefined });
+        raw.push({ hash: t.hash, at: Date.parse(t.timestamp), dir, from: t.from?.hash, to: t.to?.hash, rawAmount: value, decimals: chain.decimals, symbol: chain.symbol, logo: chain.logo, kind: "native", status: t.status === "ok" ? "ok" : t.status === null ? "pending" : "failed", scam: t.from?.is_scam || (t.from?.reputation && t.from.reputation !== "ok"), call: value === 0n && dir !== "in" ? cleanText(t.method, 40) || tt`Вызов контракта` : null, mine: dir !== "in" ? t.from?.hash?.toLowerCase() === me : undefined });
       }
       for (const t of transfers.slice(0, 40)) {
         const token = known.get((t.token?.address || t.token?.address_hash || "").toLowerCase());

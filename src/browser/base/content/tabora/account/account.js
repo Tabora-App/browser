@@ -69,9 +69,9 @@ Object.assign(Tabora, {
       this.account.support = { count: Number(r.count) || 0, staff: !!r.staff, queue: Number(r.queue) || 0 };
       if (before && window === Services.wm.getMostRecentBrowserWindow()) {
         if (this.account.support.count > before.count) {
-          this.notice("Поддержка Tabora ответила на ваше обращение");
+          this.notice(tt`Поддержка Tabora ответила на ваше обращение`);
         } else if (this.account.support.staff && this.account.support.queue > before.queue) {
-          this.notice("Новое обращение в очереди поддержки");
+          this.notice(tt`Новое обращение в очереди поддержки`);
         }
       }
       this.renderAccountButton?.();
@@ -186,30 +186,30 @@ Object.assign(Tabora, {
   },
 
   /** Поле пароля с индикатором стойкости и повтором. */
-  taPasswordPair(label = "Пароль", { withRepeat = true } = {}) {
+  taPasswordPair(label = tt`Пароль`, { withRepeat = true } = {}) {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { passwordStrength, Account } = this.accountMod();
-    const pass = this.taField(label, { type: "password", autocomplete: "new-password", placeholder: `не короче ${Account.MIN_PASSWORD} символов` });
+    const pass = this.taField(label, { type: "password", autocomplete: "new-password", placeholder: tt`не короче ${Account.MIN_PASSWORD} символов` });
     const meter = h("div", { class: "ta-meter", "data-score": "0" }, null, [0, 1, 2, 3].map(() => h("i")));
     const meterText = h("span", { class: "ta-meter-text" }, "");
     pass.wrap.append(h("div", { class: "ta-meter-row" }, null, [meter, meterText]));
     pass.input.addEventListener("input", () => {
       const s = passwordStrength(pass.input.value);
       meter.dataset.score = String(s.score);
-      meterText.textContent = pass.input.value ? (s.score < 2 ? `${s.label} · не подойдёт` : s.label) : "";
+      meterText.textContent = pass.input.value ? (s.score < 2 ? tt`${s.label} · не подойдёт` : s.label) : "";
     });
-    const again = withRepeat ? this.taField("Повторите пароль", { type: "password", autocomplete: "new-password" }) : null;
+    const again = withRepeat ? this.taField(tt`Повторите пароль`, { type: "password", autocomplete: "new-password" }) : null;
     const read = () => {
       const a = pass.input.value;
       if (again && a !== again.input.value) {
-        throw new Error("Пароли не совпадают");
+        throw new Error(tt`Пароли не совпадают`);
       }
       return a;
     };
     return { pass, again, read, nodes: [pass.wrap, again?.wrap].filter(Boolean) };
   },
 
-  taForm({ title, text, fields, okLabel, busyLabel = "Подождите", onOk, links = [], back = null, danger = false }) {
+  taForm({ title, text, fields, okLabel, busyLabel = tt`Подождите`, onOk, links = [], back = null, danger = false }) {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { Account } = this.accountMod();
     const err = h("div", { class: "ta-error", hidden: "true" });
@@ -230,7 +230,7 @@ Object.assign(Tabora, {
       // этапы операции: текст на кнопке; если тянется дольше, поясняем под кнопкой
       Account.onStep = step => (label.textContent = `${step}…`);
       const slow = setTimeout(() => {
-        status.textContent = "Это занимает несколько секунд: пароль проверяется с защитой от подбора.";
+        status.textContent = tt`Это занимает несколько секунд: пароль проверяется с защитой от подбора.`;
         status.hidden = false;
       }, 3000);
       const restore = () => {
@@ -254,8 +254,8 @@ Object.assign(Tabora, {
       }
     });
     const form = h("div", { class: "ta-step" }, null, [
-      back ? this.taLink("← Назад", back) : null,
-      h("div", { class: "ta-brand" }, null, [this.markSvg("ta-mark"), h("span", {}, "Tabora"), h("i", {}, "аккаунт")]),
+      back ? this.taLink(tt`← Назад`, back) : null,
+      h("div", { class: "ta-brand" }, null, [this.markSvg("ta-mark"), h("span", {}, "Tabora"), h("i", {}, tt`аккаунт`)]),
       h("h2", {}, title),
       text ? h("p", { class: "ta-text" }, text) : null,
       ...fields,
@@ -279,20 +279,20 @@ Object.assign(Tabora, {
     const { Account } = this.accountMod();
     const row = (icon, title, text) =>
       h("li", {}, null, [this.svg(icon, 16, 1.7), h("div", {}, null, [h("b", {}, title), h("span", {}, text)])]);
-    const skip = this.taLink("Не сейчас", () => this.accountClose());
-    const others = this.accountOthers().length ? h("div", { class: "ta-links" }, null, [this.taLink("Аккаунты на этом компьютере", () => this.accountShowAccounts({ back: "welcome" }))]) : null;
+    const skip = this.taLink(tt`Не сейчас`, () => this.accountClose());
+    const others = this.accountOthers().length ? h("div", { class: "ta-links" }, null, [this.taLink(tt`Аккаунты на этом компьютере`, () => this.accountShowAccounts({ back: "welcome" }))]) : null;
     return h("div", { class: "ta-step ta-welcome" }, null, [
-      h("div", { class: "ta-brand" }, null, [this.markSvg("ta-mark"), h("span", {}, "Tabora"), h("i", {}, "аккаунт")]),
-      h("h2", {}, "Почта, сейф и перенос на другой компьютер"),
+      h("div", { class: "ta-brand" }, null, [this.markSvg("ta-mark"), h("span", {}, "Tabora"), h("i", {}, tt`аккаунт`)]),
+      h("h2", {}, tt`Почта, сейф и перенос на другой компьютер`),
       h("ul", { class: "ta-list" }, null, [
-        row(["M3.5 6.5h17v11h-17z", "M3.5 7l8.5 6 8.5-6"], `имя@${Account.domain}`, "Свой адрес и алиасы для регистраций"),
-        row(["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], "Сейф", "Пароли и коды входа шифруются на этом компьютере"),
-        row(["M4 7h11v9H4z", "M9 20h11v-9", "M15 11h5"], "Перенос", "Вход на новом компьютере возвращает всё на место"),
+        row(["M3.5 6.5h17v11h-17z", "M3.5 7l8.5 6 8.5-6"], tt`имя@${Account.domain}`, tt`Свой адрес и алиасы для регистраций`),
+        row(["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], tt`Сейф`, tt`Пароли и коды входа шифруются на этом компьютере`),
+        row(["M4 7h11v9H4z", "M9 20h11v-9", "M15 11h5"], tt`Перенос`, tt`Вход на новом компьютере возвращает всё на место`),
       ]),
-      h("p", { class: "ta-hint" }, "Один пароль на всё. Он не покидает компьютер, восстановить его можно только вашим ключом восстановления. Кошелёк, коды и почта открываются после входа."),
+      h("p", { class: "ta-hint" }, tt`Один пароль на всё. Он не покидает компьютер, восстановить его можно только вашим ключом восстановления. Кошелёк, коды и почта открываются после входа.`),
       h("div", { class: "ta-foot" }, null, [
-        this.taButton("Создать аккаунт", "primary", () => this.accountRender("register")),
-        this.taButton("Войти", "ghost", () => this.accountRender("login")),
+        this.taButton(tt`Создать аккаунт`, "primary", () => this.accountRender("register")),
+        this.taButton(tt`Войти`, "ghost", () => this.accountRender("login")),
         skip,
       ]),
       others,
@@ -307,26 +307,26 @@ Object.assign(Tabora, {
       // профиль уже принадлежит аккаунту: ещё один создаётся в своём профиле
       return this.accountAccounts({ list: this.account.profiles || [], back: "login" });
     }
-    const name = this.taField("Адрес почты", { type: "text", autocomplete: "off", spellcheck: "false", placeholder: "имя", autocapitalize: "off", value: opts.name || "" }, { suffix: `@${Account.domain}` });
-    const pw = this.taPasswordPair(Vault.exists && Vault.hasPassword ? "Пароль (мастер-пароль сейфа)" : "Пароль");
+    const name = this.taField(tt`Адрес почты`, { type: "text", autocomplete: "off", spellcheck: "false", placeholder: tt`имя`, autocapitalize: "off", value: opts.name || "" }, { suffix: `@${Account.domain}` });
+    const pw = this.taPasswordPair(Vault.exists && Vault.hasPassword ? tt`Пароль (мастер-пароль сейфа)` : tt`Пароль`);
     const fields = [name.wrap, ...pw.nodes];
     if (Vault.exists && Vault.hasPassword) {
-      fields.push(h("p", { class: "ta-hint" }, "В этом профиле уже есть сейф с мастер-паролем. Пароль аккаунта должен быть тем же: он откроет и сейф, и аккаунт."));
+      fields.push(h("p", { class: "ta-hint" }, tt`В этом профиле уже есть сейф с мастер-паролем. Пароль аккаунта должен быть тем же: он откроет и сейф, и аккаунт.`));
     } else {
-      fields.push(h("p", { class: "ta-hint" }, "Один пароль для почты и сейфа. Сервер получает только его хеш для входа, сам пароль не покидает компьютер, поэтому забытый пароль восстанавливается только ключом восстановления, который вы получите на следующем шаге."));
+      fields.push(h("p", { class: "ta-hint" }, tt`Один пароль для почты и сейфа. Сервер получает только его хеш для входа, сам пароль не покидает компьютер, поэтому забытый пароль восстанавливается только ключом восстановления, который вы получите на следующем шаге.`));
     }
     return this.taForm({
-      title: "Создать аккаунт",
+      title: tt`Создать аккаунт`,
       fields,
-      okLabel: "Создать аккаунт",
-      busyLabel: "Создаём аккаунт",
+      okLabel: tt`Создать аккаунт`,
+      busyLabel: tt`Создаём аккаунт`,
       back: () => this.accountRender("welcome"),
       onOk: async () => {
         const password = pw.read();
         const r = await Account.register(name.input.value, password);
         this.accountRender("recovery", { email: r.email, key: r.recoveryKey });
       },
-      links: [this.taLink("Уже есть аккаунт? Войти", () => this.accountRender("login"))],
+      links: [this.taLink(tt`Уже есть аккаунт? Войти`, () => this.accountRender("login"))],
     });
   },
 
@@ -334,15 +334,15 @@ Object.assign(Tabora, {
    * (rebound) или после смены пароля со сменой ключа сейфа (rotated). Показывается один раз. */
   accountRecovery({ email, key = null, rebound = false, rotated = false, fresh = false }) {
     const h = (t, a, x, c) => this.html(t, a, x, c);
-    const pre = h("pre", { class: "ta-secret", masked: "true" }, key || "Ключ не создан: создайте его в разделе «Коды» → «Сейф»");
-    const reveal = this.taButton("Показать", "ghost small", () => {
+    const pre = h("pre", { class: "ta-secret", masked: "true" }, key || tt`Ключ не создан: создайте его в разделе «Коды» → «Сейф»`);
+    const reveal = this.taButton(tt`Показать`, "ghost small", () => {
       pre.toggleAttribute("masked");
-      reveal.textContent = pre.hasAttribute("masked") ? "Показать" : "Скрыть";
+      reveal.textContent = pre.hasAttribute("masked") ? tt`Показать` : tt`Скрыть`;
     });
-    const copy = this.taButton("Скопировать", "ghost small", () => {
+    const copy = this.taButton(tt`Скопировать`, "ghost small", () => {
       if (key) {
         this.copyWithExpiry(key, 60000);
-        this.notice("Ключ скопирован · буфер очистится через минуту");
+        this.notice(tt`Ключ скопирован · буфер очистится через минуту`);
       }
     });
     copy.disabled = !key;
@@ -357,22 +357,22 @@ Object.assign(Tabora, {
         this.accountRender("done", { email });
       }
     };
-    const next = this.taButton("Продолжить", "primary", finish);
+    const next = this.taButton(tt`Продолжить`, "primary", finish);
     next.disabled = !!key;
     check.addEventListener("change", () => { next.disabled = !check.checked; });
     const text = fresh
-      ? "Создан новый пустой сейф под паролем аккаунта. Прежний остался на диске зашифрованным прежним паролем. Запишите ключ восстановления нового сейфа и храните отдельно от компьютера: он показывается один раз."
+      ? tt`Создан новый пустой сейф под паролем аккаунта. Прежний остался на диске зашифрованным прежним паролем. Запишите ключ восстановления нового сейфа и храните отдельно от компьютера: он показывается один раз.`
       : rebound
-      ? `Сейф этого профиля теперь открывается паролем аккаунта ${email}: ключ шифрования заменён, данные перешифрованы. Прежний пароль и прежний ключ восстановления больше не действуют. Запишите новый ключ и храните отдельно от компьютера: он показывается один раз.`
+      ? tt`Сейф этого профиля теперь открывается паролем аккаунта ${email}: ключ шифрования заменён, данные перешифрованы. Прежний пароль и прежний ключ восстановления больше не действуют. Запишите новый ключ и храните отдельно от компьютера: он показывается один раз.`
       : rotated
-        ? "Ключ шифрования сейфа заменён, данные перешифрованы. Прежний ключ восстановления больше не действует. Запишите новый и храните отдельно от компьютера: он показывается один раз."
-        : "Если вы забудете пароль, только этот ключ откроет сейф и аккаунт. Запишите его и храните отдельно от компьютера: он показывается один раз.";
+        ? tt`Ключ шифрования сейфа заменён, данные перешифрованы. Прежний ключ восстановления больше не действует. Запишите новый и храните отдельно от компьютера: он показывается один раз.`
+        : tt`Если вы забудете пароль, только этот ключ откроет сейф и аккаунт. Запишите его и храните отдельно от компьютера: он показывается один раз.`;
     return h("div", { class: "ta-step" }, null, [
-      h("h2", {}, rebound || rotated || fresh ? "Новый ключ восстановления" : "Ключ восстановления"),
+      h("h2", {}, rebound || rotated || fresh ? tt`Новый ключ восстановления` : tt`Ключ восстановления`),
       h("p", { class: "ta-text" }, text),
       pre,
       h("div", { class: "ta-actions row" }, null, [reveal, copy]),
-      key ? h("label", { class: "ta-check" }, null, [check, h("span", {}, "Я записал ключ в надёжное место")]) : null,
+      key ? h("label", { class: "ta-check" }, null, [check, h("span", {}, tt`Я записал ключ в надёжное место`)]) : null,
       next,
     ].filter(Boolean));
   },
@@ -382,15 +382,15 @@ Object.assign(Tabora, {
     const { Account } = this.accountMod();
     return h("div", { class: "ta-step" }, null, [
       h("div", { class: "ta-orb" }, null, [this.markSvg("ta-mark")]),
-      h("h2", {}, "Готово"),
-      h("p", { class: "ta-text" }, Account.isLocalMode ? `Аккаунт ${email || Account.email} создан на этом компьютере.` : `Аккаунт ${email || Account.email} создан. Почта на этом адресе уже принимает письма.`),
+      h("h2", {}, tt`Готово`),
+      h("p", { class: "ta-text" }, Account.isLocalMode ? tt`Аккаунт ${email || Account.email} создан на этом компьютере.` : tt`Аккаунт ${email || Account.email} создан. Почта на этом адресе уже принимает письма.`),
       h("ul", { class: "ta-points" }, null, [
-        h("li", {}, "Сейф открыт, пароли сайтов шифруются его ключом"),
-        h("li", {}, "Раздел «Коды» для двухфакторной защиты: ⌘⇧K"),
-        h("li", {}, "Кошелёк: ⌘⇧W, почта и алиасы: ⌘⇧M"),
-        h("li", {}, Account.isLocalMode ? "Вход с других компьютеров появится, когда аккаунт подключат к серверу" : "С другого компьютера входите тем же адресом и паролем"),
+        h("li", {}, tt`Сейф открыт, пароли сайтов шифруются его ключом`),
+        h("li", {}, tt`Раздел «Коды» для двухфакторной защиты: ⌘⇧K`),
+        h("li", {}, tt`Кошелёк: ⌘⇧W, почта и алиасы: ⌘⇧M`),
+        h("li", {}, Account.isLocalMode ? tt`Вход с других компьютеров появится, когда аккаунт подключат к серверу` : tt`С другого компьютера входите тем же адресом и паролем`),
       ]),
-      this.taButton("Начать", "primary", () => {
+      this.taButton(tt`Начать`, "primary", () => {
         const after = this.account.after;
         this.accountClose();
         this.account.after = after;
@@ -404,16 +404,16 @@ Object.assign(Tabora, {
     const { Account } = this.accountMod();
     // профиль принадлежит аккаунту: войти здесь можно только в него, адрес не меняется
     const own = Account.email;
-    const email = own ? null : this.taField("Адрес почты", { type: "text", autocomplete: "username", spellcheck: "false", placeholder: "имя", autocapitalize: "off", value: opts.name || "" }, { suffix: `@${Account.domain}` });
-    const who = own ? h("div", { class: "ta-field" }, null, [h("span", {}, "Аккаунт"), h("div", { class: "ta-static" }, null, [this.accountAvatar(own), h("b", {}, own)])]) : email.wrap;
-    const pass = this.taField("Пароль", { type: "password", autocomplete: "current-password" });
+    const email = own ? null : this.taField(tt`Адрес почты`, { type: "text", autocomplete: "username", spellcheck: "false", placeholder: tt`имя`, autocapitalize: "off", value: opts.name || "" }, { suffix: `@${Account.domain}` });
+    const who = own ? h("div", { class: "ta-field" }, null, [h("span", {}, tt`Аккаунт`), h("div", { class: "ta-static" }, null, [this.accountAvatar(own), h("b", {}, own)])]) : email.wrap;
+    const pass = this.taField(tt`Пароль`, { type: "password", autocomplete: "current-password" });
     const code = this.taCodeField();
     code.wrap.hidden = true;
     return this.taForm({
-      title: "Вход",
+      title: tt`Вход`,
       fields: [who, pass.wrap, code.wrap],
-      okLabel: "Войти",
-      busyLabel: "Входим",
+      okLabel: tt`Войти`,
+      busyLabel: tt`Входим`,
       back: Account.firstRunDone ? null : () => this.accountRender("welcome"),
       onOk: async () => {
         const address = own || email.input.value;
@@ -432,15 +432,15 @@ Object.assign(Tabora, {
         this.accountLoggedIn(r);
       },
       links: [
-        this.taLink("Забыли пароль?", () => this.accountRender("forgot")),
-        own ? this.taLink("Другой аккаунт", () => this.accountShowAccounts({ back: "login" })) : this.taLink("Создать аккаунт", () => this.accountRender("register")),
+        this.taLink(tt`Забыли пароль?`, () => this.accountRender("forgot")),
+        own ? this.taLink(tt`Другой аккаунт`, () => this.accountShowAccounts({ back: "login" })) : this.taLink(tt`Создать аккаунт`, () => this.accountRender("register")),
       ],
     });
   },
 
   /** Поле кода двухфакторной защиты: шесть цифр из приложения или резервный код. */
-  taCodeField(label = "Код двухфакторной защиты") {
-    return this.taField(label, { type: "text", autocomplete: "one-time-code", spellcheck: "false", autocapitalize: "off", placeholder: "6 цифр из приложения или резервный код" });
+  taCodeField(label = tt`Код двухфакторной защиты`) {
+    return this.taField(label, { type: "text", autocomplete: "one-time-code", spellcheck: "false", autocapitalize: "off", placeholder: tt`6 цифр из приложения или резервный код` });
   },
 
   /** Ответ сервера «нужен код» превращает форму в следующий шаг: поле кода появляется, вместо
@@ -452,13 +452,13 @@ Object.assign(Tabora, {
     const first = code.wrap.hidden;
     code.wrap.hidden = false;
     setTimeout(() => (first ? code.input.focus() : code.input.select()), 0);
-    return e.code === "2fa-required" ? Object.assign(new Error("У аккаунта включена двухфакторная защита. Введите код из приложения на телефоне или резервный код"), { note: true }) : e;
+    return e.code === "2fa-required" ? Object.assign(new Error(tt`У аккаунта включена двухфакторная защита. Введите код из приложения на телефоне или резервный код`), { note: true }) : e;
   },
 
   /** Вход выполнен: сообщить, показать новый ключ восстановления, если сейф его получил, и
    * продолжить то, ради чего входили. */
   accountLoggedIn(r) {
-    this.notice(`Вы вошли как ${r.email}`);
+    this.notice(tt`Вы вошли как ${r.email}`);
     if (r.rebound || r.fresh) {
       this.accountRender("recovery", { email: r.email, key: r.recoveryKey, rebound: r.rebound, fresh: r.fresh });
       return;
@@ -477,21 +477,21 @@ Object.assign(Tabora, {
     const { Account } = this.accountMod();
     const { Vault } = this.vaultMod();
     const options = [
-      Vault.hasOsKey && Vault.osUnlockEnabled ? ["os", "Проверка системы", "Touch ID или пароль этого Mac"] : null,
-      ["password", "Прежний пароль", "Если вы его помните"],
-      Vault.hasRecoveryKey ? ["recovery", "Ключ восстановления", "Записанный при настройке сейфа"] : null,
-      ["fresh", "Пустой сейф", "Если открыть прежний нечем"],
+      Vault.hasOsKey && Vault.osUnlockEnabled ? ["os", tt`Проверка системы`, tt`Touch ID или пароль этого Mac`] : null,
+      ["password", tt`Прежний пароль`, tt`Если вы его помните`],
+      Vault.hasRecoveryKey ? ["recovery", tt`Ключ восстановления`, tt`Записанный при настройке сейфа`] : null,
+      ["fresh", tt`Пустой сейф`, tt`Если открыть прежний нечем`],
     ].filter(Boolean);
     let choice = options[0][0];
-    const oldPass = this.taField("Прежний пароль", { type: "password", autocomplete: "off" });
-    const key = this.taField("Ключ восстановления", { type: "text", autocomplete: "off", spellcheck: "false", placeholder: "XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" });
+    const oldPass = this.taField(tt`Прежний пароль`, { type: "password", autocomplete: "off" });
+    const key = this.taField(tt`Ключ восстановления`, { type: "text", autocomplete: "off", spellcheck: "false", placeholder: "XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" });
     const sure = h("input", { type: "checkbox" });
     const fresh = h("div", { class: "ta-option-body" }, null, [
-      h("p", { class: "ta-hint" }, "Пароли сайтов и коды входа этого профиля останутся на диске зашифрованными прежним паролем, но в новом сейфе их не будет. Кошелёк со своим паролем останется."),
-      h("label", { class: "ta-check" }, null, [sure, h("span", {}, "Я понимаю, что начну с пустого сейфа")]),
+      h("p", { class: "ta-hint" }, tt`Пароли сайтов и коды входа этого профиля останутся на диске зашифрованными прежним паролем, но в новом сейфе их не будет. Кошелёк со своим паролем останется.`),
+      h("label", { class: "ta-check" }, null, [sure, h("span", {}, tt`Я понимаю, что начну с пустого сейфа`)]),
     ]);
     const bodies = { password: oldPass.wrap, recovery: key.wrap, fresh };
-    const list = h("div", { class: "ta-options", role: "radiogroup", "aria-label": "Как открыть сейф" });
+    const list = h("div", { class: "ta-options", role: "radiogroup", "aria-label": tt`Как открыть сейф` });
     const pick = (id, focus = true) => {
       choice = id;
       for (const b of list.children) {
@@ -511,11 +511,11 @@ Object.assign(Tabora, {
     }
     pick(choice, false);
     return this.taForm({
-      title: "Сейф под прежним паролем",
-      text: "Пароль аккаунта принят, но сейф этого профиля зашифрован прежним паролем: сервер его ключа не знает. Выберите, чем открыть сейф; дальше он будет открываться новым паролем.",
+      title: tt`Сейф под прежним паролем`,
+      text: tt`Пароль аккаунта принят, но сейф этого профиля зашифрован прежним паролем: сервер его ключа не знает. Выберите, чем открыть сейф; дальше он будет открываться новым паролем.`,
       fields: [list, oldPass.wrap, key.wrap, fresh],
-      okLabel: "Открыть сейф и войти",
-      busyLabel: "Открываем сейф",
+      okLabel: tt`Открыть сейф и войти`,
+      busyLabel: tt`Открываем сейф`,
       back: () => {
         Account.cancelLogin();
         this.accountRender("login");
@@ -524,17 +524,17 @@ Object.assign(Tabora, {
         let opts;
         if (choice === "password") {
           if (!oldPass.input.value) {
-            throw new Error("Введите прежний пароль");
+            throw new Error(tt`Введите прежний пароль`);
           }
           opts = { vaultPassword: oldPass.input.value };
         } else if (choice === "recovery") {
           if (!key.input.value.trim()) {
-            throw new Error("Введите ключ восстановления");
+            throw new Error(tt`Введите ключ восстановления`);
           }
           opts = { vaultOpen: { via: "recovery", key: key.input.value } };
         } else if (choice === "fresh") {
           if (!sure.checked) {
-            throw new Error("Отметьте, что понимаете последствия");
+            throw new Error(tt`Отметьте, что понимаете последствия`);
           }
           opts = { vaultOpen: { via: "fresh" } };
         } else {
@@ -570,11 +570,11 @@ Object.assign(Tabora, {
   /** fresh — профиль добавили, но аккаунт в нём ещё не создали; без адреса и без этой
    * отметки — профиль, в котором от аккаунта отказались. */
   accountLabel(p) {
-    return p.email || (p.fresh ? "Новый аккаунт" : "Профиль без аккаунта");
+    return p.email || (p.fresh ? tt`Новый аккаунт` : tt`Профиль без аккаунта`);
   },
 
   accountStateText(p) {
-    return p.email ? (p.signedIn ? "вход выполнен" : "выход выполнен") : p.fresh ? "аккаунт ещё не создан" : "аккаунта нет";
+    return p.email ? (p.signedIn ? tt`вход выполнен` : tt`выход выполнен`) : p.fresh ? tt`аккаунт ещё не создан` : tt`аккаунта нет`;
   },
 
   async accountShowAccounts({ back = null } = {}) {
@@ -603,11 +603,11 @@ Object.assign(Tabora, {
     });
     const own = Account.email;
     return this.taForm({
-      title: "Аккаунты на этом компьютере",
-      text: "У каждого аккаунта свой профиль браузера: свои вкладки, история, сейф, кошелёк и почта. Между аккаунтами ничего не передаётся.",
-      fields: [rows.length ? h("div", { class: "ta-accounts" }, null, rows) : h("p", { class: "ta-hint" }, "Других аккаунтов на этом компьютере пока нет.")],
-      okLabel: own ? "Добавить аккаунт" : "Создать аккаунт",
-      busyLabel: "Открываем",
+      title: tt`Аккаунты на этом компьютере`,
+      text: tt`У каждого аккаунта свой профиль браузера: свои вкладки, история, сейф, кошелёк и почта. Между аккаунтами ничего не передаётся.`,
+      fields: [rows.length ? h("div", { class: "ta-accounts" }, null, rows) : h("p", { class: "ta-hint" }, tt`Других аккаунтов на этом компьютере пока нет.`)],
+      okLabel: own ? tt`Добавить аккаунт` : tt`Создать аккаунт`,
+      busyLabel: tt`Открываем`,
       back: back ? () => this.accountRender(back) : null,
       onOk: async () => {
         if (!own) {
@@ -626,25 +626,25 @@ Object.assign(Tabora, {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const check = h("input", { type: "checkbox" });
     return this.taForm({
-      title: profile.email ? "Удалить аккаунт с этого компьютера" : "Удалить профиль",
+      title: profile.email ? tt`Удалить аккаунт с этого компьютера` : tt`Удалить профиль`,
       text: profile.email
-        ? `Профиль аккаунта ${profile.email} будет удалён с этого компьютера вместе с вкладками, историей, паролями, кодами входа и кошельком. Вернуть их будет нельзя. Сам аккаунт и почта на сервере останутся: в него можно войти снова.`
-        : "Профиль, в котором аккаунт так и не создали, будет удалён с этого компьютера.",
+        ? tt`Профиль аккаунта ${profile.email} будет удалён с этого компьютера вместе с вкладками, историей, паролями, кодами входа и кошельком. Вернуть их будет нельзя. Сам аккаунт и почта на сервере останутся: в него можно войти снова.`
+        : tt`Профиль, в котором аккаунт так и не создали, будет удалён с этого компьютера.`,
       fields: profile.email
         ? [
-            h("p", { class: "ta-hint" }, "Если в кошельке этого профиля есть средства, сначала сохраните его фразу восстановления: без неё доступ к ним пропадёт."),
-            h("label", { class: "ta-check" }, null, [check, h("span", {}, "Я понимаю, что данные этого профиля удаляются безвозвратно")]),
+            h("p", { class: "ta-hint" }, tt`Если в кошельке этого профиля есть средства, сначала сохраните его фразу восстановления: без неё доступ к ним пропадёт.`),
+            h("label", { class: "ta-check" }, null, [check, h("span", {}, tt`Я понимаю, что данные этого профиля удаляются безвозвратно`)]),
           ]
         : [],
-      okLabel: "Удалить с компьютера",
-      busyLabel: "Удаляем",
+      okLabel: tt`Удалить с компьютера`,
+      busyLabel: tt`Удаляем`,
       danger: true,
       onOk: async () => {
         if (profile.email && !check.checked) {
-          throw new Error("Отметьте, что понимаете последствия");
+          throw new Error(tt`Отметьте, что понимаете последствия`);
         }
         await this.profilesMod().Profiles.remove(profile.dir);
-        this.notice(profile.email ? `Аккаунт ${profile.email} удалён с этого компьютера` : "Профиль удалён");
+        this.notice(profile.email ? tt`Аккаунт ${profile.email} удалён с этого компьютера` : tt`Профиль удалён`);
         this.accountClose();
       },
     });
@@ -655,7 +655,7 @@ Object.assign(Tabora, {
     try {
       await this.profilesMod().Profiles.open(p.dir);
     } catch (e) {
-      this.notice(e.message || "Не удалось открыть аккаунт");
+      this.notice(e.message || tt`Не удалось открыть аккаунт`);
       this.accountProfiles();
     }
   },
@@ -671,12 +671,12 @@ Object.assign(Tabora, {
       const { Profiles } = this.profilesMod();
       const dir = await Profiles.create({ step, name });
       await Profiles.open(dir);
-      this.notice("Новый аккаунт открывается в отдельном окне");
+      this.notice(tt`Новый аккаунт открывается в отдельном окне`);
       this.accountProfiles();
       return true;
     } catch (e) {
       this.account.addedAt = 0;
-      this.notice(`Не удалось добавить аккаунт: ${e.message || e}`);
+      this.notice(tt`Не удалось добавить аккаунт: ${e.message || e}`);
       return false;
     }
   },
@@ -687,32 +687,32 @@ Object.assign(Tabora, {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { Account } = this.accountMod();
     const own = Account.email;
-    const title = kind === "wallet" ? "Кошелёк откроется после входа" : "Коды откроются после входа";
+    const title = kind === "wallet" ? tt`Кошелёк откроется после входа` : tt`Коды откроются после входа`;
     const text = own
-      ? `Вы вышли из аккаунта ${own}. Кошелёк, коды, пароли и почта этого профиля закрыты, пока вы не войдёте снова.`
-      : "Кошелёк, коды и почта — часть аккаунта Tabora. Создайте аккаунт или войдите, чтобы ими пользоваться.";
+      ? tt`Вы вышли из аккаунта ${own}. Кошелёк, коды, пароли и почта этого профиля закрыты, пока вы не войдёте снова.`
+      : tt`Кошелёк, коды и почта — часть аккаунта Tabora. Создайте аккаунт или войдите, чтобы ими пользоваться.`;
     return h("div", { class: "w-locked" }, null, [
       h("div", { class: "w-lock-mark" }, null, [this.wIcon(["M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z", "M4.5 20c1.4-3.3 4.2-5 7.5-5s6.1 1.7 7.5 5"], 22, 1.8)]),
       h("b", {}, title),
       h("p", { class: "w-sub" }, text),
-      own ? this.wButton("Войти", "primary", () => this.accountDialog("login")) : this.wButton("Создать аккаунт", "primary", () => this.accountDialog("register")),
-      own ? null : this.wButton("Войти", "ghost", () => this.accountDialog("login")),
+      own ? this.wButton(tt`Войти`, "primary", () => this.accountDialog("login")) : this.wButton(tt`Создать аккаунт`, "primary", () => this.accountDialog("register")),
+      own ? null : this.wButton(tt`Войти`, "ghost", () => this.accountDialog("login")),
     ].filter(Boolean));
   },
 
   /** Аккаунт создан на этом компьютере без сервера: подключаем его под тем же адресом. */
   accountLink() {
     const { Account } = this.accountMod();
-    const pass = this.taField("Пароль аккаунта", { type: "password", autocomplete: "current-password" });
+    const pass = this.taField(tt`Пароль аккаунта`, { type: "password", autocomplete: "current-password" });
     return this.taForm({
-      title: "Подключить аккаунт к серверу",
-      text: `Аккаунт ${Account.email} пока есть только на этом компьютере. После подключения на этот адрес начнут приходить письма, а войти можно будет и с другого компьютера. Сервер получит только хеш пароля для входа: сам пароль и ключ сейфа остаются здесь.`,
+      title: tt`Подключить аккаунт к серверу`,
+      text: tt`Аккаунт ${Account.email} пока есть только на этом компьютере. После подключения на этот адрес начнут приходить письма, а войти можно будет и с другого компьютера. Сервер получит только хеш пароля для входа: сам пароль и ключ сейфа остаются здесь.`,
       fields: [pass.wrap],
-      okLabel: "Подключить",
-      busyLabel: "Подключаем",
+      okLabel: tt`Подключить`,
+      busyLabel: tt`Подключаем`,
       onOk: async () => {
         const r = await Account.linkToServer(pass.input.value);
-        this.notice(r.created ? `Аккаунт подключён: ящик ${r.email} работает` : `Вы вошли как ${r.email}`);
+        this.notice(r.created ? tt`Аккаунт подключён: ящик ${r.email} работает` : tt`Вы вошли как ${r.email}`);
         const after = this.account.after;
         this.accountClose();
         if (r.recoveryOffServer) {
@@ -729,18 +729,18 @@ Object.assign(Tabora, {
   accountChange() {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { Account } = this.accountMod();
-    const old = this.taField("Текущий пароль", { type: "password", autocomplete: "current-password" });
-    const pw = this.taPasswordPair("Новый пароль");
+    const old = this.taField(tt`Текущий пароль`, { type: "password", autocomplete: "current-password" });
+    const pw = this.taPasswordPair(tt`Новый пароль`);
     const rotate = h("input", { type: "checkbox" });
     return this.taForm({
-      title: "Сменить пароль",
-      text: "Пароль аккаунта и мастер-пароль сейфа меняются вместе. На других компьютерах потребуется войти заново.",
-      fields: [old.wrap, ...pw.nodes, h("label", { class: "ta-check" }, null, [rotate, h("span", {}, "Сменить и ключ шифрования сейфа: если пароль мог узнать кто-то ещё. Ключ восстановления тоже заменится")])],
-      okLabel: "Сменить пароль",
-      busyLabel: "Меняем пароль",
+      title: tt`Сменить пароль`,
+      text: tt`Пароль аккаунта и мастер-пароль сейфа меняются вместе. На других компьютерах потребуется войти заново.`,
+      fields: [old.wrap, ...pw.nodes, h("label", { class: "ta-check" }, null, [rotate, h("span", {}, tt`Сменить и ключ шифрования сейфа: если пароль мог узнать кто-то ещё. Ключ восстановления тоже заменится`)])],
+      okLabel: tt`Сменить пароль`,
+      busyLabel: tt`Меняем пароль`,
       onOk: async () => {
         const r = await Account.changePassword(old.input.value, pw.read(), { rotate: rotate.checked });
-        this.notice(r.complete === false ? "Пароль изменён; часть данных перешифруется при следующей разблокировке" : "Пароль изменён");
+        this.notice(r.complete === false ? tt`Пароль изменён; часть данных перешифруется при следующей разблокировке` : tt`Пароль изменён`);
         if (r.recoveryKey) {
           this.accountRender("recovery", { email: Account.email, key: r.recoveryKey, rotated: true });
           return;
@@ -766,13 +766,13 @@ Object.assign(Tabora, {
     };
     const mail = !Account.isLocalMode && !Account.needsServerLink;
     return h("div", { class: "ta-step" }, null, [
-      this.taLink("← Назад", () => this.accountRender("login")),
-      h("div", { class: "ta-brand" }, null, [this.markSvg("ta-mark"), h("span", {}, "Tabora"), h("i", {}, "аккаунт")]),
-      h("h2", {}, "Восстановление доступа"),
-      h("p", { class: "ta-text" }, "Пароль знаете только вы: сервер хранит лишь его хеш для входа. Вернуть доступ можно двумя способами."),
+      this.taLink(tt`← Назад`, () => this.accountRender("login")),
+      h("div", { class: "ta-brand" }, null, [this.markSvg("ta-mark"), h("span", {}, "Tabora"), h("i", {}, tt`аккаунт`)]),
+      h("h2", {}, tt`Восстановление доступа`),
+      h("p", { class: "ta-text" }, tt`Пароль знаете только вы: сервер хранит лишь его хеш для входа. Вернуть доступ можно двумя способами.`),
       h("div", { class: "ta-accounts" }, null, [
-        way("forgot-key", ["M7.5 20a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9z", "m10.7 12.3 9.3-9.3", "m16 7 3 3", "m13.5 9.5 2 2"], "Ключ восстановления", "Вернёт и аккаунт, и сейф с паролями и кодами"),
-        mail ? way("forgot-mail", ["M3.5 6.5h17v11h-17z", "M3.5 7l8.5 6 8.5-6"], "Письмо на резервный адрес", "Вернёт аккаунт и почту; сейф откроется отдельно") : null,
+        way("forgot-key", ["M7.5 20a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9z", "m10.7 12.3 9.3-9.3", "m16 7 3 3", "m13.5 9.5 2 2"], tt`Ключ восстановления`, tt`Вернёт и аккаунт, и сейф с паролями и кодами`),
+        mail ? way("forgot-mail", ["M3.5 6.5h17v11h-17z", "M3.5 7l8.5 6 8.5-6"], tt`Письмо на резервный адрес`, tt`Вернёт аккаунт и почту; сейф откроется отдельно`) : null,
       ].filter(Boolean)),
     ]);
   },
@@ -780,14 +780,14 @@ Object.assign(Tabora, {
   accountForgotKey() {
     const { Account } = this.accountMod();
     const { Vault } = this.vaultMod();
-    const key = this.taField("Ключ восстановления", { type: "text", autocomplete: "off", spellcheck: "false", placeholder: "XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" });
-    const pw = this.taPasswordPair("Новый пароль");
+    const key = this.taField(tt`Ключ восстановления`, { type: "text", autocomplete: "off", spellcheck: "false", placeholder: "XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" });
+    const pw = this.taPasswordPair(tt`Новый пароль`);
     return this.taForm({
-      title: "Ключ восстановления",
-      text: Vault.hasRecoveryKey ? "Введите ключ восстановления, записанный при настройке, и задайте новый пароль." : "Для этого сейфа ключ восстановления не создавался: без пароля данные не восстановить.",
+      title: tt`Ключ восстановления`,
+      text: Vault.hasRecoveryKey ? tt`Введите ключ восстановления, записанный при настройке, и задайте новый пароль.` : tt`Для этого сейфа ключ восстановления не создавался: без пароля данные не восстановить.`,
       fields: [key.wrap, ...pw.nodes],
-      okLabel: "Задать новый пароль",
-      busyLabel: "Задаём новый пароль",
+      okLabel: tt`Задать новый пароль`,
+      busyLabel: tt`Задаём новый пароль`,
       back: () => this.accountRender("forgot"),
       onOk: async () => {
         const password = pw.read();
@@ -798,7 +798,7 @@ Object.assign(Tabora, {
           await Vault.unlockWithRecoveryKey(key.input.value);
           await Vault.setPassword(password);
         }
-        this.notice(off ? "Новый пароль задан. Двухфакторная защита выключена: включите её заново в настройках аккаунта" : "Новый пароль задан");
+        this.notice(off ? tt`Новый пароль задан. Двухфакторная защита выключена: включите её заново в настройках аккаунта` : tt`Новый пароль задан`);
         this.accountClose();
       },
     });
@@ -811,13 +811,13 @@ Object.assign(Tabora, {
     const { Account } = this.accountMod();
     const own = Account.email;
     if (!email) {
-      const name = own ? null : this.taField("Адрес почты", { type: "text", autocomplete: "username", spellcheck: "false", placeholder: "имя", autocapitalize: "off" }, { suffix: `@${Account.domain}` });
+      const name = own ? null : this.taField(tt`Адрес почты`, { type: "text", autocomplete: "username", spellcheck: "false", placeholder: tt`имя`, autocapitalize: "off" }, { suffix: `@${Account.domain}` });
       return this.taForm({
-        title: "Письмо на резервный адрес",
-        text: `${own ? `На резервный адрес аккаунта ${own}` : "На резервный адрес аккаунта"} придёт код. Он вернёт аккаунт и почту. Сейф этого профиля останется под прежним паролем: его откроет проверка системы или ключ восстановления.`,
+        title: tt`Письмо на резервный адрес`,
+        text: tt`${own ? tt`На резервный адрес аккаунта ${own}` : tt`На резервный адрес аккаунта`} придёт код. Он вернёт аккаунт и почту. Сейф этого профиля останется под прежним паролем: его откроет проверка системы или ключ восстановления.`,
         fields: name ? [name.wrap] : [],
-        okLabel: "Отправить код",
-        busyLabel: "Отправляем",
+        okLabel: tt`Отправить код`,
+        busyLabel: tt`Отправляем`,
         back: () => this.accountRender("forgot"),
         onOk: async () => {
           const r = await Account.resetByEmailStart(own || name.input.value);
@@ -825,27 +825,27 @@ Object.assign(Tabora, {
         },
       });
     }
-    const mailCode = this.taField("Код из письма", { type: "text", autocomplete: "off", inputmode: "numeric", spellcheck: "false", placeholder: "8 цифр" });
-    const pw = this.taPasswordPair("Новый пароль");
+    const mailCode = this.taField(tt`Код из письма`, { type: "text", autocomplete: "off", inputmode: "numeric", spellcheck: "false", placeholder: tt`8 цифр` });
+    const pw = this.taPasswordPair(tt`Новый пароль`);
     const code = this.taCodeField();
     code.wrap.hidden = true;
     let changed = false; // пароль на сервере уже сменён: дальше остаётся только вход
-    const again = this.taLink("Отправить код ещё раз", async () => {
+    const again = this.taLink(tt`Отправить код ещё раз`, async () => {
       again.disabled = true;
       try {
         await Account.resetByEmailStart(email);
-        this.notice("Код отправлен ещё раз. В сутки сервер отправляет не больше трёх писем");
+        this.notice(tt`Код отправлен ещё раз. В сутки сервер отправляет не больше трёх писем`);
       } catch (e) {
         this.notice(e.message);
       }
       setTimeout(() => (again.disabled = false), 15000);
     });
     return this.taForm({
-      title: "Код из письма",
-      text: `Если у аккаунта ${email} есть подтверждённый резервный адрес, на него отправлено письмо с кодом. Код действует 30 минут.`,
+      title: tt`Код из письма`,
+      text: tt`Если у аккаунта ${email} есть подтверждённый резервный адрес, на него отправлено письмо с кодом. Код действует 30 минут.`,
       fields: [mailCode.wrap, ...pw.nodes, code.wrap],
-      okLabel: "Сменить пароль и войти",
-      busyLabel: "Меняем пароль",
+      okLabel: tt`Сменить пароль и войти`,
+      busyLabel: tt`Меняем пароль`,
       back: () => this.accountRender("forgot-mail"),
       links: [again],
       onOk: async () => {
@@ -884,7 +884,7 @@ Object.assign(Tabora, {
     modules.forEach((row, y) => row.forEach((dark, x) => (d += dark ? `M${x + quiet} ${y + quiet}h1v1h-1z` : "")));
     const svg = document.createElementNS(NS, "svg");
     const side = modules.length + quiet * 2;
-    for (const [k, v] of Object.entries({ viewBox: `0 0 ${side} ${side}`, width: size, height: size, class: "ta-qr", role: "img", "aria-label": "QR-код для приложения кодов", "shape-rendering": "crispEdges" })) {
+    for (const [k, v] of Object.entries({ viewBox: `0 0 ${side} ${side}`, width: size, height: size, class: "ta-qr", role: "img", "aria-label": tt`QR-код для приложения кодов`, "shape-rendering": "crispEdges" })) {
       svg.setAttribute(k, v);
     }
     const bg = document.createElementNS(NS, "rect");
@@ -900,13 +900,13 @@ Object.assign(Tabora, {
 
   accountTwoFactor() {
     const { Account } = this.accountMod();
-    const pass = this.taField("Пароль аккаунта", { type: "password", autocomplete: "current-password" });
+    const pass = this.taField(tt`Пароль аккаунта`, { type: "password", autocomplete: "current-password" });
     return this.taForm({
-      title: "Двухфакторная защита",
-      text: "При входе в аккаунт, кроме пароля, понадобится код из приложения на телефоне. Понадобится приложение для кодов: Google Authenticator, Aegis, 2FAS или похожее.",
+      title: tt`Двухфакторная защита`,
+      text: tt`При входе в аккаунт, кроме пароля, понадобится код из приложения на телефоне. Понадобится приложение для кодов: Google Authenticator, Aegis, 2FAS или похожее.`,
       fields: [pass.wrap],
-      okLabel: "Продолжить",
-      busyLabel: "Проверяем пароль",
+      okLabel: tt`Продолжить`,
+      busyLabel: tt`Проверяем пароль`,
       onOk: async () => {
         const r = await Account.twoFactorSetup(pass.input.value);
         this.accountRender("twofa-scan", r);
@@ -917,26 +917,26 @@ Object.assign(Tabora, {
   accountTwoFactorScan({ secret, uri }) {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { Account } = this.accountMod();
-    const code = this.taField("Код из приложения", { type: "text", autocomplete: "off", inputmode: "numeric", spellcheck: "false", placeholder: "6 цифр" });
+    const code = this.taField(tt`Код из приложения`, { type: "text", autocomplete: "off", inputmode: "numeric", spellcheck: "false", placeholder: tt`6 цифр` });
     const text = h("code", { class: "ta-key" }, secret.replace(/(.{4})/g, "$1 ").trim());
-    const copy = this.taButton("Скопировать", "ghost small", () => {
+    const copy = this.taButton(tt`Скопировать`, "ghost small", () => {
       this.copyWithExpiry(secret, 60000);
-      this.notice("Секрет скопирован · буфер очистится через минуту");
+      this.notice(tt`Секрет скопирован · буфер очистится через минуту`);
     });
     return this.taForm({
-      title: "Добавьте аккаунт в приложение",
-      text: "Отсканируйте код приложением на телефоне или введите секрет вручную, затем впишите код, который оно покажет.",
+      title: tt`Добавьте аккаунт в приложение`,
+      text: tt`Отсканируйте код приложением на телефоне или введите секрет вручную, затем впишите код, который оно покажет.`,
       fields: [
-        h("div", { class: "ta-scan" }, null, [this.accountQr(uri), h("div", { class: "ta-scan-side" }, null, [h("span", {}, "Секрет"), text, copy])]),
-        h("p", { class: "ta-hint" }, "Держите этот секрет не только в «Кодах» Tabora: они открываются после входа, а код нужен до него."),
+        h("div", { class: "ta-scan" }, null, [this.accountQr(uri), h("div", { class: "ta-scan-side" }, null, [h("span", {}, tt`Секрет`), text, copy])]),
+        h("p", { class: "ta-hint" }, tt`Держите этот секрет не только в «Кодах» Tabora: они открываются после входа, а код нужен до него.`),
         code.wrap,
       ],
-      okLabel: "Включить защиту",
-      busyLabel: "Включаем",
+      okLabel: tt`Включить защиту`,
+      busyLabel: tt`Включаем`,
       back: () => this.accountRender("twofa"),
       onOk: async () => {
         const r = await Account.twoFactorEnable(code.input.value);
-        this.notice("Двухфакторная защита включена");
+        this.notice(tt`Двухфакторная защита включена`);
         this.accountRender("codes", { codes: r.backupCodes });
       },
     });
@@ -946,38 +946,38 @@ Object.assign(Tabora, {
   accountBackupCodes({ codes = [] }) {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const list = h("div", { class: "ta-codes" }, null, codes.map(c => h("code", {}, c)));
-    const copy = this.taButton("Скопировать", "ghost small", () => {
+    const copy = this.taButton(tt`Скопировать`, "ghost small", () => {
       this.copyWithExpiry(codes.join("\n"), 60000);
-      this.notice("Коды скопированы · буфер очистится через минуту");
+      this.notice(tt`Коды скопированы · буфер очистится через минуту`);
     });
     const check = h("input", { type: "checkbox" });
-    const done = this.taButton("Готово", "primary", () => this.accountClose());
+    const done = this.taButton(tt`Готово`, "primary", () => this.accountClose());
     done.disabled = true;
     check.addEventListener("change", () => (done.disabled = !check.checked));
     return h("div", { class: "ta-step" }, null, [
-      h("h2", {}, "Резервные коды"),
-      h("p", { class: "ta-text" }, "Каждый код один раз заменяет код из приложения, если телефона нет под рукой. Сохраните их отдельно от компьютера: они показываются только сейчас."),
+      h("h2", {}, tt`Резервные коды`),
+      h("p", { class: "ta-text" }, tt`Каждый код один раз заменяет код из приложения, если телефона нет под рукой. Сохраните их отдельно от компьютера: они показываются только сейчас.`),
       list,
       h("div", { class: "ta-actions row" }, null, [copy]),
-      h("label", { class: "ta-check" }, null, [check, h("span", {}, "Я сохранил коды в надёжном месте")]),
+      h("label", { class: "ta-check" }, null, [check, h("span", {}, tt`Я сохранил коды в надёжном месте`)]),
       done,
     ]);
   },
 
   accountTwoFactorOff() {
     const { Account } = this.accountMod();
-    const pass = this.taField("Пароль аккаунта", { type: "password", autocomplete: "current-password" });
+    const pass = this.taField(tt`Пароль аккаунта`, { type: "password", autocomplete: "current-password" });
     const code = this.taCodeField();
     return this.taForm({
-      title: "Выключить двухфакторную защиту",
-      text: "После этого для входа в аккаунт снова будет достаточно пароля. Резервные коды перестанут действовать.",
+      title: tt`Выключить двухфакторную защиту`,
+      text: tt`После этого для входа в аккаунт снова будет достаточно пароля. Резервные коды перестанут действовать.`,
       fields: [pass.wrap, code.wrap],
-      okLabel: "Выключить защиту",
-      busyLabel: "Выключаем",
+      okLabel: tt`Выключить защиту`,
+      busyLabel: tt`Выключаем`,
       danger: true,
       onOk: async () => {
         await Account.twoFactorDisable(pass.input.value, code.input.value);
-        this.notice("Двухфакторная защита выключена");
+        this.notice(tt`Двухфакторная защита выключена`);
         this.accountClose();
       },
     });
@@ -985,14 +985,14 @@ Object.assign(Tabora, {
 
   accountTwoFactorCodes() {
     const { Account } = this.accountMod();
-    const pass = this.taField("Пароль аккаунта", { type: "password", autocomplete: "current-password" });
+    const pass = this.taField(tt`Пароль аккаунта`, { type: "password", autocomplete: "current-password" });
     const code = this.taCodeField();
     return this.taForm({
-      title: "Новые резервные коды",
-      text: "Прежние резервные коды перестанут действовать. Нужен пароль и код из приложения или один из прежних резервных кодов.",
+      title: tt`Новые резервные коды`,
+      text: tt`Прежние резервные коды перестанут действовать. Нужен пароль и код из приложения или один из прежних резервных кодов.`,
       fields: [pass.wrap, code.wrap],
-      okLabel: "Создать коды",
-      busyLabel: "Создаём",
+      okLabel: tt`Создать коды`,
+      busyLabel: tt`Создаём`,
       onOk: async () => {
         const r = await Account.twoFactorCodes(pass.input.value, code.input.value);
         this.accountRender("codes", { codes: r.backupCodes });
@@ -1007,16 +1007,16 @@ Object.assign(Tabora, {
 
   accountBackupEmail({ twoFactor = false } = {}) {
     const { Account } = this.accountMod();
-    const address = this.taField("Резервный адрес", { type: "email", autocomplete: "off", spellcheck: "false", autocapitalize: "off", placeholder: "вы@другая-почта.com" });
-    const pass = this.taField("Пароль аккаунта", { type: "password", autocomplete: "current-password" });
+    const address = this.taField(tt`Резервный адрес`, { type: "email", autocomplete: "off", spellcheck: "false", autocapitalize: "off", placeholder: tt`вы@другая-почта.com` });
+    const pass = this.taField(tt`Пароль аккаунта`, { type: "password", autocomplete: "current-password" });
     const code = this.taCodeField();
     code.wrap.hidden = !twoFactor;
     return this.taForm({
-      title: "Резервный адрес",
-      text: "На этот адрес придёт код, если вы забудете пароль. Укажите ящик в другой почтовой службе, к которому у вас есть доступ. Тот, кто получит этот ящик, сможет сбросить пароль аккаунта: включите вместе с ним двухфакторную защиту.",
+      title: tt`Резервный адрес`,
+      text: tt`На этот адрес придёт код, если вы забудете пароль. Укажите ящик в другой почтовой службе, к которому у вас есть доступ. Тот, кто получит этот ящик, сможет сбросить пароль аккаунта: включите вместе с ним двухфакторную защиту.`,
       fields: [address.wrap, pass.wrap, code.wrap],
-      okLabel: "Отправить код",
-      busyLabel: "Отправляем",
+      okLabel: tt`Отправить код`,
+      busyLabel: tt`Отправляем`,
       onOk: async () => {
         let r;
         try {
@@ -1031,33 +1031,33 @@ Object.assign(Tabora, {
 
   accountBackupEmailCode({ address, twoFactor = false }) {
     const { Account } = this.accountMod();
-    const code = this.taField("Код из письма", { type: "text", autocomplete: "off", inputmode: "numeric", spellcheck: "false", placeholder: "6 цифр" });
+    const code = this.taField(tt`Код из письма`, { type: "text", autocomplete: "off", inputmode: "numeric", spellcheck: "false", placeholder: tt`6 цифр` });
     return this.taForm({
-      title: "Подтвердите адрес",
-      text: `На ${address} отправлено письмо с кодом. Он действует 30 минут.`,
+      title: tt`Подтвердите адрес`,
+      text: tt`На ${address} отправлено письмо с кодом. Он действует 30 минут.`,
       fields: [code.wrap],
-      okLabel: "Подтвердить",
-      busyLabel: "Проверяем",
+      okLabel: tt`Подтвердить`,
+      busyLabel: tt`Проверяем`,
       onOk: async () => {
         const r = await Account.backupEmailVerify(code.input.value);
-        this.notice(`Резервный адрес подтверждён: ${r.address}`);
+        this.notice(tt`Резервный адрес подтверждён: ${r.address}`);
         this.accountClose();
       },
-      links: [this.taLink("Указать другой адрес", () => this.accountRender("bemail", { twoFactor }))],
+      links: [this.taLink(tt`Указать другой адрес`, () => this.accountRender("bemail", { twoFactor }))],
     });
   },
 
   accountBackupEmailOff({ address = "", twoFactor = false } = {}) {
     const { Account } = this.accountMod();
-    const pass = this.taField("Пароль аккаунта", { type: "password", autocomplete: "current-password" });
+    const pass = this.taField(tt`Пароль аккаунта`, { type: "password", autocomplete: "current-password" });
     const code = this.taCodeField();
     code.wrap.hidden = !twoFactor;
     return this.taForm({
-      title: "Удалить резервный адрес",
-      text: `${address ? `Адрес ${address}` : "Адрес"} перестанет быть резервным. Забытый пароль после этого вернёт только ключ восстановления.`,
+      title: tt`Удалить резервный адрес`,
+      text: tt`${address ? tt`Адрес ${address}` : tt`Адрес`} перестанет быть резервным. Забытый пароль после этого вернёт только ключ восстановления.`,
       fields: [pass.wrap, code.wrap],
-      okLabel: "Удалить адрес",
-      busyLabel: "Удаляем",
+      okLabel: tt`Удалить адрес`,
+      busyLabel: tt`Удаляем`,
       danger: true,
       onOk: async () => {
         try {
@@ -1065,7 +1065,7 @@ Object.assign(Tabora, {
         } catch (e) {
           throw this.taSecondFactor(e, code);
         }
-        this.notice("Резервный адрес удалён");
+        this.notice(tt`Резервный адрес удалён`);
         this.accountClose();
       },
     });
@@ -1084,7 +1084,7 @@ Object.assign(Tabora, {
         t.linkedBrowser.loadURI(Services.io.newURI("about:newtab"), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
       }
     }
-    this.notice("Вы вышли из аккаунта. Кошелёк, коды, пароли и почта закрыты до следующего входа.");
+    this.notice(tt`Вы вышли из аккаунта. Кошелёк, коды, пароли и почта закрыты до следующего входа.`);
     if (thenLogin) {
       this.accountDialog("login");
     }
@@ -1093,20 +1093,20 @@ Object.assign(Tabora, {
   /** Пункты меню аккаунта для правого клика по «Почта и алиасы» и для страницы почты. */
   accountMenuItems() {
     const { Account } = this.accountMod();
-    const items = [{ label: "Открыть почту", icon: ["M3.5 6.5h17v11h-17z", "M3.5 7l8.5 6 8.5-6"], run: () => this.openMail() }, { separator: true }];
+    const items = [{ label: tt`Открыть почту`, icon: ["M3.5 6.5h17v11h-17z", "M3.5 7l8.5 6 8.5-6"], run: () => this.openMail() }, { separator: true }];
     if (Account.signedIn) {
       items.push(
         { label: Account.email, disabled: true, run: () => {} },
-        { label: "Сменить пароль", icon: ["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], run: () => this.accountDialog("change") },
-        { label: "Выйти из аккаунта", icon: ["M10 17l5-5-5-5", "M15 12H3", "M21 4v16"], run: () => this.accountLogout() },
-        { label: "Добавить аккаунт", icon: ["M12 5v14", "M5 12h14"], run: () => this.accountAdd() }
+        { label: tt`Сменить пароль`, icon: ["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], run: () => this.accountDialog("change") },
+        { label: tt`Выйти из аккаунта`, icon: ["M10 17l5-5-5-5", "M15 12H3", "M21 4v16"], run: () => this.accountLogout() },
+        { label: tt`Добавить аккаунт`, icon: ["M12 5v14", "M5 12h14"], run: () => this.accountAdd() }
       );
     } else {
       items.push(
-        { label: "Войти", icon: ["M14 7l5 5-5 5", "M19 12H9", "M3 4v16"], run: () => this.accountDialog("login") },
+        { label: tt`Войти`, icon: ["M14 7l5 5-5 5", "M19 12H9", "M3 4v16"], run: () => this.accountDialog("login") },
         Account.email
-          ? { label: "Другой аккаунт", icon: ["M12 5v14", "M5 12h14"], run: () => this.accountShowAccounts() }
-          : { label: "Создать аккаунт", icon: ["M12 5v14", "M5 12h14"], run: () => this.accountDialog("register") }
+          ? { label: tt`Другой аккаунт`, icon: ["M12 5v14", "M5 12h14"], run: () => this.accountShowAccounts() }
+          : { label: tt`Создать аккаунт`, icon: ["M12 5v14", "M5 12h14"], run: () => this.accountDialog("register") }
       );
     }
     return items;
@@ -1120,22 +1120,22 @@ Object.assign(Tabora, {
     const row = (name, value, cls = "") => h("div", { class: `w-kv ${cls}`.trim() }, null, [h("span", {}, name), h("b", {}, value)]);
     const kids = [];
     if (Account.signedIn) {
-      kids.push(row("Аккаунт", Account.email));
+      kids.push(row(tt`Аккаунт`, Account.email));
       const offline = Account.isLocalMode || Account.needsServerLink;
-      kids.push(row("Сервер", offline ? "аккаунт есть только на этом компьютере" : `вход и почта через ${new URL(Account.serverUrl).host}; пароли и коды остаются на этом компьютере`, offline ? "muted" : ""));
-      kids.push(this.wButton("Сменить пароль", "ghost", () => this.accountDialog("change")));
-      kids.push(this.wButton("Выйти из аккаунта", "ghost", () => this.accountLogout({ thenLogin: false })));
-      kids.push(this.wButton("Добавить аккаунт", "ghost", () => this.accountAdd()));
+      kids.push(row(tt`Сервер`, offline ? tt`аккаунт есть только на этом компьютере` : tt`вход и почта через ${new URL(Account.serverUrl).host}; пароли и коды остаются на этом компьютере`, offline ? "muted" : ""));
+      kids.push(this.wButton(tt`Сменить пароль`, "ghost", () => this.accountDialog("change")));
+      kids.push(this.wButton(tt`Выйти из аккаунта`, "ghost", () => this.accountLogout({ thenLogin: false })));
+      kids.push(this.wButton(tt`Добавить аккаунт`, "ghost", () => this.accountAdd()));
     } else {
-      kids.push(row("Аккаунт", Account.email ? `${Account.email} · выход выполнен` : "не создан", "muted"));
-      kids.push(h("p", { class: "w-hint" }, "Кошелёк, коды и почта открываются после входа в аккаунт."));
+      kids.push(row(tt`Аккаунт`, Account.email ? tt`${Account.email} · выход выполнен` : tt`не создан`, "muted"));
+      kids.push(h("p", { class: "w-hint" }, tt`Кошелёк, коды и почта открываются после входа в аккаунт.`));
       kids.push(h("div", { class: "w-actions" }, null, [
-        this.wButton(Account.email ? "Войти" : "Создать аккаунт", "primary small", () => this.accountDialog(Account.email ? "login" : "register")),
-        this.wButton(Account.email ? "Другой аккаунт" : "Войти", "ghost small", () => (Account.email ? this.accountShowAccounts() : this.accountDialog("login"))),
+        this.wButton(Account.email ? tt`Войти` : tt`Создать аккаунт`, "primary small", () => this.accountDialog(Account.email ? "login" : "register")),
+        this.wButton(Account.email ? tt`Другой аккаунт` : tt`Войти`, "ghost small", () => (Account.email ? this.accountShowAccounts() : this.accountDialog("login"))),
       ]));
     }
-    const brief = Account.signedIn ? Account.email : Account.email ? "выход выполнен" : "нет аккаунта";
-    const summary = h("summary", { class: "v-card-head" }, null, [h("b", { class: "w-group-title" }, "Аккаунт"), h("span", { class: "v-card-sub" }, brief), this.svg(["m6 9 6 6 6-6"], 14, 2.2)]);
+    const brief = Account.signedIn ? Account.email : Account.email ? tt`выход выполнен` : tt`нет аккаунта`;
+    const summary = h("summary", { class: "v-card-head" }, null, [h("b", { class: "w-group-title" }, tt`Аккаунт`), h("span", { class: "v-card-sub" }, brief), this.svg(["m6 9 6 6 6-6"], 14, 2.2)]);
     const card = h("details", { class: "w-group v-card" }, null, [summary, h("div", { class: "v-card-body" }, null, kids)]);
     card.open = Services.prefs.getBoolPref("tabora.account.cardOpen", false);
     card.addEventListener("toggle", () => Services.prefs.setBoolPref("tabora.account.cardOpen", card.open));
@@ -1161,21 +1161,21 @@ Object.assign(Tabora, {
     const { Account } = this.accountMod();
     const { Vault } = this.vaultMod();
     if (!Vault.unlocked) {
-      return { level: "locked", text: "сейф заблокирован" };
+      return { level: "locked", text: tt`сейф заблокирован` };
     }
     if (Account.needsServerLink) {
-      return { level: "warn", text: "не подключён к серверу" };
+      return { level: "warn", text: tt`не подключён к серверу` };
     }
     if (!Vault.recoveryKeyCreatedAt) {
-      return { level: "warn", text: "нет ключа восстановления" };
+      return { level: "warn", text: tt`нет ключа восстановления` };
     }
     if (Account.data?.recoveryOffServer) {
-      return { level: "warn", text: "нужен новый ключ восстановления" };
+      return { level: "warn", text: tt`нужен новый ключ восстановления` };
     }
     if (Account.recoveryNeedsUpgrade) {
-      return { level: "warn", text: "ключ восстановления пора обновить" };
+      return { level: "warn", text: tt`ключ восстановления пора обновить` };
     }
-    return { level: "ok", text: "всё в порядке" };
+    return { level: "ok", text: tt`всё в порядке` };
   },
 
   /** color — цвет другого аккаунта (из его карточки); empty — аккаунта в профиле ещё нет. */
@@ -1226,11 +1226,11 @@ Object.assign(Tabora, {
       avatar.append(this.html("i", { class: `dot ${status.level}` }));
       btn.replaceChildren(avatar, this.html("span", { class: "name" }, Account.email.split("@")[0]));
       btn.title = `${Account.email} · ${status.text}`;
-      btn.setAttribute("aria-label", `Аккаунт ${Account.email}, ${status.text}`);
+      btn.setAttribute("aria-label", tt`Аккаунт ${Account.email}, ${status.text}`);
       btn.dataset.state = "in";
     } else {
-      btn.replaceChildren(this.svg(["M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z", "M4.5 20c1.4-3.3 4.2-5 7.5-5s6.1 1.7 7.5 5"], 15, 1.9), this.html("span", { class: "name" }, "Войти"));
-      btn.title = Account.email ? `Войти в аккаунт ${Account.email}` : "Войти или создать аккаунт Tabora";
+      btn.replaceChildren(this.svg(["M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z", "M4.5 20c1.4-3.3 4.2-5 7.5-5s6.1 1.7 7.5 5"], 15, 1.9), this.html("span", { class: "name" }, tt`Войти`));
+      btn.title = Account.email ? tt`Войти в аккаунт ${Account.email}` : tt`Войти или создать аккаунт Tabora`;
       btn.setAttribute("aria-label", btn.title);
       btn.dataset.state = "out";
     }
@@ -1266,39 +1266,39 @@ Object.assign(Tabora, {
     if (Account.signedIn) {
       items.push(
         { label: Account.email, avatar: { email: Account.email }, caption: true },
-        { label: "Настройки аккаунта", icon: ["M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z", "M4.5 20c1.4-3.3 4.2-5 7.5-5s6.1 1.7 7.5 5"], run: () => this.openAccountPage() },
+        { label: tt`Настройки аккаунта`, icon: ["M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z", "M4.5 20c1.4-3.3 4.2-5 7.5-5s6.1 1.7 7.5 5"], run: () => this.openAccountPage() },
         {
-          label: "Поддержка",
+          label: tt`Поддержка`,
           icon: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", "M9.5 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-.9.8-.9 1.4v.3", "M12 16.5h.01"],
           note: this.account.support?.count
-            ? `${this.account.support.count} ${this.plural(this.account.support.count, "ответ", "ответа", "ответов")}`
+            ? `${this.account.support.count} ${this.plural(this.account.support.count, tt`ответ|ответа|ответов`)}`
             : this.account.support?.staff && this.account.support.queue
-              ? `в очереди ${this.account.support.queue}`
+              ? tt`в очереди ${this.account.support.queue}`
               : "",
           run: () => this.openAccountPage("support"),
         },
         Vault.unlocked
-          ? { label: "Заблокировать сейф", icon: ["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], run: () => this.accountLockVault() }
-          : { label: "Разблокировать сейф", icon: ["M7 11V8a5 5 0 0 1 9.6-2", "M5 11h14v10H5z"], run: () => this.vaultUnlockByUser() },
-        { label: "Выйти из аккаунта", icon: ["M10 17l5-5-5-5", "M15 12H3", "M21 4v16"], run: () => this.accountLogout() }
+          ? { label: tt`Заблокировать сейф`, icon: ["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], run: () => this.accountLockVault() }
+          : { label: tt`Разблокировать сейф`, icon: ["M7 11V8a5 5 0 0 1 9.6-2", "M5 11h14v10H5z"], run: () => this.vaultUnlockByUser() },
+        { label: tt`Выйти из аккаунта`, icon: ["M10 17l5-5-5-5", "M15 12H3", "M21 4v16"], run: () => this.accountLogout() }
       );
     } else if (Account.email) {
-      items.push({ label: Account.email, avatar: { email: Account.email }, note: "выход выполнен", caption: true }, { label: "Войти", icon: ["M14 7l5 5-5 5", "M19 12H9", "M3 4v16"], run: () => this.accountDialog("login") });
+      items.push({ label: Account.email, avatar: { email: Account.email }, note: tt`выход выполнен`, caption: true }, { label: tt`Войти`, icon: ["M14 7l5 5-5 5", "M19 12H9", "M3 4v16"], run: () => this.accountDialog("login") });
     } else {
-      items.push({ label: "Создать аккаунт", icon: plus, run: () => this.accountDialog("register") }, { label: "Войти", icon: ["M14 7l5 5-5 5", "M19 12H9", "M3 4v16"], run: () => this.accountDialog("login") });
+      items.push({ label: tt`Создать аккаунт`, icon: plus, run: () => this.accountDialog("register") }, { label: tt`Войти`, icon: ["M14 7l5 5-5 5", "M19 12H9", "M3 4v16"], run: () => this.accountDialog("login") });
     }
     if (others.length || Account.email) {
       items.push({ separator: true });
     }
     if (others.length) {
-      items.push({ header: "Другие аккаунты" }, ...others);
+      items.push({ header: tt`Другие аккаунты` }, ...others);
     }
     if (Account.email) {
       // в профиле без аккаунта добавлять нечего: аккаунт создаётся прямо в нём
-      items.push({ label: "Добавить аккаунт", icon: plus, run: () => this.accountAdd() });
+      items.push({ label: tt`Добавить аккаунт`, icon: plus, run: () => this.accountAdd() });
     }
     if (others.length && Account.signedIn) {
-      items.push({ label: "Управление аккаунтами", icon: ["M4 7h10", "M18 7h2", "M4 17h2", "M10 17h10", "M16 5v4", "M8 15v4"], run: () => this.openAccountPage("accounts") });
+      items.push({ label: tt`Управление аккаунтами`, icon: ["M4 7h10", "M18 7h2", "M4 17h2", "M10 17h10", "M16 5v4", "M8 15v4"], run: () => this.openAccountPage("accounts") });
     }
     return items;
   },
@@ -1306,7 +1306,7 @@ Object.assign(Tabora, {
   accountLockVault() {
     const { Vault } = this.vaultMod();
     Vault.lock();
-    this.notice(Vault.lockPending ? "Сейф заблокируется, как только закончится текущая операция с ключом" : "Сейф заблокирован: пароли сайтов и коды закрыты до проверки");
+    this.notice(Vault.lockPending ? tt`Сейф заблокируется, как только закончится текущая операция с ключом` : tt`Сейф заблокирован: пароли сайтов и коды закрыты до проверки`);
   },
 
   /* ---- Раздел «Аккаунт» в настройках ------------------------------------------------------
@@ -1323,12 +1323,12 @@ Object.assign(Tabora, {
   accountImportPasswords() {
     const { Vault } = this.vaultMod();
     if (!Vault.unlocked) {
-      this.notice("Сначала разблокируйте сейф");
+      this.notice(tt`Сначала разблокируйте сейф`);
       return;
     }
     const fp = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
-    fp.init(window.browsingContext, "Импорт паролей", Ci.nsIFilePicker.modeOpen);
-    fp.appendFilter("Таблица паролей", "*.csv; *.tsv");
+    fp.init(window.browsingContext, tt`Импорт паролей`, Ci.nsIFilePicker.modeOpen);
+    fp.appendFilter(tt`Таблица паролей`, "*.csv; *.tsv");
     fp.appendFilters(Ci.nsIFilePicker.filterAll);
     fp.open(async rv => {
       if (rv !== Ci.nsIFilePicker.returnOK || !fp.file) {
@@ -1341,19 +1341,19 @@ Object.assign(Tabora, {
         const added = count("added");
         const changed = count("modified");
         const skipped = summary.length - added - changed;
-        this.notice(`Пароли: добавлено ${added}, обновлено ${changed}${skipped ? `, без изменений или с ошибкой ${skipped}` : ""}`);
+        this.notice(tt`Пароли: добавлено ${added}, обновлено ${changed}${skipped ? tt`, без изменений или с ошибкой ${skipped}` : ""}`);
       } catch (e) {
-        this.notice(`Не удалось прочитать файл: ${e.message}`);
+        this.notice(tt`Не удалось прочитать файл: ${e.message}`);
       }
     });
   },
 
   /** Пароли в файл CSV: только после проверки владельца, файл не зашифрован. */
   accountExportPasswords() {
-    this.vaultOwnerCheck("Сохранить пароли в файл", async () => {
+    this.vaultOwnerCheck(tt`Сохранить пароли в файл`, async () => {
       const fp = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
-      fp.init(window.browsingContext, "Сохранить пароли", Ci.nsIFilePicker.modeSave);
-      fp.appendFilter("Таблица паролей", "*.csv");
+      fp.init(window.browsingContext, tt`Сохранить пароли`, Ci.nsIFilePicker.modeSave);
+      fp.appendFilter(tt`Таблица паролей`, "*.csv");
       fp.defaultString = "tabora-passwords.csv";
       fp.defaultExtension = "csv";
       fp.open(async rv => {
@@ -1363,9 +1363,9 @@ Object.assign(Tabora, {
         try {
           const { LoginExport } = ChromeUtils.importESModule("resource://gre/modules/LoginExport.sys.mjs");
           await LoginExport.exportAsCSV(fp.file.path);
-          this.notice("Пароли сохранены. Файл не зашифрован: удалите его после переноса.");
+          this.notice(tt`Пароли сохранены. Файл не зашифрован: удалите его после переноса.`);
         } catch (e) {
-          this.notice(`Не удалось сохранить файл: ${e.message}`);
+          this.notice(tt`Не удалось сохранить файл: ${e.message}`);
         }
       });
     });

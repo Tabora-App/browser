@@ -26,6 +26,7 @@
  * здесь. Сайт, на котором блокировка мешает, вносится в исключения. */
 
 import { Engine, TYPE, hideSheet, listExpiry } from "chrome://tabora/content/shield/ShieldEngine.sys.mjs";
+import { tt } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 
 const { setTimeout, clearTimeout, setInterval } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 
@@ -38,10 +39,10 @@ const MAX_LIST = 40 * 1024 * 1024;
 const MAX_PAGES = 400;
 
 export const LISTS = [
-  { id: "easylist", title: "EasyList", note: "Реклама на сайтах всего мира", kind: "ads", url: "https://easylist.to/easylist/easylist.txt" },
-  { id: "ruadlist", title: "RU AdList", note: "Реклама на русскоязычных сайтах", kind: "ads", url: "https://easylist-downloads.adblockplus.org/advblock.txt" },
-  { id: "easyprivacy", title: "EasyPrivacy", note: "Счётчики посещений и трекеры", kind: "privacy", url: "https://easylist.to/easylist/easyprivacy.txt" },
-  { id: "lowe", title: "Список Питера Лоу", note: "Рекламные и следящие серверы", kind: "ads", url: "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=1&mimetype=plaintext" },
+  { id: "easylist", title: "EasyList", note: tt`Реклама на сайтах всего мира`, kind: "ads", url: "https://easylist.to/easylist/easylist.txt" },
+  { id: "ruadlist", title: "RU AdList", note: tt`Реклама на русскоязычных сайтах`, kind: "ads", url: "https://easylist-downloads.adblockplus.org/advblock.txt" },
+  { id: "easyprivacy", title: "EasyPrivacy", note: tt`Счётчики посещений и трекеры`, kind: "privacy", url: "https://easylist.to/easylist/easyprivacy.txt" },
+  { id: "lowe", title: tt`Список Питера Лоу`, note: tt`Рекламные и следящие серверы`, kind: "ads", url: "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=1&mimetype=plaintext" },
 ];
 
 const CP = Ci.nsIContentPolicy;
@@ -236,19 +237,19 @@ export const Shield = {
           continue;
         }
         if (!res.ok) {
-          throw new Error(`сервер списка ответил ${res.status}`);
+          throw new Error(tt`сервер списка ответил ${res.status}`);
         }
         const text = await res.text();
         // страница-заглушка или обрезанный ответ не должны заменить рабочий список
         if (text.length < 2000 || text.length > MAX_LIST || !/^\s*(\[Adblock|!)/.test(text.slice(0, 300)) || text.includes("<html")) {
-          throw new Error("ответ не похож на список фильтров");
+          throw new Error(tt`ответ не похож на список фильтров`);
         }
         await IOUtils.makeDirectory(DIR(), { ignoreExisting: true });
         await IOUtils.writeUTF8(file, text, { tmpPath: `${file}.tmp` });
         Object.assign(meta, { at: now, etag: res.headers.get("ETag") || "", expires: listExpiry(text), size: text.length, error: "" });
         changed++;
       } catch (e) {
-        meta.error = e.name === "AbortError" ? "сервер списка не ответил" : e.message || String(e);
+        meta.error = e.name === "AbortError" ? tt`сервер списка не ответил` : e.message || String(e);
       } finally {
         clearTimeout(timer);
       }

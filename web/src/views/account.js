@@ -66,7 +66,7 @@ function unlockKeysDialog(ctx) {
     clear(body, mode === "recovery" ? recovery.el : old.el, pass.el, error.el);
   };
   draw();
-  const submit = h("button", { class: "btn primary" }, t`Открыть`);
+  const submit = h("button", { class: "btn primary" }, t`Открыть@@ключи`);
   const m = modal({ title: t`Открыть ключ шифрования`, content: [h("p", { class: "modal-text" }, t`Зашифрованные письма открываются ключом аккаунта. Его копия на сервере привязана к прежнему паролю.`), tabs, body], actions: [h("button", { class: "btn", onclick: () => m.close() }, t`Отмена`), submit] });
   submit.addEventListener("click", async () => {
     error.set("");

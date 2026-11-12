@@ -24,6 +24,9 @@ const { MailStore, ACCOUNT, SPACE_COLORS } = ChromeUtils.importESModule("chrome:
 const { Account } = ChromeUtils.importESModule("chrome://tabora/content/account/Account.sys.mjs");
 const { Vault } = ChromeUtils.importESModule("chrome://tabora/content/vault/Vault.sys.mjs");
 const { RichEditor } = ChromeUtils.importESModule("chrome://tabora/content/mail/RichEditor.sys.mjs");
+// языки: надписи в коде (tt`…`) и в разметке mail.html (переводятся здесь же, до показа)
+const { tt, tr: ttr, form: ttForm, locale: ttLocale, translateDocument } = ChromeUtils.importESModule("chrome://tabora/content/i18n/I18n.sys.mjs");
+translateDocument(document);
 const Shell = window.browsingContext?.topChromeWindow?.Tabora || null;
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, { Pgp: "chrome://tabora/content/mail/Pgp.sys.mjs" });
@@ -57,10 +60,10 @@ const Store = new Proxy(MailStore, {
 });
 
 const LABELS = [
-  { id: "codes", name: "Коды", color: "#c8f25a" },
-  { id: "news", name: "Рассылки", color: "#7cc4ff" },
-  { id: "finance", name: "Финансы", color: "#ff9f5a" },
-  { id: "travel", name: "Поездки", color: "#b9a6ff" },
+  { id: "codes", name: tt`Коды`, color: "#c8f25a" },
+  { id: "news", name: tt`Рассылки`, color: "#7cc4ff" },
+  { id: "finance", name: tt`Финансы`, color: "#ff9f5a" },
+  { id: "travel", name: tt`Поездки`, color: "#b9a6ff" },
 ];
 
 const ICONS = {
@@ -97,31 +100,31 @@ function pgpNote(m) {
   }
   const mine = m.folder === "sent" || m.folder === "drafts";
   if (p.pending) {
-    return ["info", "lock", "Письмо зашифровано", "Расшифровываем…"];
+    return ["info", "lock", tt`Письмо зашифровано`, tt`Расшифровываем…`];
   }
   if (p.error) {
     const why = {
-      "no-key": "Оно зашифровано ключом, которого нет в этом профиле. Прочитать его можно там, где этот ключ есть.",
-      locked: "Когда письмо пришло, сейф был закрыт.",
-    }[p.error] || "Письмо повреждено или зашифровано способом, которого Tabora не знает.";
-    return ["warn", "lock", "Письмо не расшифровано", why];
+      "no-key": tt`Оно зашифровано ключом, которого нет в этом профиле. Прочитать его можно там, где этот ключ есть.`,
+      locked: tt`Когда письмо пришло, сейф был закрыт.`,
+    }[p.error] || tt`Письмо повреждено или зашифровано способом, которого Tabora не знает.`;
+    return ["warn", "lock", tt`Письмо не расшифровано`, why];
   }
-  const other = `Подпись сделана ключом адреса ${p.signer}, а не отправителя.`;
-  const noKey = "Ключа, которым оно подписано, здесь нет: он придёт с письмом отправителя или добавляется в разделе «Шифрование».";
+  const other = tt`Подпись сделана ключом адреса ${p.signer}, а не отправителя.`;
+  const noKey = tt`Ключа, которым оно подписано, здесь нет: он придёт с письмом отправителя или добавляется в разделе «Шифрование».`;
   if (p.encrypted) {
     return {
-      valid: ["ok", "lock", "Зашифровано и подписано", mine ? "Прочитать письмо можете только вы и получатели." : "Прочитать письмо могли только вы и другие получатели. Подпись отправителя верна."],
-      none: ["warn", "lock", "Зашифровано, но не подписано", "Прочитать письмо могли только получатели, а вот кто его написал, проверить нельзя."],
-      unknown: ["warn", "lock", "Зашифровано, подпись не проверена", noKey],
-      other: ["warn", "lock", "Зашифровано, подписано другим адресом", other],
-      invalid: ["bad", "alert", "Зашифровано, но подпись неверна", "Письмо изменили после подписи или подписал его не отправитель."],
-    }[p.signature] || ["ok", "lock", "Зашифровано", "Прочитать письмо могли только получатели."];
+      valid: ["ok", "lock", tt`Зашифровано и подписано`, mine ? tt`Прочитать письмо можете только вы и получатели.` : tt`Прочитать письмо могли только вы и другие получатели. Подпись отправителя верна.`],
+      none: ["warn", "lock", tt`Зашифровано, но не подписано`, tt`Прочитать письмо могли только получатели, а вот кто его написал, проверить нельзя.`],
+      unknown: ["warn", "lock", tt`Зашифровано, подпись не проверена`, noKey],
+      other: ["warn", "lock", tt`Зашифровано, подписано другим адресом`, other],
+      invalid: ["bad", "alert", tt`Зашифровано, но подпись неверна`, tt`Письмо изменили после подписи или подписал его не отправитель.`],
+    }[p.signature] || ["ok", "lock", tt`Зашифровано`, tt`Прочитать письмо могли только получатели.`];
   }
   return {
-    valid: ["ok", "seal", "Подпись верна", "Письмо написал владелец этого адреса, и в пути оно не менялось."],
-    unknown: ["info", "seal", "Подпись не проверена", noKey],
-    other: ["warn", "seal", "Подписано другим адресом", other],
-    invalid: ["bad", "alert", "Подпись неверна", "Письмо изменили в пути или подписал его не отправитель."],
+    valid: ["ok", "seal", tt`Подпись верна`, tt`Письмо написал владелец этого адреса, и в пути оно не менялось.`],
+    unknown: ["info", "seal", tt`Подпись не проверена`, noKey],
+    other: ["warn", "seal", tt`Подписано другим адресом`, other],
+    invalid: ["bad", "alert", tt`Подпись неверна`, tt`Письмо изменили в пути или подписал его не отправитель.`],
   }[p.signature] || null;
 }
 
@@ -131,13 +134,13 @@ function fingerprintText(fp) {
 }
 
 const FOLDERS = [
-  { id: "inbox", name: "Входящие", icon: "inbox" },
-  { id: "starred", name: "Со звездой", icon: "star", virtual: true },
-  { id: "sent", name: "Отправленные", icon: "sent" },
-  { id: "drafts", name: "Черновики", icon: "drafts" },
-  { id: "archive", name: "Архив", icon: "archive" },
-  { id: "spam", name: "Спам", icon: "spam" },
-  { id: "trash", name: "Корзина", icon: "trash" },
+  { id: "inbox", name: tt`Входящие`, icon: "inbox" },
+  { id: "starred", name: tt`Со звездой`, icon: "star", virtual: true },
+  { id: "sent", name: tt`Отправленные`, icon: "sent" },
+  { id: "drafts", name: tt`Черновики`, icon: "drafts" },
+  { id: "archive", name: tt`Архив`, icon: "archive" },
+  { id: "spam", name: tt`Спам`, icon: "spam" },
+  { id: "trash", name: tt`Корзина`, icon: "trash" },
 ];
 
 /* ---- Утилиты ----------------------------------------------------------- */
@@ -190,7 +193,7 @@ function icon(name, size = 15, stroke = 2) {
   return svg;
 }
 
-const MONTHS = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+const MONTHS = [tt`янв`, tt`фев`, tt`мар`, tt`апр`, tt`мая`, tt`июн`, tt`июл`, tt`авг`, tt`сен`, tt`окт`, tt`ноя`, tt`дек`];
 
 function dayKey(iso) {
   const d = new Date(iso);
@@ -204,10 +207,10 @@ function shortTime(iso) {
   const d = new Date(iso);
   const key = dayKey(iso);
   if (key === "today") {
-    return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleTimeString(ttLocale(), { hour: "2-digit", minute: "2-digit" });
   }
   if (key === "yesterday") {
-    return "вчера";
+    return tt`вчера`;
   }
   return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
@@ -215,12 +218,12 @@ function shortTime(iso) {
 function longTime(iso) {
   const d = new Date(iso);
   const key = dayKey(iso);
-  const time = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  const time = d.toLocaleTimeString(ttLocale(), { hour: "2-digit", minute: "2-digit" });
   if (key === "today") {
-    return `сегодня, ${time}`;
+    return tt`сегодня, ${time}`;
   }
   if (key === "yesterday") {
-    return `вчера, ${time}`;
+    return tt`вчера, ${time}`;
   }
   return `${d.getDate()} ${MONTHS[d.getMonth()]}, ${time}`;
 }
@@ -228,29 +231,21 @@ function longTime(iso) {
 function dateWord(iso) {
   const key = dayKey(iso);
   if (key === "today") {
-    return "сегодня";
+    return tt`сегодня`;
   }
   if (key === "yesterday") {
-    return "вчера";
+    return tt`вчера`;
   }
   const d = new Date(iso);
   return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
 function size(bytes) {
-  return bytes >= 1_000_000 ? `${(bytes / 1_000_000).toFixed(1).replace(".", ",")} МБ` : `${Math.max(1, Math.round(bytes / 1000))} КБ`;
+  return bytes >= 1_000_000 ? tt`${(bytes / 1_000_000).toFixed(1).replace(".", ",")} МБ` : tt`${Math.max(1, Math.round(bytes / 1000))} КБ`;
 }
 
-function plural(n, one, few, many) {
-  const a = Math.abs(n) % 100;
-  const b = a % 10;
-  if (a > 10 && a < 20) {
-    return many;
-  }
-  if (b > 1 && b < 5) {
-    return few;
-  }
-  return b === 1 ? one : many;
+function plural(n, forms) {
+  return ttForm(n, forms);
 }
 
 function letterOf(name) {
@@ -329,7 +324,7 @@ function frameReady(browser) {
         resolve();
       } else if (!browser.isConnected || Date.now() - started > 2500) {
         // процесс для письма создаётся сразу; если его нет, движок не дал встроить просмотр
-        reject(new Error("Просмотр письма не запустился"));
+        reject(new Error(tt`Просмотр письма не запустился`));
       } else {
         setTimeout(tick, 30);
       }
@@ -414,7 +409,7 @@ const App = {
       const on = !notifyOn();
       Services.prefs.setBoolPref("tabora.mail.notify", on);
       notify.setAttribute("aria-checked", String(on));
-      this.toast(on ? "О новых письмах будет сообщать уведомление" : "Уведомления о новых письмах выключены");
+      this.toast(on ? tt`О новых письмах будет сообщать уведомление` : tt`Уведомления о новых письмах выключены`);
     });
     // подсказка адреса в полях почты на сайтах (её показывает оболочка, см. vault.js)
     const suggest = document.getElementById("account-suggest");
@@ -424,7 +419,7 @@ const App = {
       const on = !suggestOn();
       Services.prefs.setBoolPref("tabora.mail.suggest", on);
       suggest.setAttribute("aria-checked", String(on));
-      this.toast(on ? "В полях почты на сайтах будут предлагаться алиас и основной адрес" : "Адрес в полях почты на сайтах больше не предлагается");
+      this.toast(on ? tt`В полях почты на сайтах будут предлагаться алиас и основной адрес` : tt`Адрес в полях почты на сайтах больше не предлагается`);
     });
     document.getElementById("account-change").addEventListener("click", () => shell()?.accountDialog("change"));
     document.getElementById("account-switch").addEventListener("click", () => shell()?.accountShowAccounts());
@@ -454,7 +449,7 @@ const App = {
     for (const a of list) {
       const external = a.kind !== "tabora";
       const selected = this.box === a.id;
-      const sub = a.error ? a.error : external ? "внешний ящик" : "ящик Tabora";
+      const sub = a.error ? a.error : external ? tt`внешний ящик` : tt`ящик Tabora`;
       const inner = [
         el("span", { class: "box-letter", "aria-hidden": "true", text: letterOf(a.address) }),
         el("span", { class: "box-text" }, [el("b", { text: a.address }), el("span", { text: sub })]),
@@ -463,19 +458,19 @@ const App = {
         pickable
           ? el("button", {
               class: "box-pick", type: "button", "aria-pressed": String(selected),
-              title: a.error || (selected ? "Показать письма всех ящиков" : `Показать только письма ящика ${a.address}`),
+              title: a.error || (selected ? tt`Показать письма всех ящиков` : tt`Показать только письма ящика ${a.address}`),
               onclick: () => this.pickBox(a.id),
             }, inner)
           : el("div", { class: "box-pick", title: a.error || a.address }, inner),
         external
           ? el("button", {
-              class: "box-remove", type: "button", "aria-label": `Убрать ящик ${a.address}`, title: "Убрать ящик с этого компьютера",
+              class: "box-remove", type: "button", "aria-label": tt`Убрать ящик ${a.address}`, title: tt`Убрать ящик с этого компьютера`,
               onclick: e => {
                 const btn = e.currentTarget;
                 if (btn.dataset.sure !== "true") {
                   // второй щелчок подтверждает
                   btn.dataset.sure = "true";
-                  btn.textContent = "Убрать?";
+                  btn.textContent = tt`Убрать?`;
                   setTimeout(() => {
                     if (btn.isConnected) {
                       btn.dataset.sure = "false";
@@ -484,7 +479,7 @@ const App = {
                   }, 4000);
                   return;
                 }
-                MailStore.removeAccount(a.id).then(() => this.toast(`Ящик ${a.address} убран с этого компьютера`), err => this.toast(err.message));
+                MailStore.removeAccount(a.id).then(() => this.toast(tt`Ящик ${a.address} убран с этого компьютера`), err => this.toast(err.message));
               },
             }, icon("close", 12, 2.4))
           : null,
@@ -575,12 +570,12 @@ const App = {
     $("thread").hidden = true;
     $("reader-empty").hidden = false;
     $("account-email").textContent = "";
-    document.title = "Почта · Tabora";
+    document.title = tt`Почта · Tabora`;
     const shell = () => window.browsingContext?.topChromeWindow?.Tabora;
     const texts = {
-      "signed-out": ["Войдите в аккаунт", "Почта Tabora открывается только после входа в аккаунт.", "Войти", () => shell()?.accountDialog("login")],
-      "vault-locked": ["Сейф заблокирован", "Письма хранятся на этом компьютере зашифрованными ключом сейфа. Разблокируйте его, чтобы открыть почту.", "Разблокировать", () => shell()?.vaultUnlockByUser()],
-      error: ["Почта недоступна", message || "Не удалось открыть почту.", "Повторить", () => this.checkAccess()],
+      "signed-out": [tt`Войдите в аккаунт`, tt`Почта Tabora открывается только после входа в аккаунт.`, tt`Войти`, () => shell()?.accountDialog("login")],
+      "vault-locked": [tt`Сейф заблокирован`, tt`Письма хранятся на этом компьютере зашифрованными ключом сейфа. Разблокируйте его, чтобы открыть почту.`, tt`Разблокировать`, () => shell()?.vaultUnlockByUser()],
+      error: [tt`Почта недоступна`, message || tt`Не удалось открыть почту.`, tt`Повторить`, () => this.checkAccess()],
     };
     const [title, text, label, run] = texts[kind] || texts.error;
     const button = el("button", { class: "primary", type: "button", onclick: () => run() }, label);
@@ -613,7 +608,7 @@ const App = {
           const err = MailStore.lastError;
           if (err && err.at !== this._shownError) {
             this._shownError = err.at;
-            this.toast(`Не получилось: ${err.where}. ${err.message}`);
+            this.toast(tt`Не получилось: ${err.where}. ${err.message}`);
           }
           return;
         }
@@ -744,9 +739,9 @@ const App = {
   },
 
   updateTitle() {
-    const where = this.view === "aliases" ? "Алиасы" : this.view === "keys" ? "Шифрование" : this.currentName();
+    const where = this.view === "aliases" ? tt`Алиасы` : this.view === "keys" ? tt`Шифрование` : this.currentName();
     // число новых писем на вкладке показывает оболочка (значком), в заголовке оно не повторяется
-    document.title = `${where} · Почта`;
+    document.title = tt`${where} · Почта`;
   },
 
   currentName() {
@@ -842,7 +837,7 @@ const App = {
     $("list-title").textContent = this.currentName();
     const unread = threads.filter(t => t.latest.unread).length;
     $("list-sub").textContent = threads.length
-      ? unread ? `${unread} ${plural(unread, "новое", "новых", "новых")}` : `${threads.length} ${plural(threads.length, "письмо", "письма", "писем")}`
+      ? unread ? `${unread} ${plural(unread, tt`новое|новых|новых`)}` : `${threads.length} ${plural(threads.length, tt`письмо|письма|писем`)}`
       : "";
     const chips = $("filter-chips");
     const picked = this.box && MailStore.accounts.find(a => a.id === this.box);
@@ -856,7 +851,7 @@ const App = {
       }
       if (picked) {
         chips.prepend(el("button", {
-          class: "chip box-chip", type: "button", dataset: { box: picked.id }, "aria-pressed": "true", title: "Показать письма всех ящиков",
+          class: "chip box-chip", type: "button", dataset: { box: picked.id }, "aria-pressed": "true", title: tt`Показать письма всех ящиков`,
           onclick: () => this.pickBox(picked.id),
         }, [el("span", { class: "box-chip-text", text: picked.address }), icon("close", 11, 2.6)]));
       }
@@ -891,25 +886,25 @@ const App = {
     if (!threads.length) {
       const filtered = this.query || this.filters.size;
       const none = !MailStore.accounts.length;
-      const title = filtered ? "Ничего не нашлось" : none ? "Ящика пока нет" : MailStore.syncing && !Store.messages.length ? "Загружаем письма" : "Здесь пусто";
+      const title = filtered ? tt`Ничего не нашлось` : none ? tt`Ящика пока нет` : MailStore.syncing && !Store.messages.length ? tt`Загружаем письма` : tt`Здесь пусто`;
       const text = filtered
-        ? "Попробуйте другой запрос или снимите фильтры."
+        ? tt`Попробуйте другой запрос или снимите фильтры.`
         : none
           ? Account.needsServerLink
-            ? "Подключите аккаунт к серверу Tabora, и адрес аккаунта начнёт принимать письма. Или добавьте свой ящик."
-            : "Добавьте ящик: Gmail, Яндекс или любой другой с доступом по IMAP."
+            ? tt`Подключите аккаунт к серверу Tabora, и адрес аккаунта начнёт принимать письма. Или добавьте свой ящик.`
+            : tt`Добавьте ящик: Gmail, Яндекс или любой другой с доступом по IMAP.`
           : MailStore.syncing && !Store.messages.length
-            ? "Первая загрузка занимает несколько секунд."
-            : "Новые письма появятся здесь, как только придут.";
+            ? tt`Первая загрузка занимает несколько секунд.`
+            : tt`Новые письма появятся здесь, как только придут.`;
       box.append(el("div", { class: "empty" }, [
         el("strong", { text: title }),
         el("span", { text }),
-        none && Account.needsServerLink ? el("button", { class: "primary", type: "button", text: "Подключить аккаунт", onclick: () => Shell?.accountDialog("link") }) : null,
-        none ? el("button", { class: none && Account.needsServerLink ? "ghost" : "primary", type: "button", text: "Добавить ящик", onclick: () => this.openBoxModal() }) : null,
+        none && Account.needsServerLink ? el("button", { class: "primary", type: "button", text: tt`Подключить аккаунт`, onclick: () => Shell?.accountDialog("link") }) : null,
+        none ? el("button", { class: none && Account.needsServerLink ? "ghost" : "primary", type: "button", text: tt`Добавить ящик`, onclick: () => this.openBoxModal() }) : null,
       ]));
       return;
     }
-    const groups = [["today", "Сегодня"], ["yesterday", "Вчера"], ["week", "На этой неделе"], ["earlier", "Ранее"]];
+    const groups = [["today", tt`Сегодня`], ["yesterday", tt`Вчера`], ["week", tt`На этой неделе`], ["earlier", tt`Ранее`]];
     let index = 0;
     for (const [key, title] of groups) {
       const items = threads.filter(t => dayKey(t.latest.date) === key);
@@ -925,7 +920,7 @@ const App = {
 
   renderRow(t, index) {
     const m = t.latest;
-    const alias = m.alias && m.alias !== ACCOUNT.address ? m.alias : m.folder === "sent" || m.draft ? `кому: ${m.to.join(", ")}` : "";
+    const alias = m.alias && m.alias !== ACCOUNT.address ? m.alias : m.folder === "sent" || m.draft ? tt`кому: ${m.to.join(", ")}` : "";
     const code = codeOf(m);
     const row = el("button", {
       class: "msg", type: "button", role: "option",
@@ -945,25 +940,25 @@ const App = {
     }, [
       el("span", { class: "avatar" }, [
         letterOf(m.from.name),
-        el("span", { class: "check", role: "checkbox", "aria-checked": String(this.checked.has(m.thread)), "aria-label": "Выбрать" }, icon("check", 14, 2.4)),
+        el("span", { class: "check", role: "checkbox", "aria-checked": String(this.checked.has(m.thread)), "aria-label": tt`Выбрать` }, icon("check", 14, 2.4)),
       ]),
       el("span", { class: "body" }, [
         el("span", { class: "row1" }, [
-          el("span", { class: "from", text: m.draft ? "Черновик" : m.from.name }),
+          el("span", { class: "from", text: m.draft ? tt`Черновик` : m.from.name }),
           t.all.length > 1 ? el("span", { class: "count", text: String(t.all.length) }) : null,
           el("span", { class: "time", text: shortTime(m.date) }),
         ]),
-        el("span", { class: "subject", text: m.subject || "(без темы)" }),
+        el("span", { class: "subject", text: m.subject || tt`(без темы)` }),
         el("span", { class: "snippet", text: snippetOf(m) }),
         el("span", { class: "row3" }, [
           alias ? el("span", { class: "alias", text: alias }) : null,
-          m.agent ? el("span", { class: "tag", text: "агент вставил код" }) : code ? el("span", { class: "tag neutral", text: "код" }) : null,
-          m.newsletter ? el("span", { class: "tag neutral", text: "рассылка" }) : null,
+          m.agent ? el("span", { class: "tag", text: tt`агент вставил код` }) : code ? el("span", { class: "tag neutral", text: tt`код` }) : null,
+          m.newsletter ? el("span", { class: "tag neutral", text: tt`рассылка` }) : null,
           el("span", { class: "meta" }, [
             m.pgp?.encrypted ? icon("lock", 13) : null,
             m.attachments?.length ? icon("clip", 13) : null,
             el("button", {
-              class: "star", type: "button", dataset: { on: String(!!m.starred) }, "aria-label": m.starred ? "Снять звезду" : "Поставить звезду", "aria-pressed": String(!!m.starred),
+              class: "star", type: "button", dataset: { on: String(!!m.starred) }, "aria-label": m.starred ? tt`Снять звезду` : tt`Поставить звезду`, "aria-pressed": String(!!m.starred),
               style: "border:0;background:transparent;padding:0;display:inline-flex",
               onclick: () => this.toggleStar(m.id),
             }, icon("star", 13, m.starred ? 0 : 2)),
@@ -971,9 +966,9 @@ const App = {
         ]),
       ]),
       el("span", { class: "actions" }, [
-        el("button", { type: "button", title: m.unread ? "Прочитано" : "Не прочитано", "aria-label": m.unread ? "Отметить прочитанным" : "Отметить непрочитанным", onclick: () => this.setRead(m.thread, !!m.unread) }, icon("read", 14)),
-        el("button", { type: "button", title: "В архив (E)", "aria-label": "В архив", onclick: () => this.moveThread(m.thread, "archive") }, icon("archive", 14)),
-        el("button", { type: "button", title: "Удалить (#)", "aria-label": "Удалить", onclick: () => this.moveThread(m.thread, "trash") }, icon("trash", 14)),
+        el("button", { type: "button", title: m.unread ? tt`Прочитано` : tt`Не прочитано`, "aria-label": m.unread ? tt`Отметить прочитанным` : tt`Отметить непрочитанным`, onclick: () => this.setRead(m.thread, !!m.unread) }, icon("read", 14)),
+        el("button", { type: "button", title: tt`В архив (E)`, "aria-label": tt`В архив`, onclick: () => this.moveThread(m.thread, "archive") }, icon("archive", 14)),
+        el("button", { type: "button", title: tt`Удалить (#)`, "aria-label": tt`Удалить`, onclick: () => this.moveThread(m.thread, "trash") }, icon("trash", 14)),
       ]),
     ]);
     if (m.starred) {
@@ -1043,8 +1038,8 @@ const App = {
     }
     this.checked.delete(threadId);
     this.renderAll();
-    const names = { archive: "В архиве", trash: "Удалено", inbox: "Во входящих", spam: "В спаме" };
-    this.toast(names[folder] || "Готово", () => {
+    const names = { archive: tt`В архиве`, trash: tt`Удалено`, inbox: tt`Во входящих`, spam: tt`В спаме` };
+    this.toast(names[folder] || tt`Готово`, () => {
       for (const [id, f] of before) {
         Store.update(id, { folder: f });
       }
@@ -1081,7 +1076,7 @@ const App = {
     }
     this.checked.clear();
     this.renderAll();
-    this.toast(`${ids.length} ${plural(ids.length, "цепочка", "цепочки", "цепочек")}: ${action === "archive" ? "в архиве" : "удалено"}`, () => {
+    this.toast(`${ids.length} ${plural(ids.length, tt`цепочка|цепочки|цепочек`)}: ${action === "archive" ? tt`в архиве` : tt`удалено`}`, () => {
       for (const [id, f] of before) {
         Store.update(id, { folder: f });
       }
@@ -1194,7 +1189,7 @@ const App = {
     const send = () => this.sendQuickReply(reply.latest, editor.content());
     const sync = () => (reply.el.dataset.active = String(editor.focused || !editor.empty));
     const editor = new RichEditor(document, {
-      label: "Быстрый ответ",
+      label: tt`Быстрый ответ`,
       grow: { min: 44, max: 320 },
       menu: (items, rect) => Shell?.showMenuFromContent?.(window, items, rect.left, rect.bottom + 6),
       onInput: () => sync(),
@@ -1202,16 +1197,16 @@ const App = {
       onSubmit: send,
     });
     const hint = el("span", { class: "hint", role: "status" });
-    const forward = el("button", { class: "btn", type: "button", onclick: () => this.openCompose({ forward: reply.latest }) }, [icon("forward", 14), "Переслать"]);
-    const submit = el("button", { class: "primary", type: "button", style: "height:32px;font-size:12px", onclick: send }, "Отправить");
+    const forward = el("button", { class: "btn", type: "button", onclick: () => this.openCompose({ forward: reply.latest }) }, [icon("forward", 14), tt`Переслать`]);
+    const submit = el("button", { class: "primary", type: "button", style: "height:32px;font-size:12px", onclick: send }, tt`Отправить`);
     reply.editor = editor;
     reply.el = el("div", { class: "quick-reply" }, [editor.el, el("div", { class: "format" }, editor.bar), el("div", { class: "bar" }, [hint, editor.toggle, forward, submit])]);
     reply.update = (latest, sending) => {
       reply.latest = latest;
       reply.el.dataset.sending = String(sending);
-      editor.setPlaceholder(`Ответить ${latest.from.name}…`);
+      editor.setPlaceholder(tt`Ответить ${latest.from.name}…`);
       editor.setReadOnly(sending);
-      hint.textContent = sending ? "Отправляем…" : "⌘⏎ отправить · R развернуть ответ";
+      hint.textContent = sending ? tt`Отправляем…` : tt`⌘⏎ отправить · R развернуть ответ`;
       forward.disabled = sending;
       submit.disabled = sending;
       submit.classList.toggle("loading", sending);
@@ -1237,17 +1232,17 @@ const App = {
 
     const head = el("div", { class: "thread-head" }, [
       el("div", { class: "thread-title-row" }, [
-        el("button", { class: "icon-btn back-btn", type: "button", title: "К списку (Esc)", "aria-label": "К списку писем", onclick: () => this.closeThread() }, icon("back", 16, 2.2)),
-        el("h2", { class: "thread-title", text: latest.subject || "(без темы)" }),
-        el("button", { class: "icon-btn", type: "button", title: latest.starred ? "Снять звезду (S)" : "Звезда (S)", "aria-pressed": String(!!latest.starred), "aria-label": "Звезда", onclick: () => this.toggleStar(latest.id) }, icon("star", 15, latest.starred ? 0 : 2)),
-        el("button", { class: "icon-btn", type: "button", title: "Не прочитано (U)", "aria-label": "Отметить непрочитанным", onclick: () => this.setRead(latest.thread, false) }, icon("read")),
-        !inTrash ? el("button", { class: "icon-btn", type: "button", title: "В архив (E)", "aria-label": "В архив", onclick: () => this.moveThread(latest.thread, "archive") }, icon("archive")) : el("button", { class: "icon-btn", type: "button", title: "Вернуть во входящие", "aria-label": "Вернуть во входящие", onclick: () => this.moveThread(latest.thread, "inbox") }, icon("inbox")),
-        el("button", { class: "icon-btn danger", type: "button", title: "Удалить (#)", "aria-label": "Удалить", onclick: () => inTrash ? this.deleteForever(latest.thread) : this.moveThread(latest.thread, "trash") }, icon("trash")),
+        el("button", { class: "icon-btn back-btn", type: "button", title: tt`К списку (Esc)`, "aria-label": tt`К списку писем`, onclick: () => this.closeThread() }, icon("back", 16, 2.2)),
+        el("h2", { class: "thread-title", text: latest.subject || tt`(без темы)` }),
+        el("button", { class: "icon-btn", type: "button", title: latest.starred ? tt`Снять звезду (S)` : tt`Звезда (S)`, "aria-pressed": String(!!latest.starred), "aria-label": tt`Звезда`, onclick: () => this.toggleStar(latest.id) }, icon("star", 15, latest.starred ? 0 : 2)),
+        el("button", { class: "icon-btn", type: "button", title: tt`Не прочитано (U)`, "aria-label": tt`Отметить непрочитанным`, onclick: () => this.setRead(latest.thread, false) }, icon("read")),
+        !inTrash ? el("button", { class: "icon-btn", type: "button", title: tt`В архив (E)`, "aria-label": tt`В архив`, onclick: () => this.moveThread(latest.thread, "archive") }, icon("archive")) : el("button", { class: "icon-btn", type: "button", title: tt`Вернуть во входящие`, "aria-label": tt`Вернуть во входящие`, onclick: () => this.moveThread(latest.thread, "inbox") }, icon("inbox")),
+        el("button", { class: "icon-btn danger", type: "button", title: tt`Удалить (#)`, "aria-label": tt`Удалить`, onclick: () => inTrash ? this.deleteForever(latest.thread) : this.moveThread(latest.thread, "trash") }, icon("trash")),
       ]),
       labels.length ? el("div", { class: "thread-labels" }, labels.map(l => el("span", { class: "label-chip" }, [el("span", { class: "label-dot", style: `background:${l.color};margin:0` }), l.name]))) : null,
     ]);
     if (latest.starred) {
-      head.querySelector('[aria-label="Звезда"] svg').setAttribute("fill", "currentColor");
+      head.querySelector(`[aria-label="${tt`Звезда`}"] svg`).setAttribute("fill", "currentColor");
     }
     return head;
   },
@@ -1263,17 +1258,17 @@ const App = {
       add(el("div", { class: "agent-card" }, [
         el("span", { class: "mark" }, el("span")),
         el("div", { class: "text" }, [
-          el("b", { text: `Агент уже вставил этот код на ${latest.agent.site}` }),
-          el("span", { text: `Регистрация ждёт вашего подтверждения во вкладке «${latest.agent.tab}»` }),
+          el("b", { text: tt`Агент уже вставил этот код на ${latest.agent.site}` }),
+          el("span", { text: tt`Регистрация ждёт вашего подтверждения во вкладке «${latest.agent.tab}»` }),
         ]),
-        el("button", { class: "btn", type: "button", text: "К вкладке", onclick: () => this.toast("Переключение на вкладку появится вместе с агентом") }),
+        el("button", { class: "btn", type: "button", text: tt`К вкладке`, onclick: () => this.toast(tt`Переключение на вкладку появится вместе с агентом`) }),
       ]));
     } else if (code) {
       add(el("div", { class: "code-card" }, [
-        el("div", {}, [el("div", { class: "label", text: "Код подтверждения" }), el("div", { class: "code", text: code })]),
+        el("div", {}, [el("div", { class: "label", text: tt`Код подтверждения` }), el("div", { class: "code", text: code })]),
         el("span", { class: "spacer" }),
-        el("span", { class: "note", text: "Найден в письме автоматически" }),
-        el("button", { class: "btn", type: "button", onclick: () => this.copy(code.replace(/\s/g, ""), "Код скопирован") }, [icon("copy", 14), "Скопировать"]),
+        el("span", { class: "note", text: tt`Найден в письме автоматически` }),
+        el("button", { class: "btn", type: "button", onclick: () => this.copy(code.replace(/\s/g, ""), tt`Код скопирован`) }, [icon("copy", 14), tt`Скопировать`]),
       ]));
     }
 
@@ -1283,7 +1278,7 @@ const App = {
       } catch (e) {
         // одно письмо, которое не удалось показать, не должно оставлять пустой всю переписку
         console.error("Tabora mail: письмо не показано", e);
-        add(el("div", { class: "mail-item" }, el("div", { class: "paper" }, el("div", { class: "fine", text: "Это письмо не удалось показать." }))));
+        add(el("div", { class: "mail-item" }, el("div", { class: "paper" }, el("div", { class: "fine", text: tt`Это письмо не удалось показать.` }))));
       }
     });
 
@@ -1297,8 +1292,8 @@ const App = {
     } else {
       body.append(el("div", { class: "quick-reply" }, [
         el("div", { class: "bar" }, [
-          el("span", { class: "hint", text: "Это черновик" }),
-          el("button", { class: "primary", type: "button", style: "height:32px;font-size:12px", onclick: () => this.openCompose({ draft: latest }) }, "Продолжить"),
+          el("span", { class: "hint", text: tt`Это черновик` }),
+          el("button", { class: "primary", type: "button", style: "height:32px;font-size:12px", onclick: () => this.openCompose({ draft: latest }) }, tt`Продолжить`),
         ]),
       ]));
     }
@@ -1314,8 +1309,8 @@ const App = {
       ]),
       el("span", { class: "spacer" }),
       m.folder !== "sent" && !m.draft && Store.aliases.some(a => a.address === m.alias)
-        ? el("button", { class: "to-chip link", type: "button", title: "Управлять алиасом", onclick: e => { e.stopPropagation(); this.go("aliases"); }, text: `через ${m.alias}` })
-        : el("span", { class: "to-chip", text: m.folder === "sent" || m.draft ? `кому: ${m.to.join(", ")}` : `на ${m.to[0]}` }),
+        ? el("button", { class: "to-chip link", type: "button", title: tt`Управлять алиасом`, onclick: e => { e.stopPropagation(); this.go("aliases"); }, text: tt`через ${m.alias}` })
+        : el("span", { class: "to-chip", text: m.folder === "sent" || m.draft ? tt`кому: ${m.to.join(", ")}` : tt`на ${m.to[0]}` }),
     ]);
     head.addEventListener("click", () => {
       if (item.classList.contains("collapsed")) {
@@ -1343,10 +1338,10 @@ const App = {
       }
     }
     if (!(m.body || []).length) {
-      paper.append(el("div", { class: "fine", text: "В письме нет текста." }));
+      paper.append(el("div", { class: "fine", text: tt`В письме нет текста.` }));
     }
     if (m.images) {
-      paper.append(el("div", { class: "fine", text: `Картинки из письма не загружаются (${m.images}): так отправитель не узнаёт, что письмо открыли.` }));
+      paper.append(el("div", { class: "fine", text: tt`Картинки из письма не загружаются (${m.images}): так отправитель не узнаёт, что письмо открыли.` }));
     }
     const note = pgpNote(m);
     const sealed = !!(m.pgp?.error || m.pgp?.pending); // текста нет: вместо него объяснение
@@ -1356,7 +1351,7 @@ const App = {
       item.append(el("div", { class: "pgp-note", dataset: { tone }, role: tone === "bad" ? "alert" : null }, [
         el("span", { class: "pgp-mark", "aria-hidden": "true" }, icon(glyph, 15, 1.9)),
         el("div", { class: "pgp-text" }, [el("b", { text: title }), el("span", { text })]),
-        m.pgp.error && m.at?.uid ? el("button", { class: "btn", type: "button", text: "Повторить", onclick: e => this.decryptAgain(m, e.currentTarget) }) : null,
+        m.pgp.error && m.at?.uid ? el("button", { class: "btn", type: "button", text: tt`Повторить`, onclick: e => this.decryptAgain(m, e.currentTarget) }) : null,
       ]));
     }
     // Письмо с вёрсткой показывается в отдельном процессе (htmlView), простое — блоками страницы.
@@ -1383,10 +1378,10 @@ const App = {
     }
     if (m.attachments?.length && !sealed) {
       item.append(el("div", { class: "attachments" }, m.attachments.map((a, index) => el("button", {
-        class: "attachment", type: "button", title: `Сохранить ${a.name} в «Загрузки»`,
+        class: "attachment", type: "button", title: tt`Сохранить ${a.name} в «Загрузки»`,
         onclick: e => this.saveAttachment(m, index, e.currentTarget),
       }, [
-        el("span", { class: "ext", text: a.name.includes(".") ? a.name.split(".").pop().slice(0, 4) : "файл" }),
+        el("span", { class: "ext", text: a.name.includes(".") ? a.name.split(".").pop().slice(0, 4) : tt`файл` }),
         el("span", { style: "display:flex;flex-direction:column;min-width:0" }, [el("span", { class: "name", text: a.name }), el("span", { class: "size", text: size(a.size) })]),
       ]))));
     }
@@ -1411,8 +1406,8 @@ const App = {
     host.append(browser, status);
     const note = el("div", { class: "html-note", hidden: true }, [
       el("span", { class: "pgp-mark", "aria-hidden": "true" }, icon("image", 14, 1.9)),
-      el("span", { class: "html-note-text", text: "Картинки с чужих серверов не загружены: так отправитель не узнаёт, что письмо открыли." }),
-      el("button", { class: "btn", type: "button", text: "Показать картинки", onclick: e => {
+      el("span", { class: "html-note-text", text: tt`Картинки с чужих серверов не загружены: так отправитель не узнаёт, что письмо открыли.` }),
+      el("button", { class: "btn", type: "button", text: tt`Показать картинки`, onclick: e => {
         this.htmlImages.add(m.id);
         setBusy(e.currentTarget, true);
         load();
@@ -1520,7 +1515,7 @@ const App = {
     setBusy(button, true);
     const rec = await MailStore.decryptAgain(m.id).catch(() => null);
     if (rec?.pgp?.error) {
-      this.toast("Письмо не расшифровано: подходящего ключа по-прежнему нет");
+      this.toast(tt`Письмо не расшифровано: подходящего ключа по-прежнему нет`);
     }
     setBusy(button, false);
     this.renderReader();
@@ -1529,20 +1524,20 @@ const App = {
   /** Вложение скачивается с сервера и сохраняется через загрузки браузера (с его же защитой). */
   async saveAttachment(m, index, button) {
     if (m.local || !m.at?.uid) {
-      this.toast("Вложение этого письма осталось на сервере отправителя");
+      this.toast(tt`Вложение этого письма осталось на сервере отправителя`);
       return;
     }
     if (!Shell?.saveMailAttachment) {
-      this.toast("Вложения сохраняются только внутри Tabora");
+      this.toast(tt`Вложения сохраняются только внутри Tabora`);
       return;
     }
     button.disabled = true;
     button.dataset.busy = "true";
     try {
       const name = await Shell.saveMailAttachment(m.id, index);
-      this.toast(`Сохранено в «Загрузки»: ${name}`);
+      this.toast(tt`Сохранено в «Загрузки»: ${name}`);
     } catch (e) {
-      this.toast(`Вложение не сохранено. ${e.message}`);
+      this.toast(tt`Вложение не сохранено. ${e.message}`);
     } finally {
       button.disabled = false;
       button.dataset.busy = "false";
@@ -1556,7 +1551,7 @@ const App = {
     }
     this.selectedThread = null;
     this.renderAll();
-    this.toast("Удалено навсегда");
+    this.toast(tt`Удалено навсегда`);
   },
 
   /** content — набранное в быстром ответе: { text, html } (html пуст, если оформления нет). */
@@ -1594,9 +1589,9 @@ const App = {
       const encrypt = plan.possible && (!!to.pgp?.encrypted || plan.suggested);
       await MailStore.send({ from: { email: from }, to: [recipient], subject, text, html, replyTo: to.id, labels: to.labels, encrypt });
       clearReply();
-      this.toast(encrypt ? `Ответ отправлен ${to.from.name} зашифрованным` : `Ответ отправлен ${to.from.name}`);
+      this.toast(encrypt ? tt`Ответ отправлен ${to.from.name} зашифрованным` : tt`Ответ отправлен ${to.from.name}`);
     } catch (e) {
-      this.toast(`Ответ не отправлен. ${e.message}`);
+      this.toast(tt`Ответ не отправлен. ${e.message}`);
     } finally {
       this.sendingReply = null;
       this.renderAll();
@@ -1607,7 +1602,7 @@ const App = {
 
   openCompose(opts = {}) {
     if (!Shell?.openCompose) {
-      this.toast("Окно письма доступно только внутри Tabora");
+      this.toast(tt`Окно письма доступно только внутри Tabora`);
       return;
     }
     Shell.openCompose({
@@ -1627,10 +1622,10 @@ const App = {
     const on = all.filter(a => a.on).length;
     const agent = all.filter(a => a.agent).length;
     $("alias-stats").replaceChildren(
-      this.stat("Активных", String(on)),
-      this.stat("Выключено", String(all.length - on)),
-      this.stat("Создано агентом", String(agent), true),
-      this.stat("Писем на алиасы", String(all.reduce((n, a) => n + (a.count || 0), 0))),
+      this.stat(tt`Активных`, String(on)),
+      this.stat(tt`Выключено`, String(all.length - on)),
+      this.stat(tt`Создано агентом`, String(agent), true),
+      this.stat(tt`Писем на алиасы`, String(all.reduce((n, a) => n + (a.count || 0), 0))),
     );
     for (const chip of $("alias-filters").children) {
       chip.setAttribute("aria-pressed", String(chip.dataset.afilter === this.aliasFilter));
@@ -1648,31 +1643,31 @@ const App = {
     const box = $("alias-rows");
     box.replaceChildren();
     if (!rows.length) {
-      box.append(el("div", { class: "empty" }, [el("strong", { text: "Ничего не нашлось" })]));
+      box.append(el("div", { class: "empty" }, [el("strong", { text: tt`Ничего не нашлось` })]));
       return;
     }
     for (const a of rows) {
       box.append(el("div", { class: "alias-row", dataset: { on: String(a.on) } }, [
         el("span", { class: "glyph", text: letterOf(a.site) }),
         el("span", { class: "addr" }, [
-          el("button", { type: "button", text: a.address, title: "Скопировать адрес", onclick: () => this.copy(a.address, "Адрес скопирован") }),
-          a.warn ? el("span", { class: "warn", text: a.on ? a.warn : a.warn.startsWith("выключен") ? a.warn : `выключен · ${a.warn}` }) : !a.on ? el("span", { class: "warn", text: "выключен" }) : null,
+          el("button", { type: "button", text: a.address, title: tt`Скопировать адрес`, onclick: () => this.copy(a.address, tt`Адрес скопирован`) }),
+          a.warn ? el("span", { class: "warn", text: a.on ? a.warn : a.warn.startsWith(tt`выключен`) ? a.warn : tt`выключен · ${a.warn}` }) : !a.on ? el("span", { class: "warn", text: tt`выключен` }) : null,
         ]),
-        el("span", { class: "site" }, [el("b", { text: a.site }), el("span", { text: `создан: ${a.by}` })]),
+        el("span", { class: "site" }, [el("b", { text: a.site }), el("span", { text: tt`создан: ${a.by}` })]),
         el("span", { class: "num", text: String(a.count) }),
         el("span", { class: "date", text: dateWord(a.created) }),
         el("span", {}, el("span", { class: "space-pill", text: a.space, style: `--space-color:${SPACE_COLORS[a.space] || "#ecedef"}` })),
         el("button", {
           class: "toggle", type: "button", role: "switch", "aria-checked": String(a.on),
-          "aria-label": `Алиас ${a.address} ${a.on ? "включён" : "выключен"}`,
+          "aria-label": tt`Алиас ${a.address} ${a.on ? tt`включён` : tt`выключен`}`,
           onclick: async e => {
             const btn = e.currentTarget;
             btn.disabled = true;
             try {
               const next = await MailStore.aliasSet(a.id, !a.on);
-              this.toast(next.on ? `Алиас ${a.address.split("@")[0]} включён` : "Алиас выключен: письма на него больше не придут");
+              this.toast(next.on ? tt`Алиас ${a.address.split("@")[0]} включён` : tt`Алиас выключен: письма на него больше не придут`);
             } catch (err) {
-              this.toast(`Алиас не изменён. ${err.message}`);
+              this.toast(tt`Алиас не изменён. ${err.message}`);
             }
             this.renderAliases();
             this.renderFolders();
@@ -1705,7 +1700,7 @@ const App = {
     }
     box.replaceChildren();
     if (failed) {
-      box.append(el("div", { class: "empty" }, [el("strong", { text: "Ключи недоступны" }), el("span", { text: failed })]));
+      box.append(el("div", { class: "empty" }, [el("strong", { text: tt`Ключи недоступны` }), el("span", { text: failed })]));
       return;
     }
     const date = iso => {
@@ -1717,33 +1712,33 @@ const App = {
       box.append(el("section", { class: "key-card", dataset: { tone: "warn" } }, [
         el("div", { class: "key-card-head" }, [
           el("span", { class: "pgp-mark", "aria-hidden": "true" }, icon("lock", 16, 1.9)),
-          el("div", { class: "key-card-title" }, [el("b", { text: "Ключа аккаунта на этом компьютере нет" }), el("span", { text: "Он создан на другом компьютере. Пока ключ не вернётся, зашифрованные письма здесь не открыть и не отправить." })]),
+          el("div", { class: "key-card-title" }, [el("b", { text: tt`Ключа аккаунта на этом компьютере нет` }), el("span", { text: tt`Он создан на другом компьютере. Пока ключ не вернётся, зашифрованные письма здесь не открыть и не отправить.` })]),
         ]),
         el("div", { class: "key-actions" }, [
-          backup.canPassword ? el("button", { class: "primary", type: "button", text: "Вернуть паролем аккаунта", onclick: () => this.askKeySecret("unlock") }) : null,
-          backup.canRecovery ? el("button", { class: backup.canPassword ? "btn" : "primary", type: "button", text: "Вернуть ключом восстановления", onclick: () => this.askKeySecret("recovery") }) : null,
-          el("button", { class: "btn", type: "button", text: "Создать новый ключ", onclick: () => this.askKeySecret("replace") }),
+          backup.canPassword ? el("button", { class: "primary", type: "button", text: tt`Вернуть паролем аккаунта`, onclick: () => this.askKeySecret("unlock") }) : null,
+          backup.canRecovery ? el("button", { class: backup.canPassword ? "btn" : "primary", type: "button", text: tt`Вернуть ключом восстановления`, onclick: () => this.askKeySecret("recovery") }) : null,
+          el("button", { class: "btn", type: "button", text: tt`Создать новый ключ`, onclick: () => this.askKeySecret("replace") }),
         ]),
         el("p", { class: "key-hint", text: backup.canPassword || backup.canRecovery
-          ? "Копия ключа лежит на сервере Tabora зашифрованной: её открывает пароль, с которым она была сохранена, или ключ восстановления. Новый ключ заменит прежний, и письма, зашифрованные прежним, прочитать будет нельзя."
-          : "Копию ключа ещё не сохранили на сервере. Откройте Tabora на том компьютере, где ключ создан, и в этом разделе сохраните копию. Новый ключ заменит прежний, и письма, зашифрованные прежним, прочитать будет нельзя." }),
+          ? tt`Копия ключа лежит на сервере Tabora зашифрованной: её открывает пароль, с которым она была сохранена, или ключ восстановления. Новый ключ заменит прежний, и письма, зашифрованные прежним, прочитать будет нельзя.`
+          : tt`Копию ключа ещё не сохранили на сервере. Откройте Tabora на том компьютере, где ключ создан, и в этом разделе сохраните копию. Новый ключ заменит прежний, и письма, зашифрованные прежним, прочитать будет нельзя.` }),
       ]));
     } else {
       const status = {
-        ok: ["ok", "seal", "Копия ключа сохранена на сервере Tabora. Она зашифрована вашим паролем: сервер прочитать её не может, а новый компьютер получит ключ после входа.", null],
-        "no-password": ["warn", "alert", "Копия ключа ещё не привязана к паролю: на другом компьютере ключ не появится, а с потерей этого пропадёт. Введите пароль аккаунта, чтобы сохранить копию.", ["Сохранить копию", () => this.askKeySecret("password")]],
-        unsupported: ["info", "seal", "Ключ хранится только на этом компьютере. Копия на сервере появится после обновления сервера Tabora.", null],
-        offline: ["info", "seal", "Сервер Tabora недоступен: копия ключа не проверена.", ["Проверить", () => lazy.Pgp.sync().catch(() => {})]],
-        local: ["info", "seal", "Аккаунт не подключён к серверу Tabora: ключ хранится только на этом компьютере.", null],
+        ok: ["ok", "seal", tt`Копия ключа сохранена на сервере Tabora. Она зашифрована вашим паролем: сервер прочитать её не может, а новый компьютер получит ключ после входа.`, null],
+        "no-password": ["warn", "alert", tt`Копия ключа ещё не привязана к паролю: на другом компьютере ключ не появится, а с потерей этого пропадёт. Введите пароль аккаунта, чтобы сохранить копию.`, [tt`Сохранить копию`, () => this.askKeySecret("password")]],
+        unsupported: ["info", "seal", tt`Ключ хранится только на этом компьютере. Копия на сервере появится после обновления сервера Tabora.`, null],
+        offline: ["info", "seal", tt`Сервер Tabora недоступен: копия ключа не проверена.`, [tt`Проверить`, () => lazy.Pgp.sync().catch(() => {})]],
+        local: ["info", "seal", tt`Аккаунт не подключён к серверу Tabora: ключ хранится только на этом компьютере.`, null],
       }[backup.state];
       box.append(el("section", { class: "key-card" }, own ? [
         el("div", { class: "key-card-head" }, [
           el("span", { class: "pgp-mark", "aria-hidden": "true" }, icon("lock", 16, 1.9)),
-          el("div", { class: "key-card-title" }, [el("b", { text: "Ваш ключ" }), el("span", { text: `${own.address}${date(own.created) ? `, создан ${date(own.created)}` : ""}` })]),
-          el("button", { class: "btn", type: "button", onclick: () => this.copy(own.publicKey, "Открытый ключ скопирован: его можно отправить собеседнику") }, [icon("copy", 14), "Скопировать открытый ключ"]),
+          el("div", { class: "key-card-title" }, [el("b", { text: tt`Ваш ключ` }), el("span", { text: `${own.address}${date(own.created) ? tt`, создан ${date(own.created)}` : ""}` })]),
+          el("button", { class: "btn", type: "button", onclick: () => this.copy(own.publicKey, tt`Открытый ключ скопирован: его можно отправить собеседнику`) }, [icon("copy", 14), tt`Скопировать открытый ключ`]),
         ]),
-        el("div", { class: "key-print", title: "Отпечаток ключа", text: fingerprintText(own.fingerprint) }),
-        el("p", { class: "key-hint", text: "Отпечаток — короткое имя ключа. Чтобы убедиться, что ключ не подменили по дороге, сверьте его с собеседником голосом или при встрече. Открытый ключ уходит с каждым вашим письмом, закрытый не покидает сейф." }),
+        el("div", { class: "key-print", title: tt`Отпечаток ключа`, text: fingerprintText(own.fingerprint) }),
+        el("p", { class: "key-hint", text: tt`Отпечаток — короткое имя ключа. Чтобы убедиться, что ключ не подменили по дороге, сверьте его с собеседником голосом или при встрече. Открытый ключ уходит с каждым вашим письмом, закрытый не покидает сейф.` }),
         status ? el("div", { class: "key-backup", dataset: { tone: status[0] } }, [
           el("span", { class: "pgp-mark", "aria-hidden": "true" }, icon(status[1], 14, 1.9)),
           el("span", { class: "key-backup-text", text: status[2] }),
@@ -1752,39 +1747,39 @@ const App = {
       ] : [
         el("div", { class: "key-card-head" }, [
           el("span", { class: "pgp-mark", "aria-hidden": "true" }, icon("lock", 16, 1.9)),
-          el("div", { class: "key-card-title" }, [el("b", { text: "Ключа пока нет" }), el("span", { text: "Он появится, когда у аккаунта будет ящик Tabora: подключите аккаунт к серверу." })]),
+          el("div", { class: "key-card-title" }, [el("b", { text: tt`Ключа пока нет` }), el("span", { text: tt`Он появится, когда у аккаунта будет ящик Tabora: подключите аккаунт к серверу.` })]),
         ]),
       ]));
     }
 
     box.append(el("div", { class: "keys-list-head" }, [
-      el("h2", { text: "Ключи собеседников" }),
+      el("h2", { text: tt`Ключи собеседников` }),
       el("span", { class: "mono", text: peers.length ? String(peers.length) : "" }),
     ]));
     if (!peers.length) {
       box.append(el("div", { class: "empty keys-empty" }, [
-        el("strong", { text: "Ключей пока нет" }),
-        el("span", { text: "Ключ собеседника приходит с его письмом и запоминается сам. После этого письма ему можно шифровать." }),
+        el("strong", { text: tt`Ключей пока нет` }),
+        el("span", { text: tt`Ключ собеседника приходит с его письмом и запоминается сам. После этого письма ему можно шифровать.` }),
       ]));
       return;
     }
-    const sources = { manual: "добавлен вручную", autocrypt: "из письма", directory: "из каталога Tabora" };
+    const sources = { manual: tt`добавлен вручную`, autocrypt: tt`из письма`, directory: tt`из каталога Tabora` };
     for (const p of peers) {
       box.append(el("div", { class: "key-row" }, [
         el("span", { class: "glyph", "aria-hidden": "true", text: letterOf(p.address) }),
         el("span", { class: "key-who" }, [
           el("b", { text: p.address }),
-          el("span", { text: `${sources[p.source] || "из письма"}${p.seen ? ` ${dateWord(new Date(p.seen).toISOString())}` : ""}${p.prefer === "mutual" || p.source === "manual" ? ", шифруем по умолчанию" : ""}` }),
+          el("span", { text: `${sources[p.source] || tt`из письма`}${p.seen ? ` ${dateWord(new Date(p.seen).toISOString())}` : ""}${p.prefer === "mutual" || p.source === "manual" ? tt`, шифруем по умолчанию` : ""}` }),
         ]),
-        el("button", { class: "key-print small", type: "button", title: "Скопировать отпечаток", text: fingerprintText(p.fingerprint), onclick: () => this.copy(fingerprintText(p.fingerprint), "Отпечаток скопирован") }),
+        el("button", { class: "key-print small", type: "button", title: tt`Скопировать отпечаток`, text: fingerprintText(p.fingerprint), onclick: () => this.copy(fingerprintText(p.fingerprint), tt`Отпечаток скопирован`) }),
         el("button", {
-          class: "box-remove key-remove", type: "button", "aria-label": `Удалить ключ ${p.address}`, title: "Удалить ключ",
+          class: "box-remove key-remove", type: "button", "aria-label": tt`Удалить ключ ${p.address}`, title: tt`Удалить ключ`,
           onclick: e => {
             const btn = e.currentTarget;
             if (btn.dataset.sure !== "true") {
               // второй щелчок подтверждает
               btn.dataset.sure = "true";
-              btn.textContent = "Удалить?";
+              btn.textContent = tt`Удалить?`;
               setTimeout(() => {
                 if (btn.isConnected) {
                   btn.dataset.sure = "false";
@@ -1793,7 +1788,7 @@ const App = {
               }, 4000);
               return;
             }
-            lazy.Pgp.removePeer(p.address).then(() => this.toast(`Ключ ${p.address} удалён: письма ему пойдут открытыми`), err => this.toast(err.message));
+            lazy.Pgp.removePeer(p.address).then(() => this.toast(tt`Ключ ${p.address} удалён: письма ему пойдут открытыми`), err => this.toast(err.message));
           },
         }, icon("close", 12, 2.4)),
       ]));
@@ -1804,10 +1799,10 @@ const App = {
    * заменить его новым. */
   askKeySecret(kind) {
     const texts = {
-      password: ["Пароль аккаунта", "Пароль нужен, чтобы зашифровать копию ключа: на сервер попадает только зашифрованная копия, пароль остаётся на этом компьютере.", "Пароль", "Сохранить копию"],
-      unlock: ["Пароль аккаунта", "Пароль открывает копию ключа шифрования, сохранённую на сервере. Сам пароль остаётся на этом компьютере.", "Пароль", "Вернуть ключ"],
-      recovery: ["Ключ восстановления", "Введите ключ восстановления аккаунта: им открывается копия ключа шифрования, сохранённая на сервере.", "Ключ восстановления", "Вернуть ключ"],
-      replace: ["Новый ключ шифрования", "Прежний ключ аккаунта будет заменён. Письма, зашифрованные прежним ключом, прочитать больше не получится, а собеседники получат новый ключ с вашим следующим письмом. Чтобы подтвердить, введите пароль аккаунта.", "Пароль", "Заменить ключ"],
+      password: [tt`Пароль аккаунта`, tt`Пароль нужен, чтобы зашифровать копию ключа: на сервер попадает только зашифрованная копия, пароль остаётся на этом компьютере.`, tt`Пароль`, tt`Сохранить копию`],
+      unlock: [tt`Пароль аккаунта`, tt`Пароль открывает копию ключа шифрования, сохранённую на сервере. Сам пароль остаётся на этом компьютере.`, tt`Пароль`, tt`Вернуть ключ`],
+      recovery: [tt`Ключ восстановления`, tt`Введите ключ восстановления аккаунта: им открывается копия ключа шифрования, сохранённая на сервере.`, tt`Ключ восстановления`, tt`Вернуть ключ`],
+      replace: [tt`Новый ключ шифрования`, tt`Прежний ключ аккаунта будет заменён. Письма, зашифрованные прежним ключом, прочитать больше не получится, а собеседники получат новый ключ с вашим следующим письмом. Чтобы подтвердить, введите пароль аккаунта.`, tt`Пароль`, tt`Заменить ключ`],
     }[kind];
     $("secret-title").textContent = texts[0];
     $("secret-sub").textContent = texts[1];
@@ -1836,13 +1831,13 @@ const App = {
       const b = kind === "recovery" ? await Account.restoreMailKeys(value) : await Account.confirmMailKeys(value, { replace: kind === "replace" });
       $("secret-input").value = "";
       $("secret-modal").hidden = true;
-      this.toast(b.state === "ok" ? (kind === "replace" ? "Ключ заменён, копия сохранена на сервере" : "Ключ на месте, копия сохранена на сервере") : "Ключ возвращён. Осталось сохранить копию с нынешним паролем");
+      this.toast(b.state === "ok" ? (kind === "replace" ? tt`Ключ заменён, копия сохранена на сервере` : tt`Ключ на месте, копия сохранена на сервере`) : tt`Ключ возвращён. Осталось сохранить копию с нынешним паролем`);
       if (kind !== "password") {
         // ключ появился или сменился: письма, которые не открылись, расшифруются при открытии
         this.renderAll();
       }
     } catch (e) {
-      error.textContent = e.code === "bad-credentials" ? "Неверный пароль" : e.message || "Не получилось";
+      error.textContent = e.code === "bad-credentials" ? tt`Неверный пароль` : e.message || tt`Не получилось`;
       error.hidden = false;
       $("secret-input").select();
     } finally {
@@ -1871,12 +1866,12 @@ const App = {
     error.hidden = true;
     const address = $("key-address").value.trim();
     if (!validEmail(address)) {
-      show("Проверьте адрес почты");
+      show(tt`Проверьте адрес почты`);
       $("key-address").focus();
       return;
     }
     if (!$("key-armored").value.includes("BEGIN PGP PUBLIC KEY BLOCK")) {
-      show("Вставьте открытый ключ целиком: он начинается со строки «-----BEGIN PGP PUBLIC KEY BLOCK-----»");
+      show(tt`Вставьте открытый ключ целиком: он начинается со строки «-----BEGIN PGP PUBLIC KEY BLOCK-----»`);
       $("key-armored").focus();
       return;
     }
@@ -1884,9 +1879,9 @@ const App = {
     try {
       const k = await lazy.Pgp.setPeer(address, $("key-armored").value, { source: "manual" });
       $("key-modal").hidden = true;
-      this.toast(`Ключ ${k.address} добавлен: письма ему шифруются по умолчанию`);
+      this.toast(tt`Ключ ${k.address} добавлен: письма ему шифруются по умолчанию`);
     } catch (e) {
-      show(e.message || "Ключ не добавлен");
+      show(e.message || tt`Ключ не добавлен`);
     } finally {
       setBusy(button, false);
     }
@@ -1898,12 +1893,12 @@ const App = {
 
   openAliasModal() {
     if (!MailStore.accounts.some(a => a.kind === "tabora")) {
-      this.toast(Account.needsServerLink ? "Алиасы появятся после подключения аккаунта к серверу Tabora" : "Алиасы работают для ящика Tabora");
+      this.toast(Account.needsServerLink ? tt`Алиасы появятся после подключения аккаунта к серверу Tabora` : tt`Алиасы работают для ящика Tabora`);
       return;
     }
     $("alias-modal").hidden = false;
     $("alias-site").value = "";
-    $("alias-note").textContent = `Адрес подберёт сервер: название сайта и четыре случайных знака, например booking-k3f9@${ACCOUNT.domain}.`;
+    $("alias-note").textContent = tt`Адрес подберёт сервер: название сайта и четыре случайных знака, например booking-k3f9@${ACCOUNT.domain}.`;
     setTimeout(() => $("alias-site").focus(), 20);
   },
 
@@ -1918,9 +1913,9 @@ const App = {
       $("alias-modal").hidden = true;
       this.renderAliases();
       this.renderFolders();
-      this.copy(a.address, `Алиас создан и скопирован: ${a.address}`);
+      this.copy(a.address, tt`Алиас создан и скопирован: ${a.address}`);
     } catch (e) {
-      this.toast(`Алиас не создан. ${e.message}`);
+      this.toast(tt`Алиас не создан. ${e.message}`);
     } finally {
       setBusy(button, false);
     }
@@ -1960,7 +1955,7 @@ const App = {
     set("box-imap-port", g.imap.port);
     set("box-smtp-host", g.smtp.host);
     set("box-smtp-port", g.smtp.port);
-    $("box-note").textContent = g.note || (g.source === "guess" ? "Серверы подставлены по имени домена: проверьте их в разделе «Серверы»." : "");
+    $("box-note").textContent = g.note || (g.source === "guess" ? tt`Серверы подставлены по имени домена: проверьте их в разделе «Серверы».` : "");
     $("box-note").hidden = !$("box-note").textContent;
     if (g.source === "guess") {
       $("box-more").open = true;
@@ -1976,7 +1971,7 @@ const App = {
     error.hidden = true;
     const address = $("box-address").value.trim();
     if (!validEmail(address)) {
-      error.textContent = "Проверьте адрес почты";
+      error.textContent = tt`Проверьте адрес почты`;
       error.hidden = false;
       $("box-address").focus();
       return;
@@ -1993,11 +1988,11 @@ const App = {
       });
       $("box-modal").hidden = true;
       $("box-password").value = "";
-      this.toast(`Ящик ${r.address} добавлен: загружаем письма`);
+      this.toast(tt`Ящик ${r.address} добавлен: загружаем письма`);
       this.renderAll();
     } catch (e) {
       // ответ сервера (например, требование пароля приложения) показываем как есть
-      error.textContent = e.server ? `${e.message}. Ответ сервера: ${e.server}` : e.message;
+      error.textContent = e.server ? tt`${e.message}. Ответ сервера: ${e.server}` : e.message;
       error.hidden = false;
       $("box-more").open = $("box-more").open || e.code === "network" || e.code === "protocol" || e.code === "tls";
     } finally {
@@ -2012,11 +2007,11 @@ const App = {
       await navigator.clipboard.writeText(text);
       this.toast(message);
     } catch (e) {
-      this.toast("Не удалось скопировать");
+      this.toast(tt`Не удалось скопировать`);
     }
   },
 
-  toast(text, undo, undoLabel = "Отменить") {
+  toast(text, undo, undoLabel = tt`Отменить@@действие`) {
     const box = $("toasts");
     const node = el("div", { class: "toast", role: "status" }, [
       el("span", { text }),
@@ -2095,7 +2090,7 @@ const App = {
       r: () => this.selectedThread && this.openCompose({ reply: this.threadMsgs(this.selectedThread).at(-1) }),
       f: () => this.selectedThread && this.openCompose({ forward: this.threadMsgs(this.selectedThread).at(-1) }),
       "/": () => (this.view === "aliases" ? $("alias-search") : $("search-input")).focus(),
-      "?": () => this.toast("J/K листать · ⏎ открыть · E архив · # удалить · S звезда · U непрочитано · X выбрать · C написать · R ответить · F переслать · / поиск"),
+      "?": () => this.toast(tt`J/K листать · ⏎ открыть · E архив · # удалить · S звезда · U непрочитано · X выбрать · C написать · R ответить · F переслать · / поиск`),
     };
     if (this.pendingG) {
       this.pendingG = false;

@@ -17,7 +17,7 @@ const TOOLS = [
   ["italic", "italic", t`Курсив`],
   ["underline", "underline", t`Подчёркнутый`],
   null,
-  ["insertUnorderedList", "list", t`Список`],
+  ["insertUnorderedList", "list", t`Список@@маркированный`],
   ["insertOrderedList", "numbered", t`Нумерованный список`],
   ["quote", "quote", t`Цитата`],
   ["link", "link", t`Ссылка`],

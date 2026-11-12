@@ -1,8 +1,8 @@
 diff --git a/browser/base/jar.mn b/browser/base/jar.mn
-index b2b5db6040..76e5b26d44 100644
+index b2b5db6040..37ac31fe7f 100644
 --- a/browser/base/jar.mn
 +++ b/browser/base/jar.mn
-@@ -33,6 +33,100 @@ browser.jar:
+@@ -33,6 +33,104 @@ browser.jar:
          content/browser/aboutTabCrashed.xhtml         (content/aboutTabCrashed.xhtml)
          content/browser/blanktab.html                 (content/blanktab.html)
          content/browser/browser.js                    (content/browser.js)
@@ -60,6 +60,10 @@ index b2b5db6040..76e5b26d44 100644
 +        content/tabora/sync/Sync.sys.mjs  (content/tabora/sync/Sync.sys.mjs)
 +        content/tabora/sync/SyncSources.sys.mjs  (content/tabora/sync/SyncSources.sys.mjs)
 +        content/tabora/shield/Shield.sys.mjs  (content/tabora/shield/Shield.sys.mjs)
++        content/tabora/i18n/I18n.sys.mjs  (content/tabora/i18n/I18n.sys.mjs)
++        content/tabora/i18n/en.json  (content/tabora/i18n/en.json)
++        content/tabora/i18n/uk.json  (content/tabora/i18n/uk.json)
++        content/tabora/i18n/es.json  (content/tabora/i18n/es.json)
 +        content/tabora/shield/ShieldEngine.sys.mjs  (content/tabora/shield/ShieldEngine.sys.mjs)
 +        content/tabora/actors/TaboraShieldParent.sys.mjs  (content/tabora/actors/TaboraShieldParent.sys.mjs)
 +        content/tabora/actors/TaboraShieldChild.sys.mjs  (content/tabora/actors/TaboraShieldChild.sys.mjs)

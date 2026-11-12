@@ -243,7 +243,10 @@ export function desktopSet() {
   for (const f of listFiles(dir, [".html", ".xhtml"], ["/vendor/"])) {
     htmlKeysOf(f).forEach((where, key) => keys.has(key) || keys.set(key, where));
   }
-  return { files: all.filter(f => !rawNames.includes(f)), raw: all.filter(f => rawNames.includes(f) && !f.endsWith("ShieldEngine.sys.mjs")), keys };
+  // оценка пароля в Vault.sys.mjs — тот же текст, что web/src/core/password.js (сверяет parity.test.mjs):
+  // её сообщения не помечены и берутся из копии
+  const password = join(ROOT, "web/src/core/password.js");
+  return { files: all.filter(f => !rawNames.includes(f)), raw: [...all.filter(f => rawNames.includes(f) && !f.endsWith("ShieldEngine.sys.mjs")), password], keys };
 }
 
 /** Модули для esbuild: import("tabora-i18n-catalog/en") — словарь одного языка отдельным файлом,

@@ -71,17 +71,17 @@ Object.assign(Tabora, {
     b.classList.toggle("stale", stale);
     b.setAttribute("role", stale ? "alert" : "status");
     if (stale) {
-      const site = this.html("button", { class: "primary", type: "button" }, "Открыть сайт");
+      const site = this.html("button", { class: "primary", type: "button" }, tt`Открыть сайт`);
       site.addEventListener("click", () => this.go(TaboraUpdate.manualUrl));
-      const retry = this.html("button", { class: "ghost", type: "button" }, "Проверить снова");
+      const retry = this.html("button", { class: "ghost", type: "button" }, tt`Проверить снова`);
       retry.addEventListener("click", () => TaboraUpdate.check({ force: true }).catch(() => {}));
-      const hide = this.html("button", { class: "linkish", type: "button" }, "Позже");
+      const hide = this.html("button", { class: "linkish", type: "button" }, tt`Позже`);
       hide.addEventListener("click", () => TaboraUpdate.snooze(24));
       b.replaceChildren(
         this.markSvg(),
         h("div", { class: "text" }, null, [
-          h("b", {}, "Сведения об обновлениях устарели"),
-          h("span", {}, "Действительный манифест обновлений не получен: новая версия могла выйти, но браузер о ней не узнает. Проверьте сайт Tabora."),
+          h("b", {}, tt`Сведения об обновлениях устарели`),
+          h("span", {}, tt`Действительный манифест обновлений не получен: новая версия могла выйти, но браузер о ней не узнает. Проверьте сайт Tabora.`),
         ]),
         hide,
         retry,
@@ -92,7 +92,7 @@ Object.assign(Tabora, {
     }
     // обновлятор недоступен (политика, нет прав, сборка без обновлятора): только сайт
     const manualOnly = !ready && !TaboraUpdate.updatesPossible;
-    const primary = this.html("button", { class: "primary", type: "button" }, ready ? "Перезапустить и обновить" : manualOnly ? "Скачать с сайта" : "Обновить");
+    const primary = this.html("button", { class: "primary", type: "button" }, ready ? tt`Перезапустить и обновить` : manualOnly ? tt`Скачать с сайта` : tt`Обновить@@браузер`);
     primary.addEventListener("click", () => {
       if (TaboraUpdate.readyForRestart) {
         TaboraUpdate.restart();
@@ -102,15 +102,15 @@ Object.assign(Tabora, {
         TaboraUpdate.check({ force: true }).catch(() => {});
       }
     });
-    const later = this.html("button", { class: "ghost", type: "button" }, "Позже");
+    const later = this.html("button", { class: "ghost", type: "button" }, tt`Позже`);
     later.addEventListener("click", () => TaboraUpdate.snooze(24));
-    const notes = TaboraUpdate.channel?.notesUrl ? this.html("button", { class: "linkish", type: "button" }, "Что нового") : null;
+    const notes = TaboraUpdate.channel?.notesUrl ? this.html("button", { class: "linkish", type: "button" }, tt`Что нового`) : null;
     notes?.addEventListener("click", () => this.go(TaboraUpdate.channel.notesUrl));
     b.replaceChildren(
       this.markSvg(),
       h("div", { class: "text" }, null, [
-        h("b", {}, `Доступна версия ${TaboraUpdate.channel?.version || ""}`),
-        h("span", {}, ready ? "Скачано и готово к установке. Вкладки восстановятся после перезапуска." : TaboraUpdate.statusText()),
+        h("b", {}, tt`Доступна версия ${TaboraUpdate.channel?.version || ""}`),
+        h("span", {}, ready ? tt`Скачано и готово к установке. Вкладки восстановятся после перезапуска.` : TaboraUpdate.statusText()),
       ]),
       notes,
       later,
@@ -144,24 +144,24 @@ Object.assign(Tabora, {
     const pct = p && p.total > 0 ? Math.round((p.done / p.total) * 100) : ready ? 100 : null;
     // выход есть всегда: «Скачать с сайта» и «Выйти»; «Повторить», пока ничего не идёт
     const action = ready
-      ? this.html("button", { class: "primary", type: "button" }, "Перезапустить и установить")
+      ? this.html("button", { class: "primary", type: "button" }, tt`Перезапустить и установить`)
       : busy
         ? null
-        : this.html("button", { class: "primary", type: "button" }, "Повторить");
+        : this.html("button", { class: "primary", type: "button" }, tt`Повторить`);
     action?.addEventListener("click", () => (TaboraUpdate.readyForRestart ? TaboraUpdate.restart() : TaboraUpdate.check({ force: true }).catch(() => {})));
-    const manual = this.html("button", { class: "linkish", type: "button" }, "Скачать с сайта");
+    const manual = this.html("button", { class: "linkish", type: "button" }, tt`Скачать с сайта`);
     manual.addEventListener("click", () => {
       this.updateWallHide(); // страница загрузки должна быть видна; стена вернётся при следующей проверке
       this.go(TaboraUpdate.manualUrl);
     });
-    const quit = this.html("button", { class: "linkish", type: "button" }, "Выйти из браузера");
+    const quit = this.html("button", { class: "linkish", type: "button" }, tt`Выйти из браузера`);
     quit.addEventListener("click", () => Services.startup.quit(Ci.nsIAppStartup.eAttemptQuit));
     const ch = TaboraUpdate.channel;
     w.replaceChildren(
       h("div", { class: "card" }, null, [
         this.markSvg("wall-mark"),
-        h("h2", {}, `Обязательное обновление до ${ch?.version || "новой версии"}`),
-        h("p", { class: "why" }, `Версия ${TaboraUpdate.currentVersion || ""} больше не поддерживается${ch?.minimum ? `: минимально допустимая ${ch.minimum}` : ""}. Работа продолжится после установки. Вкладки и данные сохранятся.`),
+        h("h2", {}, tt`Обязательное обновление до ${ch?.version || tt`новой версии`}`),
+        h("p", { class: "why" }, tt`Версия ${TaboraUpdate.currentVersion || ""} больше не поддерживается${ch?.minimum ? tt`: минимально допустимая ${ch.minimum}` : ""}. Работа продолжится после установки. Вкладки и данные сохранятся.`),
         ch?.notes ? h("p", { class: "notes" }, ch.notes) : null,
         h("div", { class: "bar", "aria-hidden": "true" }, null, [h("i", { style: `width:${pct ?? 6}%`, class: pct === null ? "indeterminate" : "" })]),
         h("p", { class: `state${failed ? " failed" : ""}` }, TaboraUpdate.statusText()),

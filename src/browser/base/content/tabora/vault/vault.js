@@ -56,7 +56,7 @@ Object.assign(Tabora, {
       // сейф откроет только вход в аккаунт: раздел не выдвигаем, у поля входа — напоминаем
       if (Vault.waitingReason === "passwords" && Date.now() - (this._vaultAskedAt || 0) >= 180000) {
         this._vaultAskedAt = Date.now();
-        this.notice("Войдите в аккаунт Tabora, чтобы подставлять пароли");
+        this.notice(tt`Войдите в аккаунт Tabora, чтобы подставлять пароли`);
       }
       return;
     }
@@ -66,9 +66,9 @@ Object.assign(Tabora, {
         return;
       }
       this._vaultAskedAt = Date.now();
-      this.notice("Сейф заблокирован: разблокируйте его, чтобы подставить пароль");
+      this.notice(tt`Сейф заблокирован: разблокируйте его, чтобы подставить пароль`);
     } else {
-      this.notice("Введите мастер-пароль сейфа, чтобы включить пароли сайтов");
+      this.notice(tt`Введите мастер-пароль сейфа, чтобы включить пароли сайтов`);
     }
     this.openDrawer("codes");
   },
@@ -98,7 +98,7 @@ Object.assign(Tabora, {
     if (window !== Services.wm.getMostRecentBrowserWindow() || !this.drawer?.el) {
       return;
     }
-    this.notice(this.vaultMod().Vault.corrupt?.missing ? "Файл сейфа пропал: выберите, как восстановиться" : "Файл сейфа повреждён: выберите, как восстановиться");
+    this.notice(this.vaultMod().Vault.corrupt?.missing ? tt`Файл сейфа пропал: выберите, как восстановиться` : tt`Файл сейфа повреждён: выберите, как восстановиться`);
     this.openDrawer("codes");
   },
 
@@ -179,16 +179,16 @@ Object.assign(Tabora, {
 
   vaultWelcomeView() {
     const h = (t, a, x, c) => this.html(t, a, x, c);
-    const create = this.wButton("Создать сейф", "primary", () => this.vaultCreateSheet());
+    const create = this.wButton(tt`Создать сейф`, "primary", () => this.vaultCreateSheet());
     return h("div", { class: "w-welcome" }, null, [
       h("div", { class: "w-orb" }, null, [this.markSvg()]),
-      h("b", {}, "Сейф Tabora"),
-      h("p", {}, "Пароли сайтов и коды двухфакторной защиты шифруются одним ключом. Ключ хранится в связке ключей этого компьютера и, по желанию, под мастер-паролем для переноса."),
+      h("b", {}, tt`Сейф Tabora`),
+      h("p", {}, tt`Пароли сайтов и коды двухфакторной защиты шифруются одним ключом. Ключ хранится в связке ключей этого компьютера и, по желанию, под мастер-паролем для переноса.`),
       h("div", { class: "w-actions" }, null, [create]),
       h("ul", { class: "w-points" }, null, [
-        h("li", {}, "Ни один пароль не лежит на диске открытым текстом"),
-        h("li", {}, "Открывается сам на этом компьютере, без ввода пароля"),
-        h("li", {}, "Мастер-пароль нужен только для переезда на другой компьютер"),
+        h("li", {}, tt`Ни один пароль не лежит на диске открытым текстом`),
+        h("li", {}, tt`Открывается сам на этом компьютере, без ввода пароля`),
+        h("li", {}, tt`Мастер-пароль нужен только для переезда на другой компьютер`),
       ]),
     ]);
   },
@@ -198,38 +198,38 @@ Object.assign(Tabora, {
     const { Vault } = this.vaultMod();
     const mark = h("div", { class: "w-lock-mark" }, null, [this.wIcon(["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], 22, 1.8)]);
     const err = h("div", { class: "w-error", hidden: "true" });
-    const recovery = Vault.hasRecoveryKey ? this.wButton("Войти по ключу восстановления", "ghost", () => this.vaultRecoverySheet()) : null;
-    const later = Vault.waiting && Vault.waitingReason === "passwords" ? this.wButton("Не сейчас", "ghost", () => Vault.cancelWaiting()) : null;
+    const recovery = Vault.hasRecoveryKey ? this.wButton(tt`Войти по ключу восстановления`, "ghost", () => this.vaultRecoverySheet()) : null;
+    const later = Vault.waiting && Vault.waitingReason === "passwords" ? this.wButton(tt`Не сейчас`, "ghost", () => Vault.cancelWaiting()) : null;
     const canTouch = Vault.hasOsKey && Vault.osUnlockEnabled;
-    const touch = canTouch ? this.wButton(Vault.hasPassword ? "Touch ID или пароль macOS" : "Разблокировать", Vault.hasPassword ? "ghost" : "primary", async () => {
+    const touch = canTouch ? this.wButton(Vault.hasPassword ? tt`Touch ID или пароль macOS` : tt`Разблокировать`, Vault.hasPassword ? "ghost" : "primary", async () => {
       touch.disabled = true;
       err.hidden = true;
       const ok = await Vault.unlock({ user: true });
       touch.disabled = false;
       if (!ok) {
-        err.textContent = "Проверка не пройдена";
+        err.textContent = tt`Проверка не пройдена`;
         err.hidden = false;
       }
     }) : null;
-    const lockedText = Vault.explicitlyLocked ? "Сейф заблокирован вами. Пароли сайтов и коды откроются после проверки." : null;
+    const lockedText = Vault.explicitlyLocked ? tt`Сейф заблокирован вами. Пароли сайтов и коды откроются после проверки.` : null;
     if (!Vault.hasPassword) {
       if (touch) {
         return h("div", { class: "w-locked" }, null, [
           mark,
-          h("b", {}, "Сейф заблокирован"),
-          h("p", { class: "w-sub" }, lockedText || "Подтвердите, что это вы: Touch ID или пароль macOS."),
+          h("b", {}, tt`Сейф заблокирован`),
+          h("p", { class: "w-sub" }, lockedText || tt`Подтвердите, что это вы: Touch ID или пароль macOS.`),
           err, touch, recovery, later,
         ].filter(Boolean));
       }
       return h("div", { class: "w-locked" }, null, [
         mark,
-        h("b", {}, "Сейф недоступен"),
-        h("p", { class: "w-sub" }, Vault.hasRecoveryKey ? "Ключ сейфа хранится в связке ключей другого компьютера, мастер-пароль не задан. Откройте сейф ключом восстановления и задайте пароль." : "Ключ сейфа хранится в связке ключей системы, а мастер-пароль не задан. Если файл перенесён с другого компьютера, открыть его нельзя."),
+        h("b", {}, tt`Сейф недоступен`),
+        h("p", { class: "w-sub" }, Vault.hasRecoveryKey ? tt`Ключ сейфа хранится в связке ключей другого компьютера, мастер-пароль не задан. Откройте сейф ключом восстановления и задайте пароль.` : tt`Ключ сейфа хранится в связке ключей системы, а мастер-пароль не задан. Если файл перенесён с другого компьютера, открыть его нельзя.`),
         recovery,
       ].filter(Boolean));
     }
-    const pass = this.wField("Мастер-пароль", { type: "password", autocomplete: "off" });
-    const go = this.wButton("Разблокировать", "primary", async () => {
+    const pass = this.wField(tt`Мастер-пароль`, { type: "password", autocomplete: "off" });
+    const go = this.wButton(tt`Разблокировать`, "primary", async () => {
       go.disabled = true;
       go.classList.add("loading");
       err.hidden = true;
@@ -253,8 +253,8 @@ Object.assign(Tabora, {
     setTimeout(() => pass.input.focus(), 50);
     return h("div", { class: "w-locked" }, null, [
       mark,
-      h("b", {}, "Сейф заблокирован"),
-      h("p", { class: "w-sub" }, lockedText || (canTouch ? "Введите мастер-пароль или подтвердите через систему." : "Введите мастер-пароль")),
+      h("b", {}, tt`Сейф заблокирован`),
+      h("p", { class: "w-sub" }, lockedText || (canTouch ? tt`Введите мастер-пароль или подтвердите через систему.` : tt`Введите мастер-пароль`)),
       pass.wrap, err, go, touch, recovery, later,
     ].filter(Boolean));
   },
@@ -280,42 +280,42 @@ Object.assign(Tabora, {
     };
     const kids = [
       h("div", { class: "w-lock-mark" }, null, [this.wIcon(["M12 9v4", "M12 17h.01", "M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"], 22, 1.8)]),
-      h("b", {}, c.missing ? "Файл сейфа пропал" : "Файл сейфа повреждён"),
-      h("p", { class: "w-sub" }, `Причина: ${c.reason || "неизвестна"}. ${c.movedTo ? `Файл сохранён рядом как ${PathUtils.filename(c.movedTo)}. ` : ""}${c.missing && !c.backup ? "Если у вас есть копия файла tabora-vault.json, закройте браузер и верните её в папку профиля. " : ""}Пароли сайтов и коды недоступны, пока вы не выберете, как восстановиться.`),
+      h("b", {}, c.missing ? tt`Файл сейфа пропал` : tt`Файл сейфа повреждён`),
+      h("p", { class: "w-sub" }, tt`Причина: ${c.reason || tt`неизвестна`}. ${c.movedTo ? tt`Файл сохранён рядом как ${PathUtils.filename(c.movedTo)}. ` : ""}${c.missing && !c.backup ? tt`Если у вас есть копия файла tabora-vault.json, закройте браузер и верните её в папку профиля. ` : ""}Пароли сайтов и коды недоступны, пока вы не выберете, как восстановиться.`),
       err,
     ];
     if (c.backup) {
-      const b = this.wButton("Восстановить из запасной копии", "primary", () => {});
+      const b = this.wButton(tt`Восстановить из запасной копии`, "primary", () => {});
       b.addEventListener("click", run(b, async () => {
         await Vault.restoreBackup();
-        this.notice("Сейф восстановлен из запасной копии");
+        this.notice(tt`Сейф восстановлен из запасной копии`);
       }));
       kids.push(b);
     }
     if (c.backup?.rk || c.salvage?.rk) {
-      kids.push(this.wButton("Восстановить ключом восстановления", c.backup ? "ghost" : "primary", () => {
-        const key = this.wField("Ключ восстановления", { placeholder: "XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX", autocomplete: "off", spellcheck: "false" });
-        this.vaultSheet("Восстановление сейфа", "Ключ восстановления откроет прежний ключ сейфа: пароли и коды снова станут доступны. Затем задайте мастер-пароль.", [key.wrap], "Восстановить", async () => {
+      kids.push(this.wButton(tt`Восстановить ключом восстановления`, c.backup ? "ghost" : "primary", () => {
+        const key = this.wField(tt`Ключ восстановления`, { placeholder: "XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX", autocomplete: "off", spellcheck: "false" });
+        this.vaultSheet(tt`Восстановление сейфа`, tt`Ключ восстановления откроет прежний ключ сейфа: пароли и коды снова станут доступны. Затем задайте мастер-пароль.`, [key.wrap], tt`Восстановить`, async () => {
           const recoveryKey = key.input.value;
           await Vault.recoverCorrupt(recoveryKey);
-          this.notice("Сейф восстановлен ключом восстановления");
+          this.notice(tt`Сейф восстановлен ключом восстановления`);
           setTimeout(() => this.vaultPasswordSheet({ reset: true, recoveryKey }), 400);
         });
       }));
     }
-    kids.push(this.wButton("Создать новый сейф", "ghost danger", () => {
+    kids.push(this.wButton(tt`Создать новый сейф`, "ghost danger", () => {
       this.vaultSheet(
-        "Создать новый сейф",
-        "Пароли сайтов, коды и почта, зашифрованные прежним ключом, станут недоступны. Их файлы не удаляются: они сохранятся рядом с пометкой vault-lost, и если найдётся прежний файл сейфа, их можно будет вернуть.",
+        tt`Создать новый сейф`,
+        tt`Пароли сайтов, коды и почта, зашифрованные прежним ключом, станут недоступны. Их файлы не удаляются: они сохранятся рядом с пометкой vault-lost, и если найдётся прежний файл сейфа, их можно будет вернуть.`,
         [],
-        "Создать новый",
+        tt`Создать новый`,
         async () => {
           await Vault.startOverAfterCorrupt();
-          this.notice("Создан новый сейф");
+          this.notice(tt`Создан новый сейф`);
         }
       );
     }));
-    kids.push(h("p", { class: "w-hint" }, "Новый ключ браузер сам не создаёт: иначе прежние данные пропали бы молча."));
+    kids.push(h("p", { class: "w-hint" }, tt`Новый ключ браузер сам не создаёт: иначе прежние данные пропали бы молча.`));
     return h("div", { class: "w-locked" }, null, kids);
   },
 
@@ -362,7 +362,7 @@ Object.assign(Tabora, {
   /* ---- Список кодов ---------------------------------------------------- */
 
   otpSitesText(e) {
-    return (e.sites || []).map(s => (s.sub ? `${s.host} и поддомены` : s.host)).join(", ");
+    return (e.sites || []).map(s => (s.sub ? tt`${s.host} и поддомены` : s.host)).join(", ");
   },
 
   codesMainView() {
@@ -371,21 +371,21 @@ Object.assign(Tabora, {
     const q = (this.drawer.query || "").toLowerCase();
     const entries = Otp.list()
       .filter(e => !q || `${e.issuer} ${e.account} ${(e.sites || []).map(s => s.host).join(" ")}`.toLowerCase().includes(q))
-      .sort((a, b) => (b.usedAt || 0) - (a.usedAt || 0) || (a.issuer || a.account).localeCompare(b.issuer || b.account, "ru"));
-    const add = this.wButton("Добавить", "primary small", e => this.otpAddMenu(e.currentTarget));
+      .sort((a, b) => (b.usedAt || 0) - (a.usedAt || 0) || (a.issuer || a.account).localeCompare(b.issuer || b.account, ttLocale()));
+    const add = this.wButton(tt`Добавить`, "primary small", e => this.otpAddMenu(e.currentTarget));
     if (Otp.loadError) {
       add.disabled = true;
     }
-    const head = h("div", { class: "otp-head" }, null, [h("b", {}, "Коды"), add]);
+    const head = h("div", { class: "otp-head" }, null, [h("b", {}, tt`Коды`), add]);
     const list = h("div", { class: "otp-list" }, null, entries.map(e => this.otpRow(e)));
-    const empty = this.drawerEmpty(q ? "Ничего не найдено" : "Кодов пока нет", q ? "" : "Добавьте код: с QR на странице, по ссылке otpauth:// или вручную");
+    const empty = this.drawerEmpty(q ? tt`Ничего не найдено` : tt`Кодов пока нет`, q ? "" : tt`Добавьте код: с QR на странице, по ссылке otpauth:// или вручную`);
     const body = h("div", { class: "w-settings" }, null, [head, Otp.loadError ? this.otpCorruptCard() : null, entries.length ? list : empty, this.accountCard(), this.vaultCard()].filter(Boolean));
     if (entries.length) {
       this.otpStartTicking();
       if (Date.now() - Otp.clockCheckedAt > 86400000) {
         Otp.checkClock().then(r => {
           if (r.applied) {
-            this.notice(`Часы компьютера расходятся с сетью на ${Math.round(r.offset / 1000)} с: коды считаются с поправкой`);
+            this.notice(tt`Часы компьютера расходятся с сетью на ${Math.round(r.offset / 1000)} с: коды считаются с поправкой`);
           }
         }).catch(() => {});
       }
@@ -400,24 +400,24 @@ Object.assign(Tabora, {
     const c = Otp.loadError;
     const actions = [];
     if (c.backup) {
-      actions.push(this.wButton("Восстановить из копии", "primary small", async () => {
+      actions.push(this.wButton(tt`Восстановить из копии`, "primary small", async () => {
         try {
           await Otp.restoreBackup();
-          this.notice("Коды восстановлены из запасной копии");
+          this.notice(tt`Коды восстановлены из запасной копии`);
         } catch (e) {
           this.notice(e.message);
         }
       }));
     }
-    actions.push(this.wButton("Начать список заново", "ghost small", () => {
-      this.vaultSheet("Начать список кодов заново", "Записи из повреждённого файла в списке не появятся. Сам файл остаётся рядом, его можно будет разобрать вручную.", [], "Начать заново", async () => {
+    actions.push(this.wButton(tt`Начать список заново`, "ghost small", () => {
+      this.vaultSheet(tt`Начать список кодов заново`, tt`Записи из повреждённого файла в списке не появятся. Сам файл остаётся рядом, его можно будет разобрать вручную.`, [], tt`Начать заново`, async () => {
         await Otp.startFresh();
-        this.notice("Список кодов начат заново");
+        this.notice(tt`Список кодов начат заново`);
       });
     }));
     return h("div", { class: "w-group" }, null, [
-      h("b", { class: "w-group-title" }, c.missing ? "Файл кодов пропал" : "Файл кодов повреждён"),
-      h("p", { class: "w-hint" }, `Причина: ${c.reason}. ${c.movedTo ? `Файл сохранён как ${PathUtils.filename(c.movedTo)}. ` : ""}Пока вы не выберете, что делать, новые коды не сохраняются.`),
+      h("b", { class: "w-group-title" }, c.missing ? tt`Файл кодов пропал` : tt`Файл кодов повреждён`),
+      h("p", { class: "w-hint" }, tt`Причина: ${c.reason}. ${c.movedTo ? tt`Файл сохранён как ${PathUtils.filename(c.movedTo)}. ` : ""}Пока вы не выберете, что делать, новые коды не сохраняются.`),
       h("div", { class: "w-actions" }, null, actions),
     ]);
   },
@@ -429,12 +429,12 @@ Object.assign(Tabora, {
     const title = e.issuer || e.account;
     const sitesText = this.otpSitesText(e);
     const invalid = e.valid === false;
-    const sub = invalid ? "запись изменена вне браузера: код не выдаётся" : e.issuer ? e.account || sitesText : sitesText;
+    const sub = invalid ? tt`запись изменена вне браузера: код не выдаётся` : e.issuer ? e.account || sitesText : sitesText;
     // при перерисовке списка строка сразу показывает последний известный код, а не заглушку
     const known = this.codes.shown?.get(e.id);
     const code = h("span", { class: "otp-code" }, invalid ? "—" : known?.text || "··· ···");
     const ring = h("span", { class: "otp-ring", style: `--p:${known?.p ?? 100}` });
-    const row = h("div", { class: `otp-row${invalid ? " invalid" : ""}`, tabindex: "0", "data-id": e.id, title: invalid ? "Подпись записи не сходится: её изменили вне браузера. Удалите запись и добавьте код заново" : "Нажмите, чтобы скопировать код" }, null, [
+    const row = h("div", { class: `otp-row${invalid ? " invalid" : ""}`, tabindex: "0", "data-id": e.id, title: invalid ? tt`Подпись записи не сходится: её изменили вне браузера. Удалите запись и добавьте код заново` : tt`Нажмите, чтобы скопировать код` }, null, [
       icon, h("div", { class: "otp-text" }, null, [h("b", {}, title), h("span", {}, sub)]), code, ring,
     ]);
     if (invalid) {
@@ -485,7 +485,7 @@ Object.assign(Tabora, {
           row.querySelector(".otp-code").textContent = text;
           row.querySelector(".otp-ring").style.setProperty("--p", String(p));
           row.classList.toggle("ending", c.remaining <= 5);
-          row.title = `Действует ещё ${c.remaining} с · следующий ${this.otpFmt(c.next)} · нажмите, чтобы скопировать`;
+          row.title = tt`Действует ещё ${c.remaining} с · следующий ${this.otpFmt(c.next)} · нажмите, чтобы скопировать`;
         } catch (err) {
           row.querySelector(".otp-code").textContent = "—";
         }
@@ -504,7 +504,7 @@ Object.assign(Tabora, {
       this.copyWithExpiry(useNext ? c.next : c.code, 30000);
       row?.classList.add("copied");
       setTimeout(() => row?.classList.remove("copied"), 1200);
-      this.notice(useNext ? "Скопирован следующий код: текущий истекает" : "Код скопирован · буфер очистится через 30 с");
+      this.notice(useNext ? tt`Скопирован следующий код: текущий истекает` : tt`Код скопирован · буфер очистится через 30 с`);
       this.codes.touching = true;
       Otp.touch(id).catch(() => {}).finally(() => setTimeout(() => (this.codes.touching = false), 0));
     } catch (e) {
@@ -544,12 +544,12 @@ Object.assign(Tabora, {
   otpAddMenu(anchor) {
     const r = anchor.getBoundingClientRect();
     this.showMenu([
-      { label: "Найти QR на этой странице", icon: ["M4 4h6v6H4z", "M14 4h6v6h-6z", "M4 14h6v6H4z", "M14 14h3v3h-3z", "M20 20h-3"], run: () => this.otpScanPage() },
-      { label: "Сканировать с экрана", icon: ["M4 8V5a1 1 0 0 1 1-1h3", "M16 4h3a1 1 0 0 1 1 1v3", "M20 16v3a1 1 0 0 1-1 1h-3", "M8 20H5a1 1 0 0 1-1-1v-3"], run: () => this.otpScanScreen() },
+      { label: tt`Найти QR на этой странице`, icon: ["M4 4h6v6H4z", "M14 4h6v6h-6z", "M4 14h6v6H4z", "M14 14h3v3h-3z", "M20 20h-3"], run: () => this.otpScanPage() },
+      { label: tt`Сканировать с экрана`, icon: ["M4 8V5a1 1 0 0 1 1-1h3", "M16 4h3a1 1 0 0 1 1 1v3", "M20 16v3a1 1 0 0 1-1 1h-3", "M8 20H5a1 1 0 0 1-1-1v-3"], run: () => this.otpScanScreen() },
       { separator: true },
-      { label: "Импорт из файла (Google Authenticator, Aegis, 2FAS)", icon: ["M12 4v11", "M7 10l5 5 5-5", "M4 19h16"], run: () => this.otpImportFile() },
-      { label: "Вставить ссылку otpauth://", icon: ["M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1", "M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"], run: () => this.otpLinkSheet() },
-      { label: "Ввести вручную", icon: ["M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z", "M13.5 6.5l3 3"], run: () => this.otpManualSheet() },
+      { label: tt`Импорт из файла (Google Authenticator, Aegis, 2FAS)`, icon: ["M12 4v11", "M7 10l5 5 5-5", "M4 19h16"], run: () => this.otpImportFile() },
+      { label: tt`Вставить ссылку otpauth://`, icon: ["M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1", "M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"], run: () => this.otpLinkSheet() },
+      { label: tt`Ввести вручную`, icon: ["M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z", "M13.5 6.5l3 3"], run: () => this.otpManualSheet() },
     ], r.left, r.bottom + 4);
   },
 
@@ -565,10 +565,10 @@ Object.assign(Tabora, {
       }));
       return { wrap: h("label", { class: "w-field" }, null, [h("span", {}, label), s]), select: s };
     };
-    const digits = sel("Цифр", [6, 7, 8], prefill.digits || 6);
-    const period = sel("Период", [15, 30, 60, 90, 120], prefill.period || 30, v => `${v} с`);
-    const algorithm = sel("Алгоритм", ["SHA1", "SHA256", "SHA512"], prefill.algorithm || "SHA1");
-    const box = h("details", { class: "w-details" }, null, [h("summary", {}, "Параметры (обычно менять не нужно)"), h("div", { class: "otp-advanced" }, null, [digits.wrap, period.wrap, algorithm.wrap])]);
+    const digits = sel(tt`Цифр`, [6, 7, 8], prefill.digits || 6);
+    const period = sel(tt`Период`, [15, 30, 60, 90, 120], prefill.period || 30, v => tt`${v} с`);
+    const algorithm = sel(tt`Алгоритм`, ["SHA1", "SHA256", "SHA512"], prefill.algorithm || "SHA1");
+    const box = h("details", { class: "w-details" }, null, [h("summary", {}, tt`Параметры (обычно менять не нужно)`), h("div", { class: "otp-advanced" }, null, [digits.wrap, period.wrap, algorithm.wrap])]);
     if (prefill.digits && prefill.digits !== 6 || prefill.period && prefill.period !== 30 || prefill.algorithm && prefill.algorithm !== "SHA1") {
       box.open = true;
     }
@@ -577,7 +577,7 @@ Object.assign(Tabora, {
 
   /** Поле сайтов и галочка «на всех поддоменах». По умолчанию подсказка с кодом появляется
    * только на точном адресе; поддомены — только если пользователь отметил это сам. */
-  otpSitesFields(sites = [], label = "Сайт, где спрашивают код") {
+  otpSitesFields(sites = [], label = tt`Сайт, где спрашивают код`) {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { Otp } = this.otpMod();
     const field = this.wField(label, { placeholder: "github.com", value: sites.map(s => s.host).join(", "), autocomplete: "off", spellcheck: "false" });
@@ -588,7 +588,7 @@ Object.assign(Tabora, {
     const update = () => {
       const first = Otp.normalizeHost(field.input.value.split(/[\s,;]+/)[0]);
       const base = first ? Otp.baseDomain(first) : "";
-      subText.textContent = base ? `Также на всех адресах ${base} (например, accounts.${base})` : "Также на всех поддоменах";
+      subText.textContent = base ? tt`Также на всех адресах ${base} (например, accounts.${base})` : tt`Также на всех поддоменах`;
     };
     field.input.addEventListener("input", update);
     update();
@@ -602,9 +602,9 @@ Object.assign(Tabora, {
   otpManualSheet(prefill = {}) {
     const { Otp } = this.otpMod();
     const h = (t, a, x, c) => this.html(t, a, x, c);
-    const issuer = this.wField("Сервис", { placeholder: "GitHub", value: prefill.issuer || "" });
-    const account = this.wField("Аккаунт", { placeholder: "you@example.com", value: prefill.account || "" });
-    const secret = this.wField("Секрет (Base32)", { placeholder: "JBSW Y3DP EHPK 3PXP", value: prefill.secret || "", autocomplete: "off", spellcheck: "false" });
+    const issuer = this.wField(tt`Сервис`, { placeholder: "GitHub", value: prefill.issuer || "" });
+    const account = this.wField(tt`Аккаунт`, { placeholder: "you@example.com", value: prefill.account || "" });
+    const secret = this.wField(tt`Секрет (Base32)`, { placeholder: "JBSW Y3DP EHPK 3PXP", value: prefill.secret || "", autocomplete: "off", spellcheck: "false" });
     const sites = this.otpSitesFields(prefill.sites || []);
     issuer.input.addEventListener("input", () => {
       if (!sites.field.input.value) {
@@ -617,24 +617,24 @@ Object.assign(Tabora, {
     });
     const params = this.otpParamSelects(prefill);
     this.vaultSheet(
-      prefill.secret ? "Добавить код" : "Новый код",
-      prefill.secret ? "Проверьте название и сайт: подсказка с кодом появится только на нём." : null,
-      [issuer.wrap, account.wrap, secret.wrap, ...sites.nodes, h("p", { class: "w-hint" }, "Подсказка с кодом появится только на указанном адресе и только по https. Если вход на сервис идёт с другого адреса того же сайта, отметьте «Также на всех адресах»."), params.box],
-      "Сохранить",
+      prefill.secret ? tt`Добавить код` : tt`Новый код`,
+      prefill.secret ? tt`Проверьте название и сайт: подсказка с кодом появится только на нём.` : null,
+      [issuer.wrap, account.wrap, secret.wrap, ...sites.nodes, h("p", { class: "w-hint" }, tt`Подсказка с кодом появится только на указанном адресе и только по https. Если вход на сервис идёт с другого адреса того же сайта, отметьте «Также на всех адресах».`), params.box],
+      tt`Сохранить`,
       async () => {
         const meta = await Otp.add({ issuer: issuer.input.value, account: account.input.value, secret: secret.input.value, sites: sites.read(), ...params.read() });
-        this.notice(`Код «${meta.issuer || meta.account}» добавлен`);
+        this.notice(tt`Код «${meta.issuer || meta.account}» добавлен`);
       }
     );
   },
 
   otpLinkSheet() {
-    const link = this.wField("Ссылка", { placeholder: "otpauth://totp/…", autocomplete: "off", spellcheck: "false" });
+    const link = this.wField(tt`Ссылка`, { placeholder: "otpauth://totp/…", autocomplete: "off", spellcheck: "false" });
     this.vaultSheet(
-      "Код по ссылке",
-      "Сайты дают её под QR-кодом, обычно по ссылке «не можете отсканировать?».",
+      tt`Код по ссылке`,
+      tt`Сайты дают её под QR-кодом, обычно по ссылке «не можете отсканировать?».`,
       [link.wrap],
-      "Далее",
+      tt`Далее`,
       async () => {
         const parsed = this.otpMod().parseOtpauth(link.input.value);
         setTimeout(() => this.otpManualSheet(parsed), 0);
@@ -661,7 +661,7 @@ Object.assign(Tabora, {
     const { Otp, parseOtpauth, parseMigration } = this.otpMod();
     if (/^otpauth-migration:/i.test(url)) {
       try {
-        this.otpImportSheet(parseMigration(url), "Экспорт Google Authenticator");
+        this.otpImportSheet(parseMigration(url), tt`Экспорт Google Authenticator`);
       } catch (e) {
         this.notice(e.message);
       }
@@ -683,7 +683,7 @@ Object.assign(Tabora, {
       const { Vault } = this.vaultMod();
       await Vault.ready();
       if (!Vault.exists || !Vault.unlocked) {
-        this.notice(Vault.exists ? "Разблокируйте сейф и повторите" : "Создайте сейф и повторите");
+        this.notice(Vault.exists ? tt`Разблокируйте сейф и повторите` : tt`Создайте сейф и повторите`);
         return;
       }
       await Otp.ready();
@@ -754,7 +754,7 @@ Object.assign(Tabora, {
     try {
       images = (await browser.browsingContext.currentWindowGlobal.getActor("TaboraVault").sendQuery("TaboraVault:PageImages")) || [];
     } catch (e) {
-      this.notice("Не удалось прочитать картинки страницы");
+      this.notice(tt`Не удалось прочитать картинки страницы`);
       return;
     }
     const host = this.otpPageHost(browser.currentURI);
@@ -765,7 +765,7 @@ Object.assign(Tabora, {
         return;
       }
     }
-    this.notice(images.length ? `QR с кодом не найден (картинок проверено: ${images.length})` : "На странице нет подходящих картинок");
+    this.notice(images.length ? tt`QR с кодом не найден (картинок проверено: ${images.length})` : tt`На странице нет подходящих картинок`);
   },
 
   /** Снимок области экрана системным выделением (как ⌘⇧4): QR из любого приложения. */
@@ -775,7 +775,7 @@ Object.assign(Tabora, {
       const bin = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
       bin.initWithPath("/usr/sbin/screencapture");
       if (!bin.exists()) {
-        this.notice("Захват экрана доступен только на macOS");
+        this.notice(tt`Захват экрана доступен только на macOS`);
         return;
       }
       const proc = Cc["@mozilla.org/process/util;1"].createInstance(Ci.nsIProcess);
@@ -794,10 +794,10 @@ Object.assign(Tabora, {
       if (text && /^otpauth(-migration)?:\/\//i.test(text)) {
         this.otpAddFromUrl(text, { host: this.otpPageHost(gBrowser.selectedBrowser?.currentURI) });
       } else {
-        this.notice(text ? "В этом QR нет кода аутентификатора" : "QR-код в выделенной области не распознан");
+        this.notice(text ? tt`В этом QR нет кода аутентификатора` : tt`QR-код в выделенной области не распознан`);
       }
     } catch (e) {
-      this.notice(`Захват экрана не удался: ${e.message}`);
+      this.notice(tt`Захват экрана не удался: ${e.message}`);
     } finally {
       IOUtils.remove(path, { ignoreAbsent: true }).catch(() => {});
     }
@@ -806,8 +806,8 @@ Object.assign(Tabora, {
   /** Импорт файла экспорта другого аутентификатора. */
   otpImportFile() {
     const fp = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
-    fp.init(window.browsingContext, "Импорт кодов", Ci.nsIFilePicker.modeOpen);
-    fp.appendFilter("Экспорт аутентификатора", "*.json; *.txt; *.2fas");
+    fp.init(window.browsingContext, tt`Импорт кодов`, Ci.nsIFilePicker.modeOpen);
+    fp.appendFilter(tt`Экспорт аутентификатора`, "*.json; *.txt; *.2fas");
     fp.appendFilters(Ci.nsIFilePicker.filterAll);
     fp.open(async rv => {
       if (rv !== Ci.nsIFilePicker.returnOK || !fp.file) {
@@ -827,21 +827,21 @@ Object.assign(Tabora, {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { Otp } = this.otpMod();
     if (!entries.length) {
-      this.notice(skipped.length ? `Нечего импортировать: ${skipped[0]}` : "Нечего импортировать");
+      this.notice(skipped.length ? tt`Нечего импортировать: ${skipped[0]}` : tt`Нечего импортировать`);
       return;
     }
     const list = h("ul", { class: "w-points" }, null, entries.slice(0, 8).map(e => h("li", {}, `${e.issuer || "—"} · ${e.account || ""}`.trim())));
     if (entries.length > 8) {
-      list.append(h("li", {}, `…и ещё ${entries.length - 8}`));
+      list.append(h("li", {}, tt`…и ещё ${entries.length - 8}`));
     }
     const body = [list];
     if (skipped.length) {
-      body.push(h("p", { class: "w-hint" }, `Пропущено ${skipped.length}: ${skipped.slice(0, 3).join("; ")}${skipped.length > 3 ? "…" : ""}`));
+      body.push(h("p", { class: "w-hint" }, tt`Пропущено ${skipped.length}: ${skipped.slice(0, 3).join("; ")}${skipped.length > 3 ? "…" : ""}`));
     }
-    body.push(h("p", { class: "w-hint" }, "Сайт для подсказки подставится, только если издатель записан как домен (github.com). Остальным сайт можно указать потом: «Название и сайт»."));
-    this.vaultSheet(`Импорт: ${source}`, `Записей для добавления: ${entries.length}. Повторы будут пропущены.`, body, "Импортировать", async () => {
+    body.push(h("p", { class: "w-hint" }, tt`Сайт для подсказки подставится, только если издатель записан как домен (github.com). Остальным сайт можно указать потом: «Название и сайт».`));
+    this.vaultSheet(tt`Импорт: ${source}`, tt`Записей для добавления: ${entries.length}. Повторы будут пропущены.`, body, tt`Импортировать`, async () => {
       const r = await Otp.addMany(entries);
-      this.notice(`Добавлено ${r.added}${r.skipped ? `, повторов ${r.skipped}` : ""}${r.errors.length ? `, ошибок ${r.errors.length}` : ""}`);
+      this.notice(tt`Добавлено ${r.added}${r.skipped ? tt`, повторов ${r.skipped}` : ""}${r.errors.length ? tt`, ошибок ${r.errors.length}` : ""}`);
     });
   },
 
@@ -850,7 +850,7 @@ Object.assign(Tabora, {
     // меню страницы создаётся из шаблона лениво, поэтому слушаем документ, а не само меню
     const item = document.createXULElement("menuitem");
     item.id = "tabora-otp-image";
-    item.setAttribute("label", "Добавить код в аутентификатор");
+    item.setAttribute("label", tt`Добавить код в аутентификатор`);
     item.addEventListener("command", () => this.otpFromContextImage());
     document.addEventListener("popupshowing", e => {
       const menu = e.target;
@@ -883,10 +883,10 @@ Object.assign(Tabora, {
       if (text && /^otpauth(-migration)?:\/\//i.test(text)) {
         this.otpAddFromUrl(text, { host });
       } else {
-        this.notice(text ? "В этом QR нет кода аутентификатора" : "QR-код не распознан");
+        this.notice(text ? tt`В этом QR нет кода аутентификатора` : tt`QR-код не распознан`);
       }
     } catch (e) {
-      this.notice("Не удалось прочитать картинку");
+      this.notice(tt`Не удалось прочитать картинку`);
     }
   },
 
@@ -982,11 +982,11 @@ Object.assign(Tabora, {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const pop = this.otpPop;
     const el = this.otpPopEl();
-    el.replaceChildren(h("div", { class: "otp-pop-head" }, null, [h("span", {}, "Код для "), h("b", {}, pop.host)]));
+    el.replaceChildren(h("div", { class: "otp-pop-head" }, null, [h("span", {}, tt`Код для `), h("b", {}, pop.host)]));
     if (pop.locked) {
       const row = h("div", { class: "otp-pop-row otp-pop-unlock", role: "option" }, null, [
         h("span", { class: "otp-icon" }, null, [this.wIcon(["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], 15, 1.8)]),
-        h("div", { class: "otp-text" }, null, [h("b", {}, "Разблокировать сейф"), h("span", {}, "Для этого сайта есть коды")]),
+        h("div", { class: "otp-text" }, null, [h("b", {}, tt`Разблокировать сейф`), h("span", {}, tt`Для этого сайта есть коды`)]),
       ]);
       row.addEventListener("click", ev => {
         if (!this.otpPopClickOk(ev)) {
@@ -1002,11 +1002,11 @@ Object.assign(Tabora, {
           return null;
         }).catch(e => this.notice(e.message));
       });
-      el.append(row, h("div", { class: "otp-pop-hint" }, "Сейф заблокирован: подсказка сама его не открывает"));
+      el.append(row, h("div", { class: "otp-pop-hint" }, tt`Сейф заблокирован: подсказка сама его не открывает`));
     } else {
       pop.entries.forEach((e, i) => {
         const site = e.sites?.[0]?.host;
-        const note = e.match === "sub" ? `запись для всех адресов ${(e.sites.find(s => s.sub && pop.host.endsWith(`.${s.host}`)) || e.sites[0]).host}` : e.issuer ? e.account || "" : "";
+        const note = e.match === "sub" ? tt`запись для всех адресов ${(e.sites.find(s => s.sub && pop.host.endsWith(`.${s.host}`)) || e.sites[0]).host}` : e.issuer ? e.account || "" : "";
         const row = h("div", { class: `otp-pop-row${i === pop.active ? " active" : ""}`, role: "option", "data-id": e.id }, null, [
           h("span", { class: "otp-icon" }, site ? null : (e.issuer || e.account || "?")[0].toUpperCase(), site ? [h("img", { src: `page-icon:https://${site}/`, alt: "" })] : []),
           h("div", { class: "otp-text" }, null, [h("b", {}, e.issuer || e.account), h("span", { class: e.match === "sub" ? "otp-pop-note" : "" }, note)]),
@@ -1023,7 +1023,7 @@ Object.assign(Tabora, {
         row.addEventListener("mouseenter", () => this.otpPopSetActive(i));
         el.append(row);
       });
-      el.append(h("div", { class: "otp-pop-hint" }, "Enter — вставить код · Esc — закрыть · форма не отправляется"));
+      el.append(h("div", { class: "otp-pop-hint" }, tt`Enter — вставить код · Esc — закрыть · форма не отправляется`));
     }
     el.hidden = false;
     if (fresh) {
@@ -1160,7 +1160,7 @@ Object.assign(Tabora, {
       if (ok) {
         Otp.touch(entry.id).catch(() => {});
       } else {
-        this.notice("Поле кода больше недоступно");
+        this.notice(tt`Поле кода больше недоступно`);
       }
     } catch (e) {
       this.otpPopHide();
@@ -1226,13 +1226,13 @@ Object.assign(Tabora, {
       try {
         await this.mail().MailStore.ready();
         known = true;
-        this.mailSiteAliases(site, data.host).slice(0, 3).forEach(a => rows.push({ kind: "alias", address: a.address, title: a.address, note: `Алиас для ${a.site}` }));
+        this.mailSiteAliases(site, data.host).slice(0, 3).forEach(a => rows.push({ kind: "alias", address: a.address, title: a.address, note: tt`Алиас для ${a.site}` }));
       } catch (e) {}
     }
     if (!rows.length) {
-      rows.push({ kind: "create", title: `Создать алиас для ${site}`, note: known ? "Отдельный адрес, письма придут во входящие" : "Отдельный адрес. Понадобится открыть сейф" });
+      rows.push({ kind: "create", title: tt`Создать алиас для ${site}`, note: known ? tt`Отдельный адрес, письма придут во входящие` : tt`Отдельный адрес. Понадобится открыть сейф` });
     }
-    rows.push({ kind: "main", address: Account.email, title: Account.email, note: "Основной адрес" });
+    rows.push({ kind: "main", address: Account.email, title: Account.email, note: tt`Основной адрес` });
     if (browser !== gBrowser.selectedBrowser) {
       return;
     }
@@ -1285,11 +1285,11 @@ Object.assign(Tabora, {
       create: ["M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z", "M12 9v6M9 12h6"],
       main: ["M3 6h18v12H3z", "m3 7 9 6 9-6"],
     };
-    el.replaceChildren(h("div", { class: "otp-pop-head" }, null, [h("span", {}, "Адрес почты для "), h("b", {}, pop.site)]));
+    el.replaceChildren(h("div", { class: "otp-pop-head" }, null, [h("span", {}, tt`Адрес почты для `), h("b", {}, pop.site)]));
     pop.rows.forEach((row, i) => {
       const node = h("div", { class: `otp-pop-row${i === pop.active ? " active" : ""}${pop.busy ? " busy" : ""}`, role: "option", "aria-selected": String(i === pop.active), "data-kind": row.kind }, null, [
         h("span", { class: "otp-icon" }, null, [this.wIcon(ICON[row.kind], 15, 1.8)]),
-        h("div", { class: "otp-text" }, null, [h("b", {}, pop.busy && row.kind === "create" ? "Создаю алиас…" : row.title), h("span", {}, row.note)]),
+        h("div", { class: "otp-text" }, null, [h("b", {}, pop.busy && row.kind === "create" ? tt`Создаю алиас…` : row.title), h("span", {}, row.note)]),
       ]);
       node.addEventListener("click", ev => {
         // клик засчитывается, только если нажатие началось после взвода подсказки
@@ -1300,7 +1300,7 @@ Object.assign(Tabora, {
       node.addEventListener("mouseenter", () => this.mailPopSetActive(i));
       el.append(node);
     });
-    el.append(h("div", { class: "otp-pop-hint" }, "↓ ↑ — выбрать · Enter — вставить · Esc — закрыть"));
+    el.append(h("div", { class: "otp-pop-hint" }, tt`↓ ↑ — выбрать · Enter — вставить · Esc — закрыть`));
     const fresh = el.hidden;
     el.hidden = false;
     if (fresh) {
@@ -1402,17 +1402,17 @@ Object.assign(Tabora, {
         const { MailStore } = this.mail();
         await MailStore.ready();
         const existing = this.mailSiteAliases(pop.site, pop.host)[0];
-        address = (existing || (await MailStore.aliasCreate({ site: pop.site, space: this.activeSpace()?.name || "Личное", by: "manual" }))).address;
+        address = (existing || (await MailStore.aliasCreate({ site: pop.site, space: this.activeSpace()?.name || tt`Личное`, by: "manual" }))).address;
       } catch (e) {
         pop.busy = false;
         this.mailPopHide();
-        this.notice(e.code === "vault-locked" ? "Алиас не создан: сейф закрыт" : `Алиас не создан: ${e.message}`);
+        this.notice(e.code === "vault-locked" ? tt`Алиас не создан: сейф закрыт` : tt`Алиас не создан: ${e.message}`);
         return;
       }
       pop.busy = false;
       if (pop.actor !== actor || !this.mailPopDocOk()) {
         this.mailPopHide();
-        this.notice(`Алиас ${address} создан, но страница уже сменилась`);
+        this.notice(tt`Алиас ${address} создан, но страница уже сменилась`);
         return;
       }
     }
@@ -1420,9 +1420,9 @@ Object.assign(Tabora, {
       const ok = await actor.sendQuery("TaboraVault:FillMail", { address });
       this.mailPopHide();
       if (!ok) {
-        this.notice(row.kind === "create" ? `Алиас ${address} создан, но поле больше недоступно` : "Поле почты больше недоступно");
+        this.notice(row.kind === "create" ? tt`Алиас ${address} создан, но поле больше недоступно` : tt`Поле почты больше недоступно`);
       } else if (row.kind === "create") {
-        this.notice(`Алиас ${address} создан для ${pop.site || "сайта"}`);
+        this.notice(tt`Алиас ${address} создан для ${pop.site || tt`сайта`}`);
       }
     } catch (e) {
       this.mailPopHide();
@@ -1451,38 +1451,38 @@ Object.assign(Tabora, {
     const items = [];
     if (e.valid !== false) {
       items.push(
-        { label: "Копировать код", icon: ["M8 8h12v12H8z", "M16 8V4H4v12h4"], run: () => this.otpCopy(e.id) },
-        { label: "Копировать следующий код", icon: ["M5 12h14", "m13 6 6 6-6 6"], run: async () => {
+        { label: tt`Копировать код`, icon: ["M8 8h12v12H8z", "M16 8V4H4v12h4"], run: () => this.otpCopy(e.id) },
+        { label: tt`Копировать следующий код`, icon: ["M5 12h14", "m13 6 6 6-6 6"], run: async () => {
           try {
             const c = await Otp.code(e.id);
             this.copyWithExpiry(c.next, 30000);
-            this.notice("Следующий код скопирован");
+            this.notice(tt`Следующий код скопирован`);
           } catch (err) {
             this.notice(err.message);
           }
         } },
         { separator: true },
-        { label: "Название и сайт", icon: ["M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z", "M13.5 6.5l3 3"], run: () => this.otpEditSheet(e) },
-        { label: "Ссылка для переноса", icon: ["M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1", "M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"], run: () => this.vaultOwnerCheck("Ссылка для переноса", () => this.otpExportSheet(e)) },
+        { label: tt`Название и сайт`, icon: ["M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z", "M13.5 6.5l3 3"], run: () => this.otpEditSheet(e) },
+        { label: tt`Ссылка для переноса`, icon: ["M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1", "M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"], run: () => this.vaultOwnerCheck(tt`Ссылка для переноса`, () => this.otpExportSheet(e)) },
         { separator: true }
       );
     }
-    items.push({ label: "Удалить", icon: ["M4 7h16", "M10 11v6", "M14 11v6", "M6 7l1 12h10l1-12", "M9 7V4h6v3"], danger: true, run: () => this.otpDeleteSheet(e) });
+    items.push({ label: tt`Удалить`, icon: ["M4 7h16", "M10 11v6", "M14 11v6", "M6 7l1 12h10l1-12", "M9 7V4h6v3"], danger: true, run: () => this.otpDeleteSheet(e) });
     return items;
   },
 
   otpEditSheet(e) {
     const { Otp } = this.otpMod();
     const h = (t, a, x, c) => this.html(t, a, x, c);
-    const issuer = this.wField("Сервис", { value: e.issuer || "" });
-    const account = this.wField("Аккаунт", { value: e.account || "" });
-    const sites = this.otpSitesFields(e.sites || [], "Сайты через запятую");
+    const issuer = this.wField(tt`Сервис`, { value: e.issuer || "" });
+    const account = this.wField(tt`Аккаунт`, { value: e.account || "" });
+    const sites = this.otpSitesFields(e.sites || [], tt`Сайты через запятую`);
     const legacy = (e.sites || []).some(s => s.legacy);
     const body = [issuer.wrap, account.wrap, ...sites.nodes];
     if (legacy) {
-      body.push(h("p", { class: "w-hint" }, "Запись добавлена до уточнения сайтов и подходит для всех адресов домена. Укажите точный адрес входа и снимите галочку, чтобы код не показывался на других поддоменах."));
+      body.push(h("p", { class: "w-hint" }, tt`Запись добавлена до уточнения сайтов и подходит для всех адресов домена. Укажите точный адрес входа и снимите галочку, чтобы код не показывался на других поддоменах.`));
     }
-    this.vaultSheet("Название и сайт", "Подсказка с кодом появляется только на указанных сайтах и только по https: на похожем домене кода не будет.", body, "Сохранить", async () => {
+    this.vaultSheet(tt`Название и сайт`, tt`Подсказка с кодом появляется только на указанных сайтах и только по https: на похожем домене кода не будет.`, body, tt`Сохранить`, async () => {
       await Otp.update(e.id, { issuer: issuer.input.value, account: account.input.value, sites: sites.read() });
     });
   },
@@ -1498,23 +1498,23 @@ Object.assign(Tabora, {
       return;
     }
     const pre = h("pre", { class: "v-secret", masked: "true" }, url);
-    const reveal = this.wButton("Показать", "ghost small", () => {
+    const reveal = this.wButton(tt`Показать`, "ghost small", () => {
       pre.toggleAttribute("masked");
-      reveal.textContent = pre.hasAttribute("masked") ? "Показать" : "Скрыть";
+      reveal.textContent = pre.hasAttribute("masked") ? tt`Показать` : tt`Скрыть`;
     });
-    const copy = this.wButton("Скопировать ссылку", "ghost small", () => {
+    const copy = this.wButton(tt`Скопировать ссылку`, "ghost small", () => {
       this.copyWithExpiry(url, 60000);
-      this.notice("Ссылка скопирована · буфер очистится через минуту");
+      this.notice(tt`Ссылка скопирована · буфер очистится через минуту`);
     });
-    const box = this.vaultSheet("Ссылка для переноса", "В ней секрет кода. Вставьте её в другое приложение-аутентификатор и больше никому не показывайте.", [pre, h("div", { class: "w-actions" }, null, [reveal, copy])], "Готово", async () => {});
+    const box = this.vaultSheet(tt`Ссылка для переноса`, tt`В ней секрет кода. Вставьте её в другое приложение-аутентификатор и больше никому не показывайте.`, [pre, h("div", { class: "w-actions" }, null, [reveal, copy])], tt`Готово`, async () => {});
     box.classList.add("w-reveal"); // скрывается при потере фокуса окна, как фраза кошелька
   },
 
   otpDeleteSheet(e) {
     const { Otp } = this.otpMod();
-    this.vaultSheet("Удалить код", `«${e.issuer || e.account}» исчезнет из браузера. Если у сервиса включена двухфакторная защита, отключите её заранее или сохраните ссылку для переноса.`, [], "Удалить", async () => {
+    this.vaultSheet(tt`Удалить код`, tt`«${e.issuer || e.account}» исчезнет из браузера. Если у сервиса включена двухфакторная защита, отключите её заранее или сохраните ссылку для переноса.`, [], tt`Удалить`, async () => {
       await Otp.remove(e.id);
-      this.notice("Код удалён");
+      this.notice(tt`Код удалён`);
     });
   },
 
@@ -1534,68 +1534,68 @@ Object.assign(Tabora, {
     const Account = this.vaultAccount();
     const row = (name, value, cls = "") => h("div", { class: `w-kv ${cls}`.trim() }, null, [h("span", {}, name), h("b", {}, value)]);
     const kids = [
-      row("Связка ключей системы", Vault.hasOsKey && Vault.osUnlockEnabled ? "ключ сохранён · тихая разблокировка" : "не используется"),
-      row("Мастер-пароль", Vault.hasPassword ? "задан · можно перенести на другой компьютер" : "не задан · только этот компьютер", Vault.hasPassword ? "" : "muted"),
+      row(tt`Связка ключей системы`, Vault.hasOsKey && Vault.osUnlockEnabled ? tt`ключ сохранён · тихая разблокировка` : tt`не используется`),
+      row(tt`Мастер-пароль`, Vault.hasPassword ? tt`задан · можно перенести на другой компьютер` : tt`не задан · только этот компьютер`, Vault.hasPassword ? "" : "muted"),
     ];
     if (Account?.signedIn) {
       // пароль аккаунта и есть мастер-пароль: меняются вместе, иначе вход и сейф разойдутся
-      kids.push(this.wButton("Сменить пароль аккаунта и сейфа", "ghost", () => this.accountDialog("change")));
+      kids.push(this.wButton(tt`Сменить пароль аккаунта и сейфа`, "ghost", () => this.accountDialog("change")));
     } else if (Vault.hasPassword) {
-      kids.push(this.wButton("Сменить мастер-пароль", "ghost", () => this.vaultPasswordSheet()));
+      kids.push(this.wButton(tt`Сменить мастер-пароль`, "ghost", () => this.vaultPasswordSheet()));
     } else {
-      kids.push(this.wButton("Задать мастер-пароль", "ghost", () => this.vaultOwnerCheck("Задать мастер-пароль", async () => this.vaultPasswordSheet())));
+      kids.push(this.wButton(tt`Задать мастер-пароль`, "ghost", () => this.vaultOwnerCheck(tt`Задать мастер-пароль`, async () => this.vaultPasswordSheet())));
     }
     if (Vault.hasPassword) {
-      const title = Vault.osUnlockEnabled ? "Спрашивать мастер-пароль при запуске" : "Открывать тихо через связку ключей";
+      const title = Vault.osUnlockEnabled ? tt`Спрашивать мастер-пароль при запуске` : tt`Открывать тихо через связку ключей`;
       kids.push(this.wButton(title, "ghost", () => this.vaultOwnerCheck(title, async () => {
         await Vault.setOsUnlock(!Vault.osUnlockEnabled);
-        this.notice(Vault.osUnlockEnabled ? "Сейф снова открывается тихо через связку ключей" : "Сейф будет спрашивать мастер-пароль при запуске");
+        this.notice(Vault.osUnlockEnabled ? tt`Сейф снова открывается тихо через связку ключей` : tt`Сейф будет спрашивать мастер-пароль при запуске`);
       })));
     }
     const rkAt = Vault.recoveryKeyCreatedAt;
-    kids.push(row("Ключ восстановления", rkAt ? `создан ${new Date(rkAt).toLocaleDateString("ru-RU")} · откроет сейф без мастер-пароля` : "не создан · забытый мастер-пароль не восстановить", rkAt ? "" : "muted"));
-    kids.push(this.wButton(rkAt ? "Создать новый ключ восстановления" : "Создать ключ восстановления", "ghost", () => this.vaultRecoveryCreateSheet()));
+    kids.push(row(tt`Ключ восстановления`, rkAt ? tt`создан ${new Date(rkAt).toLocaleDateString(ttLocale())} · откроет сейф без мастер-пароля` : tt`не создан · забытый мастер-пароль не восстановить`, rkAt ? "" : "muted"));
+    kids.push(this.wButton(rkAt ? tt`Создать новый ключ восстановления` : tt`Создать ключ восстановления`, "ghost", () => this.vaultRecoveryCreateSheet()));
     if (rkAt) {
-      kids.push(this.wButton("Отозвать ключ восстановления", "ghost", () => this.vaultOwnerCheck("Отзыв ключа восстановления", async password => {
-        this.notice("Меняем ключ сейфа и перешифровываем данные…");
+      kids.push(this.wButton(tt`Отозвать ключ восстановления`, "ghost", () => this.vaultOwnerCheck(tt`Отзыв ключа восстановления`, async password => {
+        this.notice(tt`Меняем ключ сейфа и перешифровываем данные…`);
         const r = await Vault.revokeRecoveryKey({ password });
         await this.vaultAccount()?.registerRecoveryKey(null);
-        this.notice(r.complete ? "Ключ восстановления отозван, ключ сейфа заменён" : "Ключ отозван; часть данных перешифруется при следующей разблокировке");
+        this.notice(r.complete ? tt`Ключ восстановления отозван, ключ сейфа заменён` : tt`Ключ отозван; часть данных перешифруется при следующей разблокировке`);
       })));
     }
     if (rkAt && Account?.signedIn && Account.recoveryNeedsUpgrade) {
       // на сервере лежит ключ проверки прежнего образца (общий секрет): заменить его открытым
       // ключом можно только с самим ключом восстановления, а он нигде не хранится
-      kids.push(row("Сброс пароля аккаунта", "защищён по прежней схеме · создайте новый ключ восстановления, чтобы сервер хранил только открытый ключ", "muted"));
+      kids.push(row(tt`Сброс пароля аккаунта`, tt`защищён по прежней схеме · создайте новый ключ восстановления, чтобы сервер хранил только открытый ключ`, "muted"));
     }
     if (Vault.rekeyPending) {
-      kids.push(row("Смена ключа", "не завершена · данные перешифруются при следующей разблокировке", "muted"));
+      kids.push(row(tt`Смена ключа`, tt`не завершена · данные перешифруются при следующей разблокировке`, "muted"));
     }
-    kids.push(this.wButton("Заблокировать сейф", "ghost", () => {
+    kids.push(this.wButton(tt`Заблокировать сейф`, "ghost", () => {
       Vault.lock();
-      this.notice(Vault.lockPending ? "Сейф заблокируется, как только закончится текущая операция с ключом" : "Сейф заблокирован: пароли сайтов и коды закрыты до проверки");
+      this.notice(Vault.lockPending ? tt`Сейф заблокируется, как только закончится текущая операция с ключом` : tt`Сейф заблокирован: пароли сайтов и коды закрыты до проверки`);
     }));
     const { Otp } = this.otpMod();
     const off = Otp.clockOffset;
     const checked = Otp.clockCheckedAt;
-    const clockText = !checked ? "не сверялось" : off ? `поправка ${off > 0 ? "+" : "−"}${Math.round(Math.abs(off) / 1000)} с · часы компьютера ${off > 0 ? "отстают" : "спешат"}` : "совпадает с сетью";
-    kids.push(row("Время для кодов", clockText, off ? "" : "muted"));
-    kids.push(this.wButton("Сверить время с сетью", "ghost", async () => {
+    const clockText = !checked ? tt`не сверялось` : off ? tt`поправка ${off > 0 ? "+" : "−"}${Math.round(Math.abs(off) / 1000)} с · часы компьютера ${off > 0 ? tt`отстают` : tt`спешат`}` : tt`совпадает с сетью`;
+    kids.push(row(tt`Время для кодов`, clockText, off ? "" : "muted"));
+    kids.push(this.wButton(tt`Сверить время с сетью`, "ghost", async () => {
       try {
         const r = await Otp.checkClock();
-        this.notice(r.applied ? `Часы расходятся на ${Math.round(r.offset / 1000)} с: коды считаются с поправкой` : "Время совпадает с сетью");
+        this.notice(r.applied ? tt`Часы расходятся на ${Math.round(r.offset / 1000)} с: коды считаются с поправкой` : tt`Время совпадает с сетью`);
       } catch (e) {
         this.notice(e.message);
       }
     }));
     // карточка свёрнута по умолчанию: заголовок с короткой сводкой, подробности по клику
     const brief = [
-      Vault.hasOsKey && Vault.osUnlockEnabled ? "открывается тихо" : "пароль при запуске",
-      Vault.hasPassword ? "мастер-пароль" : "без мастер-пароля",
-      rkAt ? "ключ восстановления" : "без ключа восстановления",
+      Vault.hasOsKey && Vault.osUnlockEnabled ? tt`открывается тихо` : tt`пароль при запуске`,
+      Vault.hasPassword ? tt`мастер-пароль` : tt`без мастер-пароля`,
+      rkAt ? tt`ключ восстановления` : tt`без ключа восстановления`,
     ].join(" · ");
     const summary = h("summary", { class: "v-card-head" }, null, [
-      h("b", { class: "w-group-title" }, "Сейф"),
+      h("b", { class: "w-group-title" }, tt`Сейф`),
       h("span", { class: "v-card-sub" }, brief),
       this.svg(["m6 9 6 6 6-6"], 14, 2.2),
     ]);
@@ -1609,18 +1609,18 @@ Object.assign(Tabora, {
 
   /** Пара полей пароля с повтором и оценкой стойкости; read() возвращает значение или бросает
    * ошибку. Слабый пароль не принимается (минимальная длина — 6 символов). */
-  vaultPasswordFields(label = "Мастер-пароль") {
+  vaultPasswordFields(label = tt`Мастер-пароль`) {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { Vault } = this.vaultMod();
-    const pass = this.wField(label, { type: "password", autocomplete: "new-password", placeholder: `не короче ${Vault.MIN_PASSWORD} символов` });
+    const pass = this.wField(label, { type: "password", autocomplete: "new-password", placeholder: tt`не короче ${Vault.MIN_PASSWORD} символов` });
     const meter = h("span", { class: "v-strength", "data-score": "0" }, "");
     pass.wrap.append(meter);
     pass.input.addEventListener("input", () => {
       const s = Vault.passwordStrength(pass.input.value);
       meter.dataset.score = String(s.score);
-      meter.textContent = pass.input.value ? `Стойкость: ${s.label}` : "";
+      meter.textContent = pass.input.value ? tt`Стойкость: ${s.label}` : "";
     });
-    const again = this.wField("Повторите", { type: "password", autocomplete: "new-password" });
+    const again = this.wField(tt`Повторите`, { type: "password", autocomplete: "new-password" });
     const read = ({ optional = false } = {}) => {
       const a = pass.input.value;
       const b = again.input.value;
@@ -1629,7 +1629,7 @@ Object.assign(Tabora, {
       }
       Vault.checkNewPassword(a);
       if (a !== b) {
-        throw new Error("Пароли не совпадают");
+        throw new Error(tt`Пароли не совпадают`);
       }
       return a;
     };
@@ -1639,7 +1639,7 @@ Object.assign(Tabora, {
   vaultSheet(title, text, body, okLabel, onOk) {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const err = h("div", { class: "w-error", hidden: "true" });
-    const cancel = this.wButton("Отмена", "ghost", () => box.remove());
+    const cancel = this.wButton(tt`Отмена`, "ghost", () => box.remove());
     const ok = this.wButton(okLabel, "primary", async () => {
       ok.disabled = true;
       err.hidden = true;
@@ -1679,8 +1679,8 @@ Object.assign(Tabora, {
   vaultOwnerCheck(title, onOk) {
     const { Vault } = this.vaultMod();
     if (Vault.hasPassword) {
-      const pass = this.wField("Мастер-пароль", { type: "password", autocomplete: "current-password" });
-      this.vaultSheet(title, "Подтвердите, что это вы.", [pass.wrap], "Продолжить", async () => {
+      const pass = this.wField(tt`Мастер-пароль`, { type: "password", autocomplete: "current-password" });
+      this.vaultSheet(title, tt`Подтвердите, что это вы.`, [pass.wrap], tt`Продолжить`, async () => {
         const password = pass.input.value;
         await Vault.verifyPassword(password);
         setTimeout(() => Promise.resolve(onOk(password)).catch(e => this.notice(e.message)), 0);
@@ -1691,7 +1691,7 @@ Object.assign(Tabora, {
       const { OSKeyStore } = ChromeUtils.importESModule("resource://gre/modules/OSKeyStore.sys.mjs");
       const r = await OSKeyStore.ensureLoggedIn(`Tabora: ${title}`, "", window).catch(() => ({ authenticated: false }));
       if (!r?.authenticated) {
-        this.notice("Подтверждение не пройдено");
+        this.notice(tt`Подтверждение не пройдено`);
         return;
       }
       await onOk(null);
@@ -1702,19 +1702,19 @@ Object.assign(Tabora, {
   vaultShowRecoveryKey(key, { replaced = false } = {}) {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const pre = h("pre", { class: "v-secret", masked: "true" }, key);
-    const reveal = this.wButton("Показать", "ghost small", () => {
+    const reveal = this.wButton(tt`Показать`, "ghost small", () => {
       pre.toggleAttribute("masked");
-      reveal.textContent = pre.hasAttribute("masked") ? "Показать" : "Скрыть";
+      reveal.textContent = pre.hasAttribute("masked") ? tt`Показать` : tt`Скрыть`;
     });
-    const copy = this.wButton("Скопировать", "ghost small", () => {
+    const copy = this.wButton(tt`Скопировать`, "ghost small", () => {
       this.copyWithExpiry(key, 60000);
-      this.notice("Ключ скопирован · буфер очистится через минуту");
+      this.notice(tt`Ключ скопирован · буфер очистится через минуту`);
     });
     const box = this.vaultSheet(
-      "Ключ восстановления",
-      `Запишите его и храните отдельно от компьютера. Он откроет сейф, если вы забудете мастер-пароль, и показывается только сейчас.${replaced ? " Ключ сейфа заменён: прежний ключ восстановления и старые копии файла сейфа больше ничего не открывают." : ""}`,
-      [pre, h("div", { class: "w-actions" }, null, [reveal, copy]), h("p", { class: "w-hint" }, "Кто знает этот ключ, сможет открыть сейф на любом компьютере.")],
-      "Я записал ключ",
+      tt`Ключ восстановления`,
+      tt`Запишите его и храните отдельно от компьютера. Он откроет сейф, если вы забудете мастер-пароль, и показывается только сейчас.${replaced ? tt` Ключ сейфа заменён: прежний ключ восстановления и старые копии файла сейфа больше ничего не открывают.` : ""}`,
+      [pre, h("div", { class: "w-actions" }, null, [reveal, copy]), h("p", { class: "w-hint" }, tt`Кто знает этот ключ, сможет открыть сейф на любом компьютере.`)],
+      tt`Я записал ключ`,
       async () => {}
     );
     box.classList.add("w-reveal");
@@ -1725,9 +1725,9 @@ Object.assign(Tabora, {
   vaultRecoveryCreateSheet() {
     const { Vault } = this.vaultMod();
     const replacing = Vault.hasRecoveryKey;
-    this.vaultOwnerCheck(replacing ? "Новый ключ восстановления" : "Ключ восстановления", async password => {
+    this.vaultOwnerCheck(replacing ? tt`Новый ключ восстановления` : tt`Ключ восстановления`, async password => {
       if (replacing) {
-        this.notice("Меняем ключ сейфа и перешифровываем данные…");
+        this.notice(tt`Меняем ключ сейфа и перешифровываем данные…`);
       }
       const Account = this.vaultAccount();
       const key = Account ? await Account.createRecoveryKey({ password }) : await Vault.createRecoveryKey({ password });
@@ -1743,10 +1743,10 @@ Object.assign(Tabora, {
       this.accountDialog("forgot");
       return;
     }
-    const key = this.wField("Ключ восстановления", { placeholder: "XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX", autocomplete: "off", spellcheck: "false" });
-    this.vaultSheet("Вход по ключу восстановления", "Введите ключ, записанный при настройке сейфа. После входа задайте новый мастер-пароль.", [key.wrap], "Открыть", async () => {
+    const key = this.wField(tt`Ключ восстановления`, { placeholder: "XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX", autocomplete: "off", spellcheck: "false" });
+    this.vaultSheet(tt`Вход по ключу восстановления`, tt`Введите ключ, записанный при настройке сейфа. После входа задайте новый мастер-пароль.`, [key.wrap], tt`Открыть@@сейф`, async () => {
       await Vault.unlockWithRecoveryKey(key.input.value);
-      this.notice("Сейф открыт ключом восстановления");
+      this.notice(tt`Сейф открыт ключом восстановления`);
       setTimeout(() => this.vaultPasswordSheet({ reset: true }), 400);
     });
   },
@@ -1754,27 +1754,27 @@ Object.assign(Tabora, {
   vaultCreateSheet({ migration = false } = {}) {
     const { Vault } = this.vaultMod();
     const h = (t, a, x, c) => this.html(t, a, x, c);
-    const f = this.vaultPasswordFields(migration ? "Мастер-пароль" : "Мастер-пароль (можно оставить пустым)");
+    const f = this.vaultPasswordFields(migration ? tt`Мастер-пароль` : tt`Мастер-пароль (можно оставить пустым)`);
     const askAtStart = h("input", { type: "checkbox" });
     askAtStart.checked = true;
     const body = [f.pass.wrap, f.again.wrap];
     if (migration) {
-      body.push(h("label", { class: "w-check" }, null, [askAtStart, h("span", {}, "Спрашивать мастер-пароль при запуске")]));
+      body.push(h("label", { class: "w-check" }, null, [askAtStart, h("span", {}, tt`Спрашивать мастер-пароль при запуске`)]));
     } else {
-      body.push(h("p", { class: "w-hint" }, "Забытый мастер-пароль восстановить нельзя: сейф откроется только на этом компьютере."));
+      body.push(h("p", { class: "w-hint" }, tt`Забытый мастер-пароль восстановить нельзя: сейф откроется только на этом компьютере.`));
     }
     this.vaultSheet(
-      "Создать сейф",
-      migration ? "Пароли сайтов в этом профиле были защищены основным паролем профиля. Чтобы они остались под паролем, задайте мастер-пароль сейфа: пароли перешифруются при следующем запуске, а пока работают по-старому." : "Ключ сейфа сохранится в связке ключей этого компьютера. Мастер-пароль нужен, чтобы открыть сейф на другом компьютере: его можно задать и позже.",
+      tt`Создать сейф`,
+      migration ? tt`Пароли сайтов в этом профиле были защищены основным паролем профиля. Чтобы они остались под паролем, задайте мастер-пароль сейфа: пароли перешифруются при следующем запуске, а пока работают по-старому.` : tt`Ключ сейфа сохранится в связке ключей этого компьютера. Мастер-пароль нужен, чтобы открыть сейф на другом компьютере: его можно задать и позже.`,
       body,
-      "Создать",
+      tt`Создать`,
       async () => {
         const password = f.read({ optional: !migration });
         await Vault.create({ password });
         if (migration && askAtStart.checked) {
           await Vault.setOsUnlock(false);
         }
-        this.notice(password ? "Сейф создан, мастер-пароль задан" : "Сейф создан");
+        this.notice(password ? tt`Сейф создан, мастер-пароль задан` : tt`Сейф создан`);
       }
     );
   },
@@ -1785,32 +1785,32 @@ Object.assign(Tabora, {
     const { Vault } = this.vaultMod();
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const change = Vault.hasPassword && !reset;
-    const old = change ? this.wField("Текущий мастер-пароль", { type: "password", autocomplete: "current-password" }) : null;
-    const f = this.vaultPasswordFields(change ? "Новый мастер-пароль" : "Мастер-пароль");
+    const old = change ? this.wField(tt`Текущий мастер-пароль`, { type: "password", autocomplete: "current-password" }) : null;
+    const f = this.vaultPasswordFields(change ? tt`Новый мастер-пароль` : tt`Мастер-пароль`);
     const rotate = h("input", { type: "checkbox" });
     const askAtStart = h("input", { type: "checkbox" });
     askAtStart.checked = true;
     const body = [old?.wrap, f.pass.wrap, f.again.wrap];
     if (change) {
-      body.push(h("label", { class: "w-check" }, null, [rotate, h("span", {}, "Сменить и ключ шифрования сейфа (если пароль мог узнать кто-то ещё)")]));
+      body.push(h("label", { class: "w-check" }, null, [rotate, h("span", {}, tt`Сменить и ключ шифрования сейфа (если пароль мог узнать кто-то ещё)`)]));
     }
     if (migration) {
-      body.push(h("label", { class: "w-check" }, null, [askAtStart, h("span", {}, "Спрашивать мастер-пароль при запуске")]));
+      body.push(h("label", { class: "w-check" }, null, [askAtStart, h("span", {}, tt`Спрашивать мастер-пароль при запуске`)]));
     }
     const text = change ? null
-      : reset ? "Сейф открыт ключом восстановления. Задайте новый мастер-пароль: старый больше не действует."
-      : migration ? "Пароли сайтов в этом профиле были защищены основным паролем профиля. Чтобы они остались под паролем, задайте мастер-пароль сейфа: пароли перешифруются при следующем запуске."
-      : "С мастер-паролем файл сейфа можно перенести на другой компьютер. Забытый пароль восстановить нельзя.";
+      : reset ? tt`Сейф открыт ключом восстановления. Задайте новый мастер-пароль: старый больше не действует.`
+      : migration ? tt`Пароли сайтов в этом профиле были защищены основным паролем профиля. Чтобы они остались под паролем, задайте мастер-пароль сейфа: пароли перешифруются при следующем запуске.`
+      : tt`С мастер-паролем файл сейфа можно перенести на другой компьютер. Забытый пароль восстановить нельзя.`;
     this.vaultSheet(
-      change ? "Сменить мастер-пароль" : reset ? "Новый мастер-пароль" : "Задать мастер-пароль",
+      change ? tt`Сменить мастер-пароль` : reset ? tt`Новый мастер-пароль` : tt`Задать мастер-пароль`,
       text,
       body.filter(Boolean),
-      "Сохранить",
+      tt`Сохранить`,
       async () => {
         const password = f.read();
         if (change) {
           if (rotate.checked) {
-            this.notice("Меняем ключ сейфа и перешифровываем данные…");
+            this.notice(tt`Меняем ключ сейфа и перешифровываем данные…`);
           }
           const r = await Vault.changePassword(old.input.value, password, { rotate: rotate.checked });
           if (r.recoveryKey) {
@@ -1826,7 +1826,7 @@ Object.assign(Tabora, {
             await Vault.setOsUnlock(false);
           }
         }
-        this.notice("Мастер-пароль сохранён");
+        this.notice(tt`Мастер-пароль сохранён`);
       }
     );
   },
@@ -1842,7 +1842,7 @@ setTimeout(() => {
   }
 }, 1000);
 
-Tabora.SECTIONS.codes = { label: "Коды", key: "⌘⇧K", search: "Поиск по кодам", icon: ["M4 7h16v10H4z", "M8 12h.01", "M12 12h.01", "M16 12h.01"], wide: false };
+Tabora.SECTIONS.codes = { label: tt`Коды`, key: "⌘⇧K", search: tt`Поиск по кодам`, icon: ["M4 7h16v10H4z", "M8 12h.01", "M12 12h.01", "M16 12h.01"], wide: false };
 if (!Tabora.SECTION_ORDER.includes("codes")) {
   const at = Tabora.SECTION_ORDER.indexOf("wallet");
   Tabora.SECTION_ORDER.splice(at >= 0 ? at + 1 : 1, 0, "codes");

@@ -24,12 +24,12 @@ Object.assign(Tabora, {
   // page — раздел без панели: имя метода, который открывает его страницу во вкладке (и возвращает
   // с неё), current — стоит ли страница перед глазами; badge — у раздела есть счётчик событий
   SECTIONS: {
-    mail: { label: "Почта", key: "⌘⇧M", icon: ["M3.5 6.5h17v11h-17z", "M3.5 7l8.5 6 8.5-6"], page: "toggleMail", current: () => Tabora.isMailUrl(gBrowser.selectedBrowser?.currentURI?.spec), badge: "mail" },
-    downloads: { label: "Загрузки", key: "⌘⇧J", icon: ["M12 4v11", "M7 10l5 5 5-5", "M4 19h16"], search: "Имя файла или сайт", full: "Открыть страницу загрузок", badge: "downloads" },
-    history: { label: "История", key: "⌘⇧H", icon: ["M12 7v5l3 2", "M3.5 12a8.5 8.5 0 1 0 2.5-6", "M3 4v4h4"], search: "Поиск в истории" },
-    media: { label: "Медиа", key: "⌘⇧I", icon: ["M4 5h16v14H4z", "M4 15l5-5 4 4 3-3 4 4", "M15.5 9.5h.01"], search: "Поиск по медиа" },
-    spaces: { label: "Пространства", short: "Простран\u00adства", key: "⌘⇧S", icon: ["M8 8h12v12H8z", "M4 4h12v12", "M4 4v12h12"], wide: true },
-    bookmarks: { label: "Закладки", key: "⌘⇧B", icon: ["M6 4h12v16l-6-4-6 4z"], search: "Поиск по закладкам" },
+    mail: { label: tt`Почта`, key: "⌘⇧M", icon: ["M3.5 6.5h17v11h-17z", "M3.5 7l8.5 6 8.5-6"], page: "toggleMail", current: () => Tabora.isMailUrl(gBrowser.selectedBrowser?.currentURI?.spec), badge: "mail" },
+    downloads: { label: tt`Загрузки`, key: "⌘⇧J", icon: ["M12 4v11", "M7 10l5 5 5-5", "M4 19h16"], search: tt`Имя файла или сайт`, full: tt`Открыть страницу загрузок`, badge: "downloads" },
+    history: { label: tt`История`, key: "⌘⇧H", icon: ["M12 7v5l3 2", "M3.5 12a8.5 8.5 0 1 0 2.5-6", "M3 4v4h4"], search: tt`Поиск в истории` },
+    media: { label: tt`Медиа`, key: "⌘⇧I", icon: ["M4 5h16v14H4z", "M4 15l5-5 4 4 3-3 4 4", "M15.5 9.5h.01"], search: tt`Поиск по медиа` },
+    spaces: { label: tt`Пространства`, short: tt`Простран­ства`, key: "⌘⇧S", icon: ["M8 8h12v12H8z", "M4 4h12v12", "M4 4v12h12"], wide: true },
+    bookmarks: { label: tt`Закладки`, key: "⌘⇧B", icon: ["M6 4h12v16l-6-4-6 4z"], search: tt`Поиск по закладкам` },
   },
   SECTION_ORDER: ["mail", "downloads", "history", "media", "spaces", "bookmarks"],
 
@@ -45,12 +45,12 @@ Object.assign(Tabora, {
       d.section = "downloads";
     }
 
-    const rail = h("nav", { class: "rail", "aria-label": "Разделы" }, null, [
+    const rail = h("nav", { class: "rail", "aria-label": tt`Разделы` }, null, [
       h("div", { class: "rail-items", id: "tabora-rail-items" }),
       h("div", { class: "rail-foot" }, null, [
-        this.iconButton("tabora-rail-back", "Готово", ["M19 12H5", "m11 6-6 6 6 6"], () => this.setDrawerEditing(false)),
-        this.iconButton("tabora-rail-pin", "Закрепить рейку", ["M12 17v5", "M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.8a2 2 0 0 0-1.1-1.8l-1.8-.9a2 2 0 0 1-1.1-1.8V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"], () => this.setRailPinned(!this.railPinned())),
-        this.iconButton("tabora-rail-edit", "Настроить разделы", ["M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z", "M13.5 6.5l3 3"], () => this.setDrawerEditing(!d.editing)),
+        this.iconButton("tabora-rail-back", tt`Готово`, ["M19 12H5", "m11 6-6 6 6 6"], () => this.setDrawerEditing(false)),
+        this.iconButton("tabora-rail-pin", tt`Закрепить рейку`, ["M12 17v5", "M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.8a2 2 0 0 0-1.1-1.8l-1.8-.9a2 2 0 0 1-1.1-1.8V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"], () => this.setRailPinned(!this.railPinned())),
+        this.iconButton("tabora-rail-edit", tt`Настроить разделы`, ["M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z", "M13.5 6.5l3 3"], () => this.setDrawerEditing(!d.editing)),
       ]),
     ]);
     rail.addEventListener("keydown", e => {
@@ -66,21 +66,21 @@ Object.assign(Tabora, {
 
     const search = h("div", { class: "dsearch" }, null, [
       this.svg(["M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z", "M20 20l-4-4"], 15, 2),
-      h("input", { id: "tabora-drawer-search", type: "search", autocomplete: "off", placeholder: "Поиск" }),
+      h("input", { id: "tabora-drawer-search", type: "search", autocomplete: "off", placeholder: tt`Поиск` }),
       h("kbd", {}, "/"),
     ]);
     const filterBtn = h("button", { class: "dfilter", id: "tabora-drawer-filter", type: "button", "aria-pressed": "false" }, null, [
       this.svg(["M4 6h16", "M7 12h10", "M10 18h4"], 14, 2),
-      h("span", {}, "Фильтр"),
+      h("span", {}, tt`Фильтр`),
     ]);
-    const close = this.iconButton("tabora-drawer-close", "Закрыть (Esc)", ["M6 6l12 12", "M18 6 6 18"], () => this.closeDrawer());
+    const close = this.iconButton("tabora-drawer-close", tt`Закрыть (Esc)`, ["M6 6l12 12", "M18 6 6 18"], () => this.closeDrawer());
     const head = h("header", { class: "dhead" }, null, [search, filterBtn, close]);
     const chips = h("div", { class: "dchips", id: "tabora-drawer-chips", hidden: "true" });
     const body = h("div", { class: "dbody", id: "tabora-drawer-body" });
     const foot = h("footer", { class: "dfoot", id: "tabora-drawer-foot", hidden: "true" });
     const panel = h("section", { class: "dpanel" }, null, [head, chips, body, foot]);
     const inner = h("div", { class: "inner" }, null, [rail, panel]);
-    const el = h("div", { id: "tabora-drawer", role: "complementary", "aria-label": "Ящик" }, null, [inner]);
+    const el = h("div", { id: "tabora-drawer", role: "complementary", "aria-label": tt`Ящик` }, null, [inner]);
 
     const toolbox = document.getElementById("navigator-toolbox");
     toolbox.after(el);
@@ -278,7 +278,7 @@ Object.assign(Tabora, {
           });
         }
       }
-      const ctl = this.html("span", { class: "rail-ctl", title: isHidden ? "Вернуть раздел" : "Убрать раздел" }, null, [
+      const ctl = this.html("span", { class: "rail-ctl", title: isHidden ? tt`Вернуть раздел` : tt`Убрать раздел` }, null, [
         this.svg(isHidden ? ["M12 5v14", "M5 12h14"] : ["M6 6l12 12", "M18 6 6 18"], 11, 2.4),
       ]);
       ctl.addEventListener("click", e => {
@@ -376,16 +376,16 @@ Object.assign(Tabora, {
     if (button) {
       const parts = [];
       if (b.mail) {
-        parts.push(`${b.mail} ${this.plural(b.mail, "новое письмо", "новых письма", "новых писем")}`);
+        parts.push(`${b.mail} ${this.plural(b.mail, tt`новое письмо|новых письма|новых писем`)}`);
       }
       if (b.wallet) {
-        parts.push(`${b.wallet} ${this.plural(b.wallet, "поступление", "поступления", "поступлений")} в кошелёк`);
+        parts.push(tt`${b.wallet} ${this.plural(b.wallet, tt`поступление|поступления|поступлений`)} в кошелёк`);
       }
       if (b.downloads) {
-        parts.push(`${b.downloads} ${this.plural(b.downloads, "загрузка", "загрузки", "загрузок")}${b.active && b.progress !== null ? `, ${b.progress}%` : ""}`);
+        parts.push(`${b.downloads} ${this.plural(b.downloads, tt`загрузка|загрузки|загрузок`)}${b.active && b.progress !== null ? `, ${b.progress}%` : ""}`);
       }
       button.dataset.note = parts.join(" · ");
-      button.title = parts.length ? `Разделы: ${parts.join(" · ")}` : "Разделы";
+      button.title = parts.length ? tt`Разделы: ${parts.join(" · ")}` : tt`Разделы`;
     }
     this.syncMailTabs?.();
   },
@@ -416,7 +416,7 @@ Object.assign(Tabora, {
     document.documentElement.toggleAttribute("tabora-rail-held", held);
     const pin = document.getElementById("tabora-rail-pin");
     if (pin) {
-      const title = this.railPinned() ? "Открепить рейку" : "Закрепить рейку";
+      const title = this.railPinned() ? tt`Открепить рейку` : tt`Закрепить рейку`;
       pin.title = title;
       pin.setAttribute("aria-label", title);
       pin.setAttribute("aria-pressed", String(this.railPinned()));
@@ -719,7 +719,7 @@ Object.assign(Tabora, {
       this.downloadsSeen?.();
     }
     const input = document.getElementById("tabora-drawer-search");
-    input.placeholder = s.search || "Поиск";
+    input.placeholder = s.search || tt`Поиск`;
     panel.querySelector(".dhead").hidden = !!s.wide || !!s.noSearch;
     panel.querySelector(".dchips").hidden = true;
     const foot = document.getElementById("tabora-drawer-foot");
@@ -734,7 +734,7 @@ Object.assign(Tabora, {
       await render.call(this, seq);
     } catch (e) {
       console.error("Tabora drawer", d.section, e);
-      d.body.replaceChildren(this.drawerEmpty("Не удалось загрузить раздел", String(e.message || e)));
+      d.body.replaceChildren(this.drawerEmpty(tt`Не удалось загрузить раздел`, String(e.message || e)));
     }
   },
 
@@ -772,19 +772,19 @@ Object.assign(Tabora, {
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const t = date.getTime();
     if (t >= start) {
-      return "Сегодня";
+      return tt`Сегодня`;
     }
     if (t >= start - 86400000) {
-      return "Вчера";
+      return tt`Вчера`;
     }
     if (t >= start - 6 * 86400000) {
-      return date.toLocaleDateString("ru-RU", { weekday: "long" });
+      return date.toLocaleDateString(ttLocale(), { weekday: "long" });
     }
-    return date.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+    return date.toLocaleDateString(ttLocale(), { day: "numeric", month: "long" });
   },
 
   timeLabel(date) {
-    return date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+    return date.toLocaleTimeString(ttLocale(), { hour: "2-digit", minute: "2-digit" });
   },
 
   favicon(url) {
@@ -855,7 +855,7 @@ Object.assign(Tabora, {
     if (seq !== d.seq) {
       return;
     }
-    this.drawerChips([["all", "Все"], ["active", "Идут"], ["done", "Готовые"], ["failed", "С ошибкой"]], d.filter, id => {
+    this.drawerChips([["all", tt`Все`], ["active", tt`Идут`], ["done", tt`Готовые`], ["failed", tt`С ошибкой`]], d.filter, id => {
       d.filter = id;
       this.renderDrawer();
     });
@@ -876,7 +876,7 @@ Object.assign(Tabora, {
     });
     const frag = document.createDocumentFragment();
     if (!list.length) {
-      frag.append(this.drawerEmpty(d.query ? "Ничего не найдено" : "Пока ничего не скачано", d.query ? "" : "Файлы появятся здесь сразу, как начнётся загрузка"));
+      frag.append(this.drawerEmpty(d.query ? tt`Ничего не найдено` : tt`Пока ничего не скачано`, d.query ? "" : tt`Файлы появятся здесь сразу, как начнётся загрузка`));
     }
     let lastDay = "";
     for (const dl of list) {
@@ -893,26 +893,26 @@ Object.assign(Tabora, {
       let sub;
       if (st === "active") {
         const pct = dl.hasProgress ? `${Math.round(dl.progress)}%` : "";
-        sub = [this.html("span", { class: "dprog" }, null, [this.html("span", { style: `width:${dl.hasProgress ? dl.progress : 100}%` })]), this.html("span", { class: "mono" }, `${pct}${dl.speed ? ` · ${this.fmtBytes(dl.speed)}/с` : ""}`)];
+        sub = [this.html("span", { class: "dprog" }, null, [this.html("span", { style: `width:${dl.hasProgress ? dl.progress : 100}%` })]), this.html("span", { class: "mono" }, `${pct}${dl.speed ? tt` · ${this.fmtBytes(dl.speed)}/с` : ""}`)];
       } else if (st === "paused") {
-        sub = [this.html("span", { class: "mono" }, `на паузе · ${this.fmtBytes(dl.currentBytes)}`)];
+        sub = [this.html("span", { class: "mono" }, tt`на паузе · ${this.fmtBytes(dl.currentBytes)}`)];
       } else if (st === "failed") {
-        sub = [this.html("span", { class: "warn" }, dl.error ? "ошибка загрузки" : "отменено")];
+        sub = [this.html("span", { class: "warn" }, dl.error ? tt`ошибка загрузки` : tt`отменено`)];
       } else {
         sub = [this.html("span", { class: "mono" }, this.fmtBytes(dl.target.size || dl.currentBytes)), this.html("span", { class: "dot" }, "·"), this.html("span", {}, host)];
       }
       const actions = [];
       if (st === "active") {
-        actions.push({ title: "Пауза", icon: ["M8 5v14", "M16 5v14"], run: () => dl.cancel() });
-        actions.push({ title: "Отменить", icon: ["M6 6l12 12", "M18 6 6 18"], danger: true, run: () => dl.cancel().then(() => dl.removePartialData()).then(() => this._dl.list.remove(dl)) });
+        actions.push({ title: tt`Пауза`, icon: ["M8 5v14", "M16 5v14"], run: () => dl.cancel() });
+        actions.push({ title: tt`Отменить`, icon: ["M6 6l12 12", "M18 6 6 18"], danger: true, run: () => dl.cancel().then(() => dl.removePartialData()).then(() => this._dl.list.remove(dl)) });
       } else if (st === "paused") {
-        actions.push({ title: "Продолжить", icon: ["M7 5v14l12-7z"], run: () => dl.start() });
+        actions.push({ title: tt`Продолжить`, icon: ["M7 5v14l12-7z"], run: () => dl.start() });
       } else if (st === "done") {
-        actions.push({ title: "Показать в Finder", icon: ["M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"], run: () => dl.showContainingDirectory() });
-        actions.push({ title: "Убрать из списка", icon: ["M6 6l12 12", "M18 6 6 18"], run: () => this._dl.list.remove(dl).then(() => this.drawerDirty("downloads")) });
+        actions.push({ title: tt`Показать в Finder`, icon: ["M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"], run: () => dl.showContainingDirectory() });
+        actions.push({ title: tt`Убрать из списка`, icon: ["M6 6l12 12", "M18 6 6 18"], run: () => this._dl.list.remove(dl).then(() => this.drawerDirty("downloads")) });
       } else {
-        actions.push({ title: "Повторить", icon: ["M20 12a8 8 0 1 1-2.3-5.7", "M20 4v5h-5"], run: () => dl.start().catch(() => {}) });
-        actions.push({ title: "Убрать из списка", icon: ["M6 6l12 12", "M18 6 6 18"], run: () => this._dl.list.remove(dl).then(() => this.drawerDirty("downloads")) });
+        actions.push({ title: tt`Повторить`, icon: ["M20 12a8 8 0 1 1-2.3-5.7", "M20 4v5h-5"], run: () => dl.start().catch(() => {}) });
+        actions.push({ title: tt`Убрать из списка`, icon: ["M6 6l12 12", "M18 6 6 18"], run: () => this._dl.list.remove(dl).then(() => this.drawerDirty("downloads")) });
       }
       frag.append(
         this.rowNode({
@@ -927,11 +927,11 @@ Object.assign(Tabora, {
             }
           },
           onContext: () => [
-            { label: "Открыть", disabled: st !== "done", run: () => dl.launch().catch(() => {}) },
-            { label: "Показать в Finder", disabled: st !== "done", run: () => dl.showContainingDirectory() },
-            { label: "Копировать ссылку", run: () => this.copyText(dl.source.url, "Ссылка скопирована") },
+            { label: tt`Открыть`, disabled: st !== "done", run: () => dl.launch().catch(() => {}) },
+            { label: tt`Показать в Finder`, disabled: st !== "done", run: () => dl.showContainingDirectory() },
+            { label: tt`Копировать ссылку`, run: () => this.copyText(dl.source.url, tt`Ссылка скопирована`) },
             { separator: true },
-            { label: "Убрать из списка", run: () => this._dl.list.remove(dl).then(() => this.drawerDirty("downloads")) },
+            { label: tt`Убрать из списка`, run: () => this._dl.list.remove(dl).then(() => this.drawerDirty("downloads")) },
           ],
           draggable: e => {
             if (st !== "done") {
@@ -957,7 +957,7 @@ Object.assign(Tabora, {
 
   async drawer_history(seq) {
     const d = this.drawer;
-    this.drawerChips([["all", "Всё"], ["today", "Сегодня"], ["week", "Неделя"]], d.filter, id => {
+    this.drawerChips([["all", tt`Всё`], ["today", tt`Сегодня`], ["week", tt`Неделя`]], d.filter, id => {
       d.filter = id;
       this.renderDrawer();
     });
@@ -997,7 +997,7 @@ Object.assign(Tabora, {
     }
     const frag = document.createDocumentFragment();
     if (!items.length) {
-      frag.append(this.drawerEmpty(d.query ? "Ничего не найдено" : "История пуста", d.query ? "" : "Посещённые страницы появятся здесь"));
+      frag.append(this.drawerEmpty(d.query ? tt`Ничего не найдено` : tt`История пуста`, d.query ? "" : tt`Посещённые страницы появятся здесь`));
     }
     let lastDay = "";
     for (const it of items) {
@@ -1012,23 +1012,23 @@ Object.assign(Tabora, {
         sub: this.hostOf(it.url) + (new URL(it.url).pathname.length > 1 ? new URL(it.url).pathname.replace(/\/$/, "") : ""),
         meta: this.timeLabel(it.time),
         actions: [
-          { title: "Удалить из истории", icon: ["M4 7h16", "M10 11v6M14 11v6", "M6 7l1 13h10l1-13", "M9 7V4h6v3"], danger: true, run: async () => {
+          { title: tt`Удалить из истории`, icon: ["M4 7h16", "M10 11v6M14 11v6", "M6 7l1 13h10l1-13", "M9 7V4h6v3"], danger: true, run: async () => {
             await PlacesUtils.history.remove(it.url);
             row.remove();
           } },
-          { title: "Открыть в новой вкладке", icon: ["M14 4h6v6", "M20 4l-9 9", "M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"], run: () => this.openInSpace(it.url, true) },
+          { title: tt`Открыть в новой вкладке`, icon: ["M14 4h6v6", "M20 4l-9 9", "M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"], run: () => this.openInSpace(it.url, true) },
         ],
         onClick: () => this.openInSpace(it.url, false),
         onContext: () => [
-          { label: "Открыть", run: () => this.openInSpace(it.url, false) },
-          { label: "Открыть в новой вкладке", run: () => this.openInSpace(it.url, true) },
-          { label: "Копировать ссылку", run: () => this.copyText(it.url, "Ссылка скопирована") },
+          { label: tt`Открыть`, run: () => this.openInSpace(it.url, false) },
+          { label: tt`Открыть в новой вкладке`, run: () => this.openInSpace(it.url, true) },
+          { label: tt`Копировать ссылку`, run: () => this.copyText(it.url, tt`Ссылка скопирована`) },
           { separator: true },
-          { label: "Удалить из истории", danger: true, run: async () => {
+          { label: tt`Удалить из истории`, danger: true, run: async () => {
             await PlacesUtils.history.remove(it.url);
             row.remove();
           } },
-          { label: "Забыть этот сайт", danger: true, run: async () => {
+          { label: tt`Забыть этот сайт`, danger: true, run: async () => {
             const { ForgetAboutSite } = ChromeUtils.importESModule("resource://gre/modules/ForgetAboutSite.sys.mjs");
             await ForgetAboutSite.removeDataFromBaseDomain(this.hostOf(it.url));
             this.drawerDirty("history");
@@ -1043,11 +1043,11 @@ Object.assign(Tabora, {
       frag.append(row);
     }
     d.body.replaceChildren(frag);
-    this.drawerFoot("Удалить историю за сегодня", async () => {
+    this.drawerFoot(tt`Удалить историю за сегодня`, async () => {
       const start = new Date();
       start.setHours(0, 0, 0, 0);
       await PlacesUtils.history.removeByFilter({ beginDate: start, endDate: new Date() });
-      this.notice("История за сегодня удалена");
+      this.notice(tt`История за сегодня удалена`);
       this.renderDrawer();
     }, ["M4 7h16", "M10 11v6M14 11v6", "M6 7l1 13h10l1-13", "M9 7V4h6v3"]);
   },
@@ -1113,7 +1113,7 @@ Object.assign(Tabora, {
   openMediaUrl(it) {
     const url = this.mediaWebUrl(it?.src);
     if (!url || !it.principal?.isContentPrincipal) {
-      this.notice("Этот адрес нельзя открыть");
+      this.notice(tt`Этот адрес нельзя открыть`);
       return;
     }
     gBrowser.selectedTab = gBrowser.addTab(url, {
@@ -1126,12 +1126,12 @@ Object.assign(Tabora, {
 
   async drawer_media(seq) {
     const d = this.drawer;
-    this.drawerChips([["all", "Всё"], ["image", "Картинки"], ["video", "Видео"], ["current", "Эта вкладка"]], d.filter, id => {
+    this.drawerChips([["all", tt`Всё`], ["image", tt`Картинки`], ["video", tt`Видео`], ["current", tt`Эта вкладка`]], d.filter, id => {
       d.filter = id;
       this.renderDrawer();
     });
     if (!d.cache.media) {
-      d.body.replaceChildren(this.drawerEmpty("Собираем медиа…", "Со всех вкладок текущего пространства"));
+      d.body.replaceChildren(this.drawerEmpty(tt`Собираем медиа…`, tt`Со всех вкладок текущего пространства`));
       const space = this.activeSpace();
       const tabs = gBrowser.tabs.filter(t => !t.closing && !t.hasAttribute("pending") && (t.pinned || this.contextOf(t) === space.userContextId));
       const results = await Promise.all(
@@ -1169,7 +1169,7 @@ Object.assign(Tabora, {
     });
     const frag = document.createDocumentFragment();
     if (!items.length) {
-      frag.append(this.drawerEmpty(d.query ? "Ничего не найдено" : "Медиа не найдено", "Откройте страницы с картинками или видео в этом пространстве"));
+      frag.append(this.drawerEmpty(d.query ? tt`Ничего не найдено` : tt`Медиа не найдено`, tt`Откройте страницы с картинками или видео в этом пространстве`));
     }
     const grid = this.html("div", { class: "dgrid" });
     for (const it of items) {
@@ -1180,7 +1180,7 @@ Object.assign(Tabora, {
       const tile = this.html("button", { class: "dtile", type: "button", title: `${it.alt || it.title}\n${this.hostOf(it.page)}${it.w ? ` · ${it.w}×${it.h}` : ""}` }, null, [
         img,
         it.kind === "video" ? this.html("span", { class: "play" }, null, [this.svg(["M8 5v14l11-7z"], 14, 2)]) : this.html("span"),
-        this.html("span", { class: "dtile-meta" }, null, [this.favicon(it.page), this.html("span", {}, it.w ? `${it.w}×${it.h}` : it.kind === "video" ? "видео" : "")]),
+        this.html("span", { class: "dtile-meta" }, null, [this.favicon(it.page), this.html("span", {}, it.w ? `${it.w}×${it.h}` : it.kind === "video" ? tt`видео` : "")]),
       ]);
       img.addEventListener("error", () => tile.remove());
       tile.draggable = true;
@@ -1190,11 +1190,11 @@ Object.assign(Tabora, {
         e.dataTransfer.effectAllowed = "copy";
       });
       const menu = () => [
-        { label: "Открыть в новой вкладке", run: () => this.openMediaUrl(it) },
-        { label: "Сохранить файл…", run: () => this.saveMedia(it) },
-        { label: "Копировать ссылку", run: () => this.copyText(it.src, "Ссылка скопирована") },
+        { label: tt`Открыть в новой вкладке`, run: () => this.openMediaUrl(it) },
+        { label: tt`Сохранить файл…`, run: () => this.saveMedia(it) },
+        { label: tt`Копировать ссылку`, run: () => this.copyText(it.src, tt`Ссылка скопирована`) },
         { separator: true },
-        { label: "К странице-источнику", hint: this.hostOf(it.page), disabled: it.tab.closing || !it.tab.parentNode, run: () => { gBrowser.selectedTab = it.tab; } },
+        { label: tt`К странице-источнику`, hint: this.hostOf(it.page), disabled: it.tab.closing || !it.tab.parentNode, run: () => { gBrowser.selectedTab = it.tab; } },
       ];
       tile.addEventListener("click", () => this.openMediaUrl(it));
       tile.addEventListener("contextmenu", e => {
@@ -1205,7 +1205,7 @@ Object.assign(Tabora, {
     }
     frag.append(grid);
     d.body.replaceChildren(frag);
-    const refresh = this.html("button", { class: "dfull", type: "button" }, null, [this.html("span", {}, `Обновить · ${items.length}`), this.svg(["M20 12a8 8 0 1 1-2.3-5.7", "M20 4v5h-5"], 14, 2)]);
+    const refresh = this.html("button", { class: "dfull", type: "button" }, null, [this.html("span", {}, tt`Обновить · ${items.length}`), this.svg(["M20 12a8 8 0 1 1-2.3-5.7", "M20 4v5h-5"], 14, 2)]);
     refresh.addEventListener("click", () => {
       delete d.cache.media;
       this.renderDrawer();
@@ -1219,7 +1219,7 @@ Object.assign(Tabora, {
   saveMedia(it) {
     const url = this.mediaWebUrl(it?.src);
     if (!url || !it.principal?.isContentPrincipal) {
-      this.notice("Этот файл нельзя сохранить");
+      this.notice(tt`Этот файл нельзя сохранить`);
       return;
     }
     try {
@@ -1244,13 +1244,13 @@ Object.assign(Tabora, {
     const frag = document.createDocumentFragment();
     const cur = gBrowser.selectedBrowser.currentURI.spec;
     const canAdd = /^https?:/.test(cur);
-    const add = this.html("button", { class: "dprimary", type: "button", disabled: canAdd ? null : "true" }, null, [this.svg(["M12 5v14", "M5 12h14"], 14, 2.4), this.html("span", {}, "Добавить текущую")]);
+    const add = this.html("button", { class: "dprimary", type: "button", disabled: canAdd ? null : "true" }, null, [this.svg(["M12 5v14", "M5 12h14"], 14, 2.4), this.html("span", {}, tt`Добавить текущую`)]);
     if (!canAdd) {
       add.disabled = true;
     }
     add.addEventListener("click", async () => {
       await PlacesUtils.bookmarks.insert({ parentGuid: PlacesUtils.bookmarks.toolbarGuid, url: cur, title: gBrowser.selectedTab.label });
-      this.notice("Добавлено в закладки");
+      this.notice(tt`Добавлено в закладки`);
       this.renderDrawer();
     });
     frag.append(this.html("div", { class: "dtoolbar" }, null, [add]));
@@ -1261,7 +1261,7 @@ Object.assign(Tabora, {
         return;
       }
       if (!found.length) {
-        frag.append(this.drawerEmpty("Ничего не найдено", ""));
+        frag.append(this.drawerEmpty(tt`Ничего не найдено`, ""));
       }
       for (const b of found.slice(0, 100)) {
         if (!b.url) {
@@ -1274,10 +1274,10 @@ Object.assign(Tabora, {
     }
 
     const roots = [
-      [PlacesUtils.bookmarks.toolbarGuid, "Панель закладок"],
-      [PlacesUtils.bookmarks.menuGuid, "Меню закладок"],
-      [PlacesUtils.bookmarks.unfiledGuid, "Другие"],
-      [PlacesUtils.bookmarks.mobileGuid, "С телефона"],
+      [PlacesUtils.bookmarks.toolbarGuid, tt`Панель закладок`],
+      [PlacesUtils.bookmarks.menuGuid, tt`Меню закладок`],
+      [PlacesUtils.bookmarks.unfiledGuid, tt`Другие`],
+      [PlacesUtils.bookmarks.mobileGuid, tt`С телефона`],
     ];
     let total = 0;
     for (const [guid, label] of roots) {
@@ -1298,7 +1298,7 @@ Object.assign(Tabora, {
       return;
     }
     if (!total) {
-      frag.append(this.drawerEmpty("Закладок пока нет", "Нажмите «Добавить текущую» или ⌘D на любой странице"));
+      frag.append(this.drawerEmpty(tt`Закладок пока нет`, tt`Нажмите «Добавить текущую» или ⌘D на любой странице`));
     }
     d.body.replaceChildren(frag);
   },
@@ -1317,7 +1317,7 @@ Object.assign(Tabora, {
         const head = this.html("button", { class: "dfolder", type: "button", "aria-expanded": String(open) }, null, [
           this.svg(["m9 6 6 6-6 6"], 12, 2.4),
           this.svg(["M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"], 15, 1.8),
-          this.html("span", {}, c.title || "Папка"),
+          this.html("span", {}, c.title || tt`Папка`),
           this.html("span", { class: "n" }, String(this.countBookmarks(c))),
         ]);
         const inner = this.bookmarkList(c.children || [], PlacesUtils, depth + 1);
@@ -1330,9 +1330,9 @@ Object.assign(Tabora, {
         head.addEventListener("contextmenu", e => {
           e.preventDefault();
           this.showMenu([
-            { label: "Открыть все во вкладках", hint: String(this.countBookmarks(c)), run: () => this.openAll(c) },
+            { label: tt`Открыть все во вкладках`, hint: String(this.countBookmarks(c)), run: () => this.openAll(c) },
             { separator: true },
-            { label: "Удалить папку", danger: true, run: async () => {
+            { label: tt`Удалить папку`, danger: true, run: async () => {
               await PlacesUtils.bookmarks.remove(c.guid);
               this.renderDrawer();
             } },
@@ -1361,20 +1361,20 @@ Object.assign(Tabora, {
       title,
       sub: this.hostOf(url),
       actions: [
-        { title: "Удалить закладку", icon: ["M4 7h16", "M10 11v6M14 11v6", "M6 7l1 13h10l1-13", "M9 7V4h6v3"], danger: true, run: async () => {
+        { title: tt`Удалить закладку`, icon: ["M4 7h16", "M10 11v6M14 11v6", "M6 7l1 13h10l1-13", "M9 7V4h6v3"], danger: true, run: async () => {
           await PlacesUtils.bookmarks.remove(guid);
           row.remove();
         } },
-        { title: "Открыть в новой вкладке", icon: ["M14 4h6v6", "M20 4l-9 9", "M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"], run: () => this.openInSpace(url, true) },
+        { title: tt`Открыть в новой вкладке`, icon: ["M14 4h6v6", "M20 4l-9 9", "M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"], run: () => this.openInSpace(url, true) },
       ],
       onClick: () => this.openInSpace(url, false),
       onContext: () => [
-        { label: "Открыть", run: () => this.openInSpace(url, false) },
-        { label: "Открыть в новой вкладке", run: () => this.openInSpace(url, true) },
-        { label: "Копировать ссылку", run: () => this.copyText(url, "Ссылка скопирована") },
+        { label: tt`Открыть`, run: () => this.openInSpace(url, false) },
+        { label: tt`Открыть в новой вкладке`, run: () => this.openInSpace(url, true) },
+        { label: tt`Копировать ссылку`, run: () => this.copyText(url, tt`Ссылка скопирована`) },
         { separator: true },
-        { label: "Переименовать…", run: () => this.renameBookmark(row, guid, title, PlacesUtils) },
-        { label: "Удалить закладку", danger: true, run: async () => {
+        { label: tt`Переименовать…`, run: () => this.renameBookmark(row, guid, title, PlacesUtils) },
+        { label: tt`Удалить закладку`, danger: true, run: async () => {
           await PlacesUtils.bookmarks.remove(guid);
           row.remove();
         } },
@@ -1417,7 +1417,7 @@ Object.assign(Tabora, {
   /* ---- Пространства: полотно на всю ширину ----------------------------------- */
 
   SPACE_HEX: { blue: "#7cc4ff", turquoise: "#5ee0d0", green: "#7ddf6a", yellow: "#c8f25a", orange: "#ff9f5a", red: "#ff7b7b", pink: "#ff8fd1", purple: "#c39bff", toolbar: "#c9ccd3" },
-  SPACE_COLOR_NAMES: { yellow: "Лайм", blue: "Голубой", turquoise: "Бирюза", green: "Зелёный", orange: "Оранжевый", red: "Красный", pink: "Розовый", purple: "Фиолетовый" },
+  SPACE_COLOR_NAMES: { yellow: tt`Лайм`, blue: tt`Голубой`, turquoise: tt`Бирюза`, green: tt`Зелёный`, orange: tt`Оранжевый`, red: tt`Красный`, pink: tt`Розовый`, purple: tt`Фиолетовый` },
 
   spaceHex(space) {
     return this.SPACE_HEX[space.color] || this.SPACE_HEX.yellow;
@@ -1433,25 +1433,25 @@ Object.assign(Tabora, {
         col.setAttribute("active", "true");
       }
       const name = this.html("span", { class: "dcol-name" }, space.name);
-      const rename = this.iconButton("", "Переименовать", ["M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z", "M13.5 6.5l3 3"], () => this.renameSpace(space, name), 13);
+      const rename = this.iconButton("", tt`Переименовать`, ["M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z", "M13.5 6.5l3 3"], () => this.renameSpace(space, name), 13);
       const head = this.html("header", { class: "dcol-head" }, null, [this.html("span", { class: "dcol-dot" }), name, this.html("span", { class: "dcol-count" }, String(tabsOf(space).length)), rename]);
       head.addEventListener("dblclick", () => this.renameSpace(space, name));
       const list = this.html("div", { class: "dcol-list" });
       const tabs = tabsOf(space);
       if (!tabs.length) {
-        list.append(this.html("div", { class: "dcol-empty" }, "Перетащите вкладки сюда"));
+        list.append(this.html("div", { class: "dcol-empty" }, tt`Перетащите вкладки сюда`));
       }
       for (const tab of tabs) {
         const url = tab.linkedBrowser?.currentURI?.spec || "";
         const row = this.html("div", { class: "dtab", draggable: "true", title: url }, null, [
           this.isStartUrl(url) ? this.html("span", { class: "start-dot" }) : this.favicon(url),
           this.html("span", { class: "dtab-title" }, tab.label || this.startLabel()),
-          tab.hasAttribute("pending") ? this.html("span", { class: "zz" }, "спит") : this.html("span"),
+          tab.hasAttribute("pending") ? this.html("span", { class: "zz" }, tt`спит`) : this.html("span"),
         ]);
         if (tab.selected) {
           row.setAttribute("selected", "true");
         }
-        const close = this.iconButton("", "Закрыть вкладку", ["M6 6l12 12", "M18 6 6 18"], () => gBrowser.removeTab(tab), 12);
+        const close = this.iconButton("", tt`Закрыть вкладку`, ["M6 6l12 12", "M18 6 6 18"], () => gBrowser.removeTab(tab), 12);
         row.append(close);
         row.addEventListener("click", () => {
           this.switchSpace(space.id);
@@ -1521,18 +1521,18 @@ Object.assign(Tabora, {
           this.renderDrawer();
         }
       });
-      const grip = this.html("button", { class: "icon-btn dgrip", type: "button", title: "Переставить", draggable: "true" }, null, [this.svg(["M12 3v18", "M3 12h18", "m8 7 4-4 4 4", "m8 17 4 4 4-4", "m7 8-4 4 4 4", "m17 8 4 4-4 4"], 13, 1.8)]);
+      const grip = this.html("button", { class: "icon-btn dgrip", type: "button", title: tt`Переставить`, draggable: "true" }, null, [this.svg(["M12 3v18", "M3 12h18", "m8 7 4-4 4 4", "m8 17 4 4 4-4", "m7 8-4 4 4 4", "m17 8 4 4-4 4"], 13, 1.8)]);
       grip.addEventListener("dragstart", e => {
         e.dataTransfer.setData("tabora/space", space.id);
         e.dataTransfer.effectAllowed = "move";
         col.setAttribute("dragging", "true");
       });
       grip.addEventListener("dragend", () => col.removeAttribute("dragging"));
-      const more = this.iconButton("", "Ещё", ["M5 12h.01", "M12 12h.01", "M19 12h.01"], e => {
+      const more = this.iconButton("", tt`Ещё`, ["M5 12h.01", "M12 12h.01", "M19 12h.01"], e => {
         const r = e.currentTarget.getBoundingClientRect();
         this.showMenu(this.spaceMenuItems(space, name), r.left, r.bottom + 6);
       }, 15);
-      const newTab = this.iconButton("", "Новая вкладка здесь", ["M12 5v14", "M5 12h14"], () => {
+      const newTab = this.iconButton("", tt`Новая вкладка здесь`, ["M12 5v14", "M5 12h14"], () => {
         gBrowser.selectedTab = gBrowser.addTab(BROWSER_NEW_TAB_URL, { userContextId: space.userContextId, triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
         this.switchSpace(space.id);
         this.closeDrawer();
@@ -1541,7 +1541,7 @@ Object.assign(Tabora, {
       col.append(head, list, this.html("footer", { class: "dcol-foot" }, null, [grip, this.html("span", { class: "dcol-hint" }, `⌘${index + 1}`), newTab, more]));
       board.append(col);
     });
-    const add = this.html("button", { class: "dcol-add", type: "button", title: "Новое пространство" }, null, [this.svg(["M12 5v14", "M5 12h14"], 16, 2.2)]);
+    const add = this.html("button", { class: "dcol-add", type: "button", title: tt`Новое пространство` }, null, [this.svg(["M12 5v14", "M5 12h14"], 16, 2.2)]);
     add.addEventListener("click", () => this.addSpace());
     board.append(add);
     if (seq !== d.seq) {
@@ -1558,9 +1558,9 @@ Object.assign(Tabora, {
       run: () => this.updateSpace(space, { color: id }),
     }));
     return [
-      { label: "Переименовать", run: () => this.renameSpace(space, nameEl) },
-      { label: "Цвет", children: colors },
-      { label: "Усыпить все вкладки", run: () => {
+      { label: tt`Переименовать`, run: () => this.renameSpace(space, nameEl) },
+      { label: tt`Цвет`, children: colors },
+      { label: tt`Усыпить все вкладки`, run: () => {
         for (const t of gBrowser.tabs) {
           if (!t.selected && !t.pinned && this.contextOf(t) === space.userContextId && !t.hasAttribute("pending")) {
             gBrowser.discardBrowser(t);
@@ -1570,7 +1570,7 @@ Object.assign(Tabora, {
         this.renderDrawer();
       } },
       { separator: true },
-      { label: "Удалить пространство", danger: true, disabled: space.userContextId === 0, hint: space.userContextId === 0 ? "основное" : "", run: () => this.removeSpace(space) },
+      { label: tt`Удалить пространство`, danger: true, disabled: space.userContextId === 0, hint: space.userContextId === 0 ? tt`основное` : "", run: () => this.removeSpace(space) },
     ];
   },
 
@@ -1620,7 +1620,7 @@ Object.assign(Tabora, {
   addSpace() {
     const used = new Set(this.spaces.map(s => s.color));
     const color = Object.keys(this.SPACE_COLOR_NAMES).find(c => !used.has(c)) || "purple";
-    const name = `Пространство ${this.spaces.length + 1}`;
+    const name = tt`Пространство ${this.spaces.length + 1}`;
     const identity = this.ContextualIdentityService.create(name, "circle", color);
     const space = { id: `space-${Date.now().toString(36)}`, name, icon: "circle", color, userContextId: identity.userContextId };
     this.spaces.push(space);
@@ -1653,7 +1653,7 @@ Object.assign(Tabora, {
     }
     this.saveSpaces();
     this.applySpace();
-    this.notice(`Пространство «${space.name}» удалено, вкладки перенесены в «${personal.name}»`);
+    this.notice(tt`Пространство «${space.name}» удалено, вкладки перенесены в «${personal.name}»`);
     this.renderDrawer();
   },
 

@@ -1,3 +1,4 @@
+import { tt } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -37,11 +38,11 @@ export const WalletSigner = {
     const capped = [];
     // Комиссию назначает кошелёк, а не сайт: завышенный приоритет целиком уходит валидатору
     if (priority > netPriority * 3n + 1_000_000_000n) {
-      capped.push("приоритет");
+      capped.push(tt`приоритет`);
       priority = netPriority;
     }
     if (maxFee > netMax * 3n) {
-      capped.push("максимум");
+      capped.push(tt`максимум`);
       maxFee = netMax;
     }
     if (maxFee < baseFee) {
@@ -60,7 +61,7 @@ export const WalletSigner = {
     if (tx.gas || tx.gasLimit) {
       gasLimit = toBig(tx.gas || tx.gasLimit);
       if (estimated !== null && gasLimit > estimated * 3n && gasLimit > 500_000n) {
-        capped.push("лимит газа");
+        capped.push(tt`лимит газа`);
         gasLimit = estimated;
       }
     }
@@ -111,12 +112,12 @@ export const WalletSigner = {
   /** Строгое чтение аргументов ABI: длина, чистые старшие байты адресов и ширина чисел проверяются. */
   abiReader(hex) {
     if (!/^[0-9a-fA-F]*$/.test(hex) || hex.length % 2) {
-      throw new Error("abi: не hex");
+      throw new Error(tt`abi: не hex`);
     }
     const count = Math.floor(hex.length / 64);
     const word = i => {
       if (!Number.isInteger(i) || i < 0 || i >= count) {
-        throw new Error("abi: данных меньше, чем нужно");
+        throw new Error(tt`abi: данных меньше, чем нужно`);
       }
       return hex.slice(i * 64, (i + 1) * 64);
     };
@@ -124,21 +125,21 @@ export const WalletSigner = {
     const uint = (i, bits = 256) => {
       const v = num(i);
       if (v >> BigInt(bits)) {
-        throw new Error("abi: число шире типа");
+        throw new Error(tt`abi: число шире типа`);
       }
       return v;
     };
     const addr = i => {
       const w = word(i);
       if (!/^0{24}/.test(w)) {
-        throw new Error("abi: неверный адрес");
+        throw new Error(tt`abi: неверный адрес`);
       }
       return "0x" + w.slice(24);
     };
     const bool = i => {
       const v = num(i);
       if (v > 1n) {
-        throw new Error("abi: неверный bool");
+        throw new Error(tt`abi: неверный bool`);
       }
       return v === 1n;
     };
@@ -146,7 +147,7 @@ export const WalletSigner = {
     const offset = (i, base = 0) => {
       const v = num(i);
       if (v % 32n || v / 32n >= BigInt(count)) {
-        throw new Error("abi: неверное смещение");
+        throw new Error(tt`abi: неверное смещение`);
       }
       return base + Number(v / 32n);
     };
@@ -154,19 +155,19 @@ export const WalletSigner = {
     const bytesAt = w => {
       const len = num(w);
       if (len > BigInt(hex.length)) {
-        throw new Error("abi: длина за границей");
+        throw new Error(tt`abi: длина за границей`);
       }
       const start = (w + 1) * 64;
       const end = start + Number(len) * 2;
       if (end > hex.length) {
-        throw new Error("abi: длина за границей");
+        throw new Error(tt`abi: длина за границей`);
       }
       return hex.slice(start, end);
     };
     const length = (w, max) => {
       const n = num(w);
       if (n > BigInt(max)) {
-        throw new Error("abi: слишком много элементов");
+        throw new Error(tt`abi: слишком много элементов`);
       }
       return Number(n);
     };
@@ -182,7 +183,7 @@ export const WalletSigner = {
     const sel = data.slice(0, 10).toLowerCase();
     const unknown = (reason = null) => ({ kind: "unknown", selector: sel, reason });
     if (!/^0x[0-9a-fA-F]{8}/.test(data)) {
-      return unknown("данные короче селектора");
+      return unknown(tt`данные короче селектора`);
     }
     const target = String(to || "").toLowerCase();
     try {
@@ -225,7 +226,7 @@ export const WalletSigner = {
       // multicall на том же контракте: вложенные вызовы исполняются от вашего имени (delegatecall)
       if (sel === "0xac9650d8" || sel === "0x5ae401dc" || sel === "0x1f0464d1") {
         if (depth > 0) {
-          return unknown("вложенный multicall");
+          return unknown(tt`вложенный multicall`);
         }
         const head = sel === "0xac9650d8" ? 0 : 1;
         const arr = a.offset(head);
@@ -233,7 +234,7 @@ export const WalletSigner = {
         const calls = [];
         for (let i = 0; i < n; i++) {
           const el = a.offset(arr + 1 + i, arr + 1);
-          calls.push(this.evmDecode(to, "0x" + a.bytesAt(el), 0n, { chainId, depth: depth + 1 }) || unknown("пустой вызов"));
+          calls.push(this.evmDecode(to, "0x" + a.bytesAt(el), 0n, { chainId, depth: depth + 1 }) || unknown(tt`пустой вызов`));
         }
         return { kind: "multicall", calls, deadline: sel === "0x5ae401dc" ? a.uint(0) : null };
       }
@@ -243,7 +244,7 @@ export const WalletSigner = {
     // роутеры из вендорной библиотеки: только mainnet, точное совпадение адреса и функция из белого списка;
     // вложенные вызовы multicall этого же роутера разбираются так же
     if (chainId === "ethereum" && depth <= 1 && this.SWAP_ROUTERS[target]) {
-      return this.swapDecode(target, data, value) || unknown("функция роутера вне белого списка");
+      return this.swapDecode(target, data, value) || unknown(tt`функция роутера вне белого списка`);
     }
     return unknown();
   },
@@ -385,7 +386,7 @@ export const WalletSigner = {
     let own = false;
     let held = 0; // обмены, результат которых остался на роутере и пока не забран
     let heldLoose = false; // …и минимум у них не задан
-    const noMin = "Минимум к получению не задан (ноль или ничтожная сумма): обмен пройдёт по любому курсу, и разницу заберут боты (сэндвич-атака). Обычные сайты обмена так не делают.";
+    const noMin = tt`Минимум к получению не задан (ноль или ничтожная сумма): обмен пройдёт по любому курсу, и разницу заберут боты (сэндвич-атака). Обычные сайты обмена так не делают.`;
     for (const c of calls) {
       if (c.role === "refund" || c.role === "permit") {
         continue;
@@ -394,7 +395,7 @@ export const WalletSigner = {
       if (c.recipientIs === "router") {
         if (c.role === "sweep") {
           danger = true;
-          warns.add("Вывод с роутера отправляет средства на сам роутер: забрать их сможет кто угодно.");
+          warns.add(tt`Вывод с роутера отправляет средства на сам роутер: забрать их сможет кто угодно.`);
         } else {
           held++;
           heldLoose ||= loose;
@@ -412,30 +413,30 @@ export const WalletSigner = {
         }
       } else {
         danger = true;
-        lines.push(`Получатель: чужой адрес ${c.recipient}`);
-        rows.push(["Получатель", `чужой адрес ${c.recipient}`, "bad"]);
-        warns.add(`Результат операции получит не ваш адрес, а ${c.recipient}. Сайты обмена отправляют результат вам: так выглядит кража через подменённого получателя.`);
+        lines.push(tt`Получатель: чужой адрес ${c.recipient}`);
+        rows.push([tt`Получатель`, tt`чужой адрес ${c.recipient}`, "bad"]);
+        warns.add(tt`Результат операции получит не ваш адрес, а ${c.recipient}. Сайты обмена отправляют результат вам: так выглядит кража через подменённого получателя.`);
         if (loose) {
           warns.add(noMin);
         }
       }
       if (c.feeRecipient && !/^0x0{40}$/.test(c.feeRecipient) && !mine(c.feeRecipient)) {
-        lines.push(`Комиссия посредника${c.feeBips !== null ? ` ${Number(c.feeBips) / 100}%` : ""} уходит на ${c.feeRecipient}`);
+        lines.push(tt`Комиссия посредника${c.feeBips !== null ? ` ${Number(c.feeBips) / 100}%` : ""} уходит на ${c.feeRecipient}`);
         if (c.feeBips !== null && c.feeBips > 100n) {
           danger = true;
-          warns.add("Комиссия посредника больше 1% от суммы обмена.");
+          warns.add(tt`Комиссия посредника больше 1% от суммы обмена.`);
         }
       }
     }
     if (held) {
       danger = true;
-      warns.add("Результат обмена остаётся на контракте роутера и в этой транзакции не забирается на ваш адрес: его сможет забрать кто угодно.");
+      warns.add(tt`Результат обмена остаётся на контракте роутера и в этой транзакции не забирается на ваш адрес: его сможет забрать кто угодно.`);
     }
     if (!calls.length) {
       danger = true; // проверять нечего: получателя нет
     } else if (own && !rows.length) {
-      lines.push("Получатель: ваш адрес");
-      rows.push(["Получатель", "ваш адрес"]);
+      lines.push(tt`Получатель: ваш адрес`);
+      rows.push([tt`Получатель`, tt`ваш адрес`]);
     }
     return { danger, lines, rows, warns: [...warns] };
   },
@@ -515,7 +516,8 @@ export const WalletSigner = {
         try {
           return await WalletStore.fetchJson(node + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }, { timeout: 12000 });
         } catch (e) {
-          lastError = new Error(`TRON ${e.message}`);
+          // network: нода не ответила или ответила ошибкой — в отличие от отказа самого контракта
+          lastError = Object.assign(new Error(`TRON ${e.message}`), { network: true });
           if (/HTTP 429/.test(e.message)) {
             if (attempt < 2) {
               await new Promise(r => setTimeout(r, 1200 * (attempt + 1)));
@@ -527,7 +529,7 @@ export const WalletSigner = {
         }
       }
     }
-    throw lastError || new Error("TRON: нода недоступна");
+    throw lastError || Object.assign(new Error(tt`TRON: нода недоступна`), { network: true });
   },
 
   tronRecoverableSig(hash, priv) {
@@ -541,11 +543,11 @@ export const WalletSigner = {
   /** Подпись транзакции: txID всегда считается из raw_data_hex; чужой txID не принимается. */
   tronSignTx(tx, priv) {
     if (typeof tx?.raw_data_hex !== "string" || !/^[0-9a-fA-F]+$/.test(tx.raw_data_hex)) {
-      throw new Error("Транзакция без raw_data_hex");
+      throw new Error(tt`Транзакция без raw_data_hex`);
     }
     const txID = bytesToHex(sha256(hexToBytes(tx.raw_data_hex)));
     if (tx.txID && String(tx.txID).toLowerCase() !== txID) {
-      throw new Error("txID не совпадает с raw_data_hex: транзакция подменена");
+      throw new Error(tt`txID не совпадает с raw_data_hex: транзакция подменена`);
     }
     const signature = this.tronRecoverableSig(hexToBytes(txID), priv);
     return { ...tx, txID, raw_data: this.tronRawToJson(this.tronDecodeRaw(tx.raw_data_hex)), signature: [...(tx.signature || []), signature] };
@@ -564,7 +566,7 @@ export const WalletSigner = {
   tronSignMessageV1(hexMessage, priv) {
     const bytes = hexToBytes(String(hexMessage).replace(/^0x/, ""));
     if (bytes.length !== 32) {
-      throw new Error("Для старой подписи TRON нужен хеш из 32 байт");
+      throw new Error(tt`Для старой подписи TRON нужен хеш из 32 байт`);
     }
     const prefix = utf8ToBytes("\x19TRON Signed Message:\n32");
     const all = new Uint8Array(prefix.length + bytes.length);
@@ -589,7 +591,7 @@ export const WalletSigner = {
     if (/^41[0-9a-fA-F]{40}$/.test(hex)) {
       return hexToBytes(hex);
     }
-    throw new Error("Неверный адрес TRON");
+    throw new Error(tt`Неверный адрес TRON`);
   },
 
   /** Баланс TRC-20 через ноду (для проверки «approve больше баланса»). */
@@ -597,7 +599,7 @@ export const WalletSigner = {
     const r = await this.tronPost("/wallet/triggerconstantcontract", { owner_address: owner, contract_address: contract, function_selector: "balanceOf(address)", parameter: this.abiEncodeParam("address", owner), visible: true });
     const hex = r?.constant_result?.[0];
     if (typeof hex !== "string" || !/^[0-9a-fA-F]{1,64}$/.test(hex)) {
-      throw new Error("TRON: нода не вернула баланс токена");
+      throw new Error(tt`TRON: нода не вернула баланс токена`);
     }
     return BigInt("0x" + hex);
   },
@@ -662,19 +664,19 @@ export const WalletSigner = {
       let shift = 0n;
       for (let i = 0; i < 10; i++) {
         if (o >= buf.length) {
-          throw new Error("protobuf: обрыв");
+          throw new Error(tt`protobuf: обрыв`);
         }
         const b = buf[o++];
         v |= BigInt(b & 0x7f) << shift;
         shift += 7n;
         if (!(b & 0x80)) {
           if (v > 0xffffffffffffffffn) {
-            throw new Error("protobuf: varint больше 64 бит");
+            throw new Error(tt`protobuf: varint больше 64 бит`);
           }
           return v;
         }
       }
-      throw new Error("protobuf: varint слишком длинный");
+      throw new Error(tt`protobuf: varint слишком длинный`);
     };
     while (o < buf.length) {
       const key = varint();
@@ -685,24 +687,24 @@ export const WalletSigner = {
       } else if (wt === 2) {
         const len = Number(varint());
         if (o + len > buf.length) {
-          throw new Error("protobuf: длина за границей");
+          throw new Error(tt`protobuf: длина за границей`);
         }
         fields.push({ field, wt, value: buf.slice(o, o + len) });
         o += len;
       } else if (wt === 1) {
         if (o + 8 > buf.length) {
-          throw new Error("protobuf: обрыв fixed64");
+          throw new Error(tt`protobuf: обрыв fixed64`);
         }
         fields.push({ field, wt, value: buf.slice(o, o + 8) });
         o += 8;
       } else if (wt === 5) {
         if (o + 4 > buf.length) {
-          throw new Error("protobuf: обрыв fixed32");
+          throw new Error(tt`protobuf: обрыв fixed32`);
         }
         fields.push({ field, wt, value: buf.slice(o, o + 4) });
         o += 4;
       } else {
-        throw new Error(`protobuf: неизвестный тип поля ${wt}`);
+        throw new Error(tt`protobuf: неизвестный тип поля ${wt}`);
       }
     }
     return fields;
@@ -715,11 +717,11 @@ export const WalletSigner = {
     const seen = new Set();
     for (const f of fields) {
       if (!allowed.includes(f.field)) {
-        throw new Error(`Транзакция содержит неизвестное поле ${f.field}: отклонено`);
+        throw new Error(tt`Транзакция содержит неизвестное поле ${f.field}: отклонено`);
       }
       if (!repeated.includes(f.field)) {
         if (seen.has(f.field)) {
-          throw new Error(`Поле ${f.field} повторяется: транзакция неоднозначна, отклонено`);
+          throw new Error(tt`Поле ${f.field} повторяется: транзакция неоднозначна, отклонено`);
         }
         seen.add(f.field);
       }
@@ -737,14 +739,14 @@ export const WalletSigner = {
     const one = this.pbStrict(raw, [1, 3, 4, 8, 10, 11, 14, 18], [11]);
     const i64 = v => {
       if (v !== undefined && v !== null && v > 0x7fffffffffffffffn) {
-        throw new Error("Значение поля вне диапазона int64: отклонено");
+        throw new Error(tt`Значение поля вне диапазона int64: отклонено`);
       }
       return v;
     };
     const num = v => {
       i64(v);
       if (v > 9007199254740991n) {
-        throw new Error("Значение поля слишком велико: отклонено");
+        throw new Error(tt`Значение поля слишком велико: отклонено`);
       }
       return Number(v ?? 0n);
     };
@@ -765,7 +767,7 @@ export const WalletSigner = {
       const type = Number(cOne(1) ?? 0n);
       const anyBytes = cOne(2);
       if (!anyBytes) {
-        throw new Error("Контракт без параметров");
+        throw new Error(tt`Контракт без параметров`);
       }
       const any = this.pbDecode(anyBytes);
       const aOne = this.pbStrict(any, [1, 2]);
@@ -773,7 +775,7 @@ export const WalletSigner = {
       const pf = this.pbDecode(aOne(2) || new Uint8Array(0));
       const addr = v => {
         if (!v || v.length !== 21 || v[0] !== 0x41) {
-          throw new Error("Адрес в транзакции имеет неверный формат");
+          throw new Error(tt`Адрес в транзакции имеет неверный формат`);
         }
         return b58check.encode(v);
       };
@@ -792,20 +794,20 @@ export const WalletSigner = {
         entry.callTokenValue = i64(pOne(5)) ?? 0n;
         entry.tokenId = i64(pOne(6)) ?? 0n;
       } else {
-        throw new Error(`Операция ${entry.typeName} не поддерживается кошельком`);
+        throw new Error(tt`Операция ${entry.typeName} не поддерживается кошельком`);
       }
       if (entry.typeUrl !== `type.googleapis.com/protocol.${entry.typeName}`) {
-        throw new Error("Тип контракта не совпадает с описанием");
+        throw new Error(tt`Тип контракта не совпадает с описанием`);
       }
       out.contracts.push(entry);
     }
     if (!out.contracts.length) {
-      throw new Error("Транзакция без контрактов");
+      throw new Error(tt`Транзакция без контрактов`);
     }
     // Каноническая пересборка: байты обязаны совпасть с исходными
     const canon = this.tronEncodeRaw(out);
     if (bytesToHex(canon) !== bytesToHex(bytes)) {
-      throw new Error("Нестандартная кодировка транзакции: отклонено");
+      throw new Error(tt`Нестандартная кодировка транзакции: отклонено`);
     }
     return out;
   },
@@ -840,7 +842,7 @@ export const WalletSigner = {
           this.pbUint(6, c.tokenId || 0),
         ]);
       } else {
-        throw new Error("Неизвестный тип контракта");
+        throw new Error(tt`Неизвестный тип контракта`);
       }
       const any = this.pbConcat([this.pbBytes(1, utf8ToBytes(`type.googleapis.com/protocol.${c.typeName}`)), this.pbBytes(2, param)]);
       parts.push(this.pbBytes(11, this.pbConcat([this.pbUint(1, c.type), this.pbBytes(2, any), this.pbUint(5, c.permissionId || 0)])));
@@ -875,10 +877,10 @@ export const WalletSigner = {
     const number = b.block_header?.raw_data?.number;
     const timestamp = b.block_header?.raw_data?.timestamp;
     if (!b.blockID || !number || !timestamp) {
-      throw new Error("TRON: нода не вернула блок");
+      throw new Error(tt`TRON: нода не вернула блок`);
     }
     if (Math.abs(Date.now() - timestamp) > 10 * 60 * 1000) {
-      throw new Error("TRON: нода отдаёт устаревший блок");
+      throw new Error(tt`TRON: нода отдаёт устаревший блок`);
     }
     return { refBlockBytes: number.toString(16).padStart(16, "0").slice(12, 16), refBlockHash: b.blockID.slice(16, 32), timestamp };
   },
@@ -913,7 +915,7 @@ export const WalletSigner = {
   async tronEstimateEnergy(owner, contractAddress, selector, parameterHex) {
     const sim = await this.tronPost("/wallet/triggerconstantcontract", { owner_address: owner, contract_address: contractAddress, function_selector: selector, parameter: parameterHex, visible: true });
     if (sim.result?.result === false || sim.result?.message) {
-      throw new Error(sim.result?.message ? new TextDecoder().decode(hexToBytes(sim.result.message)) : "контракт отклонил вызов");
+      throw new Error(sim.result?.message ? new TextDecoder().decode(hexToBytes(sim.result.message)) : tt`контракт отклонил вызов`);
     }
     return BigInt(sim.energy_used || 65000);
   },
@@ -925,7 +927,7 @@ export const WalletSigner = {
         hex = hex.slice(2);
       }
       if (!/^[0-9a-fA-F]{40}$/.test(hex)) {
-        throw new Error("Неверный адрес в параметрах");
+        throw new Error(tt`Неверный адрес в параметрах`);
       }
       return hex.padStart(64, "0");
     }
@@ -934,13 +936,13 @@ export const WalletSigner = {
       const unsigned = !!intMatch[1];
       const bits = BigInt(intMatch[2] || "256");
       if (bits < 8n || bits > 256n || bits % 8n !== 0n) {
-        throw new Error(`Неверная ширина типа ${type}`);
+        throw new Error(tt`Неверная ширина типа ${type}`);
       }
       let v = toBig(value);
       const max = unsigned ? (1n << bits) - 1n : (1n << (bits - 1n)) - 1n;
       const min = unsigned ? 0n : -(1n << (bits - 1n));
       if (v < min || v > max) {
-        throw new Error(`Значение вне диапазона ${type}`);
+        throw new Error(tt`Значение вне диапазона ${type}`);
       }
       if (v < 0n) {
         v = (1n << 256n) + v;
@@ -949,25 +951,25 @@ export const WalletSigner = {
     }
     if (type === "bool") {
       if (![true, false, 1, 0, "true", "false", "1", "0"].includes(value)) {
-        throw new Error("bool: допустимы только true/false");
+        throw new Error(tt`bool: допустимы только true/false`);
       }
       return (value === true || value === 1 || value === "true" || value === "1" ? "1" : "0").padStart(64, "0");
     }
     if (/^bytes32$/.test(type)) {
       const hex = String(value).replace(/^0x/, "");
       if (!/^([0-9a-fA-F]{2}){1,32}$/.test(hex)) {
-        throw new Error("bytes32: нужен hex до 32 байт");
+        throw new Error(tt`bytes32: нужен hex до 32 байт`);
       }
       return hex.padEnd(64, "0");
     }
-    throw new Error(`Тип ${type} пока не поддержан`);
+    throw new Error(tt`Тип ${type} пока не поддержан`);
   },
 
   /* ---------- Solana ---------- */
 
   solSignMessage(bytes, priv) {
     if (this.solLooksLikeMessage(bytes)) {
-      throw new Error("Сообщение является транзакцией Solana: подпись отклонена");
+      throw new Error(tt`Сообщение является транзакцией Solana: подпись отклонена`);
     }
     return ed25519.sign(bytes, priv);
   },
@@ -979,7 +981,7 @@ export const WalletSigner = {
     let o = offset;
     const need = n => {
       if (o + n > bytes.length) {
-        throw new Error("Solana: обрыв данных");
+        throw new Error(tt`Solana: обрыв данных`);
       }
     };
     const compact = (max) => {
@@ -994,11 +996,11 @@ export const WalletSigner = {
           break;
         }
         if (size > 3) {
-          throw new Error("Solana: длина слишком велика");
+          throw new Error(tt`Solana: длина слишком велика`);
         }
       }
       if (len > max) {
-        throw new Error("Solana: превышен лимит");
+        throw new Error(tt`Solana: превышен лимит`);
       }
       return len;
     };
@@ -1014,11 +1016,11 @@ export const WalletSigner = {
     const numReadonlyUnsigned = bytes[o + 2];
     o += 3;
     if (numRequired < 1 || numRequired > this.SOL_LIMITS.sigs) {
-      throw new Error("Solana: неверный заголовок");
+      throw new Error(tt`Solana: неверный заголовок`);
     }
     const keysLen = compact(this.SOL_LIMITS.keys);
     if (keysLen < numRequired || keysLen < numReadonlySigned + numRequired) {
-      throw new Error("Solana: заголовок не согласуется с ключами");
+      throw new Error(tt`Solana: заголовок не согласуется с ключами`);
     }
     need(keysLen * 32);
     const keys = [];
@@ -1068,7 +1070,7 @@ export const WalletSigner = {
     let size = 0;
     for (;;) {
       if (o >= bytes.length) {
-        throw new Error("Solana: обрыв данных");
+        throw new Error(tt`Solana: обрыв данных`);
       }
       const b = bytes[o++];
       sigCount |= (b & 0x7f) << (size * 7);
@@ -1077,21 +1079,21 @@ export const WalletSigner = {
         break;
       }
       if (size > 2) {
-        throw new Error("Solana: слишком много подписей");
+        throw new Error(tt`Solana: слишком много подписей`);
       }
     }
     if (sigCount < 1 || sigCount > this.SOL_LIMITS.sigs || o + sigCount * 64 > bytes.length) {
-      throw new Error("Solana: неверное число подписей");
+      throw new Error(tt`Solana: неверное число подписей`);
     }
     const sigStart = o;
     o += sigCount * 64;
     const msgStart = o;
     const msg = this.solParseMessage(bytes, msgStart);
     if (msg.numRequired !== sigCount) {
-      throw new Error("Solana: число подписей не совпадает с заголовком");
+      throw new Error(tt`Solana: число подписей не совпадает с заголовком`);
     }
     if (msg.end !== bytes.length) {
-      throw new Error("Solana: лишние данные после сообщения");
+      throw new Error(tt`Solana: лишние данные после сообщения`);
     }
     return { sigCount, sigStart, msgStart, message: bytes.slice(msgStart), ...msg };
   },
@@ -1110,7 +1112,7 @@ export const WalletSigner = {
     const parsed = this.solParse(bytes);
     const index = parsed.keys.indexOf(address);
     if (index === -1 || index >= parsed.sigCount) {
-      throw new Error("Транзакция не требует подписи этого адреса");
+      throw new Error(tt`Транзакция не требует подписи этого адреса`);
     }
     const sig = ed25519.sign(parsed.message, priv);
     const out = new Uint8Array(bytes);
@@ -1137,7 +1139,7 @@ export const WalletSigner = {
     const key = i => (i < parsed.keys.length ? parsed.keys[i] : null);
     const name = i => {
       const k = key(i);
-      return k === ourAddress ? "ваш адрес" : k ? short(k) : "адрес из таблицы";
+      return k === ourAddress ? tt`ваш адрес` : k ? short(k) : tt`адрес из таблицы`;
     };
     const u64 = (d, off) => new DataView(d.buffer, d.byteOffset).getBigUint64(off, true);
     const fmt = (raw, dec) => WalletStore.format(raw, dec, 6);
@@ -1151,31 +1153,31 @@ export const WalletSigner = {
       if (p === this.SOL_SYSTEM && d.length >= 4) {
         const tag = new DataView(d.buffer, d.byteOffset).getUint32(0, true);
         if (tag === 2 && d.length >= 12) {
-          lines.push(`Перевод ${fmt(u64(d, 4), 9)} SOL: ${name(ix.accounts[0])} → ${name(ix.accounts[1])}`);
+          lines.push(tt`Перевод ${fmt(u64(d, 4), 9)} SOL: ${name(ix.accounts[0])} → ${name(ix.accounts[1])}`);
           if (ours(ix.accounts[0])) {
             solOut += u64(d, 4);
           }
         } else if (tag === 0 && d.length >= 12) {
-          lines.push(`Создание счёта · ${fmt(u64(d, 4), 9)} SOL`);
+          lines.push(tt`Создание счёта · ${fmt(u64(d, 4), 9)} SOL`);
           if (ours(ix.accounts[0])) {
             solOut += u64(d, 4);
           }
         } else if (tag === 3) {
-          lines.push("Создание счёта с seed");
+          lines.push(tt`Создание счёта с seed`);
         } else if (tag === 1 || tag === 10) {
-          lines.push("System: смена владельца счёта (Assign)");
+          lines.push(tt`System: смена владельца счёта (Assign)`);
           danger = true;
         } else if (tag === 4) {
-          lines.push("Durable nonce: подпись можно будет исполнить позже, в любой момент");
+          lines.push(tt`Durable nonce: подпись можно будет исполнить позже, в любой момент`);
           danger = true;
         } else if (tag === 5 || tag === 7) {
-          lines.push(tag === 5 ? "Вывод из nonce-счёта" : "Смена владельца nonce-счёта");
+          lines.push(tag === 5 ? tt`Вывод из nonce-счёта` : tt`Смена владельца nonce-счёта`);
           danger = true;
         } else if (tag === 11) {
-          lines.push("Перевод SOL со счёта по seed");
+          lines.push(tt`Перевод SOL со счёта по seed`);
           danger = true;
         } else {
-          lines.push(`System: инструкция ${tag}, кошелёк её не расшифровывает`);
+          lines.push(tt`System: инструкция ${tag}, кошелёк её не расшифровывает`);
           danger = true;
           unknown++;
         }
@@ -1188,7 +1190,7 @@ export const WalletSigner = {
           return tokens.find(t => t.mint === mint);
         };
         if (tag === 3 && d.length >= 9) {
-          lines.push(`Перевод токена: ${u64(d, 1)} единиц со счёта ${name(ix.accounts[0])} → ${name(ix.accounts[1])}`);
+          lines.push(tt`Перевод токена: ${u64(d, 1)} единиц со счёта ${name(ix.accounts[0])} → ${name(ix.accounts[1])}`);
           if (ours(ix.accounts[2])) {
             plainTokenOut += u64(d, 1);
           }
@@ -1198,41 +1200,41 @@ export const WalletSigner = {
           if (mint && ours(ix.accounts[3])) {
             tokenOut.set(mint, (tokenOut.get(mint) || 0n) + u64(d, 1));
           }
-          lines.push(`Перевод ${t ? `${fmt(u64(d, 1), t.decimals)} ${t.symbol}` : `${fmt(u64(d, 1), d[9])} токена ${short(key(ix.accounts[1]))}`} со счёта ${name(ix.accounts[0])} на токен-счёт ${name(ix.accounts[2])}`);
+          lines.push(tt`Перевод ${t ? `${fmt(u64(d, 1), t.decimals)} ${t.symbol}` : tt`${fmt(u64(d, 1), d[9])} токена ${short(key(ix.accounts[1]))}`} со счёта ${name(ix.accounts[0])} на токен-счёт ${name(ix.accounts[2])}`);
         } else if ((tag === 4 || tag === 13) && d.length >= 9) {
           const t = tag === 13 ? tok(ix.accounts[1]) : null;
-          lines.push(`Approve: делегат ${name(ix.accounts[tag === 13 ? 2 : 1])} сможет тратить ${t ? `${fmt(u64(d, 1), t.decimals)} ${t.symbol}` : `${u64(d, 1)} единиц токена`}`);
+          lines.push(tt`Approve: делегат ${name(ix.accounts[tag === 13 ? 2 : 1])} сможет тратить ${t ? `${fmt(u64(d, 1), t.decimals)} ${t.symbol}` : tt`${u64(d, 1)} единиц токена`}`);
           danger = true;
         } else if (tag === 6) {
-          lines.push("SetAuthority: смена владельца токен-счёта");
+          lines.push(tt`SetAuthority: смена владельца токен-счёта`);
           danger = true;
         } else if (tag === 9) {
-          lines.push(`CloseAccount: закрытие токен-счёта, остаток уйдёт на ${name(ix.accounts[1])}`);
+          lines.push(tt`CloseAccount: закрытие токен-счёта, остаток уйдёт на ${name(ix.accounts[1])}`);
           danger = true;
         } else if (tag === 8 || tag === 15) {
-          lines.push("Burn: сжигание токенов");
+          lines.push(tt`Burn: сжигание токенов`);
           danger = true;
         } else if (tag === 5) {
-          lines.push("Revoke: отзыв делегата");
+          lines.push(tt`Revoke: отзыв делегата`);
         } else if (tag === 7 || tag === 14) {
-          lines.push("MintTo: выпуск токенов");
+          lines.push(tt`MintTo: выпуск токенов`);
         } else if (tag === 38) {
-          lines.push("WithdrawExcessLamports: вывод SOL с токен-счёта");
+          lines.push(tt`WithdrawExcessLamports: вывод SOL с токен-счёта`);
           danger = true;
         } else if (tag === 1 || tag === 16 || tag === 18) {
-          lines.push("Инициализация токен-счёта");
+          lines.push(tt`Инициализация токен-счёта`);
         } else if (tag === 17) {
-          lines.push("SyncNative: синхронизация обёрнутого SOL");
+          lines.push(tt`SyncNative: синхронизация обёрнутого SOL`);
         } else {
           // прочие инструкции Token и расширения Token-2022 (комиссии, хуки, конфиденциальные переводы) не разбираются
-          lines.push(`Token: инструкция ${tag}, кошелёк её не расшифровывает`);
+          lines.push(tt`Token: инструкция ${tag}, кошелёк её не расшифровывает`);
           danger = true;
           unknown++;
         }
         continue;
       }
       if (p === this.SOL_ATA) {
-        lines.push("Создание токен-счёта (ATA)");
+        lines.push(tt`Создание токен-счёта (ATA)`);
         if (ours(ix.accounts[0])) {
           ataCreates++;
         }
@@ -1244,15 +1246,15 @@ export const WalletSigner = {
       }
       danger = true;
       unknown++;
-      lines.push(`Программа ${p ? short(p) : "из таблицы адресов"}: ${ix.data.length} байт данных, не расшифрована`);
+      lines.push(tt`Программа ${p ? short(p) : tt`из таблицы адресов`}: ${ix.data.length} байт данных, не расшифрована`);
       } catch (e) {
-        lines.push(`Инструкция с некорректными данными (${ix.program ? short(ix.program) : "программа из таблицы"})`);
+        lines.push(tt`Инструкция с некорректными данными (${ix.program ? short(ix.program) : tt`программа из таблицы`})`);
         danger = true;
       }
     }
     if (parsed.lookups) {
       danger = true;
-      lines.push(`Часть адресов берётся из ${parsed.lookups} таблиц(ы): их нельзя проверить заранее`);
+      lines.push(tt`Часть адресов берётся из ${parsed.lookups} таблиц(ы): их нельзя проверить заранее`);
     }
     return { lines, danger, unknown, feePayer: parsed.keys[0] === ourAddress, solOut, ataCreates, plainTokenOut, tokenOut };
   },
@@ -1301,7 +1303,7 @@ export const WalletSigner = {
         return base58.encode(hash);
       }
     }
-    throw new Error("ATA не найден");
+    throw new Error(tt`ATA не найден`);
   },
 
   /** Сборка legacy-сообщения: feePayer первым, затем остальные подписанты, writable, readonly. */
@@ -1349,7 +1351,7 @@ export const WalletSigner = {
   /** Программа токена: только Token и Token-2022 (владельца mint сообщает RPC, ему на слово не верим). */
   solTokenProgram(program) {
     if (program !== this.SOL_TOKEN && program !== this.SOL_TOKEN_2022) {
-      throw new Error("Mint принадлежит неизвестной программе: перевод такого токена не поддерживается");
+      throw new Error(tt`Mint принадлежит неизвестной программе: перевод такого токена не поддерживается`);
     }
     return program;
   },
@@ -1359,7 +1361,7 @@ export const WalletSigner = {
     program = this.solTokenProgram(program);
     // адреса счетов пересчитываем сами: план мог прийти с подменёнными ATA
     if ((fromAta && fromAta !== this.solAta(from, mint, program)) || (toAta && toAta !== this.solAta(to, mint, program))) {
-      throw new Error("Счёт токена не совпадает с адресом: пересчитайте перевод");
+      throw new Error(tt`Счёт токена не совпадает с адресом: пересчитайте перевод`);
     }
     fromAta ||= this.solAta(from, mint, program);
     toAta ||= this.solAta(to, mint, program);

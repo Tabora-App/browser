@@ -1,3 +1,4 @@
+import { tt } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -40,12 +41,12 @@ export function argon2idAsync(password, salt, opts) {
       if (e.data?.ok) {
         resolve(new Uint8Array(e.data.out));
       } else {
-        reject(new Error(e.data?.error || "KDF: ошибка рабочего потока"));
+        reject(new Error(e.data?.error || tt`KDF: ошибка рабочего потока`));
       }
     };
     worker.onerror = e => {
       done();
-      reject(new Error(`KDF: ${e.message || "ошибка рабочего потока"}`));
+      reject(new Error(`KDF: ${e.message || tt`ошибка рабочего потока`}`));
     };
     // копии: исходные байты остаются у вызывающего и затираются в done()
     const pw = password.slice();

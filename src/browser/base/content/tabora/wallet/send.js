@@ -99,34 +99,34 @@ Object.assign(Tabora, {
     try {
       if (chain.kind === "evm") {
         if (!/^0x[0-9a-fA-F]{40}$/.test(to)) {
-          return { ok: false, note: "Адрес EVM: 0x и 40 символов" };
+          return { ok: false, note: tt`Адрес EVM: 0x и 40 символов` };
         }
         if (/[a-f]/.test(to.slice(2)) && /[A-F]/.test(to.slice(2)) && !C.ethAddr.isValid(to)) {
-          return { ok: false, note: "Контрольная сумма адреса не сходится: проверьте регистр букв" };
+          return { ok: false, note: tt`Контрольная сумма адреса не сходится: проверьте регистр букв` };
         }
       } else if (chain.kind === "tron") {
         const raw = C.base58check(C.sha256).decode(to);
         if (raw.length !== 21 || raw[0] !== 0x41) {
-          return { ok: false, note: "Это не адрес TRON" };
+          return { ok: false, note: tt`Это не адрес TRON` };
         }
       } else if (chain.kind === "sol") {
         if (C.base58.decode(to).length !== 32) {
-          return { ok: false, note: "Это не адрес Solana" };
+          return { ok: false, note: tt`Это не адрес Solana` };
         }
       } else if (chain.kind === "btc") {
         C.btc.Address().decode(to);
         if (!/^(bc1|1|3)/.test(to)) {
-          return { ok: false, note: "Нужен адрес основной сети Bitcoin" };
+          return { ok: false, note: tt`Нужен адрес основной сети Bitcoin` };
         }
       }
     } catch (e) {
-      return { ok: false, note: `Это не адрес ${chain.name}` };
+      return { ok: false, note: tt`Это не адрес ${chain.name}` };
     }
     if (tokenHit) {
-      return { ok: true, danger: true, note: `Адрес верный, но это контракт ${tokenHit.symbol}: перевод на него сгорит` };
+      return { ok: true, danger: true, note: tt`Адрес верный, но это контракт ${tokenHit.symbol}: перевод на него сгорит` };
     }
     void WalletSigner;
-    return { ok: true, note: `Адрес ${chain.name} верный` };
+    return { ok: true, note: tt`Адрес ${chain.name} верный` };
   },
 
   /** Отравление адреса: получатель похож на знакомый адрес (совпадают первые и последние символы), но не равен ему,
@@ -153,15 +153,15 @@ Object.assign(Tabora, {
     };
     for (const w of WalletStore.wallets) {
       for (const acc of w.accounts) {
-        add(known, acc.addresses?.[chainId], `ваш адрес «${acc.name}»`);
+        add(known, acc.addresses?.[chainId], tt`ваш адрес «${acc.name}»`);
       }
     }
     for (const c of WalletStore.contactsFor(chainId)) {
-      add(known, c.address, `контакт «${c.name}»`);
+      add(known, c.address, tt`контакт «${c.name}»`);
     }
     for (const a of WalletStore.activity) {
       if (a.to && a.kind === "send" && family(a.chain)) {
-        add(known, a.to, "адрес из ваших отправок");
+        add(known, a.to, tt`адрес из ваших отправок`);
       }
     }
     for (const it of this.wallet.history?.items || []) {
@@ -169,9 +169,9 @@ Object.assign(Tabora, {
         continue;
       }
       if (it.dir === "out" && it.status !== "failed") {
-        add(known, it.counterparty, "адрес из ваших отправок"); // исходящие в истории — только подписанные вами
+        add(known, it.counterparty, tt`адрес из ваших отправок`); // исходящие в истории — только подписанные вами
       } else if (it.dir === "in") {
-        add(seenIn, it.counterparty, "адрес из истории входящих");
+        add(seenIn, it.counterparty, tt`адрес из истории входящих`);
       }
     }
     const t = norm(to);
@@ -179,7 +179,7 @@ Object.assign(Tabora, {
       return null;
     }
     if ((this.wallet.history?.suspects || []).some(s => family(s.chain) && norm(s.address) === t)) {
-      return { text: "Этот адрес встречался в скрытых подозрительных операциях (нулевые переводы, пыль, «исходящие», которые вы не подписывали). Так готовят подмену адреса: не отправляйте, если скопировали его из истории или обозревателя." };
+      return { text: tt`Этот адрес встречался в скрытых подозрительных операциях (нулевые переводы, пыль, «исходящие», которые вы не подписывали). Так готовят подмену адреса: не отправляйте, если скопировали его из истории или обозревателя.` };
     }
     const ts = strip(t);
     const similar = k => {
@@ -198,13 +198,13 @@ Object.assign(Tabora, {
     // сначала сравнение со знакомыми: адрес отправителя входящего перевода, похожий на ваш или на контакт, — отравление
     for (const k of known.values()) {
       if (similar(k)) {
-        const fromIn = seenIn.has(t) ? " Он уже присылал вам перевод: так подставляют похожий адрес в историю." : "";
-        return { text: `Адрес похож на ${k.label} (${this.shortAddr(k.address)}): совпадают начало и конец, но это другой адрес.${fromIn} Так выглядит «отравление адреса»: сверьте все символы.` };
+        const fromIn = seenIn.has(t) ? tt` Он уже присылал вам перевод: так подставляют похожий адрес в историю.` : "";
+        return { text: tt`Адрес похож на ${k.label} (${this.shortAddr(k.address)}): совпадают начало и конец, но это другой адрес.${fromIn} Так выглядит «отравление адреса»: сверьте все символы.` };
       }
     }
     for (const k of seenIn.values()) {
       if (norm(k.address) !== t && similar(k)) {
-        return { text: `Адрес похож на ${k.label} (${this.shortAddr(k.address)}): совпадают начало и конец, но это другой адрес. Так выглядит «отравление адреса»: сверьте все символы.` };
+        return { text: tt`Адрес похож на ${k.label} (${this.shortAddr(k.address)}): совпадают начало и конец, но это другой адрес. Так выглядит «отравление адреса»: сверьте все символы.` };
       }
     }
     return null;
@@ -239,7 +239,7 @@ Object.assign(Tabora, {
     const available = pending ? null : BigInt(asset.native ? this.wParseAmount(asset.amount, decimals) ?? 0n : asset.token.raw || 0);
     const price = WalletStore.unitPrice(asset.chain, asset.native ? null : asset.token, this.wallet.prices || {}) || 0;
 
-    const back = this.wButton("Отмена", "ghost small", () => this.walletGo("main"));
+    const back = this.wButton(tt`Отмена`, "ghost small", () => this.walletGo("main"));
 
     // Актив: сначала монета, затем сеть (если монета лежит в нескольких)
     const groups = this.walletAssetGroups(assets);
@@ -251,21 +251,21 @@ Object.assign(Tabora, {
         : h("span", { class: "w-coin" }, null, [asset.logo ? h("img", { src: asset.logo, alt: "" }) : h("b", {}, asset.symbol[0]), asset.chainLogo && asset.chainLogo !== asset.logo ? h("i", { class: "w-coin-chain" }, null, [h("img", { src: asset.chainLogo, alt: "" })]) : null].filter(Boolean)),
       h("span", { class: "w-asset-pick-text" }, null, [
         h("b", {}, multi ? group.symbol : `${asset.symbol} · ${asset.chainName}`),
-        h("span", {}, multi ? `всего ${group.amount} в ${group.items.length} ${this.plural(group.items.length, "сети", "сетях", "сетях")}` : pending ? "баланс загружается…" : `доступно ${asset.amount}`),
+        h("span", {}, multi ? tt`всего ${group.amount} в ${group.items.length} ${this.plural(group.items.length, tt`сети|сетях|сетях`)}` : pending ? tt`баланс загружается…` : tt`доступно ${asset.amount}`),
       ]),
       this.wIcon(["m6 9 6 6 6-6"], 12, 2.2),
     ]);
     assetBtn.addEventListener("click", e => {
       const r = e.currentTarget.getBoundingClientRect();
       this.showMenu(groups.filter(g => !g.pending).map(g => ({
-        label: g.items.length > 1 ? g.symbol : `${g.symbol} · ${g.items[0].chainName}${g.custom ? " · свой токен" : ""}`, hint: g.amount, checked: g.key === group.key,
+        label: g.items.length > 1 ? g.symbol : `${g.symbol} · ${g.items[0].chainName}${g.custom ? tt` · свой токен` : ""}`, hint: g.amount, checked: g.key === group.key,
         // у монеты в нескольких сетях берётся сеть с большим остатком; её можно сменить ниже
         run: () => { s.asset = g.items[0].key; s.fee = null; this.renderDrawer(); },
       })), r.left, r.bottom + 6);
     });
     const netBtn = h("button", { class: "w-asset-pick", type: "button", style: `--c:${asset.color}` }, null, [
       h("span", { class: "w-coin" }, null, [asset.chainLogo ? h("img", { src: asset.chainLogo, alt: "" }) : h("b", {}, asset.chainName[0])]),
-      h("span", { class: "w-asset-pick-text" }, null, [h("b", {}, asset.chainName), h("span", {}, pending ? "баланс загружается…" : `доступно ${asset.amount}`)]),
+      h("span", { class: "w-asset-pick-text" }, null, [h("b", {}, asset.chainName), h("span", {}, pending ? tt`баланс загружается…` : tt`доступно ${asset.amount}`)]),
       this.wIcon(["m6 9 6 6 6-6"], 12, 2.2),
     ]);
     netBtn.addEventListener("click", e => {
@@ -277,18 +277,18 @@ Object.assign(Tabora, {
     });
 
     // Кому
-    const to = h("input", { class: "w-input mono", type: "text", spellcheck: "false", autocomplete: "off", placeholder: chain.kind === "evm" ? "0x…" : chain.kind === "tron" ? "T…" : chain.kind === "btc" ? "bc1…" : "Адрес Solana", value: s.to });
-    const paste = this.iconButton("", "Вставить", ["M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2", "M9 2h6v4H9z"], async () => {
+    const to = h("input", { class: "w-input mono", type: "text", spellcheck: "false", autocomplete: "off", placeholder: chain.kind === "evm" ? "0x…" : chain.kind === "tron" ? "T…" : chain.kind === "btc" ? "bc1…" : tt`Адрес Solana`, value: s.to });
+    const paste = this.iconButton("", tt`Вставить@@буфер`, ["M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2", "M9 2h6v4H9z"], async () => {
       try {
         to.value = (await navigator.clipboard.readText()).trim();
         to.dispatchEvent(new Event("input"));
       } catch (e) {}
     }, 14);
-    const book = this.iconButton("", "Контакты", ["M4 4h12a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2z", "M4 18a2 2 0 0 1 2-2h12", "M8 4v16", "M20 8h1", "M20 12h1"], e => {
+    const book = this.iconButton("", tt`Контакты`, ["M4 4h12a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2z", "M4 18a2 2 0 0 1 2-2h12", "M8 4v16", "M20 8h1", "M20 12h1"], e => {
       const r = e.currentTarget.getBoundingClientRect();
       const contacts = WalletStore.contactsFor(asset.chain);
       const items = contacts.map(c => ({ label: c.name, hint: this.shortAddr(c.address), run: () => { to.value = c.address; to.dispatchEvent(new Event("input")); } }));
-      items.push(...(items.length ? [{ separator: true }] : []), { label: "Новый контакт…", run: () => this.walletContactSheet({ addresses: this.wCheckAddress(asset.chain, to.value).ok ? { [WalletStore.contactKey(asset.chain)]: to.value.trim() } : {} }) });
+      items.push(...(items.length ? [{ separator: true }] : []), { label: tt`Новый контакт…`, run: () => this.walletContactSheet({ addresses: this.wCheckAddress(asset.chain, to.value).ok ? { [WalletStore.contactKey(asset.chain)]: to.value.trim() } : {} }) });
       this.showMenu(items, r.left, r.bottom + 6);
     }, 14);
     const toNote = h("span", { class: "w-note" });
@@ -297,14 +297,14 @@ Object.assign(Tabora, {
       const c = this.wCheckAddress(asset.chain, to.value);
       const contact = c.ok ? WalletStore.contactFor(asset.chain, to.value.trim()) : null;
       const risk = c.ok ? this.wAddressRisk(asset.chain, to.value) : null;
-      toNote.textContent = risk ? risk.text : contact ? `Контакт: ${contact.name} · ${c.note}` : c.note;
+      toNote.textContent = risk ? risk.text : contact ? tt`Контакт: ${contact.name} · ${c.note}` : c.note;
       toNote.className = `w-note${c.ok ? (c.danger || risk ? " danger" : " ok") : to.value.trim() ? " bad" : ""}`;
       return c;
     };
 
     // Сумма
     const amount = h("input", { class: "w-input mono", type: "text", inputmode: "decimal", placeholder: "0", value: s.amount });
-    const maxLink = h("button", { class: "w-link small", type: "button" }, pending ? "Всё" : `Всё · ${asset.amount}`);
+    const maxLink = h("button", { class: "w-link small", type: "button" }, pending ? tt`Всё` : tt`Всё · ${asset.amount}`);
     const amountNote = h("span", { class: "w-note" });
     const refreshAmountNote = () => {
       const raw = this.wParseAmount(amount.value, decimals);
@@ -314,17 +314,17 @@ Object.assign(Tabora, {
         return null;
       }
       if (raw === null) {
-        amountNote.textContent = `Число, не больше ${decimals} знаков после точки`;
+        amountNote.textContent = tt`Число, не больше ${decimals} знаков после точки`;
         amountNote.className = "w-note bad";
         return null;
       }
       if (available === null) {
-        amountNote.textContent = "Ждём баланс…";
+        amountNote.textContent = tt`Ждём баланс…`;
         amountNote.className = "w-note";
         return null;
       }
       if (raw > available) {
-        amountNote.textContent = `Больше доступного (${asset.amount})`;
+        amountNote.textContent = tt`Больше доступного (${asset.amount})`;
         amountNote.className = "w-note bad";
         return null;
       }
@@ -336,7 +336,7 @@ Object.assign(Tabora, {
     // Комиссия
     const feeBox = h("div", { class: "w-fee" });
     const warn = h("div", { class: "w-warn", hidden: "true" });
-    const submit = this.wButton("Проверить и отправить", "primary", () => this.walletSendConfirm(asset));
+    const submit = this.wButton(tt`Проверить и отправить`, "primary", () => this.walletSendConfirm(asset));
     submit.disabled = true;
 
     let feeTimer = null;
@@ -394,11 +394,11 @@ Object.assign(Tabora, {
           const est = await this.walletEstimateFee(asset, target, available, { max: true });
           raw = est.maxSendable ?? available;
         } catch (e) {
-          this.notice(`Не удалось оценить комиссию: ${e.message || e}`);
+          this.notice(tt`Не удалось оценить комиссию: ${e.message || e}`);
           return;
         }
         if (raw <= 0n) {
-          amountNote.textContent = "Баланса не хватает на комиссию сети";
+          amountNote.textContent = tt`Баланса не хватает на комиссию сети`;
           amountNote.className = "w-note bad";
           return;
         }
@@ -416,16 +416,16 @@ Object.assign(Tabora, {
     }
 
     return h("div", { class: "w-send" }, null, [
-      h("div", { class: "w-flow-head" }, null, [h("b", { class: "w-title" }, "Отправить"), back]),
-      h("label", { class: "w-field" }, null, [h("span", {}, "Актив"), assetBtn]),
-      multi ? h("label", { class: "w-field" }, null, [h("span", {}, "Сеть"), netBtn]) : h("span"),
-      h("label", { class: "w-field" }, null, [h("span", {}, "Кому"), h("div", { class: "w-input-row" }, null, [to, book, paste]), toNote]),
-      h("label", { class: "w-field" }, null, [h("span", { class: "w-field-head" }, null, [h("span", {}, "Сумма"), maxLink]), h("div", { class: "w-input-row" }, null, [to && amount, h("span", { class: "w-input-suffix" }, asset.symbol)]), amountNote]),
+      h("div", { class: "w-flow-head" }, null, [h("b", { class: "w-title" }, tt`Отправить`), back]),
+      h("label", { class: "w-field" }, null, [h("span", {}, tt`Актив`), assetBtn]),
+      multi ? h("label", { class: "w-field" }, null, [h("span", {}, tt`Сеть`), netBtn]) : h("span"),
+      h("label", { class: "w-field" }, null, [h("span", {}, tt`Кому`), h("div", { class: "w-input-row" }, null, [to, book, paste]), toNote]),
+      h("label", { class: "w-field" }, null, [h("span", { class: "w-field-head" }, null, [h("span", {}, tt`Сумма`), maxLink]), h("div", { class: "w-input-row" }, null, [to && amount, h("span", { class: "w-input-suffix" }, asset.symbol)]), amountNote]),
       feeBox,
       warn,
       h("span", { class: "spacer" }),
       submit,
-      h("p", { class: "w-hint" }, `С адреса ${account.name} · ${this.shortAddr(account.addresses[asset.chain])}`),
+      h("p", { class: "w-hint" }, tt`С адреса ${account.name} · ${this.shortAddr(account.addresses[asset.chain])}`),
     ]);
   },
 
@@ -433,13 +433,13 @@ Object.assign(Tabora, {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const row = (k, v, cls = "") => h("div", { class: `w-fee-row ${cls}`.trim() }, null, [h("span", {}, k), h("span", { class: "mono" }, v)]);
     if (!fee) {
-      return row("Комиссия сети", "укажите адрес и сумму", "muted");
+      return row(tt`Комиссия сети`, tt`укажите адрес и сумму`, "muted");
     }
     if (fee.loading) {
-      return row("Комиссия сети", "считаем…", "muted");
+      return row(tt`Комиссия сети`, tt`считаем…`, "muted");
     }
     if (fee.error) {
-      return row("Комиссия сети", `не удалось: ${fee.error}`, "bad");
+      return row(tt`Комиссия сети`, tt`не удалось: ${fee.error}`, "bad");
     }
     const wrap = h("div", {});
     for (const r of fee.rows) {
@@ -484,13 +484,13 @@ Object.assign(Tabora, {
       out.fee = est.fee;
       out.maxSendable = nativeRaw - est.fee;
       const need = asset.native ? raw + est.fee : est.fee;
-      out.rows.push(["Комиссия сети", `≈ ${fmtFee(est.feeLikely)}`], ["Максимум", fmtFee(est.fee), "muted"], ["Газ", `${est.prepared.gasLimit} · базовая ${this.wFmt(est.baseFee, 9, 3)} gwei`, "muted"]);
-      out.rows.push([`${chain.symbol} на комиссию`, `${this.wFmt(nativeRaw, chain.decimals, 6)} ${chain.symbol}${nativeRaw >= need ? "" : " · не хватает"}`, nativeRaw >= need ? "ok" : "bad"]);
+      out.rows.push([tt`Комиссия сети`, `≈ ${fmtFee(est.feeLikely)}`], [tt`Максимум`, fmtFee(est.fee), "muted"], [tt`Газ`, tt`${est.prepared.gasLimit} · базовая ${this.wFmt(est.baseFee, 9, 3)} gwei`, "muted"]);
+      out.rows.push([tt`${chain.symbol} на комиссию`, `${this.wFmt(nativeRaw, chain.decimals, 6)} ${chain.symbol}${nativeRaw >= need ? "" : tt` · не хватает`}`, nativeRaw >= need ? "ok" : "bad"]);
       if (nativeRaw < need) {
         out.ok = false;
         out.warning = asset.native
-          ? `Сумма вместе с комиссией больше баланса. Доступно к отправке около ${this.wFmt(out.maxSendable > 0n ? out.maxSendable : 0n, chain.decimals, 6)} ${chain.symbol}.`
-          : `Для перевода ${asset.symbol} в сети ${chain.name} нужна комиссия в ${chain.symbol}. Пополните адрес примерно на ${this.wFmt(est.fee - nativeRaw, chain.decimals, 6)} ${chain.symbol}.`;
+          ? tt`Сумма вместе с комиссией больше баланса. Доступно к отправке около ${this.wFmt(out.maxSendable > 0n ? out.maxSendable : 0n, chain.decimals, 6)} ${chain.symbol}.`
+          : tt`Для перевода ${asset.symbol} в сети ${chain.name} нужна комиссия в ${chain.symbol}. Пополните адрес примерно на ${this.wFmt(est.fee - nativeRaw, chain.decimals, 6)} ${chain.symbol}.`;
       }
       return out;
     }
@@ -500,7 +500,7 @@ Object.assign(Tabora, {
       const suggested = Number(fees.halfHourFee || fees.hourFee || 2);
       const rate = BigInt(Math.min(500, Math.max(1, Math.round(suggested))));
       if (suggested > 500) {
-        out.warning = `Нода предлагает ставку ${suggested} сат/vB: ограничили до 500. Проверьте сеть позже.`;
+        out.warning = tt`Нода предлагает ставку ${suggested} сат/vB: ограничили до 500. Проверьте сеть позже.`;
       }
       const sorted = [...utxos].sort((a, b) => b.value - a.value);
       const total = sorted.reduce((n, u) => n + BigInt(u.value), 0n);
@@ -513,7 +513,7 @@ Object.assign(Tabora, {
         fee = vsize(chosen.length, 1) * rate;
         out.maxSendable = total - fee;
         out.fee = fee;
-        out.rows.push(["Комиссия сети", fmtFee(fee)]);
+        out.rows.push([tt`Комиссия сети`, fmtFee(fee)]);
         return out;
       }
       for (const u of sorted) {
@@ -534,17 +534,17 @@ Object.assign(Tabora, {
       out.plan.rate = rate.toString();
       out.plan.change = noChange ? 0n : change;
       out.maxSendable = total - vsize(sorted.length, 1) * rate;
-      out.rows.push(["Комиссия сети", `${fmtFee(fee)} · ${rate} сат/vB`], ["Входов", `${chosen.length} из ${sorted.length}`, "muted"]);
+      out.rows.push([tt`Комиссия сети`, tt`${fmtFee(fee)} · ${rate} сат/vB`], [tt`Входов`, tt`${chosen.length} из ${sorted.length}`, "muted"]);
       if (sum < raw + fee) {
         out.ok = false;
-        out.warning = `Не хватает на комиссию. Доступно к отправке около ${this.wFmt(out.maxSendable > 0n ? out.maxSendable : 0n, 8, 8)} BTC.`;
-        out.rows.push(["BTC на комиссию", `${this.wFmt(total, 8, 8)} BTC · не хватает`, "bad"]);
+        out.warning = tt`Не хватает на комиссию. Доступно к отправке около ${this.wFmt(out.maxSendable > 0n ? out.maxSendable : 0n, 8, 8)} BTC.`;
+        out.rows.push([tt`BTC на комиссию`, tt`${this.wFmt(total, 8, 8)} BTC · не хватает`, "bad"]);
       }
       if (utxos.some(u => !u.status?.confirmed)) {
-        out.warning ||= "Часть средств ещё не подтверждена: перевод может занять больше времени.";
+        out.warning ||= tt`Часть средств ещё не подтверждена: перевод может занять больше времени.`;
       }
       if (out.ok && raw > 0n && fee * 10n > raw) {
-        out.warning = `Комиссия больше 10% от суммы (${this.wFmt(fee, 8, 8)} BTC). Возможно, стоит отправить больше или подождать.`;
+        out.warning = tt`Комиссия больше 10% от суммы (${this.wFmt(fee, 8, 8)} BTC). Возможно, стоит отправить больше или подождать.`;
       }
       return out;
     }
@@ -567,18 +567,18 @@ Object.assign(Tabora, {
           rent = BigInt(r.result || 2039280);
         }
         plan = { program, fromAta, toAta, createAta, decimals: asset.token.decimals };
-        out.rows.push(["Счёт получателя", createAta ? `создаём · ${this.wFmt(rent, 9, 6)} SOL аренда` : "уже есть", createAta ? "" : "ok"]);
+        out.rows.push([tt`Счёт получателя`, createAta ? tt`создаём · ${this.wFmt(rent, 9, 6)} SOL аренда` : tt`уже есть`, createAta ? "" : "ok"]);
       }
       const fee = lamportsPerSig + rent;
       out.fee = fee;
       out.plan.sol = plan;
       out.maxSendable = nativeRaw - lamportsPerSig;
       const need = asset.native ? raw + fee : fee;
-      out.rows.unshift(["Комиссия сети", fmtFee(lamportsPerSig)]);
-      out.rows.push(["SOL на комиссию", `${this.wFmt(nativeRaw, 9, 6)} SOL${nativeRaw >= need ? "" : " · не хватает"}`, nativeRaw >= need ? "ok" : "bad"]);
+      out.rows.unshift([tt`Комиссия сети`, fmtFee(lamportsPerSig)]);
+      out.rows.push([tt`SOL на комиссию`, `${this.wFmt(nativeRaw, 9, 6)} SOL${nativeRaw >= need ? "" : tt` · не хватает`}`, nativeRaw >= need ? "ok" : "bad"]);
       if (nativeRaw < need) {
         out.ok = false;
-        out.warning = asset.native ? "Сумма вместе с комиссией больше баланса SOL." : `Для перевода ${asset.symbol} нужны SOL на комиссию${rent ? " и аренду счёта получателя" : ""}. Пополните адрес примерно на ${this.wFmt(fee - nativeRaw, 9, 6)} SOL.`;
+        out.warning = asset.native ? tt`Сумма вместе с комиссией больше баланса SOL.` : tt`Для перевода ${asset.symbol} нужны SOL на комиссию${rent ? tt` и аренду счёта получателя` : ""}. Пополните адрес примерно на ${this.wFmt(fee - nativeRaw, 9, 6)} SOL.`;
       }
       return out;
     }
@@ -614,11 +614,11 @@ Object.assign(Tabora, {
         const netFee = freeNet >= bytes ? 0n : bytes * bandwidthPrice;
         fee = netFee + (recipientNew ? createFee : 0n);
         out.plan.tron = { kind: "trx" };
-        out.rows.push(["Комиссия сети", fee ? `${resourceFailed ? "до " : ""}${fmtFee(fee)}` : "0 TRX · за счёт bandwidth"], ["Bandwidth", resourceFailed ? "нода не ответила · считаем без бесплатной квоты" : `${freeNet} свободно · нужно ${bytes}`, "muted"]);
+        out.rows.push([tt`Комиссия сети`, fee ? `${resourceFailed ? tt`до ` : ""}${fmtFee(fee)}` : tt`0 TRX · за счёт bandwidth`], ["Bandwidth", resourceFailed ? tt`нода не ответила · считаем без бесплатной квоты` : tt`${freeNet} свободно · нужно ${bytes}`, "muted"]);
         if (recipientNew) {
-          out.rows.push(["Активация адреса", `${this.wFmt(createFee, 6, 2)} TRX · адрес ещё не активирован`, "muted"]);
+          out.rows.push([tt`Активация адреса`, tt`${this.wFmt(createFee, 6, 2)} TRX · адрес ещё не активирован`, "muted"]);
         } else if (!toAcc) {
-          out.rows.push(["Активация адреса", `не удалось проверить · +${this.wFmt(createFee, 6, 2)} TRX, если адрес новый`, "muted"]);
+          out.rows.push([tt`Активация адреса`, tt`не удалось проверить · +${this.wFmt(createFee, 6, 2)} TRX, если адрес новый`, "muted"]);
         }
       } else {
         const contract = asset.token.address;
@@ -628,7 +628,7 @@ Object.assign(Tabora, {
         try {
           energy = await S.tronEstimateEnergy(from, contract, "transfer(address,uint256)", parameter);
         } catch (e) {
-          if (!/HTTP|таймаут|недоступна/.test(e.message)) {
+          if (!e.network) {
             throw e; // контракт отклонил вызов: это не сетевая ошибка
           }
           energy = 65000n; // типичный transfer USDT: нода не ответила, берём верхнюю оценку
@@ -639,21 +639,21 @@ Object.assign(Tabora, {
         const netFee = freeNet >= bytes ? 0n : bytes * bandwidthPrice;
         fee = energyFee + netFee;
         out.plan.tron = { kind: "trc20", contract, parameter, feeLimit: Number(energy * energyPrice * 15n / 10n) + 1000000 };
-        out.rows.push(["Комиссия сети", `${energyGuess || resourceFailed ? "до" : "≈"} ${fmtFee(fee)}`], ["Энергия", energyGuess ? "нода не ответила · оценка сверху" : `${freeEnergy} из ${res.EnergyLimit || 0} · нужно ${energy}`, "muted"]);
+        out.rows.push([tt`Комиссия сети`, `${energyGuess || resourceFailed ? tt`до` : "≈"} ${fmtFee(fee)}`], [tt`Энергия`, energyGuess ? tt`нода не ответила · оценка сверху` : tt`${freeEnergy} из ${res.EnergyLimit || 0} · нужно ${energy}`, "muted"]);
       }
       out.fee = fee;
       out.maxSendable = nativeRaw - fee;
       const need = asset.native ? raw + fee : fee;
-      out.rows.push(["TRX на комиссию", `${this.wFmt(nativeRaw, 6, 6)} TRX${nativeRaw >= need ? "" : " · не хватает"}`, nativeRaw >= need ? "ok" : "bad"]);
+      out.rows.push([tt`TRX на комиссию`, `${this.wFmt(nativeRaw, 6, 6)} TRX${nativeRaw >= need ? "" : tt` · не хватает`}`, nativeRaw >= need ? "ok" : "bad"]);
       if (nativeRaw < need) {
         out.ok = false;
         out.warning = asset.native
-          ? "Сумма вместе с комиссией больше баланса TRX."
-          : `Для перевода ${asset.symbol} TRC-20 нужны TRX на комиссию. Пополните адрес примерно на ${this.wFmt(fee - nativeRaw + 500000n, 6, 2)} TRX или выберите другую сеть.`;
+          ? tt`Сумма вместе с комиссией больше баланса TRX.`
+          : tt`Для перевода ${asset.symbol} TRC-20 нужны TRX на комиссию. Пополните адрес примерно на ${this.wFmt(fee - nativeRaw + 500000n, 6, 2)} TRX или выберите другую сеть.`;
       }
       return out;
     }
-    throw new Error("Сеть не поддержана");
+    throw new Error(tt`Сеть не поддержана`);
   },
 
   /* ---- Подтверждение и отправка ------------------------------------------ */
@@ -672,7 +672,7 @@ Object.assign(Tabora, {
     const amountText = this.wFmt(BigInt(fee.plan.raw), decimals, decimals);
     // цена только у монет сетей и встроенных токенов; неизвестная цена — сумма считается выше порога пароля
     const usd = WalletStore.usdOf(asset.chain, asset.native ? null : asset.token, BigInt(fee.plan.raw), this.wallet.prices || {});
-    const feeRow = fee.rows.find(r => r[0] === "Комиссия сети");
+    const feeRow = fee.rows.find(r => r[0] === tt`Комиссия сети`);
     const contact = WalletStore.contactFor(asset.chain, fee.plan.to);
     const check = this.wCheckAddress(asset.chain, fee.plan.to);
     const risk = this.wAddressRisk(asset.chain, fee.plan.to);
@@ -683,28 +683,28 @@ Object.assign(Tabora, {
     if (check.danger) {
       warns.push(`${check.note}.`);
     }
-    warns.push(contact ? "Перевод необратим. Получатель из ваших контактов." : "Перевод необратим. Получатель не в контактах: сверьте все символы адреса, а не только начало и конец.", "Подпись выполняется локально, фраза не покидает устройство.");
+    warns.push(contact ? tt`Перевод необратим. Получатель из ваших контактов.` : tt`Перевод необратим. Получатель не в контактах: сверьте все символы адреса, а не только начало и конец.`, tt`Подпись выполняется локально, фраза не покидает устройство.`);
     this.walletConfirm({
-      title: "Подтверждение",
+      title: tt`Подтверждение`,
       amount: `${amountText} ${asset.symbol}`,
       usd,
       danger: !!risk || !!check.danger,
-      amountNote: `${usd ? `≈ ${this.wFmtUsd(usd)} · ` : usd === null ? "курс неизвестен · " : ""}сеть ${chain.name}`,
+      amountNote: tt`${usd ? `≈ ${this.wFmtUsd(usd)} · ` : usd === null ? tt`курс неизвестен · ` : ""}сеть ${chain.name}`,
       rows: [
-        ["Откуда", `${account.name} · ${this.shortAddr(from)}`],
-        ["Куда", contact ? `${contact.name} · ${fee.plan.to}` : fee.plan.to, "mono"],
-        ["Комиссия сети", feeRow ? feeRow[1] : "—"],
-        ["Нода", this.hostOf(WalletStore.nodesFor(asset.chain).url)],
+        [tt`Откуда`, `${account.name} · ${this.shortAddr(from)}`],
+        [tt`Куда`, contact ? `${contact.name} · ${fee.plan.to}` : fee.plan.to, "mono"],
+        [tt`Комиссия сети`, feeRow ? feeRow[1] : "—"],
+        [tt`Нода`, this.hostOf(WalletStore.nodesFor(asset.chain).url)],
       ],
       warning: warns.join(" "),
-      okLabel: "Подписать и отправить",
+      okLabel: tt`Подписать и отправить`,
       onSign: async pass => {
         const hash = await this.walletExecuteSend(asset, fee.plan, pass);
         await WalletStore.addActivity({ chain: asset.chain, hash, to: fee.plan.to, amount: amountText, symbol: asset.symbol, from, kind: "send" });
         this.wallet.send = null;
         this.wallet.balances[`${asset.chain}:${from}`] && (this.wallet.balances[`${asset.chain}:${from}`].at = 0);
         this.walletGo("main");
-        this.walletToast(`Отправлено ${amountText} ${asset.symbol}`, this.wTxUrl(asset.chain, hash));
+        this.walletToast(tt`Отправлено ${amountText} ${asset.symbol}`, this.wTxUrl(asset.chain, hash));
       },
     });
   },
@@ -718,7 +718,7 @@ Object.assign(Tabora, {
     const wallet = WalletStore.wallets.find(w => w.id === plan.walletId) || WalletStore.activeWallet;
     const account = wallet.accounts.find(a => a.index === plan.index) || WalletStore.activeAccount;
     if (account.addresses[asset.chain] !== plan.from) {
-      throw new Error("Счёт отправителя изменился: пересчитайте перевод");
+      throw new Error(tt`Счёт отправителя изменился: пересчитайте перевод`);
     }
     const raw = BigInt(plan.raw);
     return WalletSigner.withKey(wallet.id, account.index, asset.chain, async priv => {
@@ -764,13 +764,13 @@ Object.assign(Tabora, {
         const check = WalletSigner.tronDecodeRaw(tx.raw_data_hex).contracts[0];
         const okTarget = plan.tron.kind === "trx" ? check.to === plan.to && check.amount === raw : check.contractAddress === plan.tron.contract && check.data.toLowerCase() === ("0xa9059cbb" + plan.tron.parameter).toLowerCase();
         if (!check || check.owner !== plan.from || !okTarget) {
-          throw new Error("Собранная транзакция не совпадает с введёнными данными");
+          throw new Error(tt`Собранная транзакция не совпадает с введёнными данными`);
         }
         const signed = WalletSigner.tronSignTx(tx, priv);
         const res = await WalletSigner.tronBroadcast(signed);
         return res.txid;
       }
-      throw new Error("Сеть не поддержана");
+      throw new Error(tt`Сеть не поддержана`);
     });
   },
 
@@ -780,7 +780,7 @@ Object.assign(Tabora, {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { WalletStore } = this.walletStore();
     return new Promise((resolve, reject) => {
-      const pass = this.wField("Пароль кошелька", { type: "password", autocomplete: "off" });
+      const pass = this.wField(tt`Пароль кошелька`, { type: "password", autocomplete: "off" });
       const err = h("div", { class: "w-error", hidden: "true" });
       let done = false;
       // Защита от кликджекинга и перехвата ввода: кнопка включается через паузу (лист сайта — 1,5 с),
@@ -814,7 +814,7 @@ Object.assign(Tabora, {
         target.addEventListener(type, fn, capture);
         cleanups.push(() => target.removeEventListener(type, fn, capture));
       };
-      const ok = this.wButton(opts.okLabel || "Подписать", "primary", async e => {
+      const ok = this.wButton(opts.okLabel || tt`Подписать`, "primary", async e => {
         if (!armedAt) {
           return;
         }
@@ -824,12 +824,12 @@ Object.assign(Tabora, {
             return;
           }
         } else if (!pointerIn) {
-          err.textContent = "Наведите курсор на кнопку и нажмите ещё раз";
+          err.textContent = tt`Наведите курсор на кнопку и нажмите ещё раз`;
           err.hidden = false;
           return;
         }
         if (opts.guard && !opts.guard.alive()) {
-          finish(reject, Object.assign(new Error("Страница запроса закрыта или ушла: запрос отклонён"), { code: 4001 }));
+          finish(reject, Object.assign(new Error(tt`Страница запроса закрыта или ушла: запрос отклонён`), { code: 4001 }));
           return;
         }
         if (busy) {
@@ -857,22 +857,22 @@ Object.assign(Tabora, {
           ok.classList.remove("loading");
         }
       });
-      const cancel = this.wButton(opts.cancelLabel || "Отмена", "ghost", () => finish(reject, Object.assign(new Error("Отклонено пользователем"), { code: 4001 })));
+      const cancel = this.wButton(opts.cancelLabel || tt`Отмена`, "ghost", () => finish(reject, Object.assign(new Error(tt`Отклонено пользователем`), { code: 4001 })));
       const rows = (opts.rows || []).map(([k, v, cls]) => h("div", { class: "w-fee-row" }, null, [h("span", {}, k), h("span", { class: cls || "" }, v)]));
       const card = h("div", { class: "w-sheet-card w-confirm" }, null, [
-        h("div", { class: "w-flow-head" }, null, [h("b", {}, opts.title || "Подтверждение"), opts.badge ? h("span", { class: "w-chip" }, opts.badge) : null].filter(Boolean)),
-        opts.fromSite && WalletStore.phishMark ? h("div", { class: "w-mark", title: "Знак подлинности: его знает только ваш кошелёк, сайт подделать не может" }, null, [h("span", {}, WalletStore.phishMark), h("i", {}, "настоящий лист Tabora")]) : null,
-        opts.onDisconnect ? (() => { const b = h("button", { class: "w-link small w-right", type: "button" }, "Отключить сайт и отклонить"); b.addEventListener("click", async () => { await opts.onDisconnect(); finish(reject, Object.assign(new Error("Сайт отключён"), { code: 4001 })); }); return b; })() : null,
+        h("div", { class: "w-flow-head" }, null, [h("b", {}, opts.title || tt`Подтверждение`), opts.badge ? h("span", { class: "w-chip" }, opts.badge) : null].filter(Boolean)),
+        opts.fromSite && WalletStore.phishMark ? h("div", { class: "w-mark", title: tt`Знак подлинности: его знает только ваш кошелёк, сайт подделать не может` }, null, [h("span", {}, WalletStore.phishMark), h("i", {}, tt`настоящий лист Tabora`)]) : null,
+        opts.onDisconnect ? (() => { const b = h("button", { class: "w-link small w-right", type: "button" }, tt`Отключить сайт и отклонить`); b.addEventListener("click", async () => { await opts.onDisconnect(); finish(reject, Object.assign(new Error(tt`Сайт отключён`), { code: 4001 })); }); return b; })() : null,
         opts.origin ? this.wOriginCard(opts.origin) : null,
         lookalike ? h("div", { class: "w-warn danger" }, lookalike) : null,
-        WalletStore.tampered ? h("div", { class: "w-warn danger" }, "Файл кошелька изменён вне Tabora и не подтверждён: адреса пересчитаны из фразы, контакты и настройки из файла не используются.") : null,
-        opts.amount ? h("div", { class: "w-confirm-amount" }, null, [h("span", {}, opts.amountLabel || "Отправляете"), h("b", { class: "mono" }, opts.amount), h("span", {}, opts.amountNote || "")]) : null,
-        opts.summary ? h("div", { class: "w-confirm-summary" }, null, [h("span", { class: "w-label" }, "Что произойдёт"), ...[].concat(opts.summary).map(t => h("div", { class: "w-summary-line" }, t))]) : null,
+        WalletStore.tampered ? h("div", { class: "w-warn danger" }, tt`Файл кошелька изменён вне Tabora и не подтверждён: адреса пересчитаны из фразы, контакты и настройки из файла не используются.`) : null,
+        opts.amount ? h("div", { class: "w-confirm-amount" }, null, [h("span", {}, opts.amountLabel || tt`Отправляете`), h("b", { class: "mono" }, opts.amount), h("span", {}, opts.amountNote || "")]) : null,
+        opts.summary ? h("div", { class: "w-confirm-summary" }, null, [h("span", { class: "w-label" }, tt`Что произойдёт`), ...[].concat(opts.summary).map(t => h("div", { class: "w-summary-line" }, t))]) : null,
         rows.length ? h("div", { class: "w-fee" }, null, rows) : null,
         opts.extra || null,
         opts.warning ? h("div", { class: `w-warn${danger ? " danger" : ""}` }, opts.warning) : null,
-        opts.details ? h("details", { class: "w-details" }, null, [h("summary", {}, opts.detailsLabel || "Данные вызова"), h("pre", { class: "mono" }, opts.details)]) : null,
-        opts.noPassword ? null : WalletStore.passwordless ? h("p", { class: "w-badge-danger" }, "Без пароля · подпись без подтверждения паролем") : needPass ? pass.wrap : h("p", { class: "w-hint" }, "Пароль не нужен: он введён при разблокировке. Крупные суммы, суммы без известного курса и опасные операции спросят его снова."),
+        opts.details ? h("details", { class: "w-details" }, null, [h("summary", {}, opts.detailsLabel || tt`Данные вызова`), h("pre", { class: "mono" }, opts.details)]) : null,
+        opts.noPassword ? null : WalletStore.passwordless ? h("p", { class: "w-badge-danger" }, tt`Без пароля · подпись без подтверждения паролем`) : needPass ? pass.wrap : h("p", { class: "w-hint" }, tt`Пароль не нужен: он введён при разблокировке. Крупные суммы, суммы без известного курса и опасные операции спросят его снова.`),
         err,
         h("div", { class: "w-actions" }, null, [cancel, ok]),
       ].filter(Boolean));
@@ -927,7 +927,7 @@ Object.assign(Tabora, {
       // любой лист исчезает при блокировке кошелька
       const obs = (s, t, what) => {
         if (what === "locked") {
-          finish(reject, Object.assign(new Error("Кошелёк заблокирован"), { code: 4001 }));
+          finish(reject, Object.assign(new Error(tt`Кошелёк заблокирован`), { code: 4001 }));
         }
       };
       Services.obs.addObserver(obs, WalletStore.TOPIC);
@@ -937,17 +937,17 @@ Object.assign(Tabora, {
           this.openDrawer("wallet"); // экран пользователя не сбрасываем: лист ложится поверх
         }
         // лист сайта живёт не дольше 2 минут, исчезает при уходе с вкладки запроса и при навигации/закрытии страницы-отправителя
-        const ttl = setTimeout(() => finish(reject, Object.assign(new Error("Время ожидания истекло"), { code: 4001 })), 120000);
+        const ttl = setTimeout(() => finish(reject, Object.assign(new Error(tt`Время ожидания истекло`), { code: 4001 })), 120000);
         cleanups.push(() => clearTimeout(ttl));
         const g = opts.guard;
         listen(gBrowser.tabContainer, "TabSelect", () => {
           if (g?.tab && gBrowser.selectedTab !== g.tab) {
-            finish(reject, Object.assign(new Error("Вкладка запроса переключена: запрос отклонён"), { code: 4001 }));
+            finish(reject, Object.assign(new Error(tt`Вкладка запроса переключена: запрос отклонён`), { code: 4001 }));
           }
         });
         const aliveTimer = setInterval(() => {
           if (g && !g.alive()) {
-            finish(reject, Object.assign(new Error("Страница запроса закрыта или ушла: запрос отклонён"), { code: 4001 }));
+            finish(reject, Object.assign(new Error(tt`Страница запроса закрыта или ушла: запрос отклонён`), { code: 4001 }));
           }
         }, 1000);
         cleanups.push(() => clearInterval(aliveTimer));
@@ -961,7 +961,7 @@ Object.assign(Tabora, {
       });
       this.wSheetShow(box);
       arm();
-      box._cancel = () => finish(reject, Object.assign(new Error("Отклонено"), { code: 4001 }));
+      box._cancel = () => finish(reject, Object.assign(new Error(tt`Отклонено`), { code: 4001 }));
       if (!opts.fromSite) {
         setTimeout(() => pass.input.focus(), 60);
       } else {
@@ -980,7 +980,7 @@ Object.assign(Tabora, {
       }
       await new Promise(r => setTimeout(r, 500));
     }
-    throw Object.assign(new Error("Кошелёк занят другим действием"), { code: -32002 });
+    throw Object.assign(new Error(tt`Кошелёк занят другим действием`), { code: -32002 });
   },
 
   wOriginCard(origin) {
@@ -989,14 +989,14 @@ Object.assign(Tabora, {
     icon.firstChild.addEventListener("error", () => icon.replaceChildren(h("b", {}, this.letterOf(origin.host))));
     return h("div", { class: "w-origin" }, null, [
       icon,
-      h("div", { class: "w-origin-text" }, null, [h("b", {}, origin.host), h("span", {}, [origin.secure ? "HTTPS" : "без HTTPS · небезопасно", origin.topHost ? `во фрейме на ${origin.topHost}` : null, origin.note].filter(Boolean).join(" · "))]),
+      h("div", { class: "w-origin-text" }, null, [h("b", {}, origin.host), h("span", {}, [origin.secure ? "HTTPS" : tt`без HTTPS · небезопасно`, origin.topHost ? tt`во фрейме на ${origin.topHost}` : null, origin.note].filter(Boolean).join(" · "))]),
     ]);
   },
 
   walletToast(text, url) {
     this.notice(text);
     if (url) {
-      setTimeout(() => this.notice("Открыть в обозревателе: правый клик по операции в «Истории»"), 2500);
+      setTimeout(() => this.notice(tt`Открыть в обозревателе: правый клик по операции в «Истории»`), 2500);
     }
   },
 
@@ -1039,11 +1039,11 @@ Object.assign(Tabora, {
     const local = WalletStore.activity.filter(it => !it.hash || !hashes.has(it.hash)).map(it => ({ id: `local:${it.at}`, local: it, at: Date.parse(it.at), chain: it.chain }));
     const items = [...onchain, ...local].sort((a, b) => b.at - a.at).slice(0, 80);
     if (!w.history && !local.length) {
-      list.append(h("div", { class: "w-empty" }, "Загружаем операции из сетей…"));
+      list.append(h("div", { class: "w-empty" }, tt`Загружаем операции из сетей…`));
       return list;
     }
     if (!items.length) {
-      list.append(h("div", { class: "w-empty" }, w.historyLoading ? "Загружаем операции из сетей…" : "Пока операций нет. Поступления появятся здесь и в уведомлении."));
+      list.append(h("div", { class: "w-empty" }, w.historyLoading ? tt`Загружаем операции из сетей…` : tt`Пока операций нет. Поступления появятся здесь и в уведомлении.`));
     }
     // компактная дата: в строке истории рядом с ней должен поместиться адрес контрагента
     const when = ms => {
@@ -1059,7 +1059,7 @@ Object.assign(Tabora, {
         row = h("div", { class: "w-asset w-activity", style: `--c:${chain?.color || "#888"}` }, null, [
           h("span", { class: "w-coin" }, null, [chain?.logo ? h("img", { src: chain.logo, alt: "" }) : h("b", {}, "?")]),
           h("div", { class: "w-chain-text" }, null, [
-            h("b", {}, l.kind === "sign" ? `Подпись · ${l.origin || ""}` : l.kind === "dapp" ? `${l.origin}` : `Отправка ${l.symbol}`),
+            h("b", {}, l.kind === "sign" ? tt`Подпись · ${l.origin || ""}` : l.kind === "dapp" ? `${l.origin}` : tt`Отправка ${l.symbol}`),
             h("span", { class: "w-sub-line" }, `${when(it.at)} · ${l.hash ? this.shortAddr(l.hash, 5, 4) : l.note || ""}`),
           ]),
           h("div", { class: "w-chain-bal" }, null, [h("b", { class: "w-native", title: l.amount ? `−${l.amount} ${l.symbol || ""}` : "" }, l.amount ? `−${this.shortAmount(l.amount)}` : ""), h("span", { class: "w-usd" }, l.symbol && l.amount ? l.symbol : "")]),
@@ -1069,14 +1069,14 @@ Object.assign(Tabora, {
         }
       } else {
         const chain = CHAINS[it.chain];
-        const title = it.call ? `${it.call} · ${it.chainName}` : it.dir === "in" ? `Получено ${it.symbol}` : it.dir === "self" ? `Перевод себе ${it.symbol}` : `Отправка ${it.symbol}`;
+        const title = it.call ? `${it.call} · ${it.chainName}` : it.dir === "in" ? tt`Получено ${it.symbol}` : it.dir === "self" ? tt`Перевод себе ${it.symbol}` : tt`Отправка ${it.symbol}`;
         const sign = it.dir === "in" ? "+" : it.dir === "self" ? "" : "−";
         row = h("div", { class: `w-asset w-activity ${it.dir === "in" ? "in" : ""} ${it.status !== "ok" ? "muted" : ""}`.trim(), style: `--c:${chain?.color || "#888"}` }, null, [
           // значок сети только для токенов: у родной монеты он повторял бы большой логотип
           h("span", { class: "w-coin" }, null, [h("img", { src: it.logo, alt: "" }), it.chainLogo && it.chainLogo !== it.logo ? h("i", { class: "w-coin-chain" }, null, [h("img", { src: it.chainLogo, alt: "" })]) : null].filter(Boolean)),
           h("div", { class: "w-chain-text" }, null, [
             h("b", {}, title),
-            h("span", { class: "w-sub-line" }, `${when(it.at)} · ${it.status === "pending" ? "ожидает · " : it.status === "failed" ? "ошибка · " : ""}${it.counterparty ? WalletStore.contactFor(it.chain, it.counterparty)?.name || this.shortAddr(it.counterparty, 5, 4) : this.shortAddr(it.hash, 5, 4)}`),
+            h("span", { class: "w-sub-line" }, `${when(it.at)} · ${it.status === "pending" ? tt`ожидает · ` : it.status === "failed" ? tt`ошибка · ` : ""}${it.counterparty ? WalletStore.contactFor(it.chain, it.counterparty)?.name || this.shortAddr(it.counterparty, 5, 4) : this.shortAddr(it.hash, 5, 4)}`),
           ]),
           h("div", { class: "w-chain-bal" }, null, [
             h("b", { class: `w-native${this.shortAmount(it.amount).length > 6 ? " long" : ""}`, title: `${sign}${it.amount} ${it.symbol}` }, it.call && it.amount === "0" ? "" : `${sign}${this.shortAmount(it.amount)}`),
@@ -1088,12 +1088,12 @@ Object.assign(Tabora, {
       list.append(row);
     }
     if (w.history?.hidden) {
-      list.append(h("div", { class: "w-hint w-center" }, `Скрыто подозрительных операций: ${w.history.hidden} (пыль, неизвестные токены, нулевые переводы, «исходящие», которые вы не подписывали)`));
+      list.append(h("div", { class: "w-hint w-center" }, tt`Скрыто подозрительных операций: ${w.history.hidden} (пыль, неизвестные токены, нулевые переводы, «исходящие», которые вы не подписывали)`));
     }
     if (w.history?.errors?.length) {
-      list.append(h("div", { class: "w-hint w-center" }, `Нет связи: ${w.history.errors.map(e => e.split(":")[0]).join(", ")}`));
+      list.append(h("div", { class: "w-hint w-center" }, tt`Нет связи: ${w.history.errors.map(e => e.split(":")[0]).join(", ")}`));
     }
-    const refresh = h("button", { class: "w-link", type: "button" }, w.historyLoading ? "Обновляем…" : "Обновить историю");
+    const refresh = h("button", { class: "w-link", type: "button" }, w.historyLoading ? tt`Обновляем…` : tt`Обновить историю`);
     refresh.disabled = !!w.historyLoading;
     refresh.addEventListener("click", () => {
       this.walletLoadHistory(true);
@@ -1112,13 +1112,13 @@ Object.assign(Tabora, {
     row.addEventListener("contextmenu", e => {
       e.preventDefault();
       const items = [
-        { label: "Открыть в обозревателе", run: () => this.openInSpace(this.wTxUrl(chain, hash), true) },
-        { label: "Копировать хеш", run: () => this.copyText(hash, "Хеш скопирован") },
+        { label: tt`Открыть в обозревателе`, run: () => this.openInSpace(this.wTxUrl(chain, hash), true) },
+        { label: tt`Копировать хеш`, run: () => this.copyText(hash, tt`Хеш скопирован`) },
       ];
       if (counterparty) {
         const known = WalletStore.contactFor(chain, counterparty);
-        items.push({ separator: true }, { label: "Копировать адрес контрагента", run: () => this.copyText(counterparty, "Адрес скопирован") });
-        items.push(known ? { label: `Контакт: ${known.name}`, run: () => this.walletContactSheet(known) } : { label: "Сохранить в контакты…", run: () => this.walletContactSheet({ addresses: { [WalletStore.contactKey(chain)]: counterparty } }) });
+        items.push({ separator: true }, { label: tt`Копировать адрес контрагента`, run: () => this.copyText(counterparty, tt`Адрес скопирован`) });
+        items.push(known ? { label: tt`Контакт: ${known.name}`, run: () => this.walletContactSheet(known) } : { label: tt`Сохранить в контакты…`, run: () => this.walletContactSheet({ addresses: { [WalletStore.contactKey(chain)]: counterparty } }) });
       }
       this.showMenu(items, e.clientX, e.clientY);
     });
@@ -1132,9 +1132,9 @@ Object.assign(Tabora, {
   walletContactSheet(contact = {}) {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { WalletStore } = this.walletStore();
-    const name = this.wField("Имя", { type: "text", value: contact.name || "", placeholder: "Например, Биржа или Алиса", maxlength: "40" });
+    const name = this.wField(tt`Имя`, { type: "text", value: contact.name || "", placeholder: tt`Например, Биржа или Алиса`, maxlength: "40" });
     // контакт помечает получателя как доверенного: новый контакт и смена адресов подтверждаются паролем
-    const pass = this.wField("Пароль кошелька", { type: "password", autocomplete: "off" });
+    const pass = this.wField(tt`Пароль кошелька`, { type: "password", autocomplete: "off" });
     const fields = this.CONTACT_FIELDS.map(([key, label, chainId]) => {
       const f = this.wField(label, { type: "text", class: "w-input mono", value: contact.addresses?.[key] || "", spellcheck: "false", autocomplete: "off" });
       const note = h("span", { class: "w-note" });
@@ -1155,9 +1155,9 @@ Object.assign(Tabora, {
       return { key, f, check };
     });
     const err = h("div", { class: "w-error", hidden: "true" });
-    const ok = this.wButton(contact.id ? "Сохранить" : "Добавить", "primary", async () => {
+    const ok = this.wButton(contact.id ? tt`Сохранить` : tt`Добавить`, "primary", async () => {
       if (!fields.every(x => x.check())) {
-        err.textContent = "Проверьте адреса";
+        err.textContent = tt`Проверьте адреса`;
         err.hidden = false;
         return;
       }
@@ -1169,23 +1169,23 @@ Object.assign(Tabora, {
           await WalletStore.addContact({ name: name.input.value, addresses }, pass.input.value);
         }
         box.remove();
-        this.notice(contact.id ? "Контакт обновлён" : "Контакт добавлен");
+        this.notice(contact.id ? tt`Контакт обновлён` : tt`Контакт добавлен`);
         this.renderDrawer();
       } catch (e) {
         err.textContent = e.message;
         err.hidden = false;
       }
     });
-    const cancel = this.wButton("Отмена", "ghost", () => box.remove());
+    const cancel = this.wButton(tt`Отмена`, "ghost", () => box.remove());
     const actions = [cancel, ok];
     if (contact.id) {
-      actions.unshift(this.wButton("Удалить", "ghost danger small", async () => {
+      actions.unshift(this.wButton(tt`Удалить`, "ghost danger small", async () => {
         await WalletStore.removeContact(contact.id);
         box.remove();
         this.renderDrawer();
       }), h("span", { class: "spacer" }));
     }
-    const box = h("div", { class: "w-sheet" }, null, [h("div", { class: "w-sheet-card w-confirm" }, null, [h("b", {}, contact.id ? "Контакт" : "Новый контакт"), name.wrap, ...fields.map(x => x.f.wrap), WalletStore.passwordless ? null : pass.wrap, err, h("div", { class: "w-actions" }, null, actions)].filter(Boolean))]);
+    const box = h("div", { class: "w-sheet" }, null, [h("div", { class: "w-sheet-card w-confirm" }, null, [h("b", {}, contact.id ? tt`Контакт` : tt`Новый контакт`), name.wrap, ...fields.map(x => x.f.wrap), WalletStore.passwordless ? null : pass.wrap, err, h("div", { class: "w-actions" }, null, actions)].filter(Boolean))]);
     box.querySelectorAll("input").forEach(i => i.addEventListener("keydown", e => e.stopPropagation()));
     this.wSheetShow(box);
     setTimeout(() => (contact.name ? fields[0].f.input : name.input).focus(), 60);
@@ -1195,10 +1195,10 @@ Object.assign(Tabora, {
   walletContactsCard() {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { WalletStore } = this.walletStore();
-    const add = this.iconButton("", "Добавить контакт", ["M12 5v14", "M5 12h14"], () => this.walletContactSheet(), 13);
-    const card = h("div", { class: "w-group" }, null, [h("div", { class: "w-group-head" }, null, [h("b", { class: "w-group-title" }, "Контакты"), add])]);
+    const add = this.iconButton("", tt`Добавить контакт`, ["M12 5v14", "M5 12h14"], () => this.walletContactSheet(), 13);
+    const card = h("div", { class: "w-group" }, null, [h("div", { class: "w-group-head" }, null, [h("b", { class: "w-group-title" }, tt`Контакты`), add])]);
     if (!WalletStore.contacts.length) {
-      card.append(h("p", { class: "w-hint" }, "Сохраняйте адреса получателей: на экране отправки их можно выбрать из списка, а в истории будут видны имена."));
+      card.append(h("p", { class: "w-hint" }, tt`Сохраняйте адреса получателей: на экране отправки их можно выбрать из списка, а в истории будут видны имена.`));
       return card;
     }
     const labels = { evm: "EVM", bitcoin: "BTC", solana: "SOL", tron: "TRON" };
@@ -1305,7 +1305,7 @@ Object.assign(Tabora, {
               if (t.custom) {
                 w.customNotified[tkey] = Date.now();
               }
-              incoming.push({ chain, text: `${delta} ${t.symbol}${t.custom ? " (свой токен, без оценки)" : ""}`, usd, mark: `${id}:${t.symbol}:${now}`, logo: t.custom ? "" : t.logo });
+              incoming.push({ chain, text: `${delta} ${t.symbol}${t.custom ? tt` (свой токен, без оценки)` : ""}`, usd, mark: `${id}:${t.symbol}:${now}`, logo: t.custom ? "" : t.logo });
             }
           }
         }
@@ -1335,7 +1335,7 @@ Object.assign(Tabora, {
     const load = src => new Promise((resolve, reject) => {
       const img = this.html("img");
       img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error(`значок не загружен: ${src}`));
+      img.onerror = () => reject(new Error(tt`значок не загружен: ${src}`));
       img.src = src;
     });
     const size = 128;
@@ -1368,8 +1368,8 @@ Object.assign(Tabora, {
 
   /** Уведомление о поступлении (ещё не показанное): { alert, title, body }. */
   async walletIncomingAlert({ chain, text, usd, logo }) {
-    const title = `Пришло ${text}`;
-    const body = `${chain.name}${usd ? ` · ${this.wFmtUsd(usd)}` : ""} · кошелёк Tabora`;
+    const title = tt`Пришло ${text}`;
+    const body = tt`${chain.name}${usd ? ` · ${this.wFmtUsd(usd)}` : ""} · кошелёк Tabora`;
     const alert = Cc["@mozilla.org/alert-notification;1"].createInstance(Ci.nsIAlertNotification);
     alert.init(`tabora-wallet-${Date.now()}`, "", title, body, true, "", null, null, null, null, Services.scriptSecurityManager.getSystemPrincipal(), false, false);
     try {
@@ -1382,7 +1382,7 @@ Object.assign(Tabora, {
 
   async walletNotifyIncoming(incoming) {
     const { chain } = incoming;
-    this.notice(`Пришло ${incoming.text} · ${chain.name}`);
+    this.notice(tt`Пришло ${incoming.text} · ${chain.name}`);
     try {
       const { alert } = await this.walletIncomingAlert(incoming);
       const alerts = Cc["@mozilla.org/alerts-service;1"].getService(Ci.nsIAlertsService);

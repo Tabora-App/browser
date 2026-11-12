@@ -1,3 +1,4 @@
+import { tt } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -232,7 +233,7 @@ export const Sync = {
   async _seal(keys, coll, id, data) {
     let plain = te.encode(JSON.stringify(data));
     if (plain.length > MAX_PLAIN) {
-      throw fail("Запись слишком велика для синхронизации", "too-large");
+      throw fail(tt`Запись слишком велика для синхронизации`, "too-large");
     }
     const padded = new Uint8Array(Math.ceil((plain.length + 1) / 64) * 64).fill(0x20);
     padded.set(plain);
@@ -326,7 +327,7 @@ export const Sync = {
       for (let i = 0; i < ROUNDS && !done; i++) {
         const keys = await this._key();
         if (!keys) {
-          throw fail("Ключ аккаунта недоступен: введите пароль аккаунта на этом компьютере", "sync-key");
+          throw fail(tt`Ключ аккаунта недоступен: введите пароль аккаунта на этом компьютере`, "sync-key");
         }
         done = await this._round(keys, state);
       }
@@ -394,10 +395,10 @@ export const Sync = {
     const keys = await this._key();
     const backup = await lazy.Pgp.backup().catch(() => null);
     if (backup?.state === "offline") {
-      throw fail("Сервер Tabora не отвечает. Проверьте соединение и повторите", "offline");
+      throw fail(tt`Сервер Tabora не отвечает. Проверьте соединение и повторите`, "offline");
     }
     if (!keys || !backup || !["ok", "no-password"].includes(backup.state)) {
-      throw fail("Ключ аккаунта сменился: введите пароль аккаунта на этом компьютере", "sync-key");
+      throw fail(tt`Ключ аккаунта сменился: введите пароль аккаунта на этом компьютере`, "sync-key");
     }
     if (keys.id !== before) {
       return; // ключ только что обновился: следующий проход сверит его с сервером заново
@@ -429,7 +430,7 @@ export const Sync = {
     for (;;) {
       const res = await a.backend.syncPull({ session, since, limit: PULL_LIMIT });
       if (!res || !Number.isInteger(res.rev) || !Number.isInteger(res.gen) || !Array.isArray(res.items)) {
-        throw fail("Сервер Tabora ответил непонятно. Повторите позже", "bad-response");
+        throw fail(tt`Сервер Tabora ответил непонятно. Повторите позже`, "bad-response");
       }
       if (res.keyId && res.keyId !== keys.id) {
         await this._keyMismatch(state);
@@ -439,7 +440,7 @@ export const Sync = {
         if (state.gen && state.keyId && !res.keyId) {
           // данные стёрты с сервера с другого компьютера («Стереть с сервера»): заливать их обратно
           // нельзя, синхронизация выключается и здесь
-          throw fail("Данные синхронизации стёрты с сервера с другого компьютера", "sync-erased");
+          throw fail(tt`Данные синхронизации стёрты с сервера с другого компьютера`, "sync-erased");
         }
         const first = !state.gen && !Object.keys(state.items).length;
         this._forget(state, res.gen);

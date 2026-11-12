@@ -1,3 +1,4 @@
+import { tt } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -135,7 +136,7 @@ const logins = {
         }
         byId.set(id, await Services.logins.addLoginAsync(this._info(d)));
       } catch (e) {
-        warn(`пароль ${id} не применён`, e);
+        warn(tt`пароль ${id} не применён`, e);
       }
     }
     return { dirty };
@@ -206,7 +207,7 @@ const otp = {
         }
         await Otp.add(fields);
       } catch (e) {
-        warn(`код ${id} не применён`, e);
+        warn(tt`код ${id} не применён`, e);
       }
     }
     return {};
@@ -359,7 +360,7 @@ const marks = {
         try {
           await upsert(id);
         } catch (e) {
-          warn(`закладка ${id} не применена`, e);
+          warn(tt`закладка ${id} не применена`, e);
         }
       }
     }
@@ -382,7 +383,7 @@ const marks = {
           dirty.push(id); // здесь в папке есть своё: на сервер уйдёт объединённый порядок
         }
       } catch (e) {
-        warn(`порядок в папке ${id} не применён`, e);
+        warn(tt`порядок в папке ${id} не применён`, e);
       }
     }
 
@@ -410,7 +411,7 @@ const marks = {
         await B.remove(id);
         local.delete(id);
       } catch (e) {
-        warn(`закладка ${id} не удалена`, e);
+        warn(tt`закладка ${id} не удалена`, e);
       }
     }
     return { dirty };
@@ -527,7 +528,7 @@ const spaces = {
         const identity = cis.create(name, icon, color);
         list.push({ id, name, icon, color, userContextId: identity.userContextId, _o: Number(data.o) });
       } catch (e) {
-        warn(`пространство ${id} не применено`, e);
+        warn(tt`пространство ${id} не применено`, e);
       }
     }
     // порядок: пришедшие встают на свои места, остальные держат прежний
@@ -626,7 +627,7 @@ const tabs = {
       }
       if (data && Array.isArray(data.tabs)) {
         this._remote.set(id, {
-          name: str(data.name, 80) || "Компьютер", at: Number(data.at) || 0,
+          name: str(data.name, 80) || tt`Компьютер`, at: Number(data.at) || 0,
           tabs: data.tabs.filter(t => t && /^https?:\/\//.test(t.u || "")).slice(0, MAX_TABS).map(t => ({ t: str(t.t, 200), u: str(t.u, 2048), ...(t.p ? { p: 1 } : {}) })),
         });
       } else {

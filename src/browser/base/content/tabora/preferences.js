@@ -2,6 +2,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+// Языки (i18n/I18n.sys.mjs): объявлено один раз на страницу настроек, account/pane.js пользуется тем же.
+var { tt, tr: ttr, form: ttForm, locale: ttLocale } = ChromeUtils.importESModule("chrome://tabora/content/i18n/I18n.sys.mjs");
+
 /* Собственные карточки Tabora на странице настроек: баннеры cookie в разделе
  * «Приватность и защита», спящие вкладки и быстрые кнопки во «Вкладках и просмотре».
  * Стили — preferences.css. */
@@ -28,15 +31,15 @@
   function cookieBannersCard() {
     const mode = Services.prefs.getStringPref(PREF_MODE, "reject");
     const count = Services.prefs.getIntPref(PREF_COUNT, 0);
-    const card = h("moz-card", { id: "tabora-cookie-banners", heading: "Баннеры cookie", class: "tabora-card" });
+    const card = h("moz-card", { id: "tabora-cookie-banners", heading: tt`Баннеры cookie`, class: "tabora-card" });
     const body = h("div", { class: "tabora-card-body" });
-    body.append(h("p", { class: "tabora-card-sub" }, "Окна «Этот сайт использует cookie» закрываем за вас: нажимаем «Отклонить» или «Только необходимые», как только баннер появился."));
+    body.append(h("p", { class: "tabora-card-sub" }, tt`Окна «Этот сайт использует cookie» закрываем за вас: нажимаем «Отклонить» или «Только необходимые», как только баннер появился.`));
 
-    const group = h("moz-radio-group", { name: "tabora-cookie-banners-mode", "aria-label": "Что делать с баннерами cookie" });
+    const group = h("moz-radio-group", { name: "tabora-cookie-banners-mode", "aria-label": tt`Что делать с баннерами cookie` });
     const options = [
-      ["reject", "Отклонять необязательные", "Рекомендуется. Сайт получит только то, без чего не работает"],
-      ["accept", "Принимать все", "Баннер исчезает, сайт ставит все cookie"],
-      ["off", "Не трогать", "Баннеры остаются, решаете сами"],
+      ["reject", tt`Отклонять необязательные`, tt`Рекомендуется. Сайт получит только то, без чего не работает`],
+      ["accept", tt`Принимать все`, tt`Баннер исчезает, сайт ставит все cookie`],
+      ["off", tt`Не трогать`, tt`Баннеры остаются, решаете сами`],
     ];
     for (const [value, label, description] of options) {
       const radio = h("moz-radio", { value, label, description });
@@ -54,7 +57,7 @@
     });
     body.append(group);
 
-    const notify = h("moz-checkbox", { label: "Показывать уведомление, когда баннер закрыт" });
+    const notify = h("moz-checkbox", { label: tt`Показывать уведомление, когда баннер закрыт` });
     if (Services.prefs.getBoolPref(PREF_NOTIFY, true)) {
       notify.setAttribute("checked", "true");
     }
@@ -62,8 +65,8 @@
     body.append(notify);
 
     const stat = h("p", { class: "tabora-card-stat" });
-    const plural = (n, a, b, c) => (n % 10 === 1 && n % 100 !== 11 ? a : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? b : c);
-    stat.textContent = count ? `Закрыто ${count} ${plural(count, "баннер", "баннера", "баннеров")}` : "Пока ни одного баннера не закрыто";
+    const plural = (n, forms) => ttForm(n, forms);
+    stat.textContent = count ? tt`Закрыто ${count} ${plural(count, tt`баннер|баннера|баннеров`)}` : tt`Пока ни одного баннера не закрыто`;
     body.append(stat);
     card.append(body);
     return card;
@@ -72,23 +75,23 @@
   /* Блокировщик рекламы (shield/Shield.sys.mjs): выключатель, списки фильтров, исключения. */
   function shieldCard() {
     const { Shield } = ChromeUtils.importESModule("chrome://tabora/content/shield/Shield.sys.mjs");
-    const card = h("moz-card", { id: "tabora-shield", heading: "Блокировка рекламы", class: "tabora-card" });
+    const card = h("moz-card", { id: "tabora-shield", heading: tt`Блокировка рекламы`, class: "tabora-card" });
     const body = h("div", { class: "tabora-card-body" });
     card.append(body);
-    const plural = (n, a, b, c) => (n % 10 === 1 && n % 100 !== 11 ? a : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? b : c);
-    const when = at => new Date(at).toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+    const plural = (n, forms) => ttForm(n, forms);
+    const when = at => new Date(at).toLocaleString(ttLocale(), { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
     const draw = () => {
       const on = Shield.enabled;
       body.replaceChildren();
-      body.append(h("p", { class: "tabora-card-sub" }, "Запросы к рекламным и следящим серверам отменяются, рекламные блоки на страницах скрываются. Сайт, где это мешает, исключается одним нажатием: счётчик заблокированного в верхней панели → «Не блокировать на этом сайте»."));
-      const toggle = h("moz-toggle", { label: "Блокировать рекламу и трекеры", id: "tabora-shield-toggle" });
+      body.append(h("p", { class: "tabora-card-sub" }, tt`Запросы к рекламным и следящим серверам отменяются, рекламные блоки на страницах скрываются. Сайт, где это мешает, исключается одним нажатием: счётчик заблокированного в верхней панели → «Не блокировать на этом сайте».`));
+      const toggle = h("moz-toggle", { label: tt`Блокировать рекламу и трекеры`, id: "tabora-shield-toggle" });
       toggle.pressed = on;
       toggle.addEventListener("toggle", () => Shield.setEnabled(toggle.pressed));
       body.append(toggle);
 
       const lists = h("div", { class: "tabora-shield-lists" });
       for (const l of Shield.lists()) {
-        const state = l.error && !l.at ? `не загружен: ${l.error}` : l.at ? `обновлён ${when(l.at)}${l.error ? `; последняя попытка: ${l.error}` : ""}` : l.on && on ? "загружается…" : "не загружен";
+        const state = l.error && !l.at ? tt`не загружен: ${l.error}` : l.at ? tt`обновлён ${when(l.at)}${l.error ? tt`; последняя попытка: ${l.error}` : ""}` : l.on && on ? tt`загружается…` : tt`не загружен`;
         const box = h("moz-checkbox", { label: l.title, description: `${l.note}. ${state[0].toUpperCase()}${state.slice(1)}.` });
         box.checked = l.on;
         box.disabled = !on;
@@ -98,20 +101,20 @@
       body.append(lists);
 
       const row = h("div", { class: "tabora-shield-row" });
-      const refresh = h("moz-button", { label: Shield.busy ? "Обновляю…" : "Обновить списки" });
+      const refresh = h("moz-button", { label: Shield.busy ? tt`Обновляю…` : tt`Обновить списки` });
       refresh.disabled = !on || Shield.busy;
       refresh.addEventListener("click", () => Shield.update({ force: true }).catch(() => {}));
       const counts = Shield.counts;
-      row.append(refresh, h("span", { class: "tabora-card-stat" }, !on ? "Блокировка выключена" : counts ? `${counts.network.toLocaleString("ru-RU")} ${plural(counts.network, "правило", "правила", "правил")} для запросов, ${(counts.generic + counts.specific).toLocaleString("ru-RU")} для скрытия блоков` : "Списки ещё не загружены"));
+      row.append(refresh, h("span", { class: "tabora-card-stat" }, !on ? tt`Блокировка выключена` : counts ? tt`${counts.network.toLocaleString(ttLocale())} ${plural(counts.network, tt`правило|правила|правил`)} для запросов, ${(counts.generic + counts.specific).toLocaleString(ttLocale())} для скрытия блоков` : tt`Списки ещё не загружены`));
       body.append(row);
 
       const allow = Shield.allowList();
       if (allow.length) {
-        body.append(h("p", { class: "tabora-card-sub" }, "Сайты, на которых реклама не блокируется:"));
+        body.append(h("p", { class: "tabora-card-sub" }, tt`Сайты, на которых реклама не блокируется:`));
         const sites = h("div", { class: "tabora-shield-sites" });
         for (const site of allow) {
           const chip = h("span", { class: "tabora-shield-site" });
-          const remove = h("button", { type: "button", title: `Снова блокировать на ${site}`, "aria-label": `Снова блокировать на ${site}` }, "×");
+          const remove = h("button", { type: "button", title: tt`Снова блокировать на ${site}`, "aria-label": tt`Снова блокировать на ${site}` }, "×");
           remove.addEventListener("click", () => Shield.setAllowed(site, false));
           chip.append(h("span", {}, site), remove);
           sites.append(chip);
@@ -132,15 +135,15 @@
 
   function sleepingTabsCard() {
     const current = String(Services.prefs.getIntPref(PREF_SLEEP, 0));
-    const card = h("moz-card", { id: "tabora-sleeping-tabs", heading: "Спящие вкладки", class: "tabora-card" });
+    const card = h("moz-card", { id: "tabora-sleeping-tabs", heading: tt`Спящие вкладки`, class: "tabora-card" });
     const body = h("div", { class: "tabora-card-body" });
-    body.append(h("p", { class: "tabora-card-sub" }, "Спящая вкладка не занимает память, но при возврате загружается заново: несохранённое на странице может пропасть. Вкладки со звуком, камерой, микрофоном или демонстрацией экрана не засыпают."));
-    const group = h("moz-radio-group", { name: "tabora-sleeping-tabs", "aria-label": "Когда усыплять неактивные вкладки" });
+    body.append(h("p", { class: "tabora-card-sub" }, tt`Спящая вкладка не занимает память, но при возврате загружается заново: несохранённое на странице может пропасть. Вкладки со звуком, камерой, микрофоном или демонстрацией экрана не засыпают.`));
+    const group = h("moz-radio-group", { name: "tabora-sleeping-tabs", "aria-label": tt`Когда усыплять неактивные вкладки` });
     const options = [
-      ["0", "Не усыплять", "Рекомендуется. Вкладки остаются как были; при нехватке памяти система всё равно может выгрузить самые старые"],
-      ["60", "Через час простоя", ""],
-      ["240", "Через 4 часа простоя", ""],
-      ["720", "Через 12 часов простоя", ""],
+      ["0", tt`Не усыплять`, tt`Рекомендуется. Вкладки остаются как были; при нехватке памяти система всё равно может выгрузить самые старые`],
+      ["60", tt`Через час простоя`, ""],
+      ["240", tt`Через 4 часа простоя`, ""],
+      ["720", tt`Через 12 часов простоя`, ""],
     ];
     for (const [value, label, description] of options) {
       const radio = h("moz-radio", description ? { value, label, description } : { value, label });
@@ -167,9 +170,9 @@
     if (!shell?.DOCK) {
       return null;
     }
-    const card = h("moz-card", { id: "tabora-dock-card", heading: "Быстрые кнопки", class: "tabora-card" });
+    const card = h("moz-card", { id: "tabora-dock-card", heading: tt`Быстрые кнопки`, class: "tabora-card" });
     const body = h("div", { class: "tabora-card-body" });
-    body.append(h("p", { class: "tabora-card-sub" }, "Значки рядом с адресной строкой при вкладках сверху. Отметьте те, что нужны под рукой: остальное открывается сочетанием клавиш. При вкладках сбоку те же разделы открывает кнопка «Разделы» внизу колонки."));
+    body.append(h("p", { class: "tabora-card-sub" }, tt`Значки рядом с адресной строкой при вкладках сверху. Отметьте те, что нужны под рукой: остальное открывается сочетанием клавиш. При вкладках сбоку те же разделы открывает кнопка «Разделы» внизу колонки.`));
     const grid = h("div", { class: "tabora-dock-grid" });
     const boxes = new Map();
     const sync = () => {
@@ -311,7 +314,7 @@
 
   // Пункты меню настроек под Tabora: «Аккаунт» вместо «Аккаунт и синхронизация» (раздел занят
   // аккаунтом Tabora), «Расширения» без тем (тем оформления Firefox у оболочки нет).
-  const NAV_LABELS = { "category-sync": "Аккаунт", addonsButton: "Расширения" };
+  const NAV_LABELS = { "category-sync": tt`Аккаунт`, addonsButton: tt`Расширения` };
 
   /** Мелкие правки готовых блоков страницы; вызывается при каждом изменении дерева. */
   function tidy() {

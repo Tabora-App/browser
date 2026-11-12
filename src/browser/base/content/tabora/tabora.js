@@ -7,6 +7,11 @@
 
 "use strict";
 
+// Языки (i18n/I18n.sys.mjs): tt`…` — надпись, ttr — перевод готового текста, ttForm — форма слова
+// для числа, ttLocale — язык для дат и чисел. Объявлено один раз на всё окно: скрипты, которые
+// подключаются ниже через loadSubScript, пользуются этими же именами.
+var { tt, tr: ttr, form: ttForm, locale: ttLocale } = ChromeUtils.importESModule("chrome://tabora/content/i18n/I18n.sys.mjs");
+
 var Tabora = {
   // Автоусыпление неактивных вкладок: минуты простоя, 0 — никогда (по умолчанию). Усыплённая
   // вкладка загружается заново при возврате, поэтому включается только по желанию в настройках.
@@ -67,9 +72,9 @@ var Tabora = {
 
   BOOKMARK_DEFAULTS_PREF: "tabora.bookmarks.defaultsMigrated",
   BOOKMARK_DEFAULTS: [
-    ["Сайт Tabora", "https://tabora.app/"],
-    ["Исходный код", "https://github.com/Tabora-App/browser"],
-    ["Поддержка", "about:preferences#sync-support"],
+    [tt`Сайт Tabora`, "https://tabora.app/"],
+    [tt`Исходный код`, "https://github.com/Tabora-App/browser"],
+    [tt`Поддержка`, "about:preferences#sync-support"],
   ],
 
   initBookmarkDefaults() {
@@ -138,9 +143,9 @@ var Tabora = {
       const view = e.target;
       if (view.id === "appMenu-mainView") {
         const ext = view.querySelector("#appMenu-extensions-themes-button");
-        if (ext && (ext.hasAttribute("data-l10n-id") || ext.getAttribute("label") !== "Расширения")) {
+        if (ext && (ext.hasAttribute("data-l10n-id") || ext.getAttribute("label") !== tt`Расширения`)) {
           ext.removeAttribute("data-l10n-id"); // иначе перевод вернёт «Расширения и темы»
-          ext.setAttribute("label", "Расширения");
+          ext.setAttribute("label", tt`Расширения`);
         }
       } else if (view.id === "appmenu-moreTools") {
         for (const item of view.querySelectorAll('toolbarbutton[key="key_browserConsole"][shortcut]')) {
@@ -170,49 +175,49 @@ var Tabora = {
     // (mail/RichEditor.sys.mjs).
     const { RichEditor } = ChromeUtils.importESModule("chrome://tabora/content/mail/RichEditor.sys.mjs");
     const editor = new RichEditor(document, {
-      label: "Текст письма",
-      placeholder: "Текст письма",
+      label: tt`Текст письма`,
+      placeholder: tt`Текст письма`,
       menu: (items, rect) => this.showMenu(items, rect.left, rect.bottom + 6),
       onInput: () => this.composeChanged(),
       onSubmit: () => this.sendCompose(),
       onEscape: () => this.closeCompose(),
     });
     editor.el.id = "tabora-compose-text";
-    const fromSelect = h("select", { id: "tabora-compose-from", "aria-label": "Отправитель" });
-    const toInput = h("input", { id: "tabora-compose-to", type: "text", placeholder: "Адрес, Enter или запятая", autocomplete: "off" });
-    const box = h("div", { id: "tabora-compose", hidden: "true", role: "dialog", "aria-label": "Новое письмо", "data-min": "false" }, null, [
+    const fromSelect = h("select", { id: "tabora-compose-from", "aria-label": tt`Отправитель` });
+    const toInput = h("input", { id: "tabora-compose-to", type: "text", placeholder: tt`Адрес, Enter или запятая`, autocomplete: "off" });
+    const box = h("div", { id: "tabora-compose", hidden: "true", role: "dialog", "aria-label": tt`Новое письмо`, "data-min": "false" }, null, [
       h("div", { class: "head", id: "tabora-compose-head" }, null, [
         h("span", { class: "grip" }),
-        h("span", { class: "title", id: "tabora-compose-title" }, "Новое письмо"),
-        iconBtn("tabora-compose-min", "Свернуть", ["M5 12h14"]),
-        iconBtn("tabora-compose-close", "Закрыть (Esc)", ["M6 6l12 12M18 6 6 18"]),
+        h("span", { class: "title", id: "tabora-compose-title" }, tt`Новое письмо`),
+        iconBtn("tabora-compose-min", tt`Свернуть`, ["M5 12h14"]),
+        iconBtn("tabora-compose-close", tt`Закрыть (Esc)`, ["M6 6l12 12M18 6 6 18"]),
       ]),
       h("div", { class: "body" }, null, [
-        h("div", { class: "field" }, null, [h("label", { for: "tabora-compose-from" }, "От"), fromSelect]),
+        h("div", { class: "field" }, null, [h("label", { for: "tabora-compose-from" }, tt`От`), fromSelect]),
         h("div", { class: "field" }, null, [
-          h("label", { for: "tabora-compose-to" }, "Кому"),
+          h("label", { for: "tabora-compose-to" }, tt`Кому`),
           h("div", { class: "chips", id: "tabora-compose-chips" }, null, [toInput]),
-          h("button", { class: "link", id: "tabora-compose-cc-toggle", type: "button" }, "Копия"),
+          h("button", { class: "link", id: "tabora-compose-cc-toggle", type: "button" }, tt`Копия`),
         ]),
         h("div", { class: "field", id: "tabora-compose-cc-field", hidden: "true" }, null, [
-          h("label", { for: "tabora-compose-cc" }, "Копия"),
-          h("input", { id: "tabora-compose-cc", type: "text", placeholder: "Через запятую" }),
+          h("label", { for: "tabora-compose-cc" }, tt`Копия`),
+          h("input", { id: "tabora-compose-cc", type: "text", placeholder: tt`Через запятую` }),
         ]),
         h("div", { class: "field" }, null, [
-          h("label", { for: "tabora-compose-subject" }, "Тема"),
-          h("input", { id: "tabora-compose-subject", type: "text", placeholder: "О чём письмо" }),
+          h("label", { for: "tabora-compose-subject" }, tt`Тема`),
+          h("input", { id: "tabora-compose-subject", type: "text", placeholder: tt`О чём письмо` }),
         ]),
         editor.el,
         h("div", { class: "attachments", id: "tabora-compose-attachments" }),
       ]),
       h("div", { class: "format" }, null, [editor.bar]),
       h("div", { class: "foot" }, null, [
-        h("button", { class: "primary", id: "tabora-compose-send", type: "button" }, null, [document.createTextNode("Отправить"), h("span", { class: "kbd" }, "⌘⏎")]),
+        h("button", { class: "primary", id: "tabora-compose-send", type: "button" }, null, [document.createTextNode(tt`Отправить`), h("span", { class: "kbd" }, "⌘⏎")]),
         editor.toggle,
-        iconBtn("tabora-compose-attach", "Прикрепить файл", ["m21 12-8.5 8.5a5 5 0 0 1-7-7L14 5a3.3 3.3 0 0 1 4.7 4.7L10.5 18a1.7 1.7 0 0 1-2.4-2.4L16 7.7"]),
-        iconBtn("tabora-compose-lock", "Шифрование", [this.LOCK_OPEN, this.LOCK_BODY], "lock"),
-        h("span", { class: "status", id: "tabora-compose-status" }, "Черновик сохраняется автоматически"),
-        iconBtn("tabora-compose-discard", "Удалить черновик", ["M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"], "danger"),
+        iconBtn("tabora-compose-attach", tt`Прикрепить файл`, ["m21 12-8.5 8.5a5 5 0 0 1-7-7L14 5a3.3 3.3 0 0 1 4.7 4.7L10.5 18a1.7 1.7 0 0 1-2.4-2.4L16 7.7"]),
+        iconBtn("tabora-compose-lock", tt`Шифрование`, [this.LOCK_OPEN, this.LOCK_BODY], "lock"),
+        h("span", { class: "status", id: "tabora-compose-status" }, tt`Черновик сохраняется автоматически`),
+        iconBtn("tabora-compose-discard", tt`Удалить черновик`, ["M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"], "danger"),
       ]),
       h("div", { class: "resize", id: "tabora-compose-resize", "aria-hidden": "true" }),
     ]);
@@ -253,7 +258,7 @@ var Tabora = {
     toInput.addEventListener("blur", () => toInput.value.trim() && this.addRecipient(toInput.value));
     $("tabora-compose-attach").addEventListener("click", async () => {
       const picker = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
-      picker.init(window.browsingContext, "Прикрепить файлы", Ci.nsIFilePicker.modeOpenMultiple);
+      picker.init(window.browsingContext, tt`Прикрепить файлы`, Ci.nsIFilePicker.modeOpenMultiple);
       const result = await new Promise(resolve => picker.open(resolve));
       if (result === Ci.nsIFilePicker.returnCancel) {
         return;
@@ -323,7 +328,7 @@ var Tabora = {
       return;
     }
     clearTimeout(this.compose.draftTimer);
-    document.getElementById("tabora-compose-status").textContent = "Сохраняется…";
+    document.getElementById("tabora-compose-status").textContent = tt`Сохраняется…`;
     this.compose.draftTimer = setTimeout(() => this.saveDraft(), 1200);
   },
 
@@ -364,10 +369,10 @@ var Tabora = {
       if (e?.code === "signed-out") {
         this.accountDialog("login", { after: () => this.openCompose(opts) });
       } else if (e?.code === "vault-locked") {
-        this.notice("Сейф заблокирован: разблокируйте его, чтобы написать письмо");
+        this.notice(tt`Сейф заблокирован: разблокируйте его, чтобы написать письмо`);
         this.openDrawer?.("codes");
       } else {
-        this.notice(`Почта недоступна: ${e?.message || e}`);
+        this.notice(tt`Почта недоступна: ${e?.message || e}`);
       }
       return;
     }
@@ -377,7 +382,7 @@ var Tabora = {
     const senders = MailStore.senders();
     if (!senders.length) {
       const { Account } = this.accountMod();
-      this.notice(Account.needsServerLink ? "Писать пока не с чего: подключите аккаунт к серверу или добавьте ящик в почте" : "Писать пока не с чего: добавьте ящик в почте");
+      this.notice(Account.needsServerLink ? tt`Писать пока не с чего: подключите аккаунт к серверу или добавьте ящик в почте` : tt`Писать пока не с чего: добавьте ящик в почте`);
       return;
     }
     // адреса отправителя: ящик аккаунта, его включённые алиасы, внешние ящики
@@ -398,11 +403,11 @@ var Tabora = {
     editor.clear();
     editor.setReadOnly(false);
     $("tabora-compose-attachments").replaceChildren();
-    $("tabora-compose-title").textContent = "Новое письмо";
-    $("tabora-compose-status").textContent = "Черновик сохраняется на этом компьютере";
+    $("tabora-compose-title").textContent = tt`Новое письмо`;
+    $("tabora-compose-status").textContent = tt`Черновик сохраняется на этом компьютере`;
     $("tabora-compose-send").disabled = false;
 
-    const when = iso => new Date(iso).toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+    const when = iso => new Date(iso).toLocaleString(ttLocale(), { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
     const text = m => (m.body || []).map(b => b.p || b.h || b.q || b.code || b.btn || "").filter(Boolean).join("\n");
     if (opts.replyTo) {
       const m = MailStore.byId(opts.replyTo);
@@ -414,7 +419,7 @@ var Tabora = {
         // исходное письмо цитируется текстом; набранное в быстром ответе переносится с оформлением
         const quote = `\n\n${when(m.date)}, ${m.from.name} <${m.from.email}>:\n> ${text(m).split("\n")[0]}`;
         editor.set(opts.html ? { html: opts.html + fromText(quote) } : { text: `${opts.text || ""}${quote}` });
-        $("tabora-compose-title").textContent = `Ответ: ${m.from.name}`;
+        $("tabora-compose-title").textContent = tt`Ответ: ${m.from.name}`;
         this.compose.state.thread = m.thread;
         this.compose.state.labels = m.labels;
         if (m.alias && [...from.options].some(o => o.value === m.alias)) {
@@ -426,8 +431,8 @@ var Tabora = {
       const m = MailStore.byId(opts.forwardOf);
       if (m) {
         $("tabora-compose-subject").value = `Fwd: ${m.subject}`;
-        editor.set({ text: `\n\n---------- Пересланное письмо ----------\nОт: ${m.from.name} <${m.from.email}>\nДата: ${when(m.date)}\nТема: ${m.subject}\n\n${text(m)}` });
-        $("tabora-compose-title").textContent = "Переслать";
+        editor.set({ text: tt`\n\n---------- Пересланное письмо ----------\nОт: ${m.from.name} <${m.from.email}>\nДата: ${when(m.date)}\nТема: ${m.subject}\n\n${text(m)}` });
+        $("tabora-compose-title").textContent = tt`Переслать`;
         this.compose.state.secret = !!m.pgp?.encrypted;
         // вложения исходного письма берутся с сервера в момент отправки
         this.compose.state.attachments = m.at?.uid ? (m.attachments || []).map((a, index) => ({ name: a.name, size: a.size, source: { id: m.id, index } })) : [];
@@ -440,7 +445,7 @@ var Tabora = {
         editor.set({ html: m.rich || "", text: typeof m.text === "string" ? m.text : (m.body || []).map(b => b.p).join("\n\n") });
         this.compose.state.draftId = m.id;
         this.compose.state.attachments = (m.attachments || []).map(a => ({ ...a }));
-        $("tabora-compose-title").textContent = "Черновик";
+        $("tabora-compose-title").textContent = tt`Черновик`;
       }
     } else if (opts.to) {
       this.addRecipient(opts.to);
@@ -469,11 +474,11 @@ var Tabora = {
           MailStore.remove(this.compose.state.draftId);
         }
         if (discard && hasContent) {
-          this.notice("Черновик удалён");
+          this.notice(tt`Черновик удалён`);
         }
       } else {
         this.saveDraft();
-        this.notice("Черновик сохранён в почте");
+        this.notice(tt`Черновик сохранён в почте`);
       }
     }
     box.hidden = true;
@@ -488,7 +493,7 @@ var Tabora = {
     const { text, html } = this.compose.editor.content();
     return {
       id: s.draftId || `d${Date.now()}`, thread: s.thread || `td${Date.now()}`, folder: "drafts", unread: false, starred: false,
-      labels: s.labels || [], from: { name: "Я", email: $("tabora-compose-from").value }, to: s.to.slice(), alias: $("tabora-compose-from").value,
+      labels: s.labels || [], from: { name: tt`Я`, email: $("tabora-compose-from").value }, to: s.to.slice(), alias: $("tabora-compose-from").value,
       cc: $("tabora-compose-cc").value.split(/[,;\s]+/).map(v => v.trim()).filter(Boolean), replyTo: s.replyTo || undefined,
       date: new Date().toISOString(), subject: $("tabora-compose-subject").value.trim(), body: text.split(/\n{2,}/).filter(Boolean).map(p => ({ p })),
       attachments: s.attachments.slice(), draft: true, text, rich: html || undefined,
@@ -507,7 +512,7 @@ var Tabora = {
       MailStore.add(draft);
       this.compose.state.draftId = draft.id;
     }
-    document.getElementById("tabora-compose-status").textContent = `Черновик сохранён в ${new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`;
+    document.getElementById("tabora-compose-status").textContent = tt`Черновик сохранён в ${new Date().toLocaleTimeString(ttLocale(), { hour: "2-digit", minute: "2-digit" })}`;
   },
 
   addRecipient(raw) {
@@ -517,10 +522,10 @@ var Tabora = {
     }
     const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
     this.compose.state.to.push(value);
-    const chip = this.html("span", { class: "chip", "data-bad": String(!ok), "data-address": value, "data-key": "false", title: ok ? value : "Похоже, адрес с ошибкой" }, null, [
+    const chip = this.html("span", { class: "chip", "data-bad": String(!ok), "data-address": value, "data-key": "false", title: ok ? value : tt`Похоже, адрес с ошибкой` }, null, [
       this.html("span", { class: "key", "aria-hidden": "true" }, null, [this.svg([this.LOCK_CLOSED, this.LOCK_BODY], 11, 2.2)]),
       document.createTextNode(value),
-      this.html("button", { type: "button", "aria-label": `Убрать ${value}` }, null, [this.svg(["M6 6l12 12M18 6 6 18"], 11, 2.4)]),
+      this.html("button", { type: "button", "aria-label": tt`Убрать ${value}` }, null, [this.svg(["M6 6l12 12M18 6 6 18"], 11, 2.4)]),
     ]);
     chip.lastChild.addEventListener("click", () => {
       this.compose.state.to = this.compose.state.to.filter(v => v !== value);
@@ -572,12 +577,12 @@ var Tabora = {
     lock.setAttribute("aria-pressed", String(s.encrypt));
     lock.querySelector("path").setAttribute("d", s.encrypt ? this.LOCK_CLOSED : this.LOCK_OPEN);
     const title = s.encrypt
-      ? "Письмо уйдёт зашифрованным. Нажмите, чтобы отправить открытым"
+      ? tt`Письмо уйдёт зашифрованным. Нажмите, чтобы отправить открытым`
       : possible
-        ? "Зашифровать письмо"
+        ? tt`Зашифровать письмо`
         : plan.missing.length
-          ? `Зашифровать нельзя: нет ключа ${plan.missing.join(", ")}`
-          : "Шифрование: сначала укажите получателя";
+          ? tt`Зашифровать нельзя: нет ключа ${plan.missing.join(", ")}`
+          : tt`Шифрование: сначала укажите получателя`;
     lock.title = title;
     lock.setAttribute("aria-label", title);
     for (const chip of $("tabora-compose-chips").querySelectorAll(".chip")) {
@@ -586,7 +591,7 @@ var Tabora = {
     }
     if (state !== was && (state !== "off" || was)) {
       const more = plan.missing.length - 1;
-      $("tabora-compose-status").textContent = s.encrypt ? "Письмо уйдёт зашифрованным" : blocked && plan.missing.length ? `Нет ключа ${plan.missing[0]}${more > 0 ? ` и ещё ${more}` : ""}: письмо уйдёт открытым` : "Письмо уйдёт открытым";
+      $("tabora-compose-status").textContent = s.encrypt ? tt`Письмо уйдёт зашифрованным` : blocked && plan.missing.length ? tt`Нет ключа ${plan.missing[0]}${more > 0 ? tt` и ещё ${more}` : ""}: письмо уйдёт открытым` : tt`Письмо уйдёт открытым`;
     }
   },
 
@@ -597,8 +602,8 @@ var Tabora = {
     }
     if (!s.plan.possible) {
       this.notice(s.plan.missing.length
-        ? `Нет ключа ${s.plan.missing.join(", ")}. Он придёт с письмом собеседника или добавляется в почте, в разделе «Шифрование»`
-        : "Укажите получателя: зашифровать можно письмо тому, чей ключ известен");
+        ? tt`Нет ключа ${s.plan.missing.join(", ")}. Он придёт с письмом собеседника или добавляется в почте, в разделе «Шифрование»`
+        : tt`Укажите получателя: зашифровать можно письмо тому, чей ключ известен`);
       return;
     }
     s.encryptChoice = !s.encrypt;
@@ -609,9 +614,9 @@ var Tabora = {
   renderComposeAttachments() {
     const box = document.getElementById("tabora-compose-attachments");
     box.replaceChildren();
-    const size = b => (b >= 1_000_000 ? `${(b / 1_000_000).toFixed(1).replace(".", ",")} МБ` : `${Math.max(1, Math.round(b / 1000))} КБ`);
+    const size = b => (b >= 1_000_000 ? tt`${(b / 1_000_000).toFixed(1).replace(".", ",")} МБ` : tt`${Math.max(1, Math.round(b / 1000))} КБ`);
     for (const a of this.compose.state?.attachments || []) {
-      const remove = this.html("button", { type: "button", "aria-label": `Убрать ${a.name}` }, null, [this.svg(["M6 6l12 12M18 6 6 18"], 12, 2.4)]);
+      const remove = this.html("button", { type: "button", "aria-label": tt`Убрать ${a.name}` }, null, [this.svg(["M6 6l12 12M18 6 6 18"], 12, 2.4)]);
       remove.addEventListener("click", () => {
         this.compose.state.attachments = this.compose.state.attachments.filter(x => x !== a);
         this.renderComposeAttachments();
@@ -637,18 +642,18 @@ var Tabora = {
     }
     if (!s.to.length) {
       $("tabora-compose-to").focus();
-      this.notice("Укажите получателя");
+      this.notice(tt`Укажите получателя`);
       return;
     }
     const bad = s.to.find(v => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v));
     if (bad) {
-      this.notice(`Проверьте адрес: ${bad}`);
+      this.notice(tt`Проверьте адрес: ${bad}`);
       return;
     }
     const draft = this.composeDraft();
     const badCc = draft.cc.find(v => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v));
     if (badCc) {
-      this.notice(`Проверьте адрес в копии: ${badCc}`);
+      this.notice(tt`Проверьте адрес в копии: ${badCc}`);
       return;
     }
     clearTimeout(this.compose.draftTimer);
@@ -676,12 +681,12 @@ var Tabora = {
       if (s.plan?.wanted && !s.encrypt && s.plan.available && !confirmed) {
         // письмо, которое должно было уйти зашифрованным, открытым уходит только с ведома пользователя
         s.plainConfirmed = true;
-        status.textContent = "Письмо уйдёт открытым";
-        this.notice(`${s.plan.missing.length ? `Нет ключа ${s.plan.missing.join(", ")}` : "Зашифровать не получится"}. Нажмите «Отправить» ещё раз, чтобы письмо ушло открытым`);
+        status.textContent = tt`Письмо уйдёт открытым`;
+        this.notice(tt`${s.plan.missing.length ? tt`Нет ключа ${s.plan.missing.join(", ")}` : tt`Зашифровать не получится`}. Нажмите «Отправить» ещё раз, чтобы письмо ушло открытым`);
         return;
       }
-      status.textContent = s.encrypt ? "Шифруем и отправляем…" : "Отправляем…";
-      await MailStore.send({ ...draft, html: draft.rich || "", subject: draft.subject || "(без темы)", thread: s.thread || undefined, encrypt: s.encrypt });
+      status.textContent = s.encrypt ? tt`Шифруем и отправляем…` : tt`Отправляем…`;
+      await MailStore.send({ ...draft, html: draft.rich || "", subject: draft.subject || tt`(без темы)`, thread: s.thread || undefined, encrypt: s.encrypt });
       if (s.draftId) {
         MailStore.remove(s.draftId);
       }
@@ -690,10 +695,10 @@ var Tabora = {
         this.compose.box.hidden = true;
         this.compose.state = null;
       }
-      this.notice(`${s.encrypt ? "Отправлено зашифрованным" : "Отправлено"}: ${draft.to.join(", ")}`);
+      this.notice(`${s.encrypt ? tt`Отправлено зашифрованным` : tt`Отправлено`}: ${draft.to.join(", ")}`);
     } catch (e) {
-      status.textContent = "Не отправлено: письмо осталось в окне";
-      this.notice(`Письмо не отправлено. ${e.message}`);
+      status.textContent = tt`Не отправлено: письмо осталось в окне`;
+      this.notice(tt`Письмо не отправлено. ${e.message}`);
     } finally {
       busy(false);
     }
@@ -706,7 +711,7 @@ var Tabora = {
     const { Downloads } = ChromeUtils.importESModule("resource://gre/modules/Downloads.sys.mjs");
     const got = await MailStore.attachment(id, index);
     // имя из письма: только имя файла, без путей и управляющих знаков
-    const clean = String(got.name || "вложение").replace(/[\u0000-\u001f\u007f/\\:]/g, "_").replace(/^\.+/, "").slice(0, 120) || "вложение";
+    const clean = String(got.name || tt`вложение`).replace(/[\u0000-\u001f\u007f/\\:]/g, "_").replace(/^\.+/, "").slice(0, 120) || tt`вложение`;
     const tmp = await IOUtils.createUniqueFile(PathUtils.tempDir, "tabora-mail-attachment", 0o600);
     try {
       await IOUtils.write(tmp, got.bytes);
@@ -1015,30 +1020,30 @@ var Tabora = {
     const spaces = this.spaces.filter(s => s.userContextId !== this.contextOf(tab));
     const items = [
       tab.pinned
-        ? { label: "Открепить", icon: I.unpin, run: () => gBrowser.unpinTab(tab) }
-        : { label: "Закрепить", hint: "в карточки", icon: I.pin, run: () => gBrowser.pinTab(tab) },
+        ? { label: tt`Открепить`, icon: I.unpin, run: () => gBrowser.unpinTab(tab) }
+        : { label: tt`Закрепить`, hint: tt`в карточки`, icon: I.pin, run: () => gBrowser.pinTab(tab) },
       pending
-        ? { label: "Разбудить", icon: I.wake, run: () => (gBrowser.selectedTab = tab) }
-        : { label: "Усыпить вкладку", hint: "освободить память", icon: I.sleep, disabled: tab.selected || !realUrl, run: () => { gBrowser.discardBrowser(tab); this.updateMemory(); } },
-      { label: "Дублировать", icon: I.duplicate, disabled: !url || this.isStartUrl(url), run: () => gBrowser.duplicateTab(tab) },
-      { label: "Обновить", icon: I.reload, hint: "⌘R", disabled: this.isStartUrl(url), run: () => gBrowser.reloadTab(tab) },
-      audible ? { label: muted ? "Включить звук" : "Выключить звук", icon: muted ? I.unmute : I.mute, run: () => tab.toggleMuteAudio() } : null,
+        ? { label: tt`Разбудить`, icon: I.wake, run: () => (gBrowser.selectedTab = tab) }
+        : { label: tt`Усыпить вкладку`, hint: tt`освободить память`, icon: I.sleep, disabled: tab.selected || !realUrl, run: () => { gBrowser.discardBrowser(tab); this.updateMemory(); } },
+      { label: tt`Дублировать`, icon: I.duplicate, disabled: !url || this.isStartUrl(url), run: () => gBrowser.duplicateTab(tab) },
+      { label: tt`Обновить@@страницу`, icon: I.reload, hint: "⌘R", disabled: this.isStartUrl(url), run: () => gBrowser.reloadTab(tab) },
+      audible ? { label: muted ? tt`Включить звук` : tt`Выключить звук`, icon: muted ? I.unmute : I.mute, run: () => tab.toggleMuteAudio() } : null,
       { separator: true },
       spaces.length && !tab.pinned
         ? {
-            label: "Переместить в пространство",
+            label: tt`Переместить в пространство`,
             icon: I.move,
             children: spaces.map(s => ({ label: s.name, swatch: this.spaceHex(s), run: () => this.moveTabToSpace(tab, s) })),
           }
         : null,
-      { label: "Копировать адрес", icon: I.copy, disabled: !realUrl, run: () => this.copyText(url, "Адрес скопирован") },
-      { label: "В закладки", icon: I.star, hint: "⌘D", disabled: !realUrl, run: () => { gBrowser.selectedTab = tab; PlacesCommandHook.bookmarkPage(); } },
+      { label: tt`Копировать адрес`, icon: I.copy, disabled: !realUrl, run: () => this.copyText(url, tt`Адрес скопирован`) },
+      { label: tt`В закладки`, icon: I.star, hint: "⌘D", disabled: !realUrl, run: () => { gBrowser.selectedTab = tab; PlacesCommandHook.bookmarkPage(); } },
       { separator: true },
-      { label: "Закрыть", icon: I.close, hint: "⌘W", danger: true, run: () => gBrowser.removeTab(tab, { animate: true }) },
-      { label: `Закрыть остальные${others.length ? ` (${others.length})` : ""}`, icon: I.closeOthers, disabled: !others.length, danger: true, run: () => gBrowser.removeAllTabsBut(tab) },
-      { label: `Закрыть ниже${below.length ? ` (${below.length})` : ""}`, icon: I.closeBelow, disabled: !below.length, danger: true, run: () => gBrowser.removeTabsToTheEndFrom(tab) },
+      { label: tt`Закрыть`, icon: I.close, hint: "⌘W", danger: true, run: () => gBrowser.removeTab(tab, { animate: true }) },
+      { label: tt`Закрыть остальные${others.length ? ` (${others.length})` : ""}`, icon: I.closeOthers, disabled: !others.length, danger: true, run: () => gBrowser.removeAllTabsBut(tab) },
+      { label: tt`Закрыть ниже${below.length ? ` (${below.length})` : ""}`, icon: I.closeBelow, disabled: !below.length, danger: true, run: () => gBrowser.removeTabsToTheEndFrom(tab) },
       { separator: true },
-      { label: "Восстановить закрытую", icon: I.restore, hint: "⌘⇧T", disabled: !this.canUndoClose(), run: () => this.undoCloseTab() },
+      { label: tt`Восстановить закрытую`, icon: I.restore, hint: "⌘⇧T", disabled: !this.canUndoClose(), run: () => this.undoCloseTab() },
     ];
     return items.filter(Boolean);
   },
@@ -1046,10 +1051,10 @@ var Tabora = {
   tabListMenuItems() {
     const sleeping = gBrowser.tabs.filter(t => !t.selected && !t.pinned && !t.hasAttribute("pending") && /^https?:/.test(t.linkedBrowser?.currentURI?.spec || ""));
     return [
-      { label: "Новая вкладка", icon: ["M12 5v14M5 12h14"], hint: "⌘T", run: () => BrowserCommands.openTab() },
-      { label: "Усыпить все кроме текущей", icon: ["M21 13a8 8 0 1 1-10-10 6 6 0 0 0 10 10z"], disabled: !sleeping.length, run: () => { sleeping.forEach(t => gBrowser.discardBrowser(t)); this.updateMemory(); } },
+      { label: tt`Новая вкладка`, icon: ["M12 5v14M5 12h14"], hint: "⌘T", run: () => BrowserCommands.openTab() },
+      { label: tt`Усыпить все кроме текущей`, icon: ["M21 13a8 8 0 1 1-10-10 6 6 0 0 0 10 10z"], disabled: !sleeping.length, run: () => { sleeping.forEach(t => gBrowser.discardBrowser(t)); this.updateMemory(); } },
       { separator: true },
-      { label: "Восстановить закрытую", icon: ["M4 12a8 8 0 1 0 2.3-5.7", "M4 4v5h5"], hint: "⌘⇧T", disabled: !this.canUndoClose(), run: () => this.undoCloseTab() },
+      { label: tt`Восстановить закрытую`, icon: ["M4 12a8 8 0 1 0 2.3-5.7", "M4 4v5h5"], hint: "⌘⇧T", disabled: !this.canUndoClose(), run: () => this.undoCloseTab() },
     ];
   },
 
@@ -1080,7 +1085,7 @@ var Tabora = {
     gBrowser.removeTab(tab);
     this.switchSpace(space.id);
     gBrowser.selectedTab = fresh;
-    this.notice(`Перенесено в «${space.name}»`);
+    this.notice(tt`Перенесено в «${space.name}»`);
   },
 
   copyText(text, message) {
@@ -1116,9 +1121,9 @@ var Tabora = {
       return;
     }
     document.documentElement.setAttribute("tabora-private", "true");
-    const chip = this.html("span", { class: "chip private", id: "tabora-private-chip", title: "История, cookies и поиск не сохраняются" }, null, [
+    const chip = this.html("span", { class: "chip private", id: "tabora-private-chip", title: tt`История, cookies и поиск не сохраняются` }, null, [
       this.svg(["M4 10c0-2.8 2.2-5 5-5h6c2.8 0 5 2.2 5 5v1.5c0 2.5-2 4.5-4.5 4.5-1.4 0-2.6-.6-3.5-1.6-.9 1-2.1 1.6-3.5 1.6C6 16 4 14 4 11.5z"], 13, 2),
-      this.html("span", {}, "Приватное окно"),
+      this.html("span", {}, tt`Приватное окно`),
     ]);
     const bar = document.getElementById("tabora-topbar");
     bar.insertBefore(chip, document.getElementById("tabora-blocked"));
@@ -1127,8 +1132,8 @@ var Tabora = {
   localizeUrlbar() {
     const apply = () => {
       const field = gURLBar?.inputField;
-      if (field && field.getAttribute("placeholder") !== "Адрес или поиск") {
-        field.setAttribute("placeholder", "Адрес или поиск");
+      if (field && field.getAttribute("placeholder") !== tt`Адрес или поиск`) {
+        field.setAttribute("placeholder", tt`Адрес или поиск`);
       }
     };
     apply();
@@ -1283,7 +1288,7 @@ var Tabora = {
     // только сайт: текст кнопки задаёт страница, показывать его в оболочке нельзя
     const host = String(data?.host || "").replace(/[^\p{L}\p{N}.:\[\]-]/gu, "").slice(0, 80);
     if (host) {
-      this.notice(`Cookie-баннер закрыт · ${host}`);
+      this.notice(tt`Cookie-баннер закрыт · ${host}`);
     }
   },
 
@@ -1295,22 +1300,22 @@ var Tabora = {
     const toolbox = document.getElementById("navigator-toolbox");
     const navBar = document.getElementById("nav-bar");
     // Кнопка поиска вместо адресной строки в свёрнутом виде
-    const search = this.html("button", { class: "icon-btn", id: "tabora-compact-search", type: "button", title: "Адрес или поиск (⌘K)" }, null, [
+    const search = this.html("button", { class: "icon-btn", id: "tabora-compact-search", type: "button", title: tt`Адрес или поиск (⌘K)` }, null, [
       this.svg(["M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z", "M20 20l-4-4"], 16, 2),
     ]);
     search.addEventListener("click", () => this.openCommandBar());
     navBar.append(search);
     // Ручка сворачивания внизу колонки
-    const toggle = this.html("button", { class: "icon-btn", id: "tabora-sidebar-toggle", type: "button", title: "Свернуть панель (⌘B)" }, null, [
+    const toggle = this.html("button", { class: "icon-btn", id: "tabora-sidebar-toggle", type: "button", title: tt`Свернуть панель (⌘B)` }, null, [
       this.svg(["m11 17-5-5 5-5", "m18 17-5-5 5-5"], 15, 2),
     ]);
     toggle.addEventListener("click", () => this.toggleSidebar());
     // «Разделы» показывает рейку ящика (drawer.js): почта, загрузки, кошелёк, коды и остальное.
     // На кнопке стоит общее число событий разделов (новые письма, поступления в кошелёк,
     // загрузки) и ход идущих загрузок; по разделам они разложены на рейке.
-    const sections = this.html("button", { id: "tabora-sections", type: "button", title: "Разделы", "aria-pressed": String(!!(this.drawer?.open || this.drawer?.rail)) }, null, [
+    const sections = this.html("button", { id: "tabora-sections", type: "button", title: tt`Разделы`, "aria-pressed": String(!!(this.drawer?.open || this.drawer?.rail)) }, null, [
       this.svg(["M4 4h6.5v6.5H4z", "M13.5 4H20v6.5h-6.5z", "M4 13.5h6.5V20H4z", "M13.5 13.5H20V20h-6.5z"], 16, 1.8),
-      this.html("span", { class: "label" }, "Разделы"),
+      this.html("span", { class: "label" }, tt`Разделы`),
       this.html("span", { class: "pill", "data-badge": "total", hidden: "true" }),
       this.html("span", { class: "bar", "data-badge": "progress", "aria-hidden": "true", hidden: "true" }, null, [this.html("span")]),
     ]);
@@ -1593,7 +1598,7 @@ var Tabora = {
     }
     const toggle = document.getElementById("tabora-sidebar-toggle");
     if (toggle) {
-      toggle.title = on ? "Развернуть панель (⌘B)" : "Свернуть панель (⌘B)";
+      toggle.title = on ? tt`Развернуть панель (⌘B)` : tt`Свернуть панель (⌘B)`;
     }
     this.tipHide();
     if (!animate && this.drawer?.open) {
@@ -1910,7 +1915,7 @@ var Tabora = {
 
   toggleSidebar(force) {
     if (this.horizontalTabs) {
-      this.notice("Боковая панель есть только при вкладках сбоку. Раскладка меняется в настройках: «Вкладки и просмотр».");
+      this.notice(tt`Боковая панель есть только при вкладках сбоку. Раскладка меняется в настройках: «Вкладки и просмотр».`);
       return;
     }
     const on = force ?? document.documentElement.getAttribute("tabora-sidebar") !== "compact";
@@ -1927,20 +1932,20 @@ var Tabora = {
     if (tab) {
       const url = tab.linkedBrowser?.currentURI?.spec || "";
       const label = this.isStartUrl(url) ? this.startLabel() : tab.label || "";
-      return { title: label + (tab.hasAttribute("pending") ? " · спит" : ""), sub: this.isStartUrl(url) ? "" : this.displayUrl(url).replace(/^https?:\/\//, "").replace(/^www\./, "") };
+      return { title: label + (tab.hasAttribute("pending") ? tt` · спит` : ""), sub: this.isStartUrl(url) ? "" : this.displayUrl(url).replace(/^https?:\/\//, "").replace(/^www\./, "") };
     }
     const space = target.closest?.(".tabora-space");
     if (space) {
       const sp = this.spaces.find(s => s.id === space.dataset.space);
       const n = sp ? gBrowser.tabs.filter(t => !t.closing && !t.pinned && this.contextOf(t) === sp.userContextId).length : 0;
-      return { title: sp?.name || "", sub: `${n} ${this.plural(n, "вкладка", "вкладки", "вкладок")}` };
+      return { title: sp?.name || "", sub: `${n} ${this.plural(n, tt`вкладка|вкладки|вкладок`)}` };
     }
     const map = [
-      ["#tabora-compact-search", "Адрес или поиск", "⌘K"],
-      ["#vertical-tabs-newtab-button", "Новая вкладка", "⌘T"],
-      ["#tabora-memory", `Память · ${document.getElementById("tabora-memory-value")?.textContent || ""}`, document.getElementById("tabora-memory-note")?.textContent || ""],
-      ["#tabora-sections", "Разделы", document.getElementById("tabora-sections")?.dataset.note || "почта, загрузки, кошелёк, коды"],
-      ["#tabora-sidebar-toggle", "Развернуть панель", "⌘B"],
+      ["#tabora-compact-search", tt`Адрес или поиск`, "⌘K"],
+      ["#vertical-tabs-newtab-button", tt`Новая вкладка`, "⌘T"],
+      ["#tabora-memory", tt`Память · ${document.getElementById("tabora-memory-value")?.textContent || ""}`, document.getElementById("tabora-memory-note")?.textContent || ""],
+      ["#tabora-sections", tt`Разделы`, document.getElementById("tabora-sections")?.dataset.note || tt`почта, загрузки, кошелёк, коды`],
+      ["#tabora-sidebar-toggle", tt`Развернуть панель`, "⌘B"],
     ];
     for (const [sel, title, sub] of map) {
       if (target.closest?.(sel)) {
@@ -2018,10 +2023,10 @@ var Tabora = {
     const verticalTabs = document.getElementById("vertical-tabs");
     if (verticalTabs) {
       const head = this.html("div", { id: "tabora-tabs-head" });
-      head.append(this.html("span", {}, "Сегодня"));
+      head.append(this.html("span", {}, tt`Сегодня`));
       const newTab = document.getElementById("vertical-tabs-newtab-button");
       if (newTab) {
-        newTab.setAttribute("tooltiptext", "Новая вкладка (⌘T)");
+        newTab.setAttribute("tooltiptext", tt`Новая вкладка (⌘T)`);
         head.append(newTab);
       }
       // Заголовок стоит после плиток закреплённых вкладок, перед прокручиваемым списком
@@ -2035,7 +2040,7 @@ var Tabora = {
 
     const memory = this.html("div", { id: "tabora-memory" }, null, [
       this.html("div", { class: "row" }, null, [
-        this.html("span", { class: "label" }, "Память"),
+        this.html("span", { class: "label" }, tt`Память`),
         this.html("span", { class: "value", id: "tabora-memory-value" }, "…"),
       ]),
       this.html("div", { class: "bar", "aria-hidden": "true" }, null, [
@@ -2043,9 +2048,9 @@ var Tabora = {
       ]),
       this.html("span", { class: "note", id: "tabora-memory-note" }),
     ]);
-    const mail = this.html("button", { id: "tabora-mail", title: "Почта и алиасы (⌘⇧M)" }, null, [
+    const mail = this.html("button", { id: "tabora-mail", title: tt`Почта и алиасы (⌘⇧M)` }, null, [
       this.svg(["M3.5 6.5h17v11h-17z", "M3.5 7l8.5 6 8.5-6"], 16, 1.8),
-      this.html("span", {}, "Почта и алиасы"),
+      this.html("span", {}, tt`Почта и алиасы`),
       this.html("span", { class: "pill", id: "tabora-mail-unread", hidden: "true" }),
       this.html("span", { class: "kbd" }, "⌘⇧M"),
     ]);
@@ -2053,11 +2058,11 @@ var Tabora = {
     mail.addEventListener("contextmenu", e => {
       e.preventDefault();
       e.stopPropagation();
-      this.showMenu([...this.accountMenuItems(), { separator: true }, { label: "Быстрые кнопки", children: this.dockMenuItems().slice(1) }], e.clientX, e.clientY);
+      this.showMenu([...this.accountMenuItems(), { separator: true }, { label: tt`Быстрые кнопки`, children: this.dockMenuItems().slice(1) }], e.clientX, e.clientY);
     });
-    const walletCard = this.html("button", { id: "tabora-wallet-card", title: "Кошелёк (⌘⇧W)" }, null, [
+    const walletCard = this.html("button", { id: "tabora-wallet-card", title: tt`Кошелёк (⌘⇧W)` }, null, [
       this.svg(["M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v2", "M3 7v10a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-7a1 1 0 0 0-1-1H5a2 2 0 0 1-2-2z", "M16 14h.01"], 16, 1.8),
-      this.html("span", {}, "Кошелёк"),
+      this.html("span", {}, tt`Кошелёк`),
       this.html("span", { class: "pill count", "data-badge": "wallet", hidden: "true" }),
       this.html("span", { class: "pill mono", id: "tabora-wallet-total", hidden: "true" }),
       this.html("span", { class: "kbd" }, "⌘⇧W"),
@@ -2065,7 +2070,7 @@ var Tabora = {
     walletCard.addEventListener("click", () => this.toggleDrawer("wallet"));
     const downloads = this.buildDownloadsCard();
     const ready = { wallet: walletCard, mail, downloads };
-    const dock = this.html("div", { id: "tabora-dock", role: "group", "aria-label": "Быстрые кнопки" }, null, this.DOCK.map(it => ready[it.id] || this.buildQuickButton(it)));
+    const dock = this.html("div", { id: "tabora-dock", role: "group", "aria-label": tt`Быстрые кнопки` }, null, this.DOCK.map(it => ready[it.id] || this.buildQuickButton(it)));
     if (sidebar) {
       sidebar.after(dock); // карточка «Память» убрана по решению пользователя (9 ноября 2026)
     } else {
@@ -2086,14 +2091,14 @@ var Tabora = {
   DOCK_DEFAULT: "wallet,mail,codes,downloads",
   // el — id готового элемента; остальным кнопку создаёт buildQuickButton
   DOCK: [
-    { id: "wallet", label: "Кошелёк", key: "⌘⇧W", el: "tabora-wallet-card" },
-    { id: "mail", label: "Почта и алиасы", key: "⌘⇧M", el: "tabora-mail" },
-    { id: "codes", label: "Коды 2FA", key: "⌘⇧K", icon: ["M4 7h16v10H4z", "M8 12h.01", "M12 12h.01", "M16 12h.01"] },
-    { id: "downloads", label: "Загрузки", key: "⌘⇧J", el: "tabora-downloads" },
-    { id: "history", label: "История", key: "⌘⇧H", icon: ["M12 7v5l3 2", "M3.5 12a8.5 8.5 0 1 0 2.5-6", "M3 4v4h4"] },
-    { id: "bookmarks", label: "Закладки", key: "⌘⇧B", icon: ["M6 4h12v16l-6-4-6 4z"] },
-    { id: "media", label: "Медиа", key: "⌘⇧I", icon: ["M4 5h16v14H4z", "M4 15l5-5 4 4 3-3 4 4", "M15.5 9.5h.01"] },
-    { id: "spaces", label: "Пространства", key: "⌘⇧S", icon: ["M8 8h12v12H8z", "M4 4h12v12", "M4 4v12h12"] },
+    { id: "wallet", label: tt`Кошелёк`, key: "⌘⇧W", el: "tabora-wallet-card" },
+    { id: "mail", label: tt`Почта и алиасы`, key: "⌘⇧M", el: "tabora-mail" },
+    { id: "codes", label: tt`Коды 2FA`, key: "⌘⇧K", icon: ["M4 7h16v10H4z", "M8 12h.01", "M12 12h.01", "M16 12h.01"] },
+    { id: "downloads", label: tt`Загрузки`, key: "⌘⇧J", el: "tabora-downloads" },
+    { id: "history", label: tt`История`, key: "⌘⇧H", icon: ["M12 7v5l3 2", "M3.5 12a8.5 8.5 0 1 0 2.5-6", "M3 4v4h4"] },
+    { id: "bookmarks", label: tt`Закладки`, key: "⌘⇧B", icon: ["M6 4h12v16l-6-4-6 4z"] },
+    { id: "media", label: tt`Медиа`, key: "⌘⇧I", icon: ["M4 5h16v14H4z", "M4 15l5-5 4 4 3-3 4 4", "M15.5 9.5h.01"] },
+    { id: "spaces", label: tt`Пространства`, key: "⌘⇧S", icon: ["M8 8h12v12H8z", "M4 4h12v12", "M4 4v12h12"] },
   ],
 
   dockElId(it) {
@@ -2129,7 +2134,7 @@ var Tabora = {
   dockMenuItems() {
     const on = new Set(this.dockEnabled());
     return [
-      { header: "Быстрые кнопки" },
+      { header: tt`Быстрые кнопки` },
       ...this.DOCK.map(it => ({
         label: it.label,
         hint: it.key,
@@ -2179,15 +2184,15 @@ var Tabora = {
 
   buildDownloadsCard() {
     const h = (tag, attrs, text, children) => this.html(tag, attrs, text, children);
-    const head = h("button", { class: "head", id: "tabora-downloads-open", title: "Загрузки (⌘⇧J)" }, null, [
+    const head = h("button", { class: "head", id: "tabora-downloads-open", title: tt`Загрузки (⌘⇧J)` }, null, [
       this.svg(["M12 4v11", "M7 10l5 5 5-5", "M4 19h16"], 16, 1.8),
-      h("span", { class: "title" }, "Загрузки"),
+      h("span", { class: "title" }, tt`Загрузки`),
       h("span", { class: "pill", id: "tabora-downloads-pill", hidden: "true" }),
       h("span", { class: "kbd" }, "⌘⇧J"),
     ]);
     head.addEventListener("click", () => this.toggleDrawer("downloads"));
-    const toggle = h("button", { class: "icon-btn", id: "tabora-downloads-toggle", type: "button", title: "Пауза" }, null, [this.svg(["M8 5v14", "M16 5v14"], 13, 2)]);
-    const cancel = h("button", { class: "icon-btn", id: "tabora-downloads-cancel", type: "button", title: "Отменить" }, null, [this.svg(["M6 6l12 12", "M18 6 6 18"], 13, 2)]);
+    const toggle = h("button", { class: "icon-btn", id: "tabora-downloads-toggle", type: "button", title: tt`Пауза` }, null, [this.svg(["M8 5v14", "M16 5v14"], 13, 2)]);
+    const cancel = h("button", { class: "icon-btn", id: "tabora-downloads-cancel", type: "button", title: tt`Отменить` }, null, [this.svg(["M6 6l12 12", "M18 6 6 18"], 13, 2)]);
     toggle.addEventListener("click", e => { e.stopPropagation(); this.downloadsToggle(); });
     cancel.addEventListener("click", e => { e.stopPropagation(); this.downloadsCancel(); });
     const live = h("div", { class: "live", id: "tabora-downloads-live", hidden: "true" }, null, [
@@ -2234,7 +2239,7 @@ var Tabora = {
     if (d.succeeded && !d._taboraNoticed) {
       d._taboraNoticed = true;
       if (this._dl.seenStart && d.startTime >= this._dl.seenStart) {
-        this.notice(`Скачано: ${PathUtils.filename(d.target.path)}`);
+        this.notice(tt`Скачано: ${PathUtils.filename(d.target.path)}`);
         // законченная загрузка — событие, пока раздел загрузок не открыт
         if (!(this.drawer?.open && this.drawer.section === "downloads")) {
           this._dl.fresh.add(d);
@@ -2291,7 +2296,7 @@ var Tabora = {
     const done = all.reduce((n, d) => n + d.currentBytes, 0);
     const speed = running.reduce((n, d) => n + (d.speed || 0), 0);
     const fmt = this.fmtBytes;
-    document.getElementById("tabora-downloads-name").textContent = all.length > 1 ? `${PathUtils.filename(cur.target.path)} и ещё ${all.length - 1}` : PathUtils.filename(cur.target.path);
+    document.getElementById("tabora-downloads-name").textContent = all.length > 1 ? tt`${PathUtils.filename(cur.target.path)} и ещё ${all.length - 1}` : PathUtils.filename(cur.target.path);
     const pctEl = document.getElementById("tabora-downloads-pct");
     const bar = document.getElementById("tabora-downloads-bar");
     const known = all.every(d => d.hasProgress && d.totalBytes > 0);
@@ -2301,10 +2306,10 @@ var Tabora = {
     bar.classList.toggle("indeterminate", pct === null && !!running.length);
     this.setBadges?.({ downloads: count, active: all.length, progress: pct, running: !!running.length });
     const parts = [];
-    const bytes = total ? `${fmt(done)} из ${fmt(total)}` : fmt(done);
+    const bytes = total ? tt`${fmt(done)} из ${fmt(total)}` : fmt(done);
     if (running.length) {
       if (speed > 0) {
-        parts.push(`${fmt(speed)}/с`);
+        parts.push(tt`${fmt(speed)}/с`);
         if (known && total > done) {
           parts.push(this.fmtEta((total - done) / speed));
         }
@@ -2312,14 +2317,14 @@ var Tabora = {
         parts.push(bytes);
       }
     } else {
-      parts.push("на паузе", bytes);
+      parts.push(tt`на паузе`, bytes);
     }
     const note = document.getElementById("tabora-downloads-note");
     note.textContent = parts.join(" · ");
     note.title = bytes;
     const toggle = document.getElementById("tabora-downloads-toggle");
     const pausedMode = !running.length;
-    toggle.title = pausedMode ? "Продолжить" : "Пауза";
+    toggle.title = pausedMode ? tt`Продолжить` : tt`Пауза`;
     toggle.replaceChildren(pausedMode ? this.svg(["M7 5v14l12-7z"], 13, 2) : this.svg(["M8 5v14", "M16 5v14"], 13, 2));
   },
 
@@ -2360,7 +2365,7 @@ var Tabora = {
       try {
         leaf = decodeURIComponent(leaf);
       } catch (e) {}
-      const name = DownloadPaths.sanitize(leaf) || DownloadPaths.sanitize(url.hostname) || "файл";
+      const name = DownloadPaths.sanitize(leaf) || DownloadPaths.sanitize(url.hostname) || tt`файл`;
       const template = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
       template.initWithPath(PathUtils.join(dir, name));
       const target = DownloadPaths.createNiceUniqueFile(template);
@@ -2375,15 +2380,15 @@ var Tabora = {
       download.start().catch(() => {});
     } catch (e) {
       console.error("Tabora downloadFromDrop", e);
-      this.notice("Не удалось начать загрузку");
+      this.notice(tt`Не удалось начать загрузку`);
     }
   },
 
   fmtBytes(b) {
     if (!(b > 0)) {
-      return "0 Б";
+      return tt`0 Б`;
     }
-    const u = ["Б", "КБ", "МБ", "ГБ"];
+    const u = [tt`Б`, tt`КБ`, tt`МБ`, tt`ГБ`];
     let i = 0;
     while (b >= 1000 && i < u.length - 1) {
       b /= 1000;
@@ -2397,12 +2402,12 @@ var Tabora = {
       return "";
     }
     if (sec < 60) {
-      return `ещё ${Math.ceil(sec)} с`;
+      return tt`ещё ${Math.ceil(sec)} с`;
     }
     if (sec < 3600) {
-      return `ещё ${Math.ceil(sec / 60)} мин`;
+      return tt`ещё ${Math.ceil(sec / 60)} мин`;
     }
-    return `ещё ${Math.floor(sec / 3600)} ч ${Math.ceil((sec % 3600) / 60)} мин`;
+    return tt`ещё ${Math.floor(sec / 3600)} ч ${Math.ceil((sec % 3600) / 60)} мин`;
   },
 
   /** Зазор между кнопками окна и заголовком вкладки, px. */
@@ -2433,12 +2438,12 @@ var Tabora = {
 
   buildTopbar() {
     const tabbox = document.getElementById("tabbrowser-tabbox");
-    const reader = this.html("button", { class: "icon-btn", id: "tabora-reader", title: "Режим чтения", "aria-label": "Режим чтения", disabled: "true" }, null, [
+    const reader = this.html("button", { class: "icon-btn", id: "tabora-reader", title: tt`Режим чтения`, "aria-label": tt`Режим чтения`, disabled: "true" }, null, [
       this.svg(["M6 3h9l5 5v13H6z", "M14 3v6h6", "M9 13h7M9 17h7"], 16, 1.8),
     ]);
-    const toggle = this.html("button", { id: "tabora-agent-toggle", "aria-pressed": "false", title: "Панель агента (⌘J)" }, null, [
+    const toggle = this.html("button", { id: "tabora-agent-toggle", "aria-pressed": "false", title: tt`Панель агента (⌘J)` }, null, [
       this.html("span", { class: "dot" }),
-      document.createTextNode("Агент"),
+      document.createTextNode(tt`Агент`),
       this.html("span", { class: "kbd" }, "⌘J"),
     ]);
     const bar = this.html("div", { id: "tabora-topbar" }, null, [
@@ -2648,7 +2653,7 @@ var Tabora = {
       pill.hidden = !n;
       this.setBadges?.({ mail: n });
       const button = document.getElementById("tabora-mail");
-      button.title = n ? `Почта и алиасы: ${n} ${this.plural(n, "новое письмо", "новых письма", "новых писем")} (⌘⇧M)` : "Почта и алиасы (⌘⇧M)";
+      button.title = n ? tt`Почта и алиасы: ${n} ${this.plural(n, tt`новое письмо|новых письма|новых писем`)} (⌘⇧M)` : tt`Почта и алиасы (⌘⇧M)`;
     };
     const observer = { observe: () => update() };
     Services.obs.addObserver(observer, MailStore.TOPIC);
@@ -2758,15 +2763,15 @@ var Tabora = {
 
   buildStartPage() {
     const tabbox = document.getElementById("tabbrowser-tabbox");
-    const input = this.html("input", { id: "tabora-start-input", placeholder: "Найти, открыть или поручить агенту", "aria-label": "Поиск или адрес" });
+    const input = this.html("input", { id: "tabora-start-input", placeholder: tt`Найти, открыть или поручить агенту`, "aria-label": tt`Поиск или адрес` });
     const search = this.html("div", { class: "search" }, null, [
       this.svg(["M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z", "M20 20l-4-4"], 16, 1.8),
       input,
       this.html("span", { class: "kbd" }, "⌘K"),
     ]);
-    const edit = this.html("button", { class: "linkish", id: "tabora-dial-edit", type: "button" }, "Изменить");
+    const edit = this.html("button", { class: "linkish", id: "tabora-dial-edit", type: "button" }, tt`Изменить`);
     edit.addEventListener("click", () => this.dialToggleEdit());
-    const add = this.html("button", { class: "linkish", id: "tabora-dial-add", type: "button" }, "Добавить сайт");
+    const add = this.html("button", { class: "linkish", id: "tabora-dial-add", type: "button" }, tt`Добавить сайт`);
     add.addEventListener("click", () => this.dialAddForm());
     const page = this.html("div", { id: "tabora-start", hidden: "true" }, null, [
       this.html("div", { class: "top" }, null, [
@@ -2777,7 +2782,7 @@ var Tabora = {
       this.html("p", { class: "status", id: "tabora-start-status" }),
       search,
       this.html("div", { class: "sites-head", id: "tabora-sites-head", hidden: "true" }, null, [
-        this.html("span", { class: "eyebrow" }, "Сайты"),
+        this.html("span", { class: "eyebrow" }, tt`Сайты`),
         this.html("span", { class: "spacer" }),
         add,
         edit,
@@ -2859,7 +2864,7 @@ var Tabora = {
   },
 
   startLabel() {
-    return this.isPrivate ? "Приватная вкладка" : "Новая вкладка";
+    return this.isPrivate ? tt`Приватная вкладка` : tt`Новая вкладка`;
   },
 
   /** Число новых писем на вкладке почты: атрибут tabora-unread и переменная --tabora-unread,
@@ -2910,13 +2915,13 @@ var Tabora = {
     const now = new Date();
     const hour = now.getHours();
     const name = Services.prefs.getStringPref("tabora.user.name", "");
-    const word = hour < 5 ? "Доброй ночи" : hour < 12 ? "Доброе утро" : hour < 18 ? "Добрый день" : "Добрый вечер";
+    const word = hour < 5 ? tt`Доброй ночи` : hour < 12 ? tt`Доброе утро` : hour < 18 ? tt`Добрый день` : tt`Добрый вечер`;
     if (this.isPrivate) {
-      document.getElementById("tabora-start-greeting").textContent = "Приватное окно";
-      document.getElementById("tabora-start-date").textContent = "история, cookies и поиск не сохраняются";
+      document.getElementById("tabora-start-greeting").textContent = tt`Приватное окно`;
+      document.getElementById("tabora-start-date").textContent = tt`история, cookies и поиск не сохраняются`;
     } else {
       document.getElementById("tabora-start-greeting").textContent = name ? `${word}, ${name}` : word;
-      document.getElementById("tabora-start-date").textContent = new Intl.DateTimeFormat("ru-RU", {
+      document.getElementById("tabora-start-date").textContent = new Intl.DateTimeFormat(ttLocale(), {
         weekday: "long", day: "numeric", month: "long",
       }).format(now);
     }
@@ -2945,12 +2950,12 @@ var Tabora = {
         await MailStore.ready();
         const msgs = MailStore.data?.messages || MailStore.messages || [];
         const unread = msgs.filter(m => m.folder === "inbox" && m.unread).length;
-        parts.push(unread ? `в почте ${unread} ${this.plural(unread, "новое письмо", "новых письма", "новых писем")}` : "в почте нет нового");
+        parts.push(unread ? tt`в почте ${unread} ${this.plural(unread, tt`новое письмо|новых письма|новых писем`)}` : tt`в почте нет нового`);
       }
     } catch (e) {}
     const sleeping = gBrowser.tabs.filter(t => t.hasAttribute("pending") && !t.closing).length;
     const open = gBrowser.tabs.filter(t => !t.closing && !t.hidden).length;
-    parts.push(`${open} ${this.plural(open, "вкладка", "вкладки", "вкладок")}${sleeping ? `, ${sleeping} ${this.plural(sleeping, "спит", "спят", "спят")}` : ""}`);
+    parts.push(`${open} ${this.plural(open, tt`вкладка|вкладки|вкладок`)}${sleeping ? `, ${sleeping} ${this.plural(sleeping, tt`спит|спят|спят`)}` : ""}`);
     el.textContent = parts.join(" · ");
   },
 
@@ -3033,7 +3038,7 @@ var Tabora = {
       icon.replaceChildren();
       icon.textContent = (host || "?").charAt(0).toUpperCase();
     });
-    const remove = this.html("button", { class: "remove", type: "button", title: "Убрать", "aria-label": `Убрать ${label}` }, null, [this.svg(["M6 6l12 12", "M18 6 6 18"], 10, 2.2)]);
+    const remove = this.html("button", { class: "remove", type: "button", title: tt`Убрать`, "aria-label": tt`Убрать ${label}` }, null, [this.svg(["M6 6l12 12", "M18 6 6 18"], 10, 2.2)]);
     remove.addEventListener("click", e => {
       e.preventDefault();
       e.stopPropagation();
@@ -3097,15 +3102,15 @@ var Tabora = {
   dialMenu(site) {
     const pinned = this.dialState().pinned.some(s => s.url === site.url);
     return [
-      { label: "Открыть", icon: ["M5 12h14", "m13 6 6 6-6 6"], run: () => this.go(site.url) },
-      { label: "Открыть в новой вкладке", icon: ["M12 5v14", "M5 12h14"], run: () => { gBrowser.selectedTab = gBrowser.addTab(site.url, { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() }); } },
+      { label: tt`Открыть`, icon: ["M5 12h14", "m13 6 6 6-6 6"], run: () => this.go(site.url) },
+      { label: tt`Открыть в новой вкладке`, icon: ["M12 5v14", "M5 12h14"], run: () => { gBrowser.selectedTab = gBrowser.addTab(site.url, { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() }); } },
       { separator: true },
-      { label: pinned ? "Открепить" : "Закрепить", icon: ["M12 17v5", "M8 3h8l-1 7 3 3H6l3-3z"], run: () => (pinned ? this.dialUnpin(site) : this.dialAdd(site.url, site.title)) },
-      { label: "Переименовать…", icon: ["M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z", "M13.5 6.5l3 3"], run: () => this.dialRenameForm(site) },
-      { label: "Убрать со стартовой", icon: ["M6 6l12 12", "M18 6 6 18"], danger: true, run: () => this.dialRemove(site) },
+      { label: pinned ? tt`Открепить` : tt`Закрепить`, icon: ["M12 17v5", "M8 3h8l-1 7 3 3H6l3-3z"], run: () => (pinned ? this.dialUnpin(site) : this.dialAdd(site.url, site.title)) },
+      { label: tt`Переименовать…`, icon: ["M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z", "M13.5 6.5l3 3"], run: () => this.dialRenameForm(site) },
+      { label: tt`Убрать со стартовой`, icon: ["M6 6l12 12", "M18 6 6 18"], danger: true, run: () => this.dialRemove(site) },
       { separator: true },
-      { label: "Добавить сайт…", icon: ["M12 5v14", "M5 12h14"], run: () => this.dialAddForm() },
-      { label: "Изменить порядок", hint: "перетаскивание", icon: ["M4 8h16", "M4 16h16"], run: () => this.dialToggleEdit(true) },
+      { label: tt`Добавить сайт…`, icon: ["M12 5v14", "M5 12h14"], run: () => this.dialAddForm() },
+      { label: tt`Изменить порядок`, hint: tt`перетаскивание`, icon: ["M4 8h16", "M4 16h16"], run: () => this.dialToggleEdit(true) },
     ];
   },
 
@@ -3113,7 +3118,7 @@ var Tabora = {
     const state = this.dialState();
     const clean = String(url || "").trim();
     if (!/^https?:\/\//.test(clean)) {
-      this.notice("Адрес должен начинаться с http:// или https://");
+      this.notice(tt`Адрес должен начинаться с http:// или https://`);
       return;
     }
     state.hidden = state.hidden.filter(u => u !== clean);
@@ -3140,7 +3145,7 @@ var Tabora = {
       state.hidden.push(site.url);
     }
     this.dialSave(state);
-    this.notice("Сайт убран со стартовой");
+    this.notice(tt`Сайт убран со стартовой`);
   },
 
   /** Перестановка: видимый список целиком становится закреплённым в новом порядке. */
@@ -3166,7 +3171,7 @@ var Tabora = {
     const page = document.getElementById("tabora-start");
     const on = force === undefined ? !page.hasAttribute("editing") : !!force;
     page.toggleAttribute("editing", on);
-    document.getElementById("tabora-dial-edit").textContent = on ? "Готово" : "Изменить";
+    document.getElementById("tabora-dial-edit").textContent = on ? tt`Готово` : tt`Изменить`;
   },
 
   /** Небольшая форма на стартовой: добавить или переименовать сайт. */
@@ -3176,7 +3181,7 @@ var Tabora = {
     const inputs = fields.map(f => this.html("input", { class: "field", placeholder: f.placeholder, value: f.value || "", "aria-label": f.placeholder, spellcheck: "false" }));
     const err = this.html("span", { class: "err", hidden: "true" });
     const ok = this.html("button", { class: "primary", type: "button" }, okLabel);
-    const cancel = this.html("button", { class: "ghost", type: "button" }, "Отмена");
+    const cancel = this.html("button", { class: "ghost", type: "button" }, tt`Отмена`);
     const close = () => {
       box.hidden = true;
       box.replaceChildren();
@@ -3205,20 +3210,20 @@ var Tabora = {
   },
 
   dialAddForm() {
-    this.startForm("Добавить сайт", [{ placeholder: "https://example.com" }, { placeholder: "Название (необязательно)" }], "Добавить", async ([url, title]) => {
+    this.startForm(tt`Добавить сайт`, [{ placeholder: "https://example.com" }, { placeholder: tt`Название (необязательно)` }], tt`Добавить`, async ([url, title]) => {
       let u = url.trim();
       if (u && !/^https?:\/\//i.test(u)) {
         u = `https://${u}`;
       }
       if (!/^https?:\/\/[^\s/]+\.[^\s/]+/.test(u)) {
-        throw new Error("Укажите адрес сайта, например github.com");
+        throw new Error(tt`Укажите адрес сайта, например github.com`);
       }
       this.dialAdd(u, title);
     });
   },
 
   dialRenameForm(site) {
-    this.startForm("Название сайта", [{ placeholder: "Название", value: site.title || this.dialHost(site.url) }], "Сохранить", async ([title]) => {
+    this.startForm(tt`Название сайта`, [{ placeholder: tt`Название`, value: site.title || this.dialHost(site.url) }], tt`Сохранить`, async ([title]) => {
       const state = this.dialState();
       const idx = state.pinned.findIndex(s => s.url === site.url);
       if (idx >= 0) {
@@ -3232,35 +3237,35 @@ var Tabora = {
 
   buildAgentPanel() {
     const browser = document.getElementById("browser");
-    const closeBtn = this.html("button", { class: "close", "aria-label": "Скрыть панель агента", title: "Скрыть (⌘J)" }, null, [
+    const closeBtn = this.html("button", { class: "close", "aria-label": tt`Скрыть панель агента`, title: tt`Скрыть (⌘J)` }, null, [
       this.svg(["M6 6l12 12M18 6L6 18"], 14, 2.2),
     ]);
-    const moreBtn = this.html("button", { class: "close more", "aria-label": "Настройки агента", title: "Модель, ключ, очистка" }, null, [
+    const moreBtn = this.html("button", { class: "close more", "aria-label": tt`Настройки агента`, title: tt`Модель, ключ, очистка` }, null, [
       this.svg(["M5 12h.01", "M12 12h.01", "M19 12h.01"], 16, 2.4),
     ]);
     moreBtn.addEventListener("click", e => {
       const r = e.currentTarget.getBoundingClientRect();
       this.showMenu(this.agentMenuItems(), r.right - 200, r.bottom + 6);
     });
-    const input = this.html("input", { id: "tabora-agent-input", placeholder: "Спросите или поручите…", "aria-label": "Сообщение агенту" });
-    const sendBtn = this.html("button", { class: "send", "aria-label": "Отправить" }, null, [
+    const input = this.html("input", { id: "tabora-agent-input", placeholder: tt`Спросите или поручите…`, "aria-label": tt`Сообщение агенту` });
+    const sendBtn = this.html("button", { class: "send", "aria-label": tt`Отправить` }, null, [
       this.svg(["M5 12h14M13 6l6 6-6 6"], 16, 2.2),
     ]);
-    const chips = ["Саммари этой страницы", "Разложи вкладки по пространствам", "Найди код из последнего письма"].map(q =>
+    const chips = [tt`Саммари этой страницы`, tt`Разложи вкладки по пространствам`, tt`Найди код из последнего письма`].map(q =>
       this.html("button", { "data-q": q }, q)
     );
     const inner = this.html("div", { class: "agent-inner" }, null, [
       this.html("div", { class: "head" }, null, [
         this.html("span", { class: "orb", "aria-hidden": "true" }),
         this.html("div", { class: "who" }, null, [
-          this.html("span", { class: "name" }, "Агент"),
-          this.html("span", { class: "where", id: "tabora-agent-where" }, "Готов к задачам"),
+          this.html("span", { class: "name" }, tt`Агент`),
+          this.html("span", { class: "where", id: "tabora-agent-where" }, tt`Готов к задачам`),
         ]),
         moreBtn,
         closeBtn,
       ]),
       this.html("div", { class: "log", id: "tabora-agent-log" }, null, [
-        this.html("div", { class: "msg agent" }, "Чем помочь? Могу прочитать страницу и сделать саммари, разобрать вкладки по пространствам, найти код из письма, заполнить форму или открыть что угодно."),
+        this.html("div", { class: "msg agent" }, tt`Чем помочь? Могу прочитать страницу и сделать саммари, разобрать вкладки по пространствам, найти код из письма, заполнить форму или открыть что угодно.`),
       ]),
       this.html("div", { class: "chips" }, null, chips),
       this.html("div", { class: "composer" }, null, [input, sendBtn]),
@@ -3336,12 +3341,12 @@ var Tabora = {
     const browser = document.getElementById("browser");
     const input = this.html("input", {
       id: "tabora-cmd-input",
-      placeholder: "Команда, адрес или задача агенту",
-      "aria-label": "Команда, адрес или задача агенту",
+      placeholder: tt`Команда, адрес или задача агенту`,
+      "aria-label": tt`Команда, адрес или задача агенту`,
       autocomplete: "off",
       spellcheck: "false",
     });
-    const dialog = this.html("div", { class: "dialog", role: "dialog", "aria-label": "Командная строка" }, null, [
+    const dialog = this.html("div", { class: "dialog", role: "dialog", "aria-label": tt`Командная строка` }, null, [
       this.html("div", { class: "head" }, null, [
         this.html("span", { class: "dot", "aria-hidden": "true" }),
         input,
@@ -3349,11 +3354,11 @@ var Tabora = {
       ]),
       this.html("div", { class: "body", id: "tabora-cmd-body", role: "listbox" }),
       this.html("div", { class: "foot" }, null, [
-        this.hint("↑↓", "выбрать"),
-        this.hint("⏎", "выполнить"),
-        this.hint("⇥", "поручить агенту"),
+        this.hint("↑↓", tt`выбрать`),
+        this.hint("⏎", tt`выполнить`),
+        this.hint("⇥", tt`поручить агенту`),
         this.html("span", { class: "spacer" }),
-        this.html("span", {}, "Адрес или запрос открываются по ⏎, задача агенту по ⇥"),
+        this.html("span", {}, tt`Адрес или запрос открываются по ⏎, задача агенту по ⇥`),
       ]),
     ]);
     const overlay = this.html("div", { id: "tabora-cmd", hidden: "true" }, null, [dialog]);
@@ -3518,7 +3523,7 @@ var Tabora = {
 
   searchEngineName() {
     if (!this._engineName) {
-      this._engineName = "Поиск";
+      this._engineName = tt`Поиск`;
       const { SearchService } = ChromeUtils.importESModule("moz-src:///toolkit/components/search/SearchService.sys.mjs");
       SearchService.getDefault()
         .then(engine => {
@@ -3534,15 +3539,15 @@ var Tabora = {
   commands() {
     const others = gBrowser.tabs.filter(t => t !== gBrowser.selectedTab && !t.closing && !t.hasAttribute("pending"));
     return [
-      { glyph: "+", title: "Новая вкладка", note: "В текущем пространстве", key: "⌘T", tags: "new tab создать", run: () => BrowserCommands.openTab() },
+      { glyph: "+", title: tt`Новая вкладка`, note: tt`В текущем пространстве`, key: "⌘T", tags: tt`new tab создать`, run: () => BrowserCommands.openTab() },
       {
         glyph: "Z",
-        title: "Усыпить все вкладки, кроме текущей",
+        title: tt`Усыпить все вкладки, кроме текущей`,
         note: others.length
-          ? `${others.length} ${this.plural(others.length, "вкладка освободит", "вкладки освободят", "вкладок освободят")} память`
-          : "Все остальные вкладки уже спят",
+          ? tt`${others.length} ${this.plural(others.length, tt`вкладка освободит|вкладки освободят|вкладок освободят`)} память`
+          : tt`Все остальные вкладки уже спят`,
         key: "",
-        tags: "sleep память ram спать",
+        tags: tt`sleep память ram спать`,
         run: () => {
           for (const tab of others) {
             gBrowser.discardBrowser(tab);
@@ -3552,25 +3557,25 @@ var Tabora = {
       },
       ...this.spaces.map((s, i) => ({
         glyph: s.name[0],
-        title: `Пространство: ${s.name}`,
-        note: s.id === this.activeSpaceId ? "Текущее" : "Переключить",
+        title: tt`Пространство: ${s.name}`,
+        note: s.id === this.activeSpaceId ? tt`Текущее` : tt`Переключить`,
         key: `⌘${i + 1}`,
-        tags: "space пространство",
+        tags: tt`space пространство`,
         run: () => this.switchSpace(s.id),
       })),
-      { glyph: "●", title: "Панель агента", note: "Показать или скрыть", key: "⌘J", tags: "agent ai", run: () => this.toggleAgent() },
-      { glyph: "P", title: "Приватное окно", note: "Без истории и cookies", key: "⌘⇧P", tags: "private инкогнито", run: () => OpenBrowserWindow({ private: true }) },
-      { glyph: "↓", title: "Загрузки", note: "Ящик: прогресс и файлы под рукой", key: "⌘⇧J", tags: "downloads загрузки файлы", run: () => this.openDrawer("downloads") },
-      { glyph: "◷", title: "История", note: "Ящик: посещённые страницы", key: "⌘⇧H", tags: "history история журнал", run: () => this.openDrawer("history") },
-      { glyph: "★", title: "Закладки", note: "Ящик: папки и поиск", key: "⌘⇧B", tags: "bookmarks закладки избранное", run: () => this.openDrawer("bookmarks") },
-      { glyph: "▣", title: "Медиа", note: "Ящик: картинки и видео со вкладок", key: "⌘⇧I", tags: "media медиа картинки видео", run: () => this.openDrawer("media") },
-      { glyph: "◫", title: "Пространства", note: "Полотно: вкладки по пространствам", key: "⌘⇧S", tags: "spaces пространства контейнеры", run: () => this.openDrawer("spaces") },
-      { glyph: "◈", title: "Кошелёк", note: "Ethereum, L2, Bitcoin, Solana, TRON на одной фразе", key: "⌘⇧W", tags: "wallet кошелёк крипто eth btc sol trx", run: () => this.openDrawer("wallet") },
-      { glyph: "✎", title: "Написать письмо", note: "Окно письма поверх любой вкладки", key: "", tags: "compose написать письмо mail new", run: () => this.openCompose() },
-      { glyph: "✉", title: "Почта и алиасы", note: "Входящие, коды подтверждения, алиасы", key: "⌘⇧M", tags: "mail почта email письма алиасы inbox", run: () => this.openMail() },
-      { glyph: "⚙", title: "Настройки", note: "Поведение, приватность, внешний вид", key: "⌘,", tags: "settings preferences", run: () => openPreferences() },
-      { glyph: "⟨", title: document.documentElement.getAttribute("tabora-sidebar") === "compact" ? "Развернуть боковую панель" : "Свернуть боковую панель", note: "Только значки вкладок, названия по наведению", key: "⌘B", tags: "sidebar панель свернуть compact", run: () => this.toggleSidebar() },
-      { glyph: "▭", title: this.horizontalTabs ? "Вкладки сбоку" : "Вкладки сверху", note: this.horizontalTabs ? "Вернуть боковую панель с вкладками" : "Вкладки и адрес двумя строками сверху, страница на всю ширину", tags: "layout раскладка вкладки сверху сбоку горизонтальные вертикальные tabs", run: () => Services.prefs.setBoolPref(this.TABS_LAYOUT_PREF, this.horizontalTabs) },
+      { glyph: "●", title: tt`Панель агента`, note: tt`Показать или скрыть`, key: "⌘J", tags: "agent ai", run: () => this.toggleAgent() },
+      { glyph: "P", title: tt`Приватное окно`, note: tt`Без истории и cookies`, key: "⌘⇧P", tags: tt`private инкогнито`, run: () => OpenBrowserWindow({ private: true }) },
+      { glyph: "↓", title: tt`Загрузки`, note: tt`Ящик: прогресс и файлы под рукой`, key: "⌘⇧J", tags: tt`downloads загрузки файлы`, run: () => this.openDrawer("downloads") },
+      { glyph: "◷", title: tt`История`, note: tt`Ящик: посещённые страницы`, key: "⌘⇧H", tags: tt`history история журнал`, run: () => this.openDrawer("history") },
+      { glyph: "★", title: tt`Закладки`, note: tt`Ящик: папки и поиск`, key: "⌘⇧B", tags: tt`bookmarks закладки избранное`, run: () => this.openDrawer("bookmarks") },
+      { glyph: "▣", title: tt`Медиа`, note: tt`Ящик: картинки и видео со вкладок`, key: "⌘⇧I", tags: tt`media медиа картинки видео`, run: () => this.openDrawer("media") },
+      { glyph: "◫", title: tt`Пространства`, note: tt`Полотно: вкладки по пространствам`, key: "⌘⇧S", tags: tt`spaces пространства контейнеры`, run: () => this.openDrawer("spaces") },
+      { glyph: "◈", title: tt`Кошелёк`, note: tt`Ethereum, L2, Bitcoin, Solana, TRON на одной фразе`, key: "⌘⇧W", tags: tt`wallet кошелёк крипто eth btc sol trx`, run: () => this.openDrawer("wallet") },
+      { glyph: "✎", title: tt`Написать письмо`, note: tt`Окно письма поверх любой вкладки`, key: "", tags: tt`compose написать письмо mail new`, run: () => this.openCompose() },
+      { glyph: "✉", title: tt`Почта и алиасы`, note: tt`Входящие, коды подтверждения, алиасы`, key: "⌘⇧M", tags: tt`mail почта email письма алиасы inbox`, run: () => this.openMail() },
+      { glyph: "⚙", title: tt`Настройки`, note: tt`Поведение, приватность, внешний вид`, key: "⌘,", tags: "settings preferences", run: () => openPreferences() },
+      { glyph: "⟨", title: document.documentElement.getAttribute("tabora-sidebar") === "compact" ? tt`Развернуть боковую панель` : tt`Свернуть боковую панель`, note: tt`Только значки вкладок, названия по наведению`, key: "⌘B", tags: tt`sidebar панель свернуть compact`, run: () => this.toggleSidebar() },
+      { glyph: "▭", title: this.horizontalTabs ? tt`Вкладки сбоку` : tt`Вкладки сверху`, note: this.horizontalTabs ? tt`Вернуть боковую панель с вкладками` : tt`Вкладки и адрес двумя строками сверху, страница на всю ширину`, tags: tt`layout раскладка вкладки сверху сбоку горизонтальные вертикальные tabs`, run: () => Services.prefs.setBoolPref(this.TABS_LAYOUT_PREF, this.horizontalTabs) },
     ];
   },
 
@@ -3607,18 +3612,18 @@ var Tabora = {
     if (q) {
       const url = this.looksLikeUrl(q);
       groups.push({
-        name: "Открыть",
+        name: tt`Открыть`,
         items: [
           url
-            ? { glyph: this.letterOf(url.host), icon: `page-icon:https://${url.host}/`, title: url.host + url.path, note: "Открыть адрес", key: "⏎", run: () => this.go(q) }
-            : { glyph: this.svg(["M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z", "M20 20l-4-4"], 15, 2), title: `Искать «${q}»`, note: this.searchEngineName(), key: "⏎", run: () => this.go(q) },
+            ? { glyph: this.letterOf(url.host), icon: `page-icon:https://${url.host}/`, title: url.host + url.path, note: tt`Открыть адрес`, key: "⏎", run: () => this.go(q) }
+            : { glyph: this.svg(["M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z", "M20 20l-4-4"], 15, 2), title: tt`Искать «${q}»`, note: this.searchEngineName(), key: "⏎", run: () => this.go(q) },
         ],
       });
       if (!url) {
         groups.push({
-          name: "Агенту",
+          name: tt`Агенту`,
           agent: true,
-          items: [{ glyph: "●", title: q, note: "Поручить агенту. Он уточнит, если чего-то не хватает", key: "⇥", run: () => this.agentSend(q) }],
+          items: [{ glyph: "●", title: q, note: tt`Поручить агенту. Он уточнит, если чего-то не хватает`, key: "⇥", run: () => this.agentSend(q) }],
         });
       }
     }
@@ -3630,12 +3635,12 @@ var Tabora = {
       .slice(0, q ? 4 : 3);
     if (tabs.length) {
       groups.push({
-        name: "Вкладки",
+        name: tt`Вкладки`,
         items: tabs.map(t => ({
           glyph: this.letterOf(t.label),
           icon: t.getAttribute("image") || `page-icon:${t.linkedBrowser?.currentURI?.spec || ""}`,
           title: t.label,
-          note: (this.hostOf(t.linkedBrowser?.currentURI?.spec) || "Стартовая страница") + (t.hasAttribute("pending") ? " · спит" : ""),
+          note: (this.hostOf(t.linkedBrowser?.currentURI?.spec) || tt`Стартовая страница`) + (t.hasAttribute("pending") ? tt` · спит` : ""),
           key: "",
           run: () => {
             gBrowser.selectedTab = t;
@@ -3646,7 +3651,7 @@ var Tabora = {
 
     const cmds = this.commands().filter(c => !q || c.title.toLowerCase().includes(lower) || (c.tags || "").includes(lower));
     if (cmds.length) {
-      groups.push({ name: "Команды", items: cmds.slice(0, q ? 4 : 7) });
+      groups.push({ name: tt`Команды`, items: cmds.slice(0, q ? 4 : 7) });
     }
 
     if (q.length >= 2) {
@@ -3655,7 +3660,7 @@ var Tabora = {
         return;
       }
       if (hist.length) {
-        groups.push({ name: "История", items: hist });
+        groups.push({ name: tt`История`, items: hist });
       }
     }
     this.cmdRender(groups);
@@ -3667,7 +3672,7 @@ var Tabora = {
     this.cmd.items = [];
     this.cmd.sel = 0;
     if (!groups.length) {
-      body.append(this.html("div", { class: "empty" }, "Ничего не нашлось"));
+      body.append(this.html("div", { class: "empty" }, tt`Ничего не нашлось`));
       return;
     }
     for (const g of groups) {
@@ -3743,9 +3748,9 @@ var Tabora = {
    * профиле сам, разбирает cleanStockContainers. */
 
   DEFAULT_SPACES: [
-    { id: "personal", name: "Личное", icon: "fingerprint", color: "yellow", userContextId: 0 },
-    { id: "work", name: "Работа", icon: "briefcase", color: "blue" },
-    { id: "projects", name: "Проекты", icon: "chill", color: "orange" },
+    { id: "personal", name: tt`Личное`, icon: "fingerprint", color: "yellow", userContextId: 0 },
+    { id: "work", name: tt`Работа`, icon: "briefcase", color: "blue" },
+    { id: "projects", name: tt`Проекты`, icon: "chill", color: "orange" },
   ],
 
   initSpaces() {
@@ -3879,7 +3884,7 @@ var Tabora = {
     for (const identity of stock) {
       const id = identity.userContextId;
       if (used.has(id)) {
-        cis.update(id, cis.getUserContextLabel(id) || `Контейнер ${id}`, identity.icon, identity.color);
+        cis.update(id, cis.getUserContextLabel(id) || tt`Контейнер ${id}`, identity.icon, identity.color);
       } else {
         cis.remove(id);
       }
@@ -4057,7 +4062,7 @@ var Tabora = {
       label = label.slice(0, -1); // у страницы без заголовка Firefox пишет «host/»
     }
     title.textContent = host && !label.includes(host) ? `${label} · ${host}` : label;
-    document.getElementById("tabora-agent-where").textContent = host ? `Работает на ${host}` : "Готов к задачам";
+    document.getElementById("tabora-agent-where").textContent = host ? tt`Работает на ${host}` : tt`Готов к задачам`;
     this.updateBlocked();
   },
 
@@ -4067,11 +4072,11 @@ var Tabora = {
    * настоящие блокировки слежения (биты nsIWebProgressListener.STATE_*). */
   BLOCK_KINDS: [
     // содержимое трекеров, их куки (заблокированы или изолированы), подменённые скрипты, трекеры в письмах
-    { key: "tracker", title: "Трекеры", mask: (1 << 12) | (1 << 29) | (1 << 1) | (1 << 4) | (1 << 22) },
-    { key: "social", title: "Трекеры соцсетей", mask: (1 << 16) | (1 << 24) },
-    { key: "fingerprint", title: "Сбор отпечатка браузера", mask: (1 << 6) | (1 << 2) },
-    { key: "miner", title: "Майнеры", mask: 1 << 11 },
-    { key: "bounce", title: "Трекеры-переадресации", mask: 1 << 3 },
+    { key: "tracker", title: tt`Трекеры`, mask: (1 << 12) | (1 << 29) | (1 << 1) | (1 << 4) | (1 << 22) },
+    { key: "social", title: tt`Трекеры соцсетей`, mask: (1 << 16) | (1 << 24) },
+    { key: "fingerprint", title: tt`Сбор отпечатка браузера`, mask: (1 << 6) | (1 << 2) },
+    { key: "miner", title: tt`Майнеры`, mask: 1 << 11 },
+    { key: "bounce", title: tt`Трекеры-переадресации`, mask: 1 << 3 },
   ],
 
   /** { count, groups: [{ key, title, count, items: [{ host, n }] }] } для страницы во вкладке. */
@@ -4084,7 +4089,7 @@ var Tabora = {
         try {
           host = new URL(origin).hostname.replace(/^www\./, "");
         } catch (e) {}
-        host ||= "источник без адреса";
+        host ||= tt`источник без адреса`;
         for (const [flag, blocked, n] of entries) {
           if (!blocked) {
             continue;
@@ -4111,7 +4116,7 @@ var Tabora = {
       const items = entries.map(([host, n]) => ({ host, n })).sort((a, b) => b.n - a.n || a.host.localeCompare(b.host));
       return { key, title, items, count: items.reduce((sum, it) => sum + it.n, 0) };
     };
-    const groups = [group("ads", "Реклама", shield.ads.map(([host, n]) => [host.replace(/^www\./, ""), n])), ...this.BLOCK_KINDS.map(k => group(k.key, k.title, [...kinds.get(k.key)]))].filter(g => g.count);
+    const groups = [group("ads", tt`Реклама`, shield.ads.map(([host, n]) => [host.replace(/^www\./, ""), n])), ...this.BLOCK_KINDS.map(k => group(k.key, k.title, [...kinds.get(k.key)]))].filter(g => g.count);
     return { groups, count: groups.reduce((sum, g) => sum + g.count, 0), ads: groups.find(g => g.key === "ads")?.count || 0 };
   },
 
@@ -4162,8 +4167,8 @@ var Tabora = {
       host ||= browser.currentURI.host.replace(/^www\./, "");
     } catch (e) {}
     const items = [count
-      ? { label: host ? `Заблокировано на ${host}` : "Заблокировано на странице", hint: String(count), caption: true }
-      : { label: `На ${host} реклама не блокируется`, caption: true }];
+      ? { label: host ? tt`Заблокировано на ${host}` : tt`Заблокировано на странице`, hint: String(count), caption: true }
+      : { label: tt`На ${host} реклама не блокируется`, caption: true }];
     for (const g of groups) {
       items.push({ header: g.title });
       for (const it of g.items) {
@@ -4173,14 +4178,14 @@ var Tabora = {
     if (site) {
       // сайт, где блокировка мешает, исключается одним нажатием; страница перезагружается
       items.push({ separator: true }, {
-        label: site.off ? `Блокировать рекламу на ${site.host}` : `Не блокировать на ${site.host}`,
+        label: site.off ? tt`Блокировать рекламу на ${site.host}` : tt`Не блокировать на ${site.host}`,
         icon: site.off ? ["M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z", "M9 12l2 2 4-4"] : ["M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z", "M9.5 9.5l5 5M14.5 9.5l-5 5"],
         run: () => {
           this.shield().setAllowed(site.host, !site.off);
-          this.notice(site.off ? `Реклама на ${site.host} снова блокируется` : `На ${site.host} реклама больше не блокируется`);
+          this.notice(site.off ? tt`Реклама на ${site.host} снова блокируется` : tt`На ${site.host} реклама больше не блокируется`);
           browser.reload();
         },
-      }, { label: "Настройки блокировки", icon: ["M4 7h10", "M18 7h2", "M4 17h2", "M10 17h10", "M16 5v4", "M8 15v4"], run: () => openPreferences("panePrivacy") });
+      }, { label: tt`Настройки блокировки`, icon: ["M4 7h10", "M18 7h2", "M4 17h2", "M10 17h10", "M16 5v4", "M8 15v4"], run: () => openPreferences("panePrivacy") });
     }
     const r = chip.getBoundingClientRect();
     this.showMenu(items, r.left, r.bottom + 6, { owner: "blocked" });
@@ -4202,16 +4207,16 @@ var Tabora = {
     chip.hidden = !count && !paused;
     chip.toggleAttribute("data-paused", siteOff);
     const text = paused
-      ? "Реклама не блокируется"
+      ? tt`Реклама не блокируется`
       : !count
         ? ""
         : ads
-          ? `${count} заблокировано`
-          : `${count} ${this.plural(count, "трекер заблокирован", "трекера заблокировано", "трекеров заблокировано")}`;
+          ? tt`${count} заблокировано`
+          : `${count} ${this.plural(count, tt`трекер заблокирован|трекера заблокировано|трекеров заблокировано`)}`;
     document.getElementById("tabora-blocked-text").textContent = text;
     // в узком окне при вкладках сверху от фишки остаются значок и число (tabora.css)
     chip.dataset.count = count || "";
-    chip.title = siteOff && count ? `${text}; реклама на этом сайте не блокируется` : text;
+    chip.title = siteOff && count ? tt`${text}; реклама на этом сайте не блокируется` : text;
     const readerBtn = document.getElementById("tabora-reader");
     if (readerBtn) {
       const native = document.getElementById("reader-mode-button");
@@ -4268,23 +4273,15 @@ var Tabora = {
     } catch (e) {}
     const sleeping = gBrowser.tabs.filter(t => t.hasAttribute("pending") && !t.closing).length;
     const awake = gBrowser.tabs.filter(t => !t.hasAttribute("pending") && !t.closing && !t.hidden).length;
-    valueEl.textContent = mb >= 1024 ? `${(mb / 1024).toFixed(1)} ГБ` : `${Math.round(mb)} МБ`;
+    valueEl.textContent = mb >= 1024 ? tt`${(mb / 1024).toFixed(1)} ГБ` : tt`${Math.round(mb)} МБ`;
     document.getElementById("tabora-memory-bar").style.width = `${Math.min(100, (mb / this.MEMORY_BAR_MAX_MB) * 100)}%`;
     document.getElementById("tabora-memory-note").textContent = sleeping
-      ? `${sleeping} ${this.plural(sleeping, "вкладка спит", "вкладки спят", "вкладок спят")} и не ${sleeping === 1 ? "занимает" : "занимают"} RAM`
-      : `${awake} ${this.plural(awake, "вкладка активна", "вкладки активны", "вкладок активны")}`;
+      ? tt`${sleeping} ${this.plural(sleeping, tt`вкладка спит|вкладки спят|вкладок спят`)} и не ${sleeping === 1 ? tt`занимает` : tt`занимают`} RAM`
+      : `${awake} ${this.plural(awake, tt`вкладка активна|вкладки активны|вкладок активны`)}`;
   },
 
-  plural(n, one, few, many) {
-    const m10 = n % 10;
-    const m100 = n % 100;
-    if (m10 === 1 && m100 !== 11) {
-      return one;
-    }
-    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) {
-      return few;
-    }
-    return many;
+  plural(n, forms) {
+    return ttForm(n, forms);
   },
 
   /* ---- Клавиши ---------------------------------------------------------- */

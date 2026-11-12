@@ -145,26 +145,26 @@ Object.assign(Tabora, {
     const { WalletStore } = this.walletStore();
     const fixed = WalletStore._addrFixed;
     const unsigned = WalletStore.tamperReason === "unsigned";
-    const what = unsigned ? "Файл кошелька старого формата: его открытая часть не была подписана, проверить её нечем." : WalletStore.tamperReason === "rollback" ? "Файл кошелька заменён более старой копией." : "Файл кошелька изменён вне Tabora.";
-    const accept = this.wButton(unsigned ? "Проверить и принять…" : "Это мои правки, принять…", "small ghost", () => {
+    const what = unsigned ? tt`Файл кошелька старого формата: его открытая часть не была подписана, проверить её нечем.` : WalletStore.tamperReason === "rollback" ? tt`Файл кошелька заменён более старой копией.` : tt`Файл кошелька изменён вне Tabora.`;
+    const accept = this.wButton(unsigned ? tt`Проверить и принять…` : tt`Это мои правки, принять…`, "small ghost", () => {
       const content = WalletStore.untrustedContent();
       this.walletPassword(
-        "Принять файл кошелька",
+        tt`Принять файл кошелька`,
         [
-          unsigned ? "Адреса приёма уже пересчитаны из вашей фразы. Остальное содержимое файла начнёт действовать только после вашего пароля." : "Вы подтверждаете, что файл изменили вы. Если вы файл не меняли, не принимайте: восстановите кошелёк по фразе.",
-          content.length ? "После подтверждения кошелёк начнёт доверять этим данным из файла:" : "Кроме адресов (они пересчитаны из фразы), в файле нет данных, требующих доверия.",
+          unsigned ? tt`Адреса приёма уже пересчитаны из вашей фразы. Остальное содержимое файла начнёт действовать только после вашего пароля.` : tt`Вы подтверждаете, что файл изменили вы. Если вы файл не меняли, не принимайте: восстановите кошелёк по фразе.`,
+          content.length ? tt`После подтверждения кошелёк начнёт доверять этим данным из файла:` : tt`Кроме адресов (они пересчитаны из фразы), в файле нет данных, требующих доверия.`,
           ...content.map(line => `• ${line}`),
-          "Знак подлинности на листах подтверждения будет выдан новый.",
+          tt`Знак подлинности на листах подтверждения будет выдан новый.`,
         ],
         async pass => {
           await WalletStore.acceptFile(pass);
-          this.notice("Файл кошелька подтверждён. Знак подлинности выдан новый");
+          this.notice(tt`Файл кошелька подтверждён. Знак подлинности выдан новый`);
           this.renderDrawer();
         }
       );
     });
     return h("div", { class: "w-badge-danger w-tamper" }, null, [
-      h("span", {}, `${what} Пока вы не подтвердите его паролем, кошелёк ему не доверяет: адреса приёма пересчитаны из фразы${fixed ? ` (не совпадало: ${fixed})` : ""}, контакты, ноды, свои токены и настройки из файла не используются, сайты отключены.`),
+      h("span", {}, tt`${what} Пока вы не подтвердите его паролем, кошелёк ему не доверяет: адреса приёма пересчитаны из фразы${fixed ? tt` (не совпадало: ${fixed})` : ""}, контакты, ноды, свои токены и настройки из файла не используются, сайты отключены.`),
       accept,
     ]);
   },
@@ -173,12 +173,12 @@ Object.assign(Tabora, {
   walletUnverifiedView() {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { WalletStore } = this.walletStore();
-    const lock = this.wButton("Заблокировать", "ghost", () => WalletStore.lock());
-    const restore = this.wButton("Восстановить по фразе…", "primary", () => this.walletPassword(
-      "Восстановление кошелька",
+    const lock = this.wButton(tt`Заблокировать`, "ghost", () => WalletStore.lock());
+    const restore = this.wButton(tt`Восстановить по фразе…`, "primary", () => this.walletPassword(
+      tt`Восстановление кошелька`,
       [
-        "Файл кошелька будет убран в сторону (tabora-wallet.json.unverified.bak в профиле), после чего кошелёк можно создать заново, импортировав seed-фразу.",
-        "Продолжайте, только если фраза у вас записана: из этого файла её достать не удалось.",
+        tt`Файл кошелька будет убран в сторону (tabora-wallet.json.unverified.bak в профиле), после чего кошелёк можно создать заново, импортировав seed-фразу.`,
+        tt`Продолжайте, только если фраза у вас записана: из этого файла её достать не удалось.`,
       ],
       async pass => {
         await WalletStore.quarantine(pass);
@@ -188,9 +188,9 @@ Object.assign(Tabora, {
     ));
     return h("div", { class: "w-locked" }, null, [
       h("div", { class: "w-lock-mark" }, null, [this.wIcon(["M12 9v4", "M12 17h.01", "M10.3 3.9 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"], 22, 1.8)]),
-      h("b", {}, "Кошелёк не удалось проверить"),
-      h("p", { class: "w-badge-danger" }, "Файл кошелька изменён вне Tabora, и ни один зашифрованный блок с ключами не прошёл проверку. Адреса из такого файла не показываются: они могут принадлежать тому, кто его правил. Приём, отправка и запросы сайтов закрыты."),
-      h("p", { class: "w-sub" }, "Восстановите файл профиля из резервной копии или создайте кошелёк заново по seed-фразе."),
+      h("b", {}, tt`Кошелёк не удалось проверить`),
+      h("p", { class: "w-badge-danger" }, tt`Файл кошелька изменён вне Tabora, и ни один зашифрованный блок с ключами не прошёл проверку. Адреса из такого файла не показываются: они могут принадлежать тому, кто его правил. Приём, отправка и запросы сайтов закрыты.`),
+      h("p", { class: "w-sub" }, tt`Восстановите файл профиля из резервной копии или создайте кошелёк заново по seed-фразе.`),
       h("div", { class: "w-actions" }, null, [lock, restore]),
     ]);
   },
@@ -199,17 +199,17 @@ Object.assign(Tabora, {
 
   walletWelcomeView() {
     const h = (t, a, x, c) => this.html(t, a, x, c);
-    const create = this.wButton("Создать кошелёк", "primary", () => this.walletStartFlow("create"));
-    const imp = this.wButton("Импортировать фразу", "", () => this.walletStartFlow("import"));
+    const create = this.wButton(tt`Создать кошелёк`, "primary", () => this.walletStartFlow("create"));
+    const imp = this.wButton(tt`Импортировать фразу`, "", () => this.walletStartFlow("import"));
     return h("div", { class: "w-welcome" }, null, [
       h("div", { class: "w-orb" }, null, [this.markSvg()]),
-      h("b", {}, "Кошелёк Tabora"),
-      h("p", {}, "Одна seed-фраза, сети Ethereum и L2, Bitcoin, Solana и TRON. Ключи только на этом устройстве, зашифрованы вашим паролем."),
+      h("b", {}, tt`Кошелёк Tabora`),
+      h("p", {}, tt`Одна seed-фраза, сети Ethereum и L2, Bitcoin, Solana и TRON. Ключи только на этом устройстве, зашифрованы вашим паролем.`),
       h("div", { class: "w-actions" }, null, [create, imp]),
       h("ul", { class: "w-points" }, null, [
-        h("li", {}, "Фраза шифруется Argon2id + AES-256, никуда не отправляется"),
-        h("li", {}, "Подпись и отправка только после подтверждения и пароля"),
-        h("li", {}, "Публичные ноды на ваш выбор, без привязки к сервисам"),
+        h("li", {}, tt`Фраза шифруется Argon2id + AES-256, никуда не отправляется`),
+        h("li", {}, tt`Подпись и отправка только после подтверждения и пароля`),
+        h("li", {}, tt`Публичные ноды на ваш выбор, без привязки к сервисам`),
       ]),
     ]);
   },
@@ -240,29 +240,29 @@ Object.assign(Tabora, {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { WalletStore } = this.walletStore();
     const steps = f.kind.startsWith("add") ? ["words/phrase", "done"] : ["password", f.kind === "create" ? "words" : "phrase", "done"];
-    const back = this.wButton("Отмена", "ghost small", () => {
+    const back = this.wButton(tt`Отмена`, "ghost small", () => {
       this.wallet.flow = null;
       this.renderDrawer();
     });
     const head = h("div", { class: "w-flow-head" }, null, [
-      h("b", {}, { password: "Пароль кошелька", words: "Резервная фраза", quiz: "Проверка фразы", phrase: "Введите фразу", nopass: "Без пароля?" }[f.step] || ""),
+      h("b", {}, { password: tt`Пароль кошелька`, words: tt`Резервная фраза`, quiz: tt`Проверка фразы`, phrase: tt`Введите фразу`, nopass: tt`Без пароля?` }[f.step] || ""),
       back,
     ]);
     const body = h("div", { class: "w-flow-body" });
     const err = f.error ? this.wError(f.error) : null;
 
     if (f.step === "password") {
-      const p1 = this.wField("Пароль", { type: "password", autocomplete: "new-password", placeholder: "не короче 8 символов" });
-      const p2 = this.wField("Ещё раз", { type: "password", autocomplete: "new-password" });
+      const p1 = this.wField(tt`Пароль`, { type: "password", autocomplete: "new-password", placeholder: tt`не короче 8 символов` });
+      const p2 = this.wField(tt`Ещё раз`, { type: "password", autocomplete: "new-password" });
       const meter = h("div", { class: "w-meter" }, null, [h("span"), h("span"), h("span"), h("span")]);
       const score = v => Math.min(4, (v.length >= 8) + (v.length >= 12) + /[A-ZА-Я]/.test(v) + /\d/.test(v) + /[^\w\s]/.test(v));
       p1.input.addEventListener("input", () => meter.setAttribute("level", String(score(p1.input.value))));
-      const next = this.wButton("Продолжить", "primary", () => {
+      const next = this.wButton(tt`Продолжить`, "primary", () => {
         const v = p1.input.value;
         if (v.length < 8) {
-          f.error = "Пароль короче 8 символов";
+          f.error = tt`Пароль короче 8 символов`;
         } else if (v !== p2.input.value) {
-          f.error = "Пароли не совпадают";
+          f.error = tt`Пароли не совпадают`;
         } else {
           f.password = v;
           f.passwordless = false;
@@ -271,22 +271,22 @@ Object.assign(Tabora, {
         }
         this.renderDrawer();
       });
-      const nopass = h("button", { class: "w-link", type: "button" }, "Продолжить без пароля");
+      const nopass = h("button", { class: "w-link", type: "button" }, tt`Продолжить без пароля`);
       nopass.addEventListener("click", () => {
         f.step = "nopass";
         f.error = "";
         this.renderDrawer();
       });
       this.wAppend(body, 
-        h("p", { class: "w-sub" }, "Пароль нужен для разблокировки и для каждой подписи. Он не восстанавливается: без него доступ только по резервной фразе."),
+        h("p", { class: "w-sub" }, tt`Пароль нужен для разблокировки и для каждой подписи. Он не восстанавливается: без него доступ только по резервной фразе.`),
         p1.wrap, p2.wrap, meter, err, next, nopass
       );
       setTimeout(() => p1.input.focus(), 50);
     } else if (f.step === "nopass") {
       const agree = h("input", { type: "checkbox", id: "w-nopass-agree" });
-      const go = this.wButton("Понимаю риск, продолжить", "danger", () => {
+      const go = this.wButton(tt`Понимаю риск, продолжить`, "danger", () => {
         if (!agree.checked) {
-          f.error = "Подтвердите, что понимаете риск";
+          f.error = tt`Подтвердите, что понимаете риск`;
           this.renderDrawer();
           return;
         }
@@ -300,12 +300,12 @@ Object.assign(Tabora, {
       agree.addEventListener("change", () => (go.disabled = !agree.checked));
       this.wAppend(body, 
         h("div", { class: "w-warn" }, null, [
-          h("b", {}, "Крайне не рекомендуем"),
-          h("p", {}, "Без пароля любой, кто откроет этот профиль браузера, сможет подписывать транзакции и увидеть фразу. Ключ будет лежать в хранилище паролей Tabora, в этом профиле. Кошелёк будет постоянно помечен как незащищённый."),
+          h("b", {}, tt`Крайне не рекомендуем`),
+          h("p", {}, tt`Без пароля любой, кто откроет этот профиль браузера, сможет подписывать транзакции и увидеть фразу. Ключ будет лежать в хранилище паролей Tabora, в этом профиле. Кошелёк будет постоянно помечен как незащищённый.`),
         ]),
-        h("label", { class: "w-check" }, null, [agree, h("span", {}, "Я понимаю, что средства могут быть украдены")]),
+        h("label", { class: "w-check" }, null, [agree, h("span", {}, tt`Я понимаю, что средства могут быть украдены`)]),
         err, go,
-        this.wButton("Вернуться к паролю", "ghost", () => {
+        this.wButton(tt`Вернуться к паролю`, "ghost", () => {
           f.step = "password";
           f.error = "";
           this.renderDrawer();
@@ -313,9 +313,9 @@ Object.assign(Tabora, {
       );
     } else if (f.step === "words") {
       const grid = h("ol", { class: "w-phrase", masked: "true" }, null, f.words.map((w, i) => h("li", {}, null, [h("i", {}, String(i + 1)), h("span", {}, w)])));
-      const reveal = this.wButton("Показать фразу", "ghost", () => {
+      const reveal = this.wButton(tt`Показать фразу`, "ghost", () => {
         grid.toggleAttribute("masked");
-        reveal.textContent = grid.hasAttribute("masked") ? "Показать фразу" : "Скрыть";
+        reveal.textContent = grid.hasAttribute("masked") ? tt`Показать фразу` : tt`Скрыть`;
         clearTimeout(this.wallet.hideTimer);
         if (!grid.hasAttribute("masked")) {
           this.wallet.hideTimer = setTimeout(() => grid.setAttribute("masked", "true"), 60000);
@@ -323,14 +323,14 @@ Object.assign(Tabora, {
       });
       grid.addEventListener("copy", e => e.preventDefault());
       const count = h("div", { class: "w-seg" }, null, [12, 24].map(n => {
-        const b = h("button", { type: "button", "aria-pressed": String(f.words.length === n) }, `${n} слов`);
+        const b = h("button", { type: "button", "aria-pressed": String(f.words.length === n) }, tt`${n} слов`);
         b.addEventListener("click", () => {
           f.words = WalletStore.generateMnemonic(n).split(" ");
           this.renderDrawer();
         });
         return b;
       }));
-      const next = this.wButton("Я записал фразу", "primary", () => {
+      const next = this.wButton(tt`Я записал фразу`, "primary", () => {
         const idx = [];
         while (idx.length < 3) {
           const i = Math.floor(Math.random() * f.words.length);
@@ -345,7 +345,7 @@ Object.assign(Tabora, {
         this.renderDrawer();
       });
       this.wAppend(body, 
-        h("p", { class: "w-sub" }, "Запишите слова по порядку и храните офлайн. Это единственный способ восстановить кошелёк. Никому не показывайте, Tabora никогда её не спросит."),
+        h("p", { class: "w-sub" }, tt`Запишите слова по порядку и храните офлайн. Это единственный способ восстановить кошелёк. Никому не показывайте, Tabora никогда её не спросит.`),
         count, grid, this.walletPhraseTools(() => f.words.join(" ")), reveal, err, next
       );
     } else if (f.step === "quiz") {
@@ -357,7 +357,7 @@ Object.assign(Tabora, {
           options.add(list[Math.floor(Math.random() * list.length)]);
         }
         const opts = [...options].sort();
-        const row = h("div", { class: "w-quiz" }, null, [h("b", {}, `Слово №${i + 1}`), h("div", { class: "w-quiz-opts" }, null, opts.map(o => {
+        const row = h("div", { class: "w-quiz" }, null, [h("b", {}, tt`Слово №${i + 1}`), h("div", { class: "w-quiz-opts" }, null, opts.map(o => {
           const b = h("button", { type: "button", "aria-pressed": String(f.quiz.answers[i] === o) }, o);
           b.addEventListener("click", () => {
             f.quiz.answers[i] = o;
@@ -367,28 +367,28 @@ Object.assign(Tabora, {
         }))]);
         return row;
       });
-      const next = this.wButton("Подтвердить", "primary", async () => {
+      const next = this.wButton(tt`Подтвердить`, "primary", async () => {
         const ok = f.quiz.idx.every(i => f.quiz.answers[i] === f.words[i]);
         if (!ok) {
-          f.error = "Есть ошибки: проверьте запись";
+          f.error = tt`Есть ошибки: проверьте запись`;
           this.renderDrawer();
           return;
         }
         await this.walletFinish(f.words.join(" "));
       });
-      this.wAppend(body, h("p", { class: "w-sub" }, "Выберите нужные слова из записанной фразы."), ...rows, err, next, this.wButton("Назад к фразе", "ghost", () => {
+      this.wAppend(body, h("p", { class: "w-sub" }, tt`Выберите нужные слова из записанной фразы.`), ...rows, err, next, this.wButton(tt`Назад к фразе`, "ghost", () => {
         f.step = "words";
         f.error = "";
         this.renderDrawer();
       }));
     } else if (f.step === "phrase") {
-      const ta = h("textarea", { class: "w-textarea", rows: "4", placeholder: "12 или 24 слова через пробел", autocomplete: "off", spellcheck: "false" });
+      const ta = h("textarea", { class: "w-textarea", rows: "4", placeholder: tt`12 или 24 слова через пробел`, autocomplete: "off", spellcheck: "false" });
       ta.value = f.imported;
       const status = h("div", { class: "w-status" });
       const check = () => {
         const words = ta.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
         const valid = [12, 15, 18, 21, 24].includes(words.length) && WalletStore.validateMnemonic(words.join(" "));
-        status.textContent = words.length ? `${words.length} слов · ${valid ? "фраза корректна" : "проверка не пройдена"}` : "";
+        status.textContent = words.length ? tt`${words.length} слов · ${valid ? tt`фраза корректна` : tt`проверка не пройдена`}` : "";
         status.toggleAttribute("ok", valid);
         return valid;
       };
@@ -397,15 +397,15 @@ Object.assign(Tabora, {
         check();
       });
       ta.addEventListener("paste", () => setTimeout(check, 0));
-      const next = this.wButton("Импортировать", "primary", async () => {
+      const next = this.wButton(tt`Импортировать`, "primary", async () => {
         if (!check()) {
-          f.error = "Фраза не проходит проверку BIP-39";
+          f.error = tt`Фраза не проходит проверку BIP-39`;
           this.renderDrawer();
           return;
         }
         await this.walletFinish(ta.value);
       });
-      this.wAppend(body, h("p", { class: "w-sub" }, "Фраза вводится только здесь, в защищённой панели браузера, и сразу шифруется."), ta, status, err, next);
+      this.wAppend(body, h("p", { class: "w-sub" }, tt`Фраза вводится только здесь, в защищённой панели браузера, и сразу шифруется.`), ta, status, err, next);
       setTimeout(() => ta.focus(), 50);
     }
     const stage = { password: 0, nopass: 0, words: 1, quiz: 1, phrase: 1 }[f.step] ?? 0;
@@ -421,20 +421,20 @@ Object.assign(Tabora, {
       this.agentStatus?.("", false);
       if (f.kind.startsWith("add")) {
         // новый кошелёк = новые адреса приёма: добавление только с паролем
-        this.walletPassword("Добавить кошелёк", "Введите пароль кошелька, чтобы добавить фразу.", async pass => {
-          await WalletStore.addWallet({ mnemonic: phrase, name: f.name || `Кошелёк ${WalletStore.wallets.length + 1}` }, pass);
+        this.walletPassword(tt`Добавить кошелёк`, tt`Введите пароль кошелька, чтобы добавить фразу.`, async pass => {
+          await WalletStore.addWallet({ mnemonic: phrase, name: f.name || tt`Кошелёк ${WalletStore.wallets.length + 1}` }, pass);
           this.wallet.flow = null;
           this.wallet.view = "main";
-          this.notice(f.kind.includes("import") ? "Кошелёк импортирован" : "Кошелёк создан");
+          this.notice(f.kind.includes("import") ? tt`Кошелёк импортирован` : tt`Кошелёк создан`);
           this.renderDrawer();
         });
         return;
       } else {
-        await WalletStore.create({ mnemonic: phrase, password: f.passwordless ? "" : f.password, name: "Кошелёк 1" });
+        await WalletStore.create({ mnemonic: phrase, password: f.passwordless ? "" : f.password, name: tt`Кошелёк 1` });
       }
       this.wallet.flow = null;
       this.wallet.view = "main";
-      this.notice(f.kind.includes("import") ? "Кошелёк импортирован" : "Кошелёк создан");
+      this.notice(f.kind.includes("import") ? tt`Кошелёк импортирован` : tt`Кошелёк создан`);
     } catch (e) {
       f.error = e.message || String(e);
     }
@@ -446,9 +446,9 @@ Object.assign(Tabora, {
   walletLockedView() {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { WalletStore } = this.walletStore();
-    const pass = this.wField("Пароль", { type: "password", autocomplete: "off" });
+    const pass = this.wField(tt`Пароль`, { type: "password", autocomplete: "off" });
     const err = h("div", { class: "w-error", hidden: "true" });
-    const go = this.wButton("Разблокировать", "primary", async () => {
+    const go = this.wButton(tt`Разблокировать`, "primary", async () => {
       go.disabled = true;
       go.classList.add("loading");
       err.hidden = true;
@@ -472,8 +472,8 @@ Object.assign(Tabora, {
     setTimeout(() => pass.input.focus(), 50);
     return h("div", { class: "w-locked" }, null, [
       h("div", { class: "w-lock-mark" }, null, [this.wIcon(["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], 22, 1.8)]),
-      h("b", {}, "Кошелёк заблокирован"),
-      h("p", { class: "w-sub" }, `${WalletStore.wallets.length} ${this.plural(WalletStore.wallets.length, "кошелёк", "кошелька", "кошельков")} · ${WalletStore.autolockMinutes ? `автоблокировка через ${WalletStore.autolockMinutes} мин` : "без автоблокировки"}`),
+      h("b", {}, tt`Кошелёк заблокирован`),
+      h("p", { class: "w-sub" }, `${WalletStore.wallets.length} ${this.plural(WalletStore.wallets.length, tt`кошелёк|кошелька|кошельков`)} · ${WalletStore.autolockMinutes ? tt`автоблокировка через ${WalletStore.autolockMinutes} мин` : tt`без автоблокировки`}`),
       pass.wrap, err, go,
     ]);
   },
@@ -493,11 +493,11 @@ Object.assign(Tabora, {
     walletBtn.addEventListener("click", e => {
       const r = e.currentTarget.getBoundingClientRect();
       this.showMenu([
-        ...WalletStore.wallets.map(x => ({ label: x.name, hint: `${x.accounts.length} адр.`, checked: x.id === wallet.id, run: () => WalletStore.setActive(x.id, 0) })),
+        ...WalletStore.wallets.map(x => ({ label: x.name, hint: tt`${x.accounts.length} адр.`, checked: x.id === wallet.id, run: () => WalletStore.setActive(x.id, 0) })),
         { separator: true },
-        { label: "Добавить кошелёк по фразе…", run: () => this.walletStartFlow("add-import") },
-        { label: "Создать новый кошелёк…", run: () => this.walletStartFlow("add-create") },
-        { label: "Переименовать", run: () => this.walletPrompt("Название кошелька", wallet.name, v => WalletStore.renameWallet(wallet.id, v)) },
+        { label: tt`Добавить кошелёк по фразе…`, run: () => this.walletStartFlow("add-import") },
+        { label: tt`Создать новый кошелёк…`, run: () => this.walletStartFlow("add-create") },
+        { label: tt`Переименовать`, run: () => this.walletPrompt(tt`Название кошелька`, wallet.name, v => WalletStore.renameWallet(wallet.id, v)) },
       ], r.left, r.bottom + 6);
     });
     const accBtn = h("button", { class: "w-pick small", type: "button" }, null, [h("span", {}, `${account.name} · ${this.shortAddr(account.addresses.ethereum)}`), this.wIcon(["m6 9 6 6 6-6"], 11, 2.2)]);
@@ -506,8 +506,8 @@ Object.assign(Tabora, {
       this.showMenu([
         ...wallet.accounts.map(a => ({ label: a.name, hint: this.shortAddr(a.addresses.ethereum), checked: a.index === account.index, run: () => WalletStore.setActive(wallet.id, a.index) })),
         { separator: true },
-        { label: "Новый адрес", hint: `№${wallet.accounts.length + 1}`, run: async () => { await WalletStore.addAccount(wallet.id); this.notice("Новый адрес создан"); } },
-        { label: "Переименовать адрес", run: () => this.walletPrompt("Название адреса", account.name, v => WalletStore.renameAccount(wallet.id, account.index, v)) },
+        { label: tt`Новый адрес`, hint: `№${wallet.accounts.length + 1}`, run: async () => { await WalletStore.addAccount(wallet.id); this.notice(tt`Новый адрес создан`); } },
+        { label: tt`Переименовать адрес`, run: () => this.walletPrompt(tt`Название адреса`, account.name, v => WalletStore.renameAccount(wallet.id, account.index, v)) },
       ], r.left, r.bottom + 6);
     });
 
@@ -516,23 +516,23 @@ Object.assign(Tabora, {
     const loaded = assets.filter(a => !a.pending).length;
     const total = h("div", { class: "w-total" }, null, [
       h("span", { class: "w-total-sum" }, loaded ? `$${totalUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"),
-      h("span", { class: "w-total-note" }, assets.some(a => a.pending) ? "обновляем…" : `${CHAIN_ORDER.filter(id => !hidden.has(id)).length} сетей · ${new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`),
+      h("span", { class: "w-total-note" }, assets.some(a => a.pending) ? tt`обновляем…` : tt`${CHAIN_ORDER.filter(id => !hidden.has(id)).length} сетей · ${new Date().toLocaleTimeString(ttLocale(), { hour: "2-digit", minute: "2-digit" })}`),
     ]);
-    const lock = this.iconButton("", "Заблокировать", ["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], () => WalletStore.lock(), 15);
-    const settings = this.iconButton("", "Настройки кошелька", ["M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", "M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"], () => this.walletGo("settings"), 15);
-    const receiveBtn = this.wButton("Получить", "", () => this.walletReceive("ethereum"));
+    const lock = this.iconButton("", tt`Заблокировать`, ["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], () => WalletStore.lock(), 15);
+    const settings = this.iconButton("", tt`Настройки кошелька`, ["M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", "M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"], () => this.walletGo("settings"), 15);
+    const receiveBtn = this.wButton(tt`Получить`, "", () => this.walletReceive("ethereum"));
     receiveBtn.prepend(this.wIcon(["M12 5v14", "M5 12l7 7 7-7"], 14, 2.2));
-    const sendBtn = this.wButton("Отправить", "primary", () => this.walletSendStart());
+    const sendBtn = this.wButton(tt`Отправить`, "primary", () => this.walletSendStart());
     sendBtn.prepend(this.wIcon(["M12 19V5", "M5 12l7-7 7 7"], 14, 2.2));
     const head = h("div", { class: "w-head" }, null, [
       h("div", { class: "w-head-row" }, null, [walletBtn, h("span", { class: "spacer" }), settings, lock]),
       accBtn,
       total,
       h("div", { class: "w-head-actions" }, null, [sendBtn, receiveBtn]),
-      WalletStore.passwordless ? h("div", { class: "w-badge-danger" }, "Без пароля · незащищённый режим") : h("span"),
+      WalletStore.passwordless ? h("div", { class: "w-badge-danger" }, tt`Без пароля · незащищённый режим`) : h("span"),
     ]);
 
-    const seg = h("div", { class: "w-seg wide" }, null, [["assets", "Активы"], ["chains", "Сети"], ["activity", "История"]].map(([id, label]) => {
+    const seg = h("div", { class: "w-seg wide" }, null, [["assets", tt`Активы`], ["chains", tt`Сети`], ["activity", tt`История`]].map(([id, label]) => {
       const b = h("button", { type: "button", "aria-pressed": String(w.tab === id) }, label);
       b.addEventListener("click", () => {
         w.tab = id;
@@ -551,10 +551,10 @@ Object.assign(Tabora, {
       const zero = groups.filter(g => !g.pending && !(g.sum > 0));
       nonzero.forEach(g => list.append(...this.walletGroupRows(g)));
       if (!nonzero.length && !assets.some(a => a.pending)) {
-        list.append(h("div", { class: "w-empty" }, "Пока пусто. Пополните любой адрес: ниже кнопка «Получить»."));
+        list.append(h("div", { class: "w-empty" }, tt`Пока пусто. Пополните любой адрес: ниже кнопка «Получить».`));
       }
       if (zero.length) {
-        const toggle = h("button", { class: "w-link", type: "button" }, w.showZero ? "Скрыть пустые" : `Показать ${zero.length} без баланса`);
+        const toggle = h("button", { class: "w-link", type: "button" }, w.showZero ? tt`Скрыть пустые` : tt`Показать ${zero.length} без баланса`);
         toggle.addEventListener("click", () => {
           w.showZero = !w.showZero;
           this.renderDrawer();
@@ -564,7 +564,7 @@ Object.assign(Tabora, {
           zero.forEach(g => list.append(...this.walletGroupRows(g)));
         }
       }
-      const add = h("button", { class: "w-add", type: "button" }, null, [this.wIcon(["M12 5v14", "M5 12h14"], 14, 2.2), h("span", {}, "Добавить токен по адресу контракта")]);
+      const add = h("button", { class: "w-add", type: "button" }, null, [this.wIcon(["M12 5v14", "M5 12h14"], 14, 2.2), h("span", {}, tt`Добавить токен по адресу контракта`)]);
       add.addEventListener("click", () => this.walletAddTokenSheet());
       list.append(add);
     } else {
@@ -580,7 +580,7 @@ Object.assign(Tabora, {
           h("img", { class: "w-logo", src: chain.logo, alt: "" }),
           h("div", { class: "w-chain-text" }, null, [h("b", {}, chain.name), h("span", { class: "w-addr mono", title: address }, this.shortAddr(address))]),
           h("div", { class: "w-chain-bal" }, null, [
-            h("b", { class: `w-native${bal?.error ? " err" : ""}` }, bal ? (bal.error ? "нет связи" : `${bal.native} ${chain.symbol}`) : "…"),
+            h("b", { class: `w-native${bal?.error ? " err" : ""}` }, bal ? (bal.error ? tt`нет связи` : `${bal.native} ${chain.symbol}`) : "…"),
             h("span", { class: "w-usd" }, bal && !bal.error ? (price ? `$${(parseFloat(bal.native) * price).toFixed(2)}` : "") : bal?.error ? bal.error.slice(0, 36) : ""),
           ]),
         ]);
@@ -588,11 +588,11 @@ Object.assign(Tabora, {
         row.addEventListener("contextmenu", e => {
           e.preventDefault();
           this.showMenu([
-            { label: "Копировать адрес", run: () => this.copyText(address, "Адрес скопирован") },
-            { label: "Показать адрес и QR", run: () => this.walletReceive(id) },
-            { label: "Открыть в обозревателе", run: () => this.openInSpace(chain.explorer + address, true) },
+            { label: tt`Копировать адрес`, run: () => this.copyText(address, tt`Адрес скопирован`) },
+            { label: tt`Показать адрес и QR`, run: () => this.walletReceive(id) },
+            { label: tt`Открыть в обозревателе`, run: () => this.openInSpace(chain.explorer + address, true) },
             { separator: true },
-            { label: "Скрыть сеть", run: () => WalletStore.setChainHidden(id, true).catch(e => this.notice(e.message)) },
+            { label: tt`Скрыть сеть`, run: () => WalletStore.setChainHidden(id, true).catch(e => this.notice(e.message)) },
           ], e.clientX, e.clientY);
         });
         list.append(row);
@@ -603,7 +603,7 @@ Object.assign(Tabora, {
     foot.replaceChildren();
     const refreshing = !!w.refreshing;
     const refresh = h("button", { class: `dfull${refreshing ? " loading" : ""}`, type: "button" }, null, [
-      h("span", {}, refreshing ? "Обновляем…" : "Обновить балансы"),
+      h("span", {}, refreshing ? tt`Обновляем…` : tt`Обновить балансы`),
       refreshing ? h("span", { class: "spin" }) : this.svg(["M20 12a8 8 0 1 1-2.3-5.7", "M20 4v5h-5"], 14, 2),
     ]);
     refresh.disabled = refreshing;
@@ -673,9 +673,9 @@ Object.assign(Tabora, {
           ].filter(Boolean)),
       group
         ? h("div", { class: "w-chain-text" }, null, [h("b", {}, a.chainName), h("span", { class: "w-sub-line mono" }, a.address ? this.shortAddr(a.address) : "")])
-        : h("div", { class: "w-chain-text" }, null, [h("b", {}, a.symbol), h("span", { class: "w-sub-line" }, a.native ? a.chainName : `${a.chainName}${a.token?.custom ? " · свой токен" : ""}`)]),
+        : h("div", { class: "w-chain-text" }, null, [h("b", {}, a.symbol), h("span", { class: "w-sub-line" }, a.native ? a.chainName : `${a.chainName}${a.token?.custom ? tt` · свой токен` : ""}`)]),
       h("div", { class: "w-chain-bal" }, null, [
-        h("b", { class: `w-native${a.error ? " err" : ""}` }, a.pending ? "…" : a.error ? "нет связи" : a.amount),
+        h("b", { class: `w-native${a.error ? " err" : ""}` }, a.pending ? "…" : a.error ? tt`нет связи` : a.amount),
         h("span", { class: "w-usd" }, a.pending || a.error ? "" : a.usd ? `$${a.usd.toFixed(2)}` : ""),
       ]),
     ]);
@@ -683,13 +683,13 @@ Object.assign(Tabora, {
     row.addEventListener("contextmenu", e => {
       e.preventDefault();
       const items = [
-        { label: `Отправить ${a.symbol}`, hint: group ? a.chainName : "", run: () => this.walletSendStart(a.key) },
-        { label: `Получить ${a.symbol}`, hint: group ? a.chainName : "", run: () => this.walletReceive(a.chain, groupKey) },
-        { label: "Копировать адрес", run: () => this.copyText(a.address, "Адрес скопирован") },
-        { label: "Открыть в обозревателе", run: () => this.openInSpace(CHAINS[a.chain].explorer + a.address, true) },
+        { label: tt`Отправить ${a.symbol}`, hint: group ? a.chainName : "", run: () => this.walletSendStart(a.key) },
+        { label: tt`Получить ${a.symbol}`, hint: group ? a.chainName : "", run: () => this.walletReceive(a.chain, groupKey) },
+        { label: tt`Копировать адрес`, run: () => this.copyText(a.address, tt`Адрес скопирован`) },
+        { label: tt`Открыть в обозревателе`, run: () => this.openInSpace(CHAINS[a.chain].explorer + a.address, true) },
       ];
       if (a.token) {
-        items.push({ separator: true }, { label: "Скрыть токен", run: async () => { await WalletStore.hideToken(a.chain, a.token); this.wallet.balances = {}; } });
+        items.push({ separator: true }, { label: tt`Скрыть токен`, run: async () => { await WalletStore.hideToken(a.chain, a.token); this.wallet.balances = {}; } });
       }
       this.showMenu(items, e.clientX, e.clientY);
     });
@@ -746,7 +746,7 @@ Object.assign(Tabora, {
     const open = w.openGroups.has(g.key);
     const funded = g.items.filter(a => parseFloat(a.amount) > 0);
     const count = funded.length || g.items.length;
-    const where = funded.length && funded.length <= 2 ? funded.map(a => a.chainName).join(" · ") : `${count} ${this.plural(count, "сеть", "сети", "сетей")}`;
+    const where = funded.length && funded.length <= 2 ? funded.map(a => a.chainName).join(" · ") : `${count} ${this.plural(count, tt`сеть|сети|сетей`)}`;
     const chevron = this.wIcon(["m6 9 6 6 6-6"], 13, 2.2);
     chevron.classList.add("w-chevron");
     const row = h("div", { class: "w-asset w-multi", role: "button", tabindex: "0", "aria-expanded": String(open), style: `--c:${g.color}` }, null, [
@@ -776,8 +776,8 @@ Object.assign(Tabora, {
     row.addEventListener("contextmenu", e => {
       e.preventDefault();
       this.showMenu([
-        { label: `Отправить ${g.symbol}`, run: () => this.walletSendStart(g.items[0].key) },
-        { label: `Получить ${g.symbol}`, run: () => this.walletReceive(g.items[0].chain, g.key) },
+        { label: tt`Отправить ${g.symbol}`, run: () => this.walletSendStart(g.items[0].key) },
+        { label: tt`Получить ${g.symbol}`, run: () => this.walletReceive(g.items[0].chain, g.key) },
       ], e.clientX, e.clientY);
     });
     return open ? [row, h("div", { class: "w-multi-items" }, null, g.items.map(a => this.walletAssetRow(a, g)))] : [row];
@@ -795,9 +795,9 @@ Object.assign(Tabora, {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { WalletStore, CHAINS, CHAIN_ORDER } = this.walletStore();
     const chainSel = h("select", {}, null, CHAIN_ORDER.filter(id => CHAINS[id].kind !== "btc").map(id => h("option", { value: id }, CHAINS[id].name)));
-    const addr = this.wField("Адрес контракта или mint", { type: "text", placeholder: "0x… / T… / mint", autocomplete: "off", spellcheck: "false" });
-    const sym = this.wField("Символ", { type: "text", placeholder: "USDT", maxlength: "12" });
-    const dec = this.wField("Знаков после запятой", { type: "number", min: "0", max: "18", placeholder: "6" });
+    const addr = this.wField(tt`Адрес контракта или mint`, { type: "text", placeholder: "0x… / T… / mint", autocomplete: "off", spellcheck: "false" });
+    const sym = this.wField(tt`Символ`, { type: "text", placeholder: "USDT", maxlength: "12" });
+    const dec = this.wField(tt`Знаков после запятой`, { type: "number", min: "0", max: "18", placeholder: "6" });
     const status = h("div", { class: "w-status" });
     const err = h("div", { class: "w-error", hidden: "true" });
     let timer = null;
@@ -806,14 +806,14 @@ Object.assign(Tabora, {
       if (v.length < 20) {
         return;
       }
-      status.textContent = "Ищем контракт…";
+      status.textContent = tt`Ищем контракт…`;
       try {
         const info = await WalletStore.tokenInfo(chainSel.value, v);
         if (info.symbol) {
           sym.input.value = info.symbol;
         }
         dec.input.value = String(info.decimals);
-        status.textContent = info.name ? `Найдено: ${info.name}` : "Контракт найден, укажите символ";
+        status.textContent = info.name ? tt`Найдено: ${info.name}` : tt`Контракт найден, укажите символ`;
         status.toggleAttribute("ok", true);
       } catch (e) {
         status.textContent = e.message;
@@ -825,12 +825,12 @@ Object.assign(Tabora, {
       timer = setTimeout(lookup, 400);
     });
     chainSel.addEventListener("change", lookup);
-    const ok = this.wButton("Добавить", "primary", async () => {
+    const ok = this.wButton(tt`Добавить`, "primary", async () => {
       const v = addr.input.value.trim();
       const symbol = sym.input.value.trim().toUpperCase();
       const decimals = parseInt(dec.input.value, 10);
       if (!v || !symbol || Number.isNaN(decimals) || decimals < 0 || decimals > 36) {
-        err.textContent = "Заполните адрес, символ и знаки";
+        err.textContent = tt`Заполните адрес, символ и знаки`;
         err.hidden = false;
         return;
       }
@@ -839,18 +839,18 @@ Object.assign(Tabora, {
         await WalletStore.addToken(chainSel.value, kind === "sol" ? { mint: v, symbol, decimals } : { address: v, symbol, decimals });
         box.remove();
         this.wallet.balances = {};
-        this.notice(`Токен ${symbol} добавлен`);
+        this.notice(tt`Токен ${symbol} добавлен`);
         this.renderDrawer();
       } catch (e) {
         err.textContent = e.message;
         err.hidden = false;
       }
     });
-    const cancel = this.wButton("Отмена", "ghost", () => box.remove());
+    const cancel = this.wButton(tt`Отмена`, "ghost", () => box.remove());
     const box = h("div", { class: "w-sheet" }, null, [h("div", { class: "w-sheet-card" }, null, [
-      h("b", {}, "Добавить токен"),
-      h("p", { class: "w-sub" }, "ERC-20, TRC-20 и SPL. Символ и знаки подставим из контракта, проверьте их перед добавлением."),
-      h("label", { class: "w-field" }, null, [h("span", {}, "Сеть"), chainSel]),
+      h("b", {}, tt`Добавить токен`),
+      h("p", { class: "w-sub" }, tt`ERC-20, TRC-20 и SPL. Символ и знаки подставим из контракта, проверьте их перед добавлением.`),
+      h("label", { class: "w-field" }, null, [h("span", {}, tt`Сеть`), chainSel]),
       addr.wrap, h("div", { class: "w-row2" }, null, [sym.wrap, dec.wrap]), status, err,
       h("div", { class: "w-actions" }, null, [cancel, ok]),
     ])]);
@@ -937,12 +937,12 @@ Object.assign(Tabora, {
     const account = WalletStore.activeAccount;
     const address = account.addresses[id];
     const symbol = group ? group.symbol : chain.symbol;
-    const back = this.wButton("Назад", "ghost small", () => this.walletGo("main"));
+    const back = this.wButton(tt`Назад`, "ghost small", () => this.walletGo("main"));
     const qr = h("canvas", { class: "w-qr", width: "220", height: "220" });
     this.drawQr(qr, address);
-    const copy = this.wButton("Копировать адрес", "primary", () => this.copyText(address, "Адрес скопирован"));
-    const explorer = this.wButton("В обозревателе", "ghost", () => this.openInSpace(chain.explorer + address, true));
-    const nets = h("div", { class: "w-nets", role: "group", "aria-label": "Сеть" }, null, chains.map(c => {
+    const copy = this.wButton(tt`Копировать адрес`, "primary", () => this.copyText(address, tt`Адрес скопирован`));
+    const explorer = this.wButton(tt`В обозревателе`, "ghost", () => this.openInSpace(chain.explorer + address, true));
+    const nets = h("div", { class: "w-nets", role: "group", "aria-label": tt`Сеть` }, null, chains.map(c => {
       const b = h("button", { type: "button", "aria-pressed": String(c === id) }, null, [h("img", { src: CHAINS[c].logo, alt: "" }), h("span", {}, CHAINS[c].name)]);
       b.addEventListener("click", () => {
         this.wallet.receive = c;
@@ -952,15 +952,15 @@ Object.assign(Tabora, {
     }));
     const token = group && !group.items.find(a => a.chain === id)?.native;
     return h("div", { class: "w-receive" }, null, [
-      h("div", { class: "w-flow-head" }, null, [h("span", { class: "w-title-logo" }, null, [h("img", { class: "w-logo", src: group?.logo || chain.logo, alt: "" }), h("b", {}, `Получить ${symbol}`)]), back]),
+      h("div", { class: "w-flow-head" }, null, [h("span", { class: "w-title-logo" }, null, [h("img", { class: "w-logo", src: group?.logo || chain.logo, alt: "" }), h("b", {}, tt`Получить ${symbol}`)]), back]),
       chains.length > 1 ? nets : h("span"),
-      h("p", { class: "w-sub" }, `Сеть ${chain.name} · ${account.name}`),
+      h("p", { class: "w-sub" }, tt`Сеть ${chain.name} · ${account.name}`),
       qr,
       h("div", { class: "w-address mono", title: address }, address),
       h("div", { class: "w-actions" }, null, [copy, explorer]),
       token
-        ? h("p", { class: "w-hint" }, `Отправитель должен выбрать сеть ${chain.name}: ${symbol}, отправленный на этот адрес в другой сети, сюда не придёт.`)
-        : chain.kind === "evm" ? h("p", { class: "w-hint" }, "Этот адрес одинаков в Ethereum, Base, Arbitrum и Polygon. Отправитель должен выбрать нужную сеть.") : h("span"),
+        ? h("p", { class: "w-hint" }, tt`Отправитель должен выбрать сеть ${chain.name}: ${symbol}, отправленный на этот адрес в другой сети, сюда не придёт.`)
+        : chain.kind === "evm" ? h("p", { class: "w-hint" }, tt`Этот адрес одинаков в Ethereum, Base, Arbitrum и Polygon. Отправитель должен выбрать нужную сеть.`) : h("span"),
     ]);
   },
 
@@ -1014,16 +1014,16 @@ Object.assign(Tabora, {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { WalletStore } = this.walletStore();
     return h("div", { class: "w-group" }, null, [
-      h("b", { class: "w-group-title" }, "Знак подлинности"),
+      h("b", { class: "w-group-title" }, tt`Знак подлинности`),
       h("div", { class: "w-mark big" }, null, [h("span", {}, WalletStore.phishMark || "—")]),
-      h("p", { class: "w-hint" }, "Эти эмодзи показываются на каждом настоящем запросе от сайта. Если на листе подтверждения их нет или они другие, это подделка внутри страницы: ничего не вводите."),
+      h("p", { class: "w-hint" }, tt`Эти эмодзи показываются на каждом настоящем запросе от сайта. Если на листе подтверждения их нет или они другие, это подделка внутри страницы: ничего не вводите.`),
     ]);
   },
 
   walletSettingsView() {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const { WalletStore, CHAINS, CHAIN_ORDER } = this.walletStore();
-    const back = this.wButton("Назад", "ghost small", () => this.walletGo("main"));
+    const back = this.wButton(tt`Назад`, "ghost small", () => this.walletGo("main"));
     const wallet = WalletStore.activeWallet;
     const hidden = WalletStore.hiddenChains;
     // смена нод, автоблокировки и режима пароля — только с паролем кошелька (кто угодно за разблокированным компьютером не ослабит защиту)
@@ -1032,7 +1032,7 @@ Object.assign(Tabora, {
       this.renderDrawer();
     }, () => this.renderDrawer());
 
-    const nodes = h("div", { class: "w-group" }, null, [h("b", { class: "w-group-title" }, "Ноды (публичные, можно менять)")]);
+    const nodes = h("div", { class: "w-group" }, null, [h("b", { class: "w-group-title" }, tt`Ноды (публичные, можно менять)`)]);
     for (const id of CHAIN_ORDER) {
       const chain = CHAINS[id];
       const { list, index } = WalletStore.nodesFor(id);
@@ -1045,12 +1045,12 @@ Object.assign(Tabora, {
       }));
       select.addEventListener("change", () => {
         const next = parseInt(select.value, 10);
-        guarded(`Нода ${chain.name}`, `Переключить на ${this.hostOf(list[next])}? Нода видит ваши адреса и сообщает балансы, комиссии и результаты симуляции.`, async pass => {
+        guarded(tt`Нода ${chain.name}`, tt`Переключить на ${this.hostOf(list[next])}? Нода видит ваши адреса и сообщает балансы, комиссии и результаты симуляции.`, async pass => {
           await WalletStore.setNodes(id, list, next, { password: pass });
           this.wallet.balances = {};
         });
       });
-      const add = this.iconButton("", "Добавить свою ноду", ["M12 5v14", "M5 12h14"], () => this.walletPrompt(`Адрес ноды для ${chain.name}`, "https://", v => {
+      const add = this.iconButton("", tt`Добавить свою ноду`, ["M12 5v14", "M5 12h14"], () => this.walletPrompt(tt`Адрес ноды для ${chain.name}`, "https://", v => {
         let url;
         try {
           url = WalletStore.validateNodeUrl(v.trim());
@@ -1058,7 +1058,7 @@ Object.assign(Tabora, {
           this.notice(e.message);
           return;
         }
-        guarded(`Своя нода ${chain.name}`, `Добавить и выбрать ${this.hostOf(url)}? Своя нода видит ваши адреса и может сообщать ложные балансы, комиссии и результаты симуляции.`, async pass => {
+        guarded(tt`Своя нода ${chain.name}`, tt`Добавить и выбрать ${this.hostOf(url)}? Своя нода видит ваши адреса и может сообщать ложные балансы, комиссии и результаты симуляции.`, async pass => {
           await WalletStore.setNodes(id, list.includes(url) ? list : [...list, url], list.includes(url) ? list.indexOf(url) : list.length, { password: pass });
           this.wallet.balances = {};
         });
@@ -1070,7 +1070,7 @@ Object.assign(Tabora, {
       }
     }
 
-    const chains = h("div", { class: "w-group" }, null, [h("b", { class: "w-group-title" }, "Сети в списке")]);
+    const chains = h("div", { class: "w-group" }, null, [h("b", { class: "w-group-title" }, tt`Сети в списке`)]);
     for (const id of CHAIN_ORDER) {
       const cb = h("input", { type: "checkbox" });
       cb.checked = !hidden.has(id);
@@ -1083,7 +1083,7 @@ Object.assign(Tabora, {
 
     const autolockNow = WalletStore.autolockMinutes;
     const autolock = h("select", {}, null, [...new Set([5, 15, 30, 60, 0, autolockNow])].map(v => {
-      const o = h("option", { value: String(v) }, v ? `${v} мин` : "никогда");
+      const o = h("option", { value: String(v) }, v ? tt`${v} мин` : tt`никогда`);
       if (v === autolockNow) {
         o.selected = true;
       }
@@ -1091,14 +1091,14 @@ Object.assign(Tabora, {
     }));
     autolock.addEventListener("change", () => {
       const v = parseInt(autolock.value, 10);
-      guarded("Автоблокировка", v ? `Блокировать кошелёк через ${v} мин без действий?` : "Отключить автоблокировку? Кошелёк останется открытым, пока вы не заблокируете его вручную.", async pass => {
+      guarded(tt`Автоблокировка`, v ? tt`Блокировать кошелёк через ${v} мин без действий?` : tt`Отключить автоблокировку? Кошелёк останется открытым, пока вы не заблокируете его вручную.`, async pass => {
         await WalletStore.setAutolock(v, pass);
-        this.notice(v ? `Автоблокировка через ${v} мин` : "Автоблокировка выключена");
+        this.notice(v ? tt`Автоблокировка через ${v} мин` : tt`Автоблокировка выключена`);
       });
     });
     const sp = WalletStore.signPassword;
     const spCurrent = !sp.skip ? "always" : sp.thresholdUsd ? String(sp.thresholdUsd) : "never";
-    const signSel = h("select", {}, null, [["always", "каждый раз"], ["100", "только от 100 $"], ["500", "только от 500 $"], ["2000", "только от 2000 $"], ["never", "никогда до автоблокировки"]].map(([v, label]) => {
+    const signSel = h("select", {}, null, [["always", tt`каждый раз`], ["100", tt`только от 100 $`], ["500", tt`только от 500 $`], ["2000", tt`только от 2000 $`], ["never", tt`никогда до автоблокировки`]].map(([v, label]) => {
       const o = h("option", { value: v }, label);
       if (v === spCurrent) {
         o.selected = true;
@@ -1107,21 +1107,21 @@ Object.assign(Tabora, {
     }));
     signSel.addEventListener("change", () => {
       const v = signSel.value;
-      guarded("Пароль при подписи", v === "always" ? "Спрашивать пароль на каждую подпись?" : "Подписи без пароля до автоблокировки: любой за этим компьютером сможет подписать операцию ниже порога. Суммы без известного курса и опасные операции по-прежнему спросят пароль.", async pass => {
+      guarded(tt`Пароль при подписи`, v === "always" ? tt`Спрашивать пароль на каждую подпись?` : tt`Подписи без пароля до автоблокировки: любой за этим компьютером сможет подписать операцию ниже порога. Суммы без известного курса и опасные операции по-прежнему спросят пароль.`, async pass => {
         await WalletStore.setSignPassword(v === "always" ? { skip: false } : { skip: true, thresholdUsd: v === "never" ? 0 : Number(v) }, pass);
-        this.notice(v === "always" ? "Пароль нужен на каждую подпись" : "Пароль только при разблокировке, крупных суммах и опасных операциях");
+        this.notice(v === "always" ? tt`Пароль нужен на каждую подпись` : tt`Пароль только при разблокировке, крупных суммах и опасных операциях`);
       });
     });
     const security = h("div", { class: "w-group" }, null, [
-      h("b", { class: "w-group-title" }, "Безопасность"),
-      h("div", { class: "w-node" }, null, [h("span", { class: "w-node-name" }, "Автоблокировка"), autolock]),
-      h("div", { class: "w-node" }, null, [h("span", { class: "w-node-name" }, "Пароль при подписи"), signSel]),
-      WalletStore.signPassword.skip ? h("p", { class: "w-hint" }, "Пока кошелёк разблокирован, подпись не спрашивает пароль: любой за этим компьютером сможет подписать транзакцию до автоблокировки. Опасные операции, суммы от порога и суммы без известного курса спрашивают пароль всегда.") : h("span", { hidden: "true" }),
-      this.wButton(`Показать фразу: ${wallet.name}`, "ghost", () => this.walletRevealFlow(wallet)),
-      this.wButton(WalletStore.passwordless ? "Установить пароль" : "Сменить пароль", "ghost", () => this.walletChangePasswordFlow()),
-      this.wButton(`Удалить кошелёк «${wallet.name}» из браузера`, "ghost danger", () => this.walletPassword("Удаление кошелька", "Фраза останется только у вас. Введите пароль для подтверждения.", async pass => {
+      h("b", { class: "w-group-title" }, tt`Безопасность`),
+      h("div", { class: "w-node" }, null, [h("span", { class: "w-node-name" }, tt`Автоблокировка`), autolock]),
+      h("div", { class: "w-node" }, null, [h("span", { class: "w-node-name" }, tt`Пароль при подписи`), signSel]),
+      WalletStore.signPassword.skip ? h("p", { class: "w-hint" }, tt`Пока кошелёк разблокирован, подпись не спрашивает пароль: любой за этим компьютером сможет подписать транзакцию до автоблокировки. Опасные операции, суммы от порога и суммы без известного курса спрашивают пароль всегда.`) : h("span", { hidden: "true" }),
+      this.wButton(tt`Показать фразу: ${wallet.name}`, "ghost", () => this.walletRevealFlow(wallet)),
+      this.wButton(WalletStore.passwordless ? tt`Установить пароль` : tt`Сменить пароль`, "ghost", () => this.walletChangePasswordFlow()),
+      this.wButton(tt`Удалить кошелёк «${wallet.name}» из браузера`, "ghost danger", () => this.walletPassword(tt`Удаление кошелька`, tt`Фраза останется только у вас. Введите пароль для подтверждения.`, async pass => {
         await WalletStore.removeWallet(wallet.id, pass);
-        this.notice("Кошелёк удалён из браузера");
+        this.notice(tt`Кошелёк удалён из браузера`);
         if (!WalletStore.wallets.length) {
           await WalletStore.destroy(pass).catch(() => {});
         }
@@ -1132,16 +1132,16 @@ Object.assign(Tabora, {
       window.TaboraSelect.enhance(autolock, { compact: true });
       window.TaboraSelect.enhance(signSel, { compact: true });
     }
-    return h("div", { class: "w-settings" }, null, [h("div", { class: "w-flow-head" }, null, [h("b", {}, "Настройки кошелька"), back]), security, this.walletMarkCard(), this.walletContactsCard(), this.walletSitesCard(), nodes, chains]);
+    return h("div", { class: "w-settings" }, null, [h("div", { class: "w-flow-head" }, null, [h("b", {}, tt`Настройки кошелька`), back]), security, this.walletMarkCard(), this.walletContactsCard(), this.walletSitesCard(), nodes, chains]);
   },
 
   /** Запрос пароля в панели: колбэк получает пароль, при ошибке показываем текст; onCancel — при отмене. */
   walletPassword(title, sub, onOk, onCancel = null) {
     const { WalletStore } = this.walletStore();
     const h = (t, a, x, c) => this.html(t, a, x, c);
-    const pass = this.wField("Пароль", { type: "password", autocomplete: "current-password" });
+    const pass = this.wField(tt`Пароль`, { type: "password", autocomplete: "current-password" });
     const err = h("div", { class: "w-error", hidden: "true" });
-    const ok = this.wButton("Подтвердить", "primary", async () => {
+    const ok = this.wButton(tt`Подтвердить`, "primary", async () => {
       ok.disabled = true;
       try {
         await onOk(pass.input.value);
@@ -1152,7 +1152,7 @@ Object.assign(Tabora, {
         ok.disabled = false;
       }
     });
-    const cancel = this.wButton("Отмена", "ghost", () => {
+    const cancel = this.wButton(tt`Отмена`, "ghost", () => {
       box.remove();
       onCancel?.();
     });
@@ -1170,12 +1170,12 @@ Object.assign(Tabora, {
   walletPrompt(title, value, onOk) {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const input = h("input", { class: "w-input", type: "text", value });
-    const ok = this.wButton("Сохранить", "primary", async () => {
+    const ok = this.wButton(tt`Сохранить`, "primary", async () => {
       await onOk(input.value);
       box.remove();
       this.renderDrawer();
     });
-    const cancel = this.wButton("Отмена", "ghost", () => box.remove());
+    const cancel = this.wButton(tt`Отмена`, "ghost", () => box.remove());
     const box = h("div", { class: "w-sheet" }, null, [h("div", { class: "w-sheet-card" }, null, [h("b", {}, title), input, h("div", { class: "w-actions" }, null, [cancel, ok])])]);
     input.addEventListener("keydown", e => {
       e.stopPropagation();
@@ -1195,11 +1195,11 @@ Object.assign(Tabora, {
    * менеджеры она не попадает) и стирается оттуда через минуту; QR-код скрывается через минуту
    * и при переключении окна, как сама фраза. phrase — функция, которая отдаёт фразу в момент нажатия. */
   walletPhraseTools(phrase) {
-    const copy = this.wButton("Скопировать", "ghost", () => {
+    const copy = this.wButton(tt`Скопировать`, "ghost", () => {
       this.copyWithExpiry(phrase(), 60000);
-      this.notice("Фраза скопирована. Буфер обмена очистится через минуту");
+      this.notice(tt`Фраза скопирована. Буфер обмена очистится через минуту`);
     });
-    const qr = this.wButton("QR-код", "ghost", () => this.walletPhraseQr(phrase()));
+    const qr = this.wButton(tt`QR-код`, "ghost", () => this.walletPhraseQr(phrase()));
     return this.html("div", { class: "w-actions w-phrase-tools" }, null, [copy, qr]);
   },
 
@@ -1207,14 +1207,14 @@ Object.assign(Tabora, {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const canvas = h("canvas", { class: "w-qr", width: "220", height: "220" });
     this.drawQr(canvas, phrase);
-    const close = this.wButton("Скрыть", "primary", () => {
+    const close = this.wButton(tt`Скрыть`, "primary", () => {
       clearTimeout(timer);
       sheet.remove();
     });
     const sheet = h("div", { class: "w-sheet w-reveal w-phrase-qr" }, null, [h("div", { class: "w-sheet-card" }, null, [
-      h("b", {}, "Резервная фраза QR-кодом"),
+      h("b", {}, tt`Резервная фраза QR-кодом`),
       canvas,
-      h("p", { class: "w-hint" }, "Сканируйте только своим устройством: кто снимет этот код, получит кошелёк целиком. Код скроется через минуту."),
+      h("p", { class: "w-hint" }, tt`Сканируйте только своим устройством: кто снимет этот код, получит кошелёк целиком. Код скроется через минуту.`),
       close,
     ])]);
     this.wSheetShow(sheet);
@@ -1223,12 +1223,12 @@ Object.assign(Tabora, {
 
   walletRevealFlow(wallet) {
     const { WalletStore } = this.walletStore();
-    this.walletPassword(`Фраза: ${wallet.name}`, "Никому не показывайте. Фраза скроется при переключении окна и через 60 секунд.", async pass => {
+    this.walletPassword(tt`Фраза: ${wallet.name}`, tt`Никому не показывайте. Фраза скроется при переключении окна и через 60 секунд.`, async pass => {
       const phrase = await WalletStore.revealMnemonic(wallet.id, pass);
       const h = (t, a, x, c) => this.html(t, a, x, c);
       const grid = h("ol", { class: "w-phrase" }, null, phrase.split(" ").map((w, i) => h("li", {}, null, [h("i", {}, String(i + 1)), h("span", {}, w)])));
       grid.addEventListener("copy", e => e.preventDefault());
-      const close = this.wButton("Скрыть", "primary", () => sheet.remove());
+      const close = this.wButton(tt`Скрыть`, "primary", () => sheet.remove());
       const sheet = h("div", { class: "w-sheet w-reveal" }, null, [h("div", { class: "w-sheet-card" }, null, [h("b", {}, wallet.name), grid, this.walletPhraseTools(() => phrase), close])]);
       this.wSheetShow(sheet);
       clearTimeout(this.wallet.hideTimer);
@@ -1239,13 +1239,13 @@ Object.assign(Tabora, {
   walletChangePasswordFlow() {
     const { WalletStore } = this.walletStore();
     const h = (t, a, x, c) => this.html(t, a, x, c);
-    const old = this.wField("Текущий пароль", { type: "password" });
-    const p1 = this.wField("Новый пароль", { type: "password", placeholder: "не короче 8 символов" });
-    const p2 = this.wField("Ещё раз", { type: "password" });
+    const old = this.wField(tt`Текущий пароль`, { type: "password" });
+    const p1 = this.wField(tt`Новый пароль`, { type: "password", placeholder: tt`не короче 8 символов` });
+    const p2 = this.wField(tt`Ещё раз`, { type: "password" });
     const err = h("div", { class: "w-error", hidden: "true" });
-    const ok = this.wButton("Сменить", "primary", async () => {
+    const ok = this.wButton(tt`Сменить`, "primary", async () => {
       if (p1.input.value.length < 8 || p1.input.value !== p2.input.value) {
-        err.textContent = p1.input.value.length < 8 ? "Пароль короче 8 символов" : "Пароли не совпадают";
+        err.textContent = p1.input.value.length < 8 ? tt`Пароль короче 8 символов` : tt`Пароли не совпадают`;
         err.hidden = false;
         return;
       }
@@ -1253,7 +1253,7 @@ Object.assign(Tabora, {
       try {
         await WalletStore.changePassword(old.input.value, p1.input.value);
         box.remove();
-        this.notice("Пароль кошелька обновлён");
+        this.notice(tt`Пароль кошелька обновлён`);
         this.renderDrawer();
       } catch (e) {
         err.textContent = e.message;
@@ -1261,8 +1261,8 @@ Object.assign(Tabora, {
         ok.disabled = false;
       }
     });
-    const cancel = this.wButton("Отмена", "ghost", () => box.remove());
-    const box = h("div", { class: "w-sheet" }, null, [h("div", { class: "w-sheet-card" }, null, [h("b", {}, WalletStore.passwordless ? "Установить пароль" : "Сменить пароль"), WalletStore.passwordless ? h("span") : old.wrap, p1.wrap, p2.wrap, err, h("div", { class: "w-actions" }, null, [cancel, ok])])]);
+    const cancel = this.wButton(tt`Отмена`, "ghost", () => box.remove());
+    const box = h("div", { class: "w-sheet" }, null, [h("div", { class: "w-sheet-card" }, null, [h("b", {}, WalletStore.passwordless ? tt`Установить пароль` : tt`Сменить пароль`), WalletStore.passwordless ? h("span") : old.wrap, p1.wrap, p2.wrap, err, h("div", { class: "w-actions" }, null, [cancel, ok])])]);
     box.querySelectorAll("input").forEach(i => i.addEventListener("keydown", e => e.stopPropagation()));
     this.wSheetShow(box);
   },
@@ -1272,7 +1272,7 @@ Object.assign(Tabora, {
 setTimeout(() => Tabora.walletStartWatch?.(), 5000);
 
 // Регистрация раздела в ящике
-Tabora.SECTIONS.wallet = { label: "Кошелёк", key: "⌘⇧W", noSearch: true, badge: "wallet", icon: ["M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v2", "M3 7v10a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-7a1 1 0 0 0-1-1H5a2 2 0 0 1-2-2z", "M16 14h.01"], wide: false };
+Tabora.SECTIONS.wallet = { label: tt`Кошелёк`, key: "⌘⇧W", noSearch: true, badge: "wallet", icon: ["M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v2", "M3 7v10a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-7a1 1 0 0 0-1-1H5a2 2 0 0 1-2-2z", "M16 14h.01"], wide: false };
 if (!Tabora.SECTION_ORDER.includes("wallet")) {
   Tabora.SECTION_ORDER.splice(Tabora.SECTION_ORDER.indexOf("downloads") + 1, 0, "wallet");
 }

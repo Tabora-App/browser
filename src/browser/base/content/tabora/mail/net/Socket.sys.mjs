@@ -1,3 +1,4 @@
+import { tt } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -28,17 +29,17 @@ export function netError(e, host) {
     const cls = Cc["@mozilla.org/nss_errors_service;1"].getService(Ci.nsINSSErrorsService).getErrorClass(code);
     tls = cls === Ci.nsINSSErrorsService.ERROR_CLASS_BAD_CERT || cls === Ci.nsINSSErrorsService.ERROR_CLASS_SSL_PROTOCOL;
     if (cls === Ci.nsINSSErrorsService.ERROR_CLASS_BAD_CERT) {
-      return Object.assign(new Error(`Сертификат сервера ${host} не прошёл проверку: соединение не установлено`), { code: "bad-cert" });
+      return Object.assign(new Error(tt`Сертификат сервера ${host} не прошёл проверку: соединение не установлено`), { code: "bad-cert" });
     }
   } catch (x) {}
   const text =
-    tls ? `Не удалось установить защищённое соединение с ${host}`
-    : name === "NS_ERROR_UNKNOWN_HOST" ? `Сервер ${host} не найден: проверьте адрес`
-    : name === "NS_ERROR_CONNECTION_REFUSED" || name === "NS_ERROR_PROXY_CONNECTION_REFUSED" ? `Сервер ${host} не принимает соединения на этом порту`
-    : name === "NS_ERROR_NET_TIMEOUT" ? `Сервер ${host} не ответил вовремя`
-    : name === "NS_ERROR_OFFLINE" ? "Нет соединения с интернетом"
-    : name ? `Соединение с ${host} оборвалось`
-    : `Не удалось соединиться с ${host}`;
+    tls ? tt`Не удалось установить защищённое соединение с ${host}`
+    : name === "NS_ERROR_UNKNOWN_HOST" ? tt`Сервер ${host} не найден: проверьте адрес`
+    : name === "NS_ERROR_CONNECTION_REFUSED" || name === "NS_ERROR_PROXY_CONNECTION_REFUSED" ? tt`Сервер ${host} не принимает соединения на этом порту`
+    : name === "NS_ERROR_NET_TIMEOUT" ? tt`Сервер ${host} не ответил вовремя`
+    : name === "NS_ERROR_OFFLINE" ? tt`Нет соединения с интернетом`
+    : name ? tt`Соединение с ${host} оборвалось`
+    : tt`Не удалось соединиться с ${host}`;
   return Object.assign(new Error(text), { code: tls ? "tls" : "network", detail: String(e?.message || e || "") });
 }
 
@@ -198,7 +199,7 @@ export class MailSocket {
 
   _read(take, timeoutMs) {
     if (this._want) {
-      return Promise.reject(new Error("MailSocket: чтение уже ожидается"));
+      return Promise.reject(new Error(tt`MailSocket: чтение уже ожидается`));
     }
     const ready = take();
     if (ready !== undefined) {
@@ -208,7 +209,7 @@ export class MailSocket {
       return Promise.reject(this._error);
     }
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => this._fail(Object.assign(new Error(`Сервер ${this.host} не ответил вовремя`), { code: "network" })), timeoutMs);
+      const timer = setTimeout(() => this._fail(Object.assign(new Error(tt`Сервер ${this.host} не ответил вовремя`), { code: "network" })), timeoutMs);
       this._want = { take, resolve, reject, timer };
     });
   }
@@ -294,7 +295,7 @@ export class MailSocket {
       return;
     }
     this.closed = true;
-    this._error ||= Object.assign(new Error("Соединение закрыто"), { code: "closed" });
+    this._error ||= Object.assign(new Error(tt`Соединение закрыто`), { code: "closed" });
     const w = this._want;
     this._want = null;
     if (w) {

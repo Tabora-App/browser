@@ -9,6 +9,7 @@
  * в том виде, в каком он их прислал, для показа декодируются decodeMailboxName(). */
 
 import { MailSocket } from "chrome://tabora/content/mail/net/Socket.sys.mjs";
+import { tt } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 
@@ -134,7 +135,7 @@ export class ImapClient {
     try {
       const greeting = await sock.readLine();
       if (!/^\* (OK|PREAUTH)/i.test(greeting)) {
-        throw fail(/^\* BYE/i.test(greeting) ? `Сервер ${server.host} отказал в соединении` : `Сервер ${server.host} не похож на сервер IMAP: проверьте адрес и порт`);
+        throw fail(/^\* BYE/i.test(greeting) ? tt`Сервер ${server.host} отказал в соединении` : tt`Сервер ${server.host} не похож на сервер IMAP: проверьте адрес и порт`);
       }
       client._noteCaps(greeting);
       if (security === "starttls") {
@@ -142,7 +143,7 @@ export class ImapClient {
           await client._capability();
         }
         if (!client.caps.has("STARTTLS")) {
-          throw fail(`Сервер ${server.host} не предлагает защищённое соединение на этом порту`, "tls");
+          throw fail(tt`Сервер ${server.host} не предлагает защищённое соединение на этом порту`, "tls");
         }
         await client.cmd("STARTTLS");
         sock.startTLS();
@@ -186,12 +187,12 @@ export class ImapClient {
       } else if (!this.caps.has("LOGINDISABLED")) {
         await this.cmd(`LOGIN ${quote(utf8Bytes(login))} ${quote(utf8Bytes(password))}`);
       } else {
-        throw fail("Сервер не принимает вход по паролю", "auth");
+        throw fail(tt`Сервер не принимает вход по паролю`, "auth");
       }
     } catch (e) {
       if (e.code === "no" || e.code === "bad") {
         // ответ сервера (например, у Gmail — требование пароля приложения) передаётся наверх
-        throw fail("Сервер не принял логин или пароль", "auth", { server: e.server || "" });
+        throw fail(tt`Сервер не принял логин или пароль`, "auth", { server: e.server || "" });
       }
       throw e;
     }
@@ -225,19 +226,19 @@ export class ImapClient {
       const head = typeof chunks[0] === "string" ? chunks[0] : "";
       if (head.startsWith("+")) {
         if (!onContinue) {
-          throw fail("Сервер ждёт продолжения команды, которого нет");
+          throw fail(tt`Сервер ждёт продолжения команды, которого нет`);
         }
         await this.sock.write(`${await onContinue(head.slice(1).trim())}\r\n`);
       } else if (head.startsWith(`${tag} `)) {
         const m = /^(OK|NO|BAD)\b\s*(.*)$/i.exec(head.slice(tag.length + 1)) || ["", "BAD", head];
         this._noteCaps(m[2]);
         if (m[1].toUpperCase() !== "OK") {
-          throw fail(`Сервер отклонил команду: ${m[2] || m[1]}`, m[1].toUpperCase() === "NO" ? "no" : "bad", { server: m[2] });
+          throw fail(tt`Сервер отклонил команду: ${m[2] || m[1]}`, m[1].toUpperCase() === "NO" ? "no" : "bad", { server: m[2] });
         }
         return { untagged, text: m[2] };
       } else if (head.startsWith("* ")) {
         if (/^\* BYE/i.test(head) && !/^LOGOUT/i.test(text)) {
-          throw fail("Сервер закрыл соединение", "network");
+          throw fail(tt`Сервер закрыл соединение`, "network");
         }
         untagged.push(chunks);
       }
@@ -436,12 +437,12 @@ export class ImapClient {
         if (head.startsWith(`${tag} `)) {
           const m = /^(OK|NO|BAD)\b\s*(.*)$/i.exec(head.slice(tag.length + 1)) || ["", "BAD", head];
           if (m[1].toUpperCase() !== "OK") {
-            throw fail(`Сервер отклонил ожидание писем: ${m[2] || m[1]}`, "no", { server: m[2] });
+            throw fail(tt`Сервер отклонил ожидание писем: ${m[2] || m[1]}`, "no", { server: m[2] });
           }
           return reason;
         }
         if (/^\* BYE/i.test(head)) {
-          throw fail("Сервер закрыл соединение", "network");
+          throw fail(tt`Сервер закрыл соединение`, "network");
         }
         const m = /^\* (\d+) (EXISTS|EXPUNGE|FETCH)\b/i.exec(head);
         if (m && !done) {

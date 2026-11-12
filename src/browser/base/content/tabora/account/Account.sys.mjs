@@ -1,3 +1,4 @@
+import { tt } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -32,7 +33,9 @@
 
 const C = ChromeUtils.importESModule("chrome://tabora/content/wallet/vendor/crypto.sys.mjs");
 const { randomBytes, base64, utf8ToBytes, bytesToHex, hexToBytes, hmac, sha256, ed25519 } = C;
-const { Vault, passwordStrength, checkNewPassword } = ChromeUtils.importESModule("chrome://tabora/content/vault/Vault.sys.mjs");
+const { Vault } = ChromeUtils.importESModule("chrome://tabora/content/vault/Vault.sys.mjs");
+// оценка с подписью на языке интерфейса
+const passwordStrength = password => Vault.passwordStrength(password);
 const { argon2idAsync } = ChromeUtils.importESModule("chrome://tabora/content/vault/Kdf.sys.mjs");
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 
@@ -64,7 +67,7 @@ export { passwordStrength };
 
 /** Пароль аккаунта: не короче 6 символов и не «слабый» (оценка показывается в окнах). */
 export function checkPassword(password) {
-  return checkNewPassword(password);
+  return Vault.checkNewPassword(password);
 }
 
 function wipe(a) {
@@ -158,7 +161,7 @@ class LocalBackend {
   async register({ email, loginHash, kdf, deviceId, deviceName }) {
     const d = await this._load();
     if (d.users[email]) {
-      throw new Error("Такой адрес уже занят");
+      throw new Error(tt`Такой адрес уже занят`);
     }
     const salt = base64.encode(randomBytes(16));
     const userId = `u${Date.now().toString(36)}${bytesToHex(randomBytes(4))}`;
@@ -171,7 +174,7 @@ class LocalBackend {
     const d = await this._load();
     const u = d.users[email];
     if (!this._check(u, loginHash)) {
-      throw Object.assign(new Error("Неверный адрес или пароль"), { code: "bad-credentials" });
+      throw Object.assign(new Error(tt`Неверный адрес или пароль`), { code: "bad-credentials" });
     }
     u.devices ||= {};
     u.devices[deviceId] = { name: deviceName, at: Date.now() };
@@ -184,7 +187,7 @@ class LocalBackend {
     const d = await this._load();
     const u = d.users[email];
     if (!this._check(u, oldLoginHash)) {
-      throw Object.assign(new Error("Неверный пароль"), { code: "bad-credentials" });
+      throw Object.assign(new Error(tt`Неверный пароль`), { code: "bad-credentials" });
     }
     u.salt = base64.encode(randomBytes(16));
     u.verifier = this._verifier(newLoginHash, u.salt);
@@ -197,7 +200,7 @@ class LocalBackend {
     const d = await this._load();
     const u = d.users[email];
     if (!this._check(u, oldLoginHash)) {
-      throw Object.assign(new Error("Неверный текущий пароль"), { code: "bad-credentials" });
+      throw Object.assign(new Error(tt`Неверный текущий пароль`), { code: "bad-credentials" });
     }
     u.salt = base64.encode(randomBytes(16));
     u.verifier = this._verifier(newLoginHash, u.salt);
@@ -212,10 +215,10 @@ class LocalBackend {
     const d = await this._load();
     const u = d.users[email];
     if (!u) {
-      throw new Error("Аккаунт не найден на этом компьютере");
+      throw new Error(tt`Аккаунт не найден на этом компьютере`);
     }
     if (recoveryVerifier && !VERIFIER_RE.test(recoveryVerifier)) {
-      throw new Error("Ключ проверки должен быть открытым ключом Ed25519");
+      throw new Error(tt`Ключ проверки должен быть открытым ключом Ed25519`);
     }
     u.recovery = recoveryVerifier ? { verifier: recoveryVerifier, at: new Date().toISOString() } : null;
     await this._save(d);
@@ -244,15 +247,15 @@ class LocalBackend {
     const d = await this._load();
     const u = d.users[email];
     if (!u) {
-      throw new Error("Аккаунт не найден на этом компьютере");
+      throw new Error(tt`Аккаунт не найден на этом компьютере`);
     }
     const n = u.resetNonce;
     delete u.resetNonce; // nonce одноразовый, даже при ошибке
     await this._save(d);
     if (!n || n.value !== nonce || Date.now() > n.exp) {
-      throw Object.assign(new Error("Запрос сброса устарел: повторите"), { code: "bad-nonce" });
+      throw Object.assign(new Error(tt`Запрос сброса устарел: повторите`), { code: "bad-nonce" });
     }
-    const badProof = () => Object.assign(new Error("Ключ восстановления не подходит к этому аккаунту"), { code: "bad-proof" });
+    const badProof = () => Object.assign(new Error(tt`Ключ восстановления не подходит к этому аккаунту`), { code: "bad-proof" });
     const current = u.recovery?.verifier || "";
     const modern = VERIFIER_RE.test(current);
     const upgrade = newRecoveryVerifier && VERIFIER_RE.test(newRecoveryVerifier) ? newRecoveryVerifier : null;
@@ -271,7 +274,7 @@ class LocalBackend {
         throw badProof();
       }
     } else if (!(legacyVaultProof && upgrade && verifyResetProof(upgrade, email, newLoginHash, nonce, recoveryProof))) {
-      throw Object.assign(new Error("Для аккаунта не зарегистрирован ключ восстановления"), { code: "no-recovery" });
+      throw Object.assign(new Error(tt`Для аккаунта не зарегистрирован ключ восстановления`), { code: "no-recovery" });
     }
     u.salt = base64.encode(randomBytes(16));
     u.verifier = this._verifier(newLoginHash, u.salt);
@@ -293,7 +296,7 @@ class LocalBackend {
   }
 
   _noServer() {
-    throw Object.assign(new Error("Появится, когда аккаунт подключат к серверу Tabora"), { code: "no-server" });
+    throw Object.assign(new Error(tt`Появится, когда аккаунт подключат к серверу Tabora`), { code: "no-server" });
   }
 
   async twoFactorSetup() {
@@ -385,7 +388,7 @@ class LocalBackend {
 
   // ящик и алиасы выдаёт только сервер
   async mailPassword() {
-    throw Object.assign(new Error("Почта работает после подключения аккаунта к серверу"), { code: "local-mode" });
+    throw Object.assign(new Error(tt`Почта работает после подключения аккаунта к серверу`), { code: "local-mode" });
   }
 
   async aliases() {
@@ -393,15 +396,15 @@ class LocalBackend {
   }
 
   async aliasCreate() {
-    throw Object.assign(new Error("Алиасы работают после подключения аккаунта к серверу"), { code: "local-mode" });
+    throw Object.assign(new Error(tt`Алиасы работают после подключения аккаунта к серверу`), { code: "local-mode" });
   }
 
   async aliasUpdate() {
-    throw Object.assign(new Error("Алиасы работают после подключения аккаунта к серверу"), { code: "local-mode" });
+    throw Object.assign(new Error(tt`Алиасы работают после подключения аккаунта к серверу`), { code: "local-mode" });
   }
 
   async aliasDelete() {
-    throw Object.assign(new Error("Алиасы работают после подключения аккаунта к серверу"), { code: "local-mode" });
+    throw Object.assign(new Error(tt`Алиасы работают после подключения аккаунта к серверу`), { code: "local-mode" });
   }
 
   // копия ключей почты и каталог ключей есть только у сервера
@@ -477,7 +480,7 @@ class HttpBackend {
       const text = await res.text();
       const json = text ? JSON.parse(text) : {};
       if (!res.ok) {
-        const error = Object.assign(new Error(json.message || `Сервер: HTTP ${res.status}`), { code: json.code || (res.status === 401 ? "bad-credentials" : `http-${res.status}`), status: res.status, data: json });
+        const error = Object.assign(new Error(json.message || tt`Сервер: HTTP ${res.status}`), { code: json.code || (res.status === 401 ? "bad-credentials" : `http-${res.status}`), status: res.status, data: json });
         if (error.code === "session-expired" && token) {
           Account._sessionExpired(token).catch(() => {});
         }
@@ -487,10 +490,10 @@ class HttpBackend {
     } catch (e) {
       if (e.name === "AbortError" || e.name === "TypeError") {
         // нет сети, сервер не отвечает, истекло ожидание
-        throw Object.assign(new Error("Сервер Tabora не отвечает. Проверьте соединение и повторите"), { code: "offline" });
+        throw Object.assign(new Error(tt`Сервер Tabora не отвечает. Проверьте соединение и повторите`), { code: "offline" });
       }
       if (e.name === "SyntaxError") {
-        throw Object.assign(new Error("Сервер Tabora ответил непонятно. Повторите позже"), { code: "bad-response" });
+        throw Object.assign(new Error(tt`Сервер Tabora ответил непонятно. Повторите позже`), { code: "bad-response" });
       }
       throw e;
     } finally {
@@ -665,12 +668,12 @@ class HttpBackend {
     try {
       const res = await fetch(`${this.base}/v1/support/files/${Number(id)}`, { headers: { Authorization: `Bearer ${session?.token}` }, credentials: "omit", redirect: "error", signal: ctrl.signal });
       if (!res.ok) {
-        throw Object.assign(new Error("Вложение недоступно"), { code: `http-${res.status}`, status: res.status });
+        throw Object.assign(new Error(tt`Вложение недоступно`), { code: `http-${res.status}`, status: res.status });
       }
       return { bytes: new Uint8Array(await res.arrayBuffer()), type: (res.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase() };
     } catch (e) {
       if (e.name === "AbortError" || e.name === "TypeError") {
-        throw Object.assign(new Error("Сервер Tabora не отвечает. Проверьте соединение и повторите"), { code: "offline" });
+        throw Object.assign(new Error(tt`Сервер Tabora не отвечает. Проверьте соединение и повторите`), { code: "offline" });
       }
       throw e;
     } finally {
@@ -696,13 +699,13 @@ class HttpBackend {
         return null;
       }
       if (!res.ok) {
-        throw Object.assign(new Error(`Каталог ключей: HTTP ${res.status}`), { code: `http-${res.status}` });
+        throw Object.assign(new Error(tt`Каталог ключей: HTTP ${res.status}`), { code: `http-${res.status}` });
       }
       const bytes = new Uint8Array(await res.arrayBuffer());
       return bytes.length && bytes.length <= 16384 ? bytes : null;
     } catch (e) {
       if (e.name === "AbortError" || e.name === "TypeError") {
-        throw Object.assign(new Error("Сервер Tabora не отвечает"), { code: "offline" });
+        throw Object.assign(new Error(tt`Сервер Tabora не отвечает`), { code: "offline" });
       }
       throw e;
     } finally {
@@ -844,12 +847,12 @@ export const Account = {
     if (s.includes("@")) {
       const [name, dom] = s.split("@");
       if (dom !== this.domain) {
-        throw new Error(`Адрес должен быть в домене ${this.domain}`);
+        throw new Error(tt`Адрес должен быть в домене ${this.domain}`);
       }
       s = name;
     }
     if (!/^[a-z0-9](?:[a-z0-9._-]{1,30}[a-z0-9])?$/.test(s) || /[._-]{2}/.test(s)) {
-      throw new Error("Имя: 2–32 символа, латиница, цифры, точка, дефис или подчёркивание");
+      throw new Error(tt`Имя: 2–32 символа, латиница, цифры, точка, дефис или подчёркивание`);
     }
     return `${s}@${this.domain}`;
   },
@@ -868,7 +871,7 @@ export const Account = {
   async loginHash(email, password, kdf = KDF_CURRENT) {
     const params = AUTH_KDF[kdf];
     if (!params) {
-      throw new Error("Неизвестная версия хеша входа");
+      throw new Error(tt`Неизвестная версия хеша входа`);
     }
     const salt = sha256(utf8ToBytes(`${AUTH_SALT[kdf]}${email}`)).slice(0, 16);
     const k = await argon2idAsync(utf8ToBytes(String(password).normalize("NFKC")), salt, params);
@@ -932,7 +935,7 @@ export const Account = {
     await this.ready();
     this._session();
     if (!password) {
-      throw new Error("Введите пароль");
+      throw new Error(tt`Введите пароль`);
     }
     const loginHash = await this.loginHash(this.email, password, await this._kdfFor(this.email));
     const key = this._takeMailKey(loginHash);
@@ -1030,15 +1033,15 @@ export const Account = {
     if (await this._vaultIsBlank()) {
       return;
     }
-    if (!(await Vault.confirmOwner("задать мастер-пароль сейфа Tabora"))) {
-      throw Object.assign(new Error("Сейф этого компьютера уже создан. Чтобы задать ему пароль аккаунта, подтвердите, что вы владелец компьютера (Touch ID или пароль системы)"), { code: "owner-check" });
+    if (!(await Vault.confirmOwner(tt`задать мастер-пароль сейфа Tabora`))) {
+      throw Object.assign(new Error(tt`Сейф этого компьютера уже создан. Чтобы задать ему пароль аккаунта, подтвердите, что вы владелец компьютера (Touch ID или пароль системы)`), { code: "owner-check" });
     }
     if (!Vault.unlocked) {
       // проверку системы только что прошли: открываем без второго запроса
       await Vault.unlock({ user: true, reauth: false });
     }
     if (!Vault.unlocked) {
-      throw new Error("Сейф заблокирован: разблокируйте его и повторите");
+      throw new Error(tt`Сейф заблокирован: разблокируйте его и повторите`);
     }
   },
 
@@ -1050,7 +1053,7 @@ export const Account = {
   async _syncVaultPassword(password, { ownerConfirmed = false } = {}) {
     await Vault.ready();
     if (Vault.state === "corrupt") {
-      throw new Error("Файл сейфа повреждён или утрачен: восстановите его в разделе «Коды» и войдите снова");
+      throw new Error(tt`Файл сейфа повреждён или утрачен: восстановите его в разделе «Коды» и войдите снова`);
     }
     if (!Vault.exists) {
       await Vault.create({ password, checkStrength: false });
@@ -1061,7 +1064,7 @@ export const Account = {
         if (e.code !== "bad-password") {
           throw e;
         }
-        throw Object.assign(new Error("Сейф этого профиля защищён прежним паролем. Введите его ниже: сейф перейдёт на пароль аккаунта."), { code: "vault-mismatch" });
+        throw Object.assign(new Error(tt`Сейф этого профиля защищён прежним паролем. Введите его ниже: сейф перейдёт на пароль аккаунта.`), { code: "vault-mismatch" });
       };
       if (Vault.unlocked) {
         await Vault.verifyPassword(password).catch(mismatch);
@@ -1091,32 +1094,32 @@ export const Account = {
   async _register(nameInput, password) {
     await this.ready();
     if (this.signedIn) {
-      throw new Error("Вы уже вошли в аккаунт");
+      throw new Error(tt`Вы уже вошли в аккаунт`);
     }
     if (this.data?.email) {
-      throw bound(`В этом профиле уже есть аккаунт ${this.data.email}. Другой аккаунт создаётся в отдельном профиле: «Добавить аккаунт»`);
+      throw bound(tt`В этом профиле уже есть аккаунт ${this.data.email}. Другой аккаунт создаётся в отдельном профиле: «Добавить аккаунт»`);
     }
     const email = this.normalizeEmail(nameInput);
     checkPassword(password);
     await Vault.ready();
     if (Vault.state === "corrupt") {
-      throw new Error("Файл сейфа повреждён или утрачен: восстановите его в разделе «Коды» и повторите");
+      throw new Error(tt`Файл сейфа повреждён или утрачен: восстановите его в разделе «Коды» и повторите`);
     }
     let ownerConfirmed = false;
     if (Vault.exists && Vault.hasPassword) {
       await Vault.verifyPassword(password).catch(e => {
-        throw e.code === "locked-out" ? e : new Error("В этом профиле уже есть сейф с мастер-паролем. Введите его как пароль аккаунта");
+        throw e.code === "locked-out" ? e : new Error(tt`В этом профиле уже есть сейф с мастер-паролем. Введите его как пароль аккаунта`);
       });
     } else if (Vault.exists) {
       // до обращения к серверу: отказ от проверки не должен оставлять занятый адрес без аккаунта здесь
       await this._confirmVaultOwner();
       ownerConfirmed = true;
     }
-    this._step("Защищаем пароль");
+    this._step(tt`Защищаем пароль`);
     const loginHash = await this.loginHash(email, password, KDF_CURRENT);
-    this._step("Создаём аккаунт");
+    this._step(tt`Создаём аккаунт`);
     const r = await this.backend.register({ email, loginHash, kdf: KDF_CURRENT, deviceId: this.deviceId(), deviceName: this.deviceName() });
-    this._step("Готовим сейф");
+    this._step(tt`Готовим сейф`);
     this._noteKdf(email, KDF_CURRENT);
     await this._syncVaultPassword(password, { ownerConfirmed });
     this.data = { version: 1, email, userId: r.userId, session: r.session, server: this.serverUrl || null, kdf: KDF_CURRENT, createdAt: new Date().toISOString(), lastLoginAt: new Date().toISOString() };
@@ -1126,7 +1129,7 @@ export const Account = {
     this.markFirstRunDone();
     let recoveryKey = null;
     try {
-      this._step("Создаём ключ восстановления");
+      this._step(tt`Создаём ключ восстановления`);
       recoveryKey = await this.createRecoveryKey({ password });
     } catch (e) {
       console.error("Tabora account: ключ восстановления не создан", e);
@@ -1188,7 +1191,7 @@ export const Account = {
    * больше ничего не открывают. Другому аккаунту сейф не передаётся (см. login). */
   async _rebindVault(vaultPassword, password) {
     await Vault.verifyPassword(vaultPassword).catch(e => {
-      throw e.code === "locked-out" ? e : new Error("Неверный мастер-пароль сейфа");
+      throw e.code === "locked-out" ? e : new Error(tt`Неверный мастер-пароль сейфа`);
     });
     if (!Vault.unlocked) {
       await Vault.unlockWithPassword(vaultPassword);
@@ -1209,29 +1212,29 @@ export const Account = {
   async _linkToServer(password) {
     await this.ready();
     if (this.isLocalMode) {
-      throw new Error("Сервер Tabora не задан");
+      throw new Error(tt`Сервер Tabora не задан`);
     }
     const email = this.email;
     if (!email) {
-      throw new Error("На этом компьютере нет аккаунта");
+      throw new Error(tt`На этом компьютере нет аккаунта`);
     }
     if (!password) {
-      throw new Error("Введите пароль");
+      throw new Error(tt`Введите пароль`);
     }
     await Vault.ready();
     await Vault.guard.check();
     if (!Vault.exists || !Vault.hasPassword) {
-      throw new Error("У сейфа этого компьютера нет пароля. Задайте его: «Аккаунт» → «Безопасность» → «Сменить пароль»");
+      throw new Error(tt`У сейфа этого компьютера нет пароля. Задайте его: «Аккаунт» → «Безопасность» → «Сменить пароль»`);
     }
     await Vault.verifyPassword(password).catch(e => {
-      throw e.code === "locked-out" ? e : Object.assign(new Error("Неверный пароль"), { code: "bad-credentials" });
+      throw e.code === "locked-out" ? e : Object.assign(new Error(tt`Неверный пароль`), { code: "bad-credentials" });
     });
     if (!Vault.unlocked) {
       await Vault.unlockWithPassword(password);
     }
-    this._step("Защищаем пароль");
+    this._step(tt`Защищаем пароль`);
     const loginHash = await this.loginHash(email, password, KDF_CURRENT);
-    this._step("Подключаем к серверу");
+    this._step(tt`Подключаем к серверу`);
     const device = { deviceId: this.deviceId(), deviceName: this.deviceName() };
     let r;
     let created = true;
@@ -1244,7 +1247,7 @@ export const Account = {
       created = false;
       r = await this.backend.login({ email, loginHash, ...device }).catch(e2 => {
         if (e2.code === "bad-credentials") {
-          throw Object.assign(new Error(`Адрес ${email} на сервере уже занят другим человеком. Этот аккаунт останется только на компьютере; аккаунт с другим именем добавляется отдельно: «Добавить аккаунт»`), { code: "taken" });
+          throw Object.assign(new Error(tt`Адрес ${email} на сервере уже занят другим человеком. Этот аккаунт останется только на компьютере; аккаунт с другим именем добавляется отдельно: «Добавить аккаунт»`), { code: "taken" });
         }
         throw e2;
       });
@@ -1350,10 +1353,10 @@ export const Account = {
     const email = this.normalizeEmail(emailInput);
     if (this.data?.email && this.data.email !== email) {
       // сейф и данные этого профиля принадлежат его аккаунту и другому не передаются
-      throw bound(`Этот профиль принадлежит аккаунту ${this.data.email}. Аккаунт ${email} открывается в своём профиле: «Добавить аккаунт»`, { email });
+      throw bound(tt`Этот профиль принадлежит аккаунту ${this.data.email}. Аккаунт ${email} открывается в своём профиле: «Добавить аккаунт»`, { email });
     }
     if (!password) {
-      throw new Error("Введите пароль");
+      throw new Error(tt`Введите пароль`);
     }
     if (this.needsServerLink && this.data.email === email && !vaultPassword) {
       // аккаунт этого компьютера ещё не на сервере: вход его и подключает
@@ -1365,10 +1368,10 @@ export const Account = {
       await this._dropPending();
       const deviceId = this.deviceId();
       const deviceName = this.deviceName();
-      this._step("Проверяем пароль");
+      this._step(tt`Проверяем пароль`);
       const kdf = await this._kdfFor(email);
       const loginHash = await this.loginHash(email, password, kdf);
-      this._step("Входим в аккаунт");
+      this._step(tt`Входим в аккаунт`);
       let r;
       try {
         r = await this.backend.login({ email, loginHash, deviceId, deviceName, totp: totp || undefined });
@@ -1400,7 +1403,7 @@ export const Account = {
       }
     }
     const { r, usedKdf } = pending;
-    this._step("Открываем сейф");
+    this._step(tt`Открываем сейф`);
     let rebound = null;
     let fresh = false;
     await Vault.ready();
@@ -1414,7 +1417,7 @@ export const Account = {
       // Владелец назвал пароль сейфа: сначала проверяется он (это и есть попытка), и только
       // после этого пароль аккаунта сверяется с сейфом без счёта — владение уже доказано.
       await Vault.verifyPassword(vaultPassword).catch(e => {
-        throw e.code === "bad-password" ? new Error("Неверный мастер-пароль сейфа") : e;
+        throw e.code === "bad-password" ? new Error(tt`Неверный мастер-пароль сейфа`) : e;
       });
       const same = password === vaultPassword || (await Vault.verifyPassword(password, { count: false }).then(() => true, e => (e.code === "bad-password" ? false : Promise.reject(e))));
       if (same) {
@@ -1511,14 +1514,14 @@ export const Account = {
     if (via === "password") {
       // прежний пароль помнят: это обычная попытка открыть сейф, она считается
       await Vault.unlockWithPassword(previous).catch(e => {
-        throw e.code === "bad-password" ? new Error("Неверный прежний пароль сейфа") : e;
+        throw e.code === "bad-password" ? new Error(tt`Неверный прежний пароль сейфа`) : e;
       });
     } else if (via === "os") {
       if (!Vault.hasOsKey || !Vault.osUnlockEnabled) {
-        throw new Error("На этом компьютере сейф не открывается проверкой системы");
+        throw new Error(tt`На этом компьютере сейф не открывается проверкой системы`);
       }
-      if (!(await Vault.unlock({ user: true, prompt: "открыть сейф Tabora после смены пароля аккаунта" }))) {
-        throw Object.assign(new Error("Проверка системы не пройдена"), { code: "owner-check" });
+      if (!(await Vault.unlock({ user: true, prompt: tt`открыть сейф Tabora после смены пароля аккаунта` }))) {
+        throw Object.assign(new Error(tt`Проверка системы не пройдена`), { code: "owner-check" });
       }
     } else if (via === "recovery") {
       await Vault.unlockWithRecoveryKey(key);
@@ -1531,7 +1534,7 @@ export const Account = {
       }
       return true;
     } else {
-      throw new Error("Неизвестный способ открыть сейф");
+      throw new Error(tt`Неизвестный способ открыть сейф`);
     }
     await Vault.setPassword(password, { checkStrength: false });
     return false;
@@ -1542,19 +1545,19 @@ export const Account = {
    * он возвращается в { recoveryKey }. */
   async changePassword(oldPassword, newPassword, { rotate = false } = {}) {
     await this.ready();
-    this._step(rotate ? "Меняем пароль и ключ сейфа" : "Меняем пароль");
+    this._step(rotate ? tt`Меняем пароль и ключ сейфа` : tt`Меняем пароль`);
     if (!this.signedIn) {
-      throw new Error("Вы не вошли в аккаунт");
+      throw new Error(tt`Вы не вошли в аккаунт`);
     }
     checkPassword(newPassword);
     if (oldPassword === newPassword) {
-      throw new Error("Новый пароль совпадает с текущим");
+      throw new Error(tt`Новый пароль совпадает с текущим`);
     }
     await Vault.ready();
     let ownerConfirmed = false;
     if (Vault.hasPassword) {
       await Vault.verifyPassword(oldPassword).catch(e => {
-        throw e.code === "locked-out" ? e : new Error("Неверный текущий пароль");
+        throw e.code === "locked-out" ? e : new Error(tt`Неверный текущий пароль`);
       });
     } else {
       await Vault.guard.check();
@@ -1608,9 +1611,9 @@ export const Account = {
 
   async _resetPasswordWithRecovery(recoveryKey, newPassword) {
     await this.ready();
-    this._step("Проверяем ключ восстановления");
+    this._step(tt`Проверяем ключ восстановления`);
     if (!this.email) {
-      throw new Error("На этом компьютере нет аккаунта");
+      throw new Error(tt`На этом компьютере нет аккаунта`);
     }
     checkPassword(newPassword);
     await Vault.ready();
@@ -1685,9 +1688,9 @@ export const Account = {
     await this.ready();
     const session = this._session();
     if (!password) {
-      throw new Error("Введите пароль");
+      throw new Error(tt`Введите пароль`);
     }
-    this._step("Проверяем пароль");
+    this._step(tt`Проверяем пароль`);
     const loginHash = await this.loginHash(this.email, password, await this._kdfFor(this.email));
     return { session, loginHash };
   },
@@ -1737,7 +1740,7 @@ export const Account = {
     await this.ready();
     const email = this.normalizeEmail(emailInput);
     if (this.data?.email && this.data.email !== email) {
-      throw bound(`Этот профиль принадлежит аккаунту ${this.data.email}`, { email });
+      throw bound(tt`Этот профиль принадлежит аккаунту ${this.data.email}`, { email });
     }
     await this.backend.resetEmailStart({ email });
     return { email };
@@ -1749,9 +1752,9 @@ export const Account = {
     await this.ready();
     const email = this.normalizeEmail(emailInput);
     checkPassword(newPassword);
-    this._step("Защищаем пароль");
+    this._step(tt`Защищаем пароль`);
     const newLoginHash = await this.loginHash(email, newPassword, KDF_CURRENT);
-    this._step("Меняем пароль");
+    this._step(tt`Меняем пароль`);
     const r = await this.backend.resetEmailConfirm({ email, code, newLoginHash, kdf: KDF_CURRENT, totp, deviceId: this.deviceId(), deviceName: this.deviceName() });
     this._noteKdf(email, KDF_CURRENT);
     if (this.data?.email === email && this.data.session) {
@@ -1800,7 +1803,7 @@ export const Account = {
   async _support(method, args = {}) {
     await this.ready();
     if (this.needsServerLink) {
-      throw Object.assign(new Error("Обращения появятся, когда аккаунт подключат к серверу Tabora"), { code: "no-server" });
+      throw Object.assign(new Error(tt`Обращения появятся, когда аккаунт подключат к серверу Tabora`), { code: "no-server" });
     }
     return this.backend[method]({ session: this._session(), ...args });
   },
@@ -1837,7 +1840,7 @@ export const Account = {
 
   _session() {
     if (!this.signedIn) {
-      throw Object.assign(new Error("Войдите в аккаунт Tabora"), { code: "signed-out" });
+      throw Object.assign(new Error(tt`Войдите в аккаунт Tabora`), { code: "signed-out" });
     }
     return this.data.session;
   },

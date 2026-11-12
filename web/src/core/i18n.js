@@ -89,13 +89,26 @@ export function chooseLanguage(code) {
   return code !== lang;
 }
 
+/** Одно русское слово бывает двумя разными на другом языке («Открыть» — Open и Unlock). Такое
+ *  место помечается смыслом в конце надписи: t`Открыть@@сейф`. Пометка — часть ключа словаря, на экран
+ *  не попадает; нет перевода с пометкой — берётся перевод слова без неё. */
+const CONTEXT = /@@[\p{L}\p{N}-]+$/u;
+
+function plain(key, dict) {
+  if (!key.includes("@@")) {
+    return key;
+  }
+  const bare = key.replace(CONTEXT, "");
+  return dict?.[bare] ?? bare;
+}
+
 export function t(strings, ...values) {
   let key = keys.get(strings);
   if (key === undefined) {
     key = strings.length === 1 ? strings[0] : strings.reduce((all, part, i) => `${all}{${i - 1}}${part}`);
     keys.set(strings, key);
   }
-  const text = dict ? dict[key] ?? key : key;
+  const text = dict ? dict[key] ?? plain(key, dict) : plain(key);
   return values.length ? text.replace(/\{(\d+)\}/g, (m, i) => (i < values.length ? String(values[i]) : m)) : text;
 }
 
@@ -127,7 +140,8 @@ export function tr(text) {
     if (m) {
       const parts = [];
       order.forEach((slot, i) => {
-        parts[slot] = dict[m[i + 1]] ?? m[i + 1];
+        const part = m[i + 1];
+        parts[slot] = dict[part] ?? (part.length < text.length ? tr(part) : part);
       });
       return value.replace(/\{(\d+)\}/g, (all, i) => parts[i] ?? all);
     }

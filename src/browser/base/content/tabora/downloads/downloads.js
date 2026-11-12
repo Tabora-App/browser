@@ -11,6 +11,9 @@
 
 const { Downloads } = ChromeUtils.importESModule("resource://gre/modules/Downloads.sys.mjs");
 const { DownloadsCommon } = ChromeUtils.importESModule("moz-src:///browser/components/downloads/DownloadsCommon.sys.mjs");
+// языки: надписи в коде (tt`…`) и в разметке downloads.html (переводятся здесь же, до показа)
+const { tt, tr: ttr, form: ttForm, locale: ttLocale, translateDocument } = ChromeUtils.importESModule("chrome://tabora/content/i18n/I18n.sys.mjs");
+translateDocument(document);
 const Shell = window.browsingContext?.topChromeWindow?.Tabora || null;
 
 const $ = id => document.getElementById(id);
@@ -74,19 +77,19 @@ function fmtSize(bytes) {
     return "";
   }
   if (bytes < 1000) {
-    return `${bytes} Б`;
+    return tt`${bytes} Б`;
   }
   if (bytes < 1_000_000) {
-    return `${Math.round(bytes / 1000)} КБ`;
+    return tt`${Math.round(bytes / 1000)} КБ`;
   }
   if (bytes < 1_000_000_000) {
-    return `${(bytes / 1_000_000).toFixed(bytes < 10_000_000 ? 1 : 0).replace(".", ",")} МБ`;
+    return tt`${(bytes / 1_000_000).toFixed(bytes < 10_000_000 ? 1 : 0).replace(".", ",")} МБ`;
   }
-  return `${(bytes / 1_000_000_000).toFixed(2).replace(".", ",")} ГБ`;
+  return tt`${(bytes / 1_000_000_000).toFixed(2).replace(".", ",")} ГБ`;
 }
 
 function fmtSpeed(bps) {
-  return bps > 0 ? `${fmtSize(bps)}/с` : "";
+  return bps > 0 ? tt`${fmtSize(bps)}/с` : "";
 }
 
 function fmtEta(seconds) {
@@ -94,15 +97,15 @@ function fmtEta(seconds) {
     return "";
   }
   if (seconds < 60) {
-    return `${Math.ceil(seconds)} с`;
+    return tt`${Math.ceil(seconds)} с`;
   }
   if (seconds < 3600) {
-    return `${Math.ceil(seconds / 60)} мин`;
+    return tt`${Math.ceil(seconds / 60)} мин`;
   }
-  return `${Math.floor(seconds / 3600)} ч ${Math.ceil((seconds % 3600) / 60)} мин`;
+  return tt`${Math.floor(seconds / 3600)} ч ${Math.ceil((seconds % 3600) / 60)} мин`;
 }
 
-const MONTHS = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+const MONTHS = [tt`янв`, tt`фев`, tt`мар`, tt`апр`, tt`мая`, tt`июн`, tt`июл`, tt`авг`, tt`сен`, tt`окт`, tt`ноя`, tt`дек`];
 
 function dayKey(date) {
   const now = new Date();
@@ -114,21 +117,13 @@ function dayKey(date) {
 
 function fmtTime(date) {
   const d = new Date(date);
-  const time = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  const time = d.toLocaleTimeString(ttLocale(), { hour: "2-digit", minute: "2-digit" });
   const key = dayKey(date);
-  return key === "today" ? time : key === "yesterday" ? `вчера, ${time}` : `${d.getDate()} ${MONTHS[d.getMonth()]}, ${time}`;
+  return key === "today" ? time : key === "yesterday" ? tt`вчера, ${time}` : `${d.getDate()} ${MONTHS[d.getMonth()]}, ${time}`;
 }
 
-function plural(n, one, few, many) {
-  const a = Math.abs(n) % 100;
-  const b = a % 10;
-  if (a > 10 && a < 20) {
-    return many;
-  }
-  if (b > 1 && b < 5) {
-    return few;
-  }
-  return b === 1 ? one : many;
+function plural(n, forms) {
+  return ttForm(n, forms);
 }
 
 /* ---- Тип файла --------------------------------------------------------- */
@@ -297,10 +292,10 @@ const App = {
     $("empty").hidden = items.length > 0;
     if (!items.length) {
       const filtered = all.length > 0;
-      $("empty-title").textContent = filtered ? "Ничего не нашлось" : "Пока ничего не скачано";
-      $("empty-sub").textContent = filtered ? "Попробуйте другой фильтр или запрос." : "Файлы появятся здесь сразу, как начнётся загрузка. Картинки покажем миниатюрой, файлы можно перетаскивать прямо отсюда.";
+      $("empty-title").textContent = filtered ? tt`Ничего не нашлось` : tt`Пока ничего не скачано`;
+      $("empty-sub").textContent = filtered ? tt`Попробуйте другой фильтр или запрос.` : tt`Файлы появятся здесь сразу, как начнётся загрузка. Картинки покажем миниатюрой, файлы можно перетаскивать прямо отсюда.`;
     }
-    const groups = [["active", "Сейчас"], ["today", "Сегодня"], ["yesterday", "Вчера"], ["week", "На этой неделе"], ["earlier", "Ранее"]];
+    const groups = [["active", tt`Сейчас`], ["today", tt`Сегодня`], ["yesterday", tt`Вчера`], ["week", tt`На этой неделе`], ["earlier", tt`Ранее`]];
     const byGroup = new Map(groups.map(([k]) => [k, []]));
     for (const d of items) {
       const st = stateOf(d);
@@ -367,11 +362,11 @@ const App = {
     const info = el("div", { class: "info" }, [
       el("div", { class: "name-row" }, [
         el("span", { class: "name", text: name, title: download.target?.path || name }),
-        state === "missing" ? el("span", { class: "badge warn", text: "файл перемещён" }) : null,
-        state === "failed" ? el("span", { class: "badge warn", text: "ошибка" }) : null,
-        state === "canceled" ? el("span", { class: "badge", text: "отменено" }) : null,
-        state === "paused" ? el("span", { class: "badge", text: "пауза" }) : null,
-        entry.justDone ? el("span", { class: "badge accent", text: "готово" }) : null,
+        state === "missing" ? el("span", { class: "badge warn", text: tt`файл перемещён` }) : null,
+        state === "failed" ? el("span", { class: "badge warn", text: tt`ошибка` }) : null,
+        state === "canceled" ? el("span", { class: "badge", text: tt`отменено` }) : null,
+        state === "paused" ? el("span", { class: "badge", text: tt`пауза` }) : null,
+        entry.justDone ? el("span", { class: "badge accent", text: tt`готово` }) : null,
       ]),
       el("div", { class: "meta" }, this.metaParts(download, state, host)),
       ["active", "paused", "pending"].includes(state)
@@ -407,7 +402,7 @@ const App = {
       path.setAttribute("d", d);
       svg.append(path);
     }
-    return el("span", { class: "plate", dataset: { kind } }, [svg, el("b", { class: "ext", text: ext || "файл" })]);
+    return el("span", { class: "plate", dataset: { kind } }, [svg, el("b", { class: "ext", text: ext || tt`файл` })]);
   },
 
   metaParts(d, state, host) {
@@ -418,15 +413,15 @@ const App = {
     const dot = () => (parts.length ? el("span", { class: "dot" }) : null);
     if (state === "active") {
       const left = d.totalBytes > 0 && d.speed > 0 ? (d.totalBytes - d.currentBytes) / d.speed : 0;
-      parts.push(dot(), el("span", { class: "mono", text: d.totalBytes > 0 ? `${fmtSize(d.currentBytes)} из ${fmtSize(d.totalBytes)}` : fmtSize(d.currentBytes) }));
+      parts.push(dot(), el("span", { class: "mono", text: d.totalBytes > 0 ? tt`${fmtSize(d.currentBytes)} из ${fmtSize(d.totalBytes)}` : fmtSize(d.currentBytes) }));
       if (d.speed > 0) {
         parts.push(dot(), el("span", { class: "mono speed", text: fmtSpeed(d.speed) }));
       }
       if (left) {
-        parts.push(dot(), el("span", { text: `осталось ${fmtEta(left)}` }));
+        parts.push(dot(), el("span", { text: tt`осталось ${fmtEta(left)}` }));
       }
     } else if (state === "paused") {
-      parts.push(dot(), el("span", { class: "mono", text: `${fmtSize(d.currentBytes)}${d.totalBytes ? ` из ${fmtSize(d.totalBytes)}` : ""}` }));
+      parts.push(dot(), el("span", { class: "mono", text: `${fmtSize(d.currentBytes)}${d.totalBytes ? tt` из ${fmtSize(d.totalBytes)}` : ""}` }));
     } else if (state === "failed") {
       parts.push(dot(), el("span", { class: "error", text: this.errorText(d) }));
     } else {
@@ -444,18 +439,18 @@ const App = {
   errorText(d) {
     const e = d.error || {};
     if (e.becauseBlockedByParentalControls) {
-      return "заблокировано родительским контролем";
+      return tt`заблокировано родительским контролем`;
     }
     if (e.becauseBlockedByReputationCheck) {
-      return "файл помечен как опасный";
+      return tt`файл помечен как опасный`;
     }
     if (e.becauseTargetFailed) {
-      return "не удалось записать файл";
+      return tt`не удалось записать файл`;
     }
     if (e.becauseSourceFailed) {
-      return "сервер оборвал загрузку";
+      return tt`сервер оборвал загрузку`;
     }
-    return "не удалось скачать";
+    return tt`не удалось скачать`;
   },
 
   actionButtons(d, state) {
@@ -466,32 +461,32 @@ const App = {
     switch (state) {
       case "active":
         return [
-          btn("Пауза", "pause", () => d.cancel(), "icon-only"),
-          btn("Отменить", "close", () => this.cancel(d), "icon-only danger"),
+          btn(tt`Пауза`, "pause", () => d.cancel(), "icon-only"),
+          btn(tt`Отменить`, "close", () => this.cancel(d), "icon-only danger"),
         ];
       case "paused":
         return [
-          btn("Продолжить", "play", () => d.start(), "primary"),
-          btn("Отменить", "close", () => this.cancel(d), "icon-only danger quiet"),
+          btn(tt`Продолжить`, "play", () => d.start(), "primary"),
+          btn(tt`Отменить`, "close", () => this.cancel(d), "icon-only danger quiet"),
         ];
       case "pending":
-        return [btn("Отменить", "close", () => this.cancel(d), "icon-only danger")];
+        return [btn(tt`Отменить`, "close", () => this.cancel(d), "icon-only danger")];
       case "done":
         return [
-          btn("Открыть", "open", () => this.open(d), "primary"),
-          btn("Показать в Finder", "folder", () => d.showContainingDirectory(), "icon-only quiet"),
-          btn("Удалить с файлом", "trash", () => this.deleteFile(d), "icon-only quiet danger"),
-          btn("Убрать из списка", "close", () => this.removeFromList(d), "icon-only quiet"),
+          btn(tt`Открыть`, "open", () => this.open(d), "primary"),
+          btn(tt`Показать в Finder`, "folder", () => d.showContainingDirectory(), "icon-only quiet"),
+          btn(tt`Удалить с файлом`, "trash", () => this.deleteFile(d), "icon-only quiet danger"),
+          btn(tt`Убрать из списка`, "close", () => this.removeFromList(d), "icon-only quiet"),
         ];
       case "missing":
         return [
-          btn("Скачать снова", "download", () => this.redownload(d), ""),
-          btn("Убрать из списка", "close", () => this.removeFromList(d), "icon-only quiet"),
+          btn(tt`Скачать снова`, "download", () => this.redownload(d), ""),
+          btn(tt`Убрать из списка`, "close", () => this.removeFromList(d), "icon-only quiet"),
         ];
       default: // failed, canceled
         return [
-          btn("Повторить", "retry", () => this.retry(d), ""),
-          btn("Убрать из списка", "close", () => this.removeFromList(d), "icon-only quiet"),
+          btn(tt`Повторить`, "retry", () => this.retry(d), ""),
+          btn(tt`Убрать из списка`, "close", () => this.removeFromList(d), "icon-only quiet"),
         ];
     }
   },
@@ -520,17 +515,17 @@ const App = {
     const todayBytes = today.reduce((s, d) => s + (d.target?.size || d.totalBytes || 0), 0);
     const parts = [];
     if (active.length) {
-      parts.push(el("b", { text: `${active.length} ${plural(active.length, "загрузка идёт", "загрузки идут", "загрузок идут")}` }));
+      parts.push(el("b", { text: `${active.length} ${plural(active.length, tt`загрузка идёт|загрузки идут|загрузок идут`)}` }));
       if (speed) {
         parts.push(" · ", el("span", { class: "mono", text: fmtSpeed(speed) }));
       }
     } else if (paused.length) {
-      parts.push(el("b", { text: `${paused.length} на паузе` }));
+      parts.push(el("b", { text: tt`${paused.length} на паузе` }));
     } else {
-      parts.push("Ничего не скачивается");
+      parts.push(tt`Ничего не скачивается`);
     }
     if (today.length) {
-      parts.push(" · сегодня ", el("b", { text: `${today.length} ${plural(today.length, "файл", "файла", "файлов")}` }), ", ", el("span", { class: "mono", text: fmtSize(todayBytes) }));
+      parts.push(tt` · сегодня `, el("b", { text: `${today.length} ${plural(today.length, tt`файл|файла|файлов`)}` }), ", ", el("span", { class: "mono", text: fmtSize(todayBytes) }));
     }
     $("summary").replaceChildren(...parts);
     const count = active.length + paused.length;
@@ -539,7 +534,7 @@ const App = {
     $("pause-all").hidden = !active.length;
     $("resume-all").hidden = !paused.length;
     $("clear-done").disabled = !all.some(d => d.succeeded || d.error || d.canceled);
-    document.title = `${active.length ? `${active.length} ↓ · ` : ""}Загрузки`;
+    document.title = tt`${active.length ? `${active.length} ↓ · ` : ""}Загрузки`;
   },
 
   /* ---- Действия ---- */
@@ -548,7 +543,7 @@ const App = {
     try {
       await d.launch();
     } catch (e) {
-      this.toast("Не удалось открыть файл");
+      this.toast(tt`Не удалось открыть файл`);
     }
   },
 
@@ -556,14 +551,14 @@ const App = {
     await d.cancel();
     await d.removePartialData().catch(() => {});
     await this.list.remove(d);
-    this.toast("Загрузка отменена");
+    this.toast(tt`Загрузка отменена`);
   },
 
   async retry(d) {
     try {
       await d.start();
     } catch (e) {
-      this.toast("Не получилось: " + this.errorText(d));
+      this.toast(tt`Не получилось: ${this.errorText(d)}`);
     }
   },
 
@@ -574,7 +569,7 @@ const App = {
       await this.list.remove(d);
       fresh.start().catch(() => {});
     } catch (e) {
-      this.toast("Не удалось начать загрузку");
+      this.toast(tt`Не удалось начать загрузку`);
     }
   },
 
@@ -584,19 +579,19 @@ const App = {
       await d.cancel();
     }
     await this.list.remove(d);
-    this.toast("Убрано из списка", async () => {
+    this.toast(tt`Убрано из списка`, async () => {
       await this.list.add(d);
     });
   },
 
   async deleteFile(d) {
     await DownloadsCommon.deleteDownloadFiles(d);
-    this.toast("Файл удалён с диска");
+    this.toast(tt`Файл удалён с диска`);
   },
 
   copyLink(d) {
     Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(d.source.url);
-    this.toast("Ссылка скопирована");
+    this.toast(tt`Ссылка скопирована`);
   },
 
   async openFolder() {
@@ -641,27 +636,27 @@ const App = {
     const I = ICONS;
     const items = [];
     if (state === "done") {
-      items.push({ label: "Открыть", icon: [I.open], run: () => this.open(d) });
-      items.push({ label: "Показать в Finder", icon: [I.folder], run: () => d.showContainingDirectory() });
+      items.push({ label: tt`Открыть`, icon: [I.open], run: () => this.open(d) });
+      items.push({ label: tt`Показать в Finder`, icon: [I.folder], run: () => d.showContainingDirectory() });
     }
     if (state === "active") {
-      items.push({ label: "Пауза", icon: [I.pause], run: () => d.cancel() });
+      items.push({ label: tt`Пауза`, icon: [I.pause], run: () => d.cancel() });
     }
     if (state === "paused") {
-      items.push({ label: "Продолжить", icon: [I.play], run: () => d.start() });
+      items.push({ label: tt`Продолжить`, icon: [I.play], run: () => d.start() });
     }
     if (state === "failed" || state === "canceled") {
-      items.push({ label: "Повторить", icon: [I.retry], run: () => this.retry(d) });
+      items.push({ label: tt`Повторить`, icon: [I.retry], run: () => this.retry(d) });
     }
     if (state === "missing") {
-      items.push({ label: "Скачать снова", icon: [I.download], run: () => this.redownload(d) });
+      items.push({ label: tt`Скачать снова`, icon: [I.download], run: () => this.redownload(d) });
     }
-    items.push({ label: "Копировать ссылку", icon: [I.link], run: () => this.copyLink(d) });
-    items.push({ label: "Открыть страницу источника", icon: [I.open], disabled: !/^https?:/.test(d.source.referrerInfo?.originalReferrer?.spec || ""), run: () => Shell.openUrl(d.source.referrerInfo.originalReferrer.spec) });
+    items.push({ label: tt`Копировать ссылку`, icon: [I.link], run: () => this.copyLink(d) });
+    items.push({ label: tt`Открыть страницу источника`, icon: [I.open], disabled: !/^https?:/.test(d.source.referrerInfo?.originalReferrer?.spec || ""), run: () => Shell.openUrl(d.source.referrerInfo.originalReferrer.spec) });
     items.push({ separator: true });
-    items.push({ label: "Убрать из списка", icon: [I.close], hint: "⌫", run: () => this.removeFromList(d) });
+    items.push({ label: tt`Убрать из списка`, icon: [I.close], hint: "⌫", run: () => this.removeFromList(d) });
     if (state === "done") {
-      items.push({ label: "Удалить файл с диска", icon: [I.trash], danger: true, run: () => this.deleteFile(d) });
+      items.push({ label: tt`Удалить файл с диска`, icon: [I.trash], danger: true, run: () => this.deleteFile(d) });
     }
     Shell.showMenuFromContent(window, items, x, y);
   },
@@ -670,7 +665,7 @@ const App = {
     const box = $("toasts");
     const node = el("div", { class: "toast", role: "status" }, [
       el("span", { text }),
-      undo ? el("button", { type: "button", text: "Отменить", onclick: () => { undo(); node.remove(); } }) : null,
+      undo ? el("button", { type: "button", text: tt`Отменить@@действие`, onclick: () => { undo(); node.remove(); } }) : null,
     ]);
     box.append(node);
     while (box.children.length > 3) {
@@ -714,7 +709,7 @@ const App = {
     $("clear-done").addEventListener("click", async () => {
       const gone = [...this.downloads.keys()].filter(d => d.succeeded || d.error || d.canceled);
       await this.list.removeFinished();
-      this.toast(`Убрано: ${gone.length}`, async () => {
+      this.toast(tt`Убрано: ${gone.length}`, async () => {
         for (const d of gone) {
           await this.list.add(d);
         }
@@ -772,7 +767,7 @@ const App = {
         await this.list.add(d);
         d.start().catch(() => {});
       } catch (err) {
-        this.toast("Не удалось начать загрузку");
+        this.toast(tt`Не удалось начать загрузку`);
       }
     });
   },

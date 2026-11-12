@@ -23,6 +23,7 @@
  * Рамку нельзя переставлять в документе: вынутая из него, она теряет набранное. */
 
 import { clean, fromText, parseInert, escapeHtml, FONTS, SIZES, COLORS, NO_COLOR } from "chrome://tabora/content/mail/RichText.sys.mjs";
+import { tt } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 
 const XHTML = "http://www.w3.org/1999/xhtml";
 const SVG = "http://www.w3.org/2000/svg";
@@ -113,10 +114,10 @@ export class RichEditor {
     this._pending = "";
     this._snapshot = "";
     this._readOnly = false;
-    this.frame = h(doc, "iframe", { class: "tb-editor-frame", type: "content", sandbox: "allow-same-origin", title: opts.label || "Текст письма" });
+    this.frame = h(doc, "iframe", { class: "tb-editor-frame", type: "content", sandbox: "allow-same-origin", title: opts.label || tt`Текст письма` });
     this.el = h(doc, "div", { class: "tb-editor" }, [this.frame]);
     this.bar = this.#buildBar();
-    this.toggle = h(doc, "button", { class: "tb-editor-toggle", type: "button", title: "Оформление", "aria-label": "Панель оформления", "aria-pressed": "false" }, "Аа");
+    this.toggle = h(doc, "button", { class: "tb-editor-toggle", type: "button", title: tt`Оформление`, "aria-label": tt`Панель оформления`, "aria-pressed": "false" }, tt`Аа`);
     this.toggle.addEventListener("mousedown", e => e.preventDefault());
     this.toggle.addEventListener("click", () => {
       Services.prefs.setBoolPref(SHOWN_PREF, this.bar.hidden);
@@ -177,7 +178,7 @@ export class RichEditor {
     body.spellcheck = true;
     body.setAttribute("role", "textbox");
     body.setAttribute("aria-multiline", "true");
-    body.setAttribute("aria-label", this.opts.label || "Текст письма");
+    body.setAttribute("aria-label", this.opts.label || tt`Текст письма`);
     body.setAttribute("data-placeholder", this.opts.placeholder || "");
     body.dir = "auto";
     this.#theme();
@@ -523,36 +524,36 @@ export class RichEditor {
     this._fontLabel = h(doc, "span", { class: "tb-editor-pick-label" }, FONTS[0].label);
     this._colorMark = h(doc, "span", { class: "tb-editor-color", "aria-hidden": "true" });
     const tools = h(doc, "div", { class: "tb-editor-tools" }, [
-      button("undo", "Отменить (⌘Z)", "undo"),
-      button("redo", "Повторить (⇧⌘Z)", "redo"),
+      button("undo", tt`Отменить (⌘Z)`, "undo"),
+      button("redo", tt`Повторить (⇧⌘Z)`, "redo"),
       sep(),
-      pick("font", "Шрифт", this._fontLabel),
-      pick("size", "Размер", svg(doc, ICONS.size)),
+      pick("font", tt`Шрифт`, this._fontLabel),
+      pick("size", tt`Размер`, svg(doc, ICONS.size)),
       sep(),
-      toggle("bold", "Жирный (⌘B)", "bold"),
-      toggle("italic", "Курсив (⌘I)", "italic"),
-      toggle("underline", "Подчёркнутый (⌘U)", "underline"),
-      pick("color", "Цвет текста", h(doc, "span", { class: "tb-editor-color-icon" }, [svg(doc, ICONS.color), this._colorMark])),
+      toggle("bold", tt`Жирный (⌘B)`, "bold"),
+      toggle("italic", tt`Курсив (⌘I)`, "italic"),
+      toggle("underline", tt`Подчёркнутый (⌘U)`, "underline"),
+      pick("color", tt`Цвет текста`, h(doc, "span", { class: "tb-editor-color-icon" }, [svg(doc, ICONS.color), this._colorMark])),
       sep(),
-      pick("align", "Выравнивание", svg(doc, ICONS.left)),
-      toggle("insertOrderedList", "Нумерованный список", "ordered"),
-      toggle("insertUnorderedList", "Маркированный список", "bullets"),
-      button("outdent", "Уменьшить отступ", "outdent"),
-      button("indent", "Увеличить отступ", "indent"),
+      pick("align", tt`Выравнивание`, svg(doc, ICONS.left)),
+      toggle("insertOrderedList", tt`Нумерованный список`, "ordered"),
+      toggle("insertUnorderedList", tt`Маркированный список`, "bullets"),
+      button("outdent", tt`Уменьшить отступ`, "outdent"),
+      button("indent", tt`Увеличить отступ`, "indent"),
       sep(),
-      toggle("quote", "Цитата", "quote"),
-      toggle("strikeThrough", "Зачёркнутый (⇧⌘X)", "strike"),
-      button("link", "Ссылка", "link"),
+      toggle("quote", tt`Цитата`, "quote"),
+      toggle("strikeThrough", tt`Зачёркнутый (⇧⌘X)`, "strike"),
+      button("link", tt`Ссылка`, "link"),
       sep(),
-      button("clear", "Убрать оформление", "clear"),
+      button("clear", tt`Убрать оформление`, "clear"),
     ]);
-    const more = h(doc, "button", { class: "tb-editor-btn tb-editor-more", type: "button", title: "Ещё", "aria-label": "Ещё", "aria-haspopup": "menu", hidden: true }, [svg(doc, ICONS.more)]);
+    const more = h(doc, "button", { class: "tb-editor-btn tb-editor-more", type: "button", title: tt`Ещё`, "aria-label": tt`Ещё`, "aria-haspopup": "menu", hidden: true }, [svg(doc, ICONS.more)]);
     more.addEventListener("mousedown", e => e.preventDefault());
     more.addEventListener("click", () => this.opts.menu?.(this.#moreItems(), more.getBoundingClientRect()));
     this._tools = tools;
     this._more = more;
     this._linkForm = this.#buildLinkForm();
-    const bar = h(doc, "div", { class: "tb-editor-bar", role: "toolbar", "aria-label": "Оформление текста" }, [tools, more, this._linkForm]);
+    const bar = h(doc, "div", { class: "tb-editor-bar", role: "toolbar", "aria-label": tt`Оформление текста` }, [tools, more, this._linkForm]);
     // что не поместилось в строку, уходит в «Ещё»
     this._overflowWatch = new this.win.ResizeObserver(() => this.#overflow());
     this._overflowWatch.observe(tools);
@@ -592,20 +593,20 @@ export class RichEditor {
     if (id === "color") {
       const current = this.#currentColor();
       return [
-        { label: "По умолчанию", checked: !current, run: () => this.exec("foreColor", NO_COLOR) },
+        { label: tt`По умолчанию`, checked: !current, run: () => this.exec("foreColor", NO_COLOR) },
         { separator: true },
         ...COLORS.map(c => ({ label: c.label, swatch: c.hex, checked: current === c.hex, run: () => this.exec("foreColor", c.hex) })),
       ];
     }
     return [
-      { label: "По левому краю", icon: ICONS.left, checked: this.#state("justifyLeft"), run: () => this.exec("justifyLeft") },
-      { label: "По центру", icon: ICONS.center, checked: this.#state("justifyCenter"), run: () => this.exec("justifyCenter") },
-      { label: "По правому краю", icon: ICONS.right, checked: this.#state("justifyRight"), run: () => this.exec("justifyRight") },
+      { label: tt`По левому краю`, icon: ICONS.left, checked: this.#state("justifyLeft"), run: () => this.exec("justifyLeft") },
+      { label: tt`По центру`, icon: ICONS.center, checked: this.#state("justifyCenter"), run: () => this.exec("justifyCenter") },
+      { label: tt`По правому краю`, icon: ICONS.right, checked: this.#state("justifyRight"), run: () => this.exec("justifyRight") },
     ];
   }
 
   #moreItems() {
-    const titles = { font: "Шрифт", size: "Размер", color: "Цвет текста", align: "Выравнивание" };
+    const titles = { font: tt`Шрифт`, size: tt`Размер`, color: tt`Цвет текста`, align: tt`Выравнивание` };
     const items = [];
     for (const el of this.#hiddenTools()) {
       if (el.localName !== "button") {
@@ -659,9 +660,9 @@ export class RichEditor {
 
   #buildLinkForm() {
     const doc = this.host;
-    const input = h(doc, "input", { type: "text", class: "tb-editor-link-input", placeholder: "https://…", "aria-label": "Адрес ссылки", autocomplete: "off", spellcheck: "false" });
-    const apply = h(doc, "button", { type: "button", class: "tb-editor-link-apply" }, "Вставить");
-    const remove = h(doc, "button", { type: "button", class: "tb-editor-link-remove" }, "Убрать");
+    const input = h(doc, "input", { type: "text", class: "tb-editor-link-input", placeholder: "https://…", "aria-label": tt`Адрес ссылки`, autocomplete: "off", spellcheck: "false" });
+    const apply = h(doc, "button", { type: "button", class: "tb-editor-link-apply" }, tt`Вставить`);
+    const remove = h(doc, "button", { type: "button", class: "tb-editor-link-remove" }, tt`Убрать`);
     const form = h(doc, "div", { class: "tb-editor-link", hidden: true }, [input, apply, remove]);
     const close = () => {
       form.hidden = true;

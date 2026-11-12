@@ -1,3 +1,4 @@
+import { tt } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -221,7 +222,7 @@ export const MailView = {
 
   _file(token) {
     if (!TOKEN.test(token)) {
-      throw new Error("Tabora mail: неверное имя записи вёрстки");
+      throw new Error(tt`Tabora mail: неверное имя записи вёрстки`);
     }
     return PathUtils.join(DIR(), `${token}.json`);
   },

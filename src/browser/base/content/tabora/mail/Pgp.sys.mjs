@@ -1,3 +1,4 @@
+import { tt } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -188,7 +189,7 @@ export const Pgp = {
             if (w?.wrappedJSObject?.pgpReady === true) {
               resolve(w);
             } else if (Date.now() - started > 15000) {
-              reject(fail("Модуль шифрования не запустился"));
+              reject(fail(tt`Модуль шифрования не запустился`));
             } else {
               setTimeout(poll, 40);
             }
@@ -198,7 +199,7 @@ export const Pgp = {
         // исполнитель обязан остаться обычной страницей со своим адресом: без прав оболочки
         const p = wb.document.nodePrincipal;
         if (p.isSystemPrincipal || p.isNullPrincipal || p.origin !== HOST_ORIGIN || !win.isSecureContext) {
-          throw fail("Модуль шифрования запущен не в изолированном документе");
+          throw fail(tt`Модуль шифрования запущен не в изолированном документе`);
         }
         this._host = { wb, win, timer: null };
         this._touch();
@@ -233,7 +234,7 @@ export const Pgp = {
   async _call(method, args = {}, timeoutMs = 120000) {
     const win = await this._window();
     const text = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(fail("Шифрование не ответило вовремя")), timeoutMs);
+      const timer = setTimeout(() => reject(fail(tt`Шифрование не ответило вовремя`)), timeoutMs);
       try {
         win.wrappedJSObject.pgpCall(
           JSON.stringify({ method, args }),
@@ -252,7 +253,7 @@ export const Pgp = {
       r = JSON.parse(text);
     } catch (e) {}
     if (!r || r.ok !== true || typeof r.value !== "object" || !r.value) {
-      throw Object.assign(fail("Операция шифрования не выполнена"), { detail: String(r?.error || "").slice(0, 300) });
+      throw Object.assign(fail(tt`Операция шифрования не выполнена`), { detail: String(r?.error || "").slice(0, 300) });
     }
     return r.value;
   },
@@ -261,7 +262,7 @@ export const Pgp = {
 
   _require() {
     if (!lazy.Account.signedIn) {
-      throw fail("Шифрование писем доступно после входа в аккаунт Tabora", "signed-out");
+      throw fail(tt`Шифрование писем доступно после входа в аккаунт Tabora`, "signed-out");
     }
     Vault.requireUnlocked();
   },
@@ -353,7 +354,7 @@ export const Pgp = {
         const r = await this._call("generate", { email: address });
         const info = this._usable(r.info, address);
         if (typeof r.privateKey !== "string" || !r.privateKey.includes("PRIVATE KEY BLOCK")) {
-          throw fail("Ключ не создан");
+          throw fail(tt`Ключ не создан`);
         }
         d.own[address] = { fingerprint: info.fingerprint, keyId: info.keyId, subkeyIds: info.subkeyIds, created: info.created, publicKey: info.armored, privateKey: r.privateKey };
         await this._save();
@@ -396,12 +397,12 @@ export const Pgp = {
     const address = clean(lazy.Account.email);
     const text = String(privateArmored || "");
     if (text.length > MAX_KEY_CHARS || !text.includes("PRIVATE KEY BLOCK")) {
-      throw fail("Это не закрытый ключ OpenPGP");
+      throw fail(tt`Это не закрытый ключ OpenPGP`);
     }
     const { keys } = await this._call("info", { armored: text });
     const info = this._usable(keys?.[0], address);
     if (!info.private) {
-      throw fail("Это не закрытый ключ OpenPGP");
+      throw fail(tt`Это не закрытый ключ OpenPGP`);
     }
     d.own[address] = { fingerprint: info.fingerprint, keyId: info.keyId, subkeyIds: info.subkeyIds, created: info.created, publicKey: info.armored, privateKey: text };
     await this._save();
@@ -414,7 +415,7 @@ export const Pgp = {
     const d = await this.ready();
     const k = d.own[clean(address)];
     if (!k) {
-      throw fail("У этого адреса нет ключа");
+      throw fail(tt`У этого адреса нет ключа`);
     }
     return k.privateKey;
   },
@@ -431,19 +432,19 @@ export const Pgp = {
       typeof info.armored === "string" &&
       ARMOR_RE.test(info.armored);
     if (!ok) {
-      throw fail("Ключ не разобран");
+      throw fail(tt`Ключ не разобран`);
     }
     if (info.revoked) {
-      throw fail("Ключ отозван владельцем");
+      throw fail(tt`Ключ отозван владельцем`);
     }
     if (info.expired) {
-      throw fail("Срок действия ключа истёк");
+      throw fail(tt`Срок действия ключа истёк`);
     }
     if (!info.canEncrypt) {
-      throw fail("Этим ключом нельзя шифровать");
+      throw fail(tt`Этим ключом нельзя шифровать`);
     }
     if (address && info.emails.length && !info.emails.includes(clean(address))) {
-      throw fail(`Ключ выпущен для другого адреса: ${info.emails.slice(0, 3).join(", ")}`);
+      throw fail(tt`Ключ выпущен для другого адреса: ${info.emails.slice(0, 3).join(", ")}`);
     }
     return { ...info, subkeyIds: info.subkeyIds.filter(x => /^[0-9a-f]{16}$/.test(x)).slice(0, 16), created: String(info.created || "").slice(0, 30) };
   },
@@ -471,10 +472,10 @@ export const Pgp = {
     const a = clean(address);
     const text = String(armored || "");
     if (!ADDRESS_RE.test(a) || a.length > 254) {
-      throw fail("Некорректный адрес");
+      throw fail(tt`Некорректный адрес`);
     }
     if (text.length > MAX_KEY_CHARS || !ARMOR_RE.test(text)) {
-      throw fail("Это не открытый ключ OpenPGP");
+      throw fail(tt`Это не открытый ключ OpenPGP`);
     }
     const { keys } = await this._call("info", { armored: text.match(ARMOR_RE)[0] });
     const info = this._usable(keys?.[0], source === "autocrypt" ? "" : a);
@@ -486,7 +487,7 @@ export const Pgp = {
       return { ...prior, address: a, kept: true }; // для адресов Tabora верен каталог: письмо его не подменит
     }
     if (!prior && Object.keys(d.peers).length >= MAX_PEERS) {
-      throw fail("Ключей собеседников слишком много: удалите ненужные");
+      throw fail(tt`Ключей собеседников слишком много: удалите ненужные`);
     }
     d.peers[a] = { fingerprint: info.fingerprint, keyId: info.keyId, subkeyIds: info.subkeyIds, publicKey: info.armored, source, prefer: prefer === "mutual" ? "mutual" : "", seen, changed: prior && prior.fingerprint !== info.fingerprint ? Date.now() : prior?.changed || 0 };
     if (source === "directory") {
@@ -616,7 +617,7 @@ export const Pgp = {
       } catch (e) {
         const state = e.status === 404 || e.code === "no-server" ? "unsupported" : "offline";
         if (strict) {
-          throw fail(state === "unsupported" ? "Сервер Tabora пока не хранит копии ключей: это появится после его обновления" : e.message, state);
+          throw fail(state === "unsupported" ? tt`Сервер Tabora пока не хранит копии ключей: это появится после его обновления` : e.message, state);
         }
         return done(state);
       }
@@ -653,7 +654,7 @@ export const Pgp = {
           const { keys } = await this._call("info", { armored });
           const info = this._usable(keys?.[0], address);
           if (!info.private || info.fingerprint !== remoteFp) {
-            throw fail("Копия ключа на сервере повреждена");
+            throw fail(tt`Копия ключа на сервере повреждена`);
           }
           if (own) {
             d.retired = [own, ...(d.retired || [])].slice(0, MAX_RETIRED);
@@ -673,14 +674,14 @@ export const Pgp = {
           // открыть копию нечем, а ключ на сервере другой (или здесь ключа нет вовсе)
           if (strict && passwordKey) {
             if (!wrapPw) {
-              throw fail("Копия ключа на сервере ещё не привязана к паролю. Откройте Tabora на том компьютере, где ключ создан, и сохраните копию там", "no-wrap");
+              throw fail(tt`Копия ключа на сервере ещё не привязана к паролю. Откройте Tabora на том компьютере, где ключ создан, и сохраните копию там`, "no-wrap");
             }
             // пароль неверен или копия сохранена с прежним паролем: верен ли пароль, скажет сервер
             await account.backend.mailKeysSave({ session, rev: remote.rev, wrapPassword: remote.wrapPassword, loginHash });
-            throw fail("Копия ключа сохранена с прежним паролем аккаунта: нынешним её не открыть", "wrong-wrap");
+            throw fail(tt`Копия ключа сохранена с прежним паролем аккаунта: нынешним её не открыть`, "wrong-wrap");
           }
           if (strict && recoveryKey) {
-            throw fail("Этот ключ восстановления к копии ключа не подходит", "wrong-wrap");
+            throw fail(tt`Этот ключ восстановления к копии ключа не подходит`, "wrong-wrap");
           }
           if (recoveryKey) {
             // ключ восстановления этого компьютера создан, пока ключа почты здесь нет: обёртка им
@@ -695,7 +696,7 @@ export const Pgp = {
       } else {
         // ключа на сервере нет (или его велено заменить): сохраняем свой, при надобности создав
         if (replace && !(passwordKey && loginHash)) {
-          throw fail("Чтобы заменить ключ аккаунта, нужен пароль");
+          throw fail(tt`Чтобы заменить ключ аккаунта, нужен пароль`);
         }
         if (!own) {
           await this.ensureKey();
@@ -783,19 +784,19 @@ export const Pgp = {
     const d = await this.ready();
     const own = d.own[clean(lazy.Account.email)];
     if (!own) {
-      throw fail("У аккаунта ещё нет ключа шифрования");
+      throw fail(tt`У аккаунта ещё нет ключа шифрования`);
     }
     const keys = [own.publicKey];
     for (const a of [...new Set((addresses || []).map(clean).filter(Boolean))]) {
       const k = d.own[a] || d.peers[a];
       if (!k) {
-        throw fail(`Нет ключа получателя ${a}: письмо нельзя зашифровать`, "no-key");
+        throw fail(tt`Нет ключа получателя ${a}: письмо нельзя зашифровать`, "no-key");
       }
       keys.push(k.publicKey);
     }
     const r = await this._call("encrypt", { data: bytesToBase64(bytes), recipients: keys, signer: own.privateKey });
     if (typeof r.armored !== "string" || !r.armored.startsWith("-----BEGIN PGP MESSAGE-----")) {
-      throw fail("Письмо не зашифровано");
+      throw fail(tt`Письмо не зашифровано`);
     }
     return r.armored;
   },
@@ -875,17 +876,17 @@ export const Pgp = {
     // прежние ключи аккаунта остаются для писем, зашифрованных до замены ключа
     const keys = [...Object.values(d.own), ...(d.retired || [])].map(k => k.privateKey);
     if (!keys.length) {
-      throw fail("В этом профиле нет ключа, которым зашифровано письмо", "no-key");
+      throw fail(tt`В этом профиле нет ключа, которым зашифровано письмо`, "no-key");
     }
     let r;
     try {
       r = await this._call("decrypt", { armored: String(armored), keys, verifiers: this._verifiers(from) });
     } catch (e) {
       const noKey = /no decryption key|session key decryption failed/i.test(e.detail || "");
-      throw fail(noKey ? "Письмо зашифровано не для этого аккаунта: в профиле нет подходящего ключа" : "Письмо не расшифровано: оно повреждено или зашифровано неизвестным способом", noKey ? "no-key" : "pgp");
+      throw fail(noKey ? tt`Письмо зашифровано не для этого аккаунта: в профиле нет подходящего ключа` : tt`Письмо не расшифровано: оно повреждено или зашифровано неизвестным способом`, noKey ? "no-key" : "pgp");
     }
     if (typeof r.data !== "string") {
-      throw fail("Письмо не расшифровано");
+      throw fail(tt`Письмо не расшифровано`);
     }
     const other = this._otherSigner(r.signatures);
     if (other) {
@@ -903,11 +904,11 @@ export const Pgp = {
     const d = await this.ready();
     const own = d.own[clean(lazy.Account.email)];
     if (!own) {
-      throw fail("У аккаунта ещё нет ключа");
+      throw fail(tt`У аккаунта ещё нет ключа`);
     }
     const r = await this._call("sign", { data: bytesToBase64(bytes), signer: own.privateKey });
     if (typeof r.signature !== "string" || !r.signature.includes("BEGIN PGP SIGNATURE") || !/^sha[0-9-]+$/.test(r.hash || "")) {
-      throw fail("Письмо не подписано");
+      throw fail(tt`Письмо не подписано`);
     }
     return { signature: r.signature, micalg: `pgp-${r.hash}` };
   },

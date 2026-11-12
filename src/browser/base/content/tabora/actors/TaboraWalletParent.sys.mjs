@@ -1,3 +1,4 @@
+import { tt } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -15,7 +16,7 @@ export class TaboraWalletParent extends JSWindowActorParent {
     // Только обычные документы с настоящим origin: без system/null/expanded принципалов,
     // без data:/blob:/sandbox-фреймов и без http (кроме localhost).
     if (!win?.Tabora?.walletHandleRequest || !principal || !principal.isContentPrincipal) {
-      throw { code: 4100, message: "Кошелёк недоступен для этого документа" };
+      throw { code: 4100, message: tt`Кошелёк недоступен для этого документа` };
     }
     let host = "";
     let hostPort = "";
@@ -25,7 +26,7 @@ export class TaboraWalletParent extends JSWindowActorParent {
     } catch (e) {}
     const local = ["localhost", "127.0.0.1"].includes(host) || host.endsWith(".localhost");
     if (!principal.schemeIs("https") && !(principal.schemeIs("http") && local)) {
-      throw { code: 4100, message: "Кошелёк доступен только сайтам по HTTPS" };
+      throw { code: 4100, message: tt`Кошелёк доступен только сайтам по HTTPS` };
     }
     const origin = principal.origin;
     let topHost = hostPort;

@@ -25,16 +25,16 @@ window.TaboraAccountPane = (function () {
   const { Sync } = ChromeUtils.importESModule("chrome://tabora/content/sync/Sync.sys.mjs");
   const Shell = window.browsingContext?.topChromeWindow?.Tabora || null;
   const HTML = "http://www.w3.org/1999/xhtml";
-  const LATER = "появится в одной из следующих версий";
+  const LATER = tt`появится в одной из следующих версий`;
 
   const TABS = [
-    ["profile", "Профиль"],
-    ["security", "Безопасность"],
-    ["sync", "Синхронизация"],
-    ["data", "Данные"],
-    ["accounts", "Аккаунты"],
-    ["support", "Поддержка"],
-    ["exit", "Выход"],
+    ["profile", tt`Профиль`],
+    ["security", tt`Безопасность`],
+    ["sync", tt`Синхронизация`],
+    ["data", tt`Данные`],
+    ["accounts", tt`Аккаунты`],
+    ["support", tt`Поддержка`],
+    ["exit", tt`Выход`],
   ];
 
   // security: настройки входа с сервера (null — ещё не загружены, { error } — сервер не ответил)
@@ -82,13 +82,11 @@ window.TaboraAccountPane = (function () {
 
   function date(v) {
     // без хвоста «г.»: дата стоит в середине фраз
-    return v ? new Date(v).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" }).replace(/\s*г\.$/, "") : "";
+    return v ? new Date(v).toLocaleDateString(ttLocale(), { day: "numeric", month: "long", year: "numeric" }).replace(/\s*[гр]\.$/, "") : "";
   }
 
-  function plural(n, one, few, many) {
-    const m10 = n % 10;
-    const m100 = n % 100;
-    return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
+  function plural(n, forms) {
+    return ttForm(n, forms);
   }
 
   /** Действие оболочки; если страницу открыли вне окна браузера, ничего не делаем. */
@@ -112,14 +110,14 @@ window.TaboraAccountPane = (function () {
   };
 
   const supStatus = (status, staffView) => ({
-    open: staffView ? "ждёт ответа" : "ждёт ответа поддержки",
-    answered: staffView ? "отвечено" : "поддержка ответила",
-    closed: "закрыто",
+    open: staffView ? tt`ждёт ответа` : tt`ждёт ответа поддержки`,
+    answered: staffView ? tt`отвечено` : tt`поддержка ответила`,
+    closed: tt`закрыто`,
   }[status] || status);
 
   const supWhen = iso => {
     const d = new Date(iso);
-    return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+    return Number.isNaN(d.getTime()) ? "" : d.toLocaleString(ttLocale(), { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
   };
 
   function supFail(e) {
@@ -127,7 +125,7 @@ window.TaboraAccountPane = (function () {
       sup.unsupported = true; // сервер ещё не знает об обращениях
       return "";
     }
-    return e.code === "no-server" ? "Обращения появятся, когда аккаунт подключат к серверу Tabora." : e.message || String(e);
+    return e.code === "no-server" ? tt`Обращения появятся, когда аккаунт подключат к серверу Tabora.` : e.message || String(e);
   }
 
   async function supLoadList() {
@@ -208,29 +206,29 @@ window.TaboraAccountPane = (function () {
       ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
       const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.85));
       if (blob && blob.size <= SUP_FILE_MAX) {
-        return new File([blob], `${file.name.replace(/\.[a-z0-9]+$/i, "") || "снимок"}.jpg`, { type: "image/jpeg" });
+        return new File([blob], `${file.name.replace(/\.[a-z0-9]+$/i, "") || tt`снимок`}.jpg`, { type: "image/jpeg" });
       }
       scale *= 0.7;
     }
-    throw new Error(`«${file.name}» не удалось уменьшить до 2 МБ`);
+    throw new Error(tt`«${file.name}» не удалось уменьшить до 2 МБ`);
   }
 
   async function supAttach(target, files) {
     for (const raw of files) {
       if (target.files.length >= SUP_FILES_MAX) {
-        shell(s => s.notice(`К сообщению можно приложить не больше ${SUP_FILES_MAX} файлов`))();
+        shell(s => s.notice(tt`К сообщению можно приложить не больше ${SUP_FILES_MAX} файлов`))();
         break;
       }
       try {
         if (!SUP_TYPES.includes(raw.type)) {
-          throw new Error(`«${raw.name}»: прикладывать можно снимки (PNG, JPEG, WebP) и текстовые файлы`);
+          throw new Error(tt`«${raw.name}»: прикладывать можно снимки (PNG, JPEG, WebP) и текстовые файлы`);
         }
         const file = await supFit(raw);
         if (file.size > SUP_FILE_MAX) {
-          throw new Error(`«${file.name}» больше 2 МБ`);
+          throw new Error(tt`«${file.name}» больше 2 МБ`);
         }
         const bytes = new Uint8Array(await file.arrayBuffer());
-        target.files.push({ name: file.name || "снимок.png", type: file.type, size: file.size, data: bytes.toBase64(), url: /^image\//.test(file.type) ? URL.createObjectURL(file) : "" });
+        target.files.push({ name: file.name || tt`снимок.png`, type: file.type, size: file.size, data: bytes.toBase64(), url: /^image\//.test(file.type) ? URL.createObjectURL(file) : "" });
       } catch (e) {
         shell(s => s.notice(e.message || String(e)))();
       }
@@ -238,7 +236,7 @@ window.TaboraAccountPane = (function () {
     render();
   }
 
-  const supSize = n => (n >= 1048576 ? `${(n / 1048576).toFixed(1).replace(".", ",")} МБ` : `${Math.max(1, Math.round(n / 1024))} КБ`);
+  const supSize = n => (n >= 1048576 ? tt`${(n / 1048576).toFixed(1).replace(".", ",")} МБ` : tt`${Math.max(1, Math.round(n / 1024))} КБ`);
 
   /** Поле сообщения с вложениями: кнопка выбора файлов, вставка снимка из буфера, список приложенного. */
   function supComposer(target, { placeholder, rows }) {
@@ -256,10 +254,10 @@ window.TaboraAccountPane = (function () {
     });
     const input = el("input", { type: "file", multiple: true, accept: SUP_TYPES.join(","), hidden: true });
     input.addEventListener("change", () => supAttach(target, [...input.files]));
-    const pick = el("moz-button", { label: "Прикрепить файл" });
+    const pick = el("moz-button", { label: tt`Прикрепить файл` });
     pick.addEventListener("click", () => input.click());
     const list = el("div", { class: "tabora-sup-attached" }, target.files.map((f, i) => {
-      const remove = el("button", { class: "tabora-sup-remove", type: "button", "aria-label": `Убрать ${f.name}`, title: "Убрать" }, "×");
+      const remove = el("button", { class: "tabora-sup-remove", type: "button", "aria-label": tt`Убрать ${f.name}`, title: tt`Убрать` }, "×");
       remove.addEventListener("click", () => {
         if (f.url) {
           URL.revokeObjectURL(f.url);
@@ -296,7 +294,7 @@ window.TaboraAccountPane = (function () {
       return;
     }
     if (d.subject.trim().length < 3 || !d.text.trim()) {
-      shell(s => s.notice(d.subject.trim().length < 3 ? "Коротко назовите тему обращения" : "Опишите, что случилось"))();
+      shell(s => s.notice(d.subject.trim().length < 3 ? tt`Коротко назовите тему обращения` : tt`Опишите, что случилось`))();
       return;
     }
     sup.busy = true;
@@ -309,7 +307,7 @@ window.TaboraAccountPane = (function () {
       sup.reply = { text: "", files: [] };
       sup.view = "ticket";
       sup.stale = true;
-      shell(s => s.notice(`Обращение № ${t.id} отправлено`))();
+      shell(s => s.notice(tt`Обращение № ${t.id} отправлено`))();
     } catch (e) {
       shell(s => s.notice(e.message || String(e)))();
     }
@@ -368,11 +366,11 @@ window.TaboraAccountPane = (function () {
         if (/^image\/(png|jpeg|webp)$/.test(got.type)) {
           img.src = got.url;
         }
-      }).catch(() => img.replaceWith(el("span", { class: "tabora-sup-chip" }, `${f.name}: не загрузилось`)));
+      }).catch(() => img.replaceWith(el("span", { class: "tabora-sup-chip" }, tt`${f.name}: не загрузилось`)));
       img.addEventListener("click", () => img.classList.toggle("wide"));
       return img;
     }
-    const link = el("button", { class: "tabora-sup-chip link", type: "button", title: "Сохранить файл" }, `${f.name}, ${supSize(f.size)}`);
+    const link = el("button", { class: "tabora-sup-chip link", type: "button", title: tt`Сохранить файл` }, `${f.name}, ${supSize(f.size)}`);
     link.addEventListener("click", async () => {
       try {
         const got = await load();
@@ -389,38 +387,38 @@ window.TaboraAccountPane = (function () {
 
   function supportPanel() {
     if (sup.unsupported) {
-      return [group("Поддержка", "", [item("Обращения из браузера скоро заработают", "Сервер Tabora ещё не обновлён. Пока напишите нам на hello@tabora.app — ответим письмом.", [button("Проверить снова", () => {
+      return [group(tt`Поддержка`, "", [item(tt`Обращения из браузера скоро заработают`, tt`Сервер Tabora ещё не обновлён. Пока напишите нам на hello@tabora.app — ответим письмом.`, [button(tt`Проверить снова`, () => {
         sup.unsupported = false;
         sup.stale = true;
         render();
       })])])];
     }
-    const head = "Напишите нам о проблеме или идее — ответим здесь же. Переписку читают сотрудники поддержки Tabora: она не зашифрована от них, поэтому не присылайте пароли, коды и фразу восстановления кошелька.";
+    const head = tt`Напишите нам о проблеме или идее — ответим здесь же. Переписку читают сотрудники поддержки Tabora: она не зашифрована от них, поэтому не присылайте пароли, коды и фразу восстановления кошелька.`;
 
     if (sup.view === "new") {
       const d = sup.draft;
-      const subject = el("input", { class: "tabora-sup-input", type: "text", maxlength: "140", placeholder: "Тема: что случилось, в двух словах", "aria-label": "Тема обращения" });
+      const subject = el("input", { class: "tabora-sup-input", type: "text", maxlength: "140", placeholder: tt`Тема: что случилось, в двух словах`, "aria-label": tt`Тема обращения` });
       subject.value = d.subject;
       subject.addEventListener("input", () => {
         d.subject = subject.value;
       });
-      const c = supComposer(d, { placeholder: "Что вы делали, что ожидали увидеть и что получилось. Снимок экрана можно вставить из буфера.", rows: 8 });
-      const meta = el("moz-checkbox", { label: "Приложить сведения о браузере", description: "Версия Tabora, система, язык и размер окна. Помогают повторить проблему." });
+      const c = supComposer(d, { placeholder: tt`Что вы делали, что ожидали увидеть и что получилось. Снимок экрана можно вставить из буфера.`, rows: 8 });
+      const meta = el("moz-checkbox", { label: tt`Приложить сведения о браузере`, description: tt`Версия Tabora, система, язык и размер окна. Помогают повторить проблему.` });
       meta.checked = d.meta;
       meta.addEventListener("change", () => {
         d.meta = meta.checked;
       });
-      const send = el("moz-button", { label: sup.busy ? "Отправляю…" : "Отправить", type: "primary" });
+      const send = el("moz-button", { label: sup.busy ? tt`Отправляю…` : tt`Отправить`, type: "primary" });
       send.disabled = sup.busy;
       send.addEventListener("click", supCreate);
-      const cancel = el("moz-button", { label: "Отмена" });
+      const cancel = el("moz-button", { label: tt`Отмена` });
       cancel.addEventListener("click", () => {
         sup.view = "list";
         render();
       });
       queueMicrotask(() => !d.subject && subject.focus());
       return [el("moz-card", { role: "presentation", class: "tabora-acc-group tabora-sup-card" }, [
-        el("moz-fieldset", { label: "Новое обращение", description: head, headinglevel: "2" }, [
+        el("moz-fieldset", { label: tt`Новое обращение`, description: head, headinglevel: "2" }, [
           el("div", { class: "tabora-sup-form" }, [subject, c.node, meta, el("div", { class: "tabora-sup-buttons" }, [send, c.pick, cancel])]),
         ]),
       ])];
@@ -429,26 +427,26 @@ window.TaboraAccountPane = (function () {
     if (sup.view === "ticket" && sup.ticket) {
       const t = sup.ticket;
       const staffView = !!t.staff;
-      const back = el("moz-button", { label: "Все обращения" });
+      const back = el("moz-button", { label: tt`Все обращения` });
       back.addEventListener("click", () => {
         sup.view = "list";
         sup.ticket = null;
         render();
       });
-      const toggle = el("moz-button", { label: t.status === "closed" ? "Открыть снова" : "Закрыть обращение" });
+      const toggle = el("moz-button", { label: t.status === "closed" ? tt`Открыть снова` : tt`Закрыть обращение` });
       toggle.disabled = sup.busy;
       toggle.addEventListener("click", () => supSetStatus(t.status === "closed" ? "open" : "closed"));
-      const thread = el("div", { class: "tabora-sup-thread", role: "log", "aria-label": "Переписка" }, (t.messages || []).map(m => {
+      const thread = el("div", { class: "tabora-sup-thread", role: "log", "aria-label": tt`Переписка` }, (t.messages || []).map(m => {
         const mine = m.from === (staffView ? "staff" : "user");
-        const who = mine ? "Вы" : m.from === "staff" ? "Поддержка Tabora" : t.author || "Автор обращения";
+        const who = mine ? tt`Вы` : m.from === "staff" ? tt`Поддержка Tabora` : t.author || tt`Автор обращения`;
         return el("div", { class: `tabora-sup-msg${mine ? " mine" : ""}` }, [
           el("div", { class: "tabora-sup-meta" }, [el("b", {}, who), el("time", {}, supWhen(m.at))]),
           el("div", { class: "tabora-sup-text" }, m.text),
           (m.files || []).length ? el("div", { class: "tabora-sup-files" }, m.files.map(supFile)) : null,
         ]);
       }));
-      const c = supComposer(sup.reply, { placeholder: t.status === "closed" ? "Сообщение откроет обращение снова" : "Ваш ответ", rows: 3 });
-      const send = el("moz-button", { label: sup.busy ? "Отправляю…" : "Ответить", type: "primary" });
+      const c = supComposer(sup.reply, { placeholder: t.status === "closed" ? tt`Сообщение откроет обращение снова` : tt`Ваш ответ`, rows: 3 });
+      const send = el("moz-button", { label: sup.busy ? tt`Отправляю…` : tt`Ответить`, type: "primary" });
       send.disabled = sup.busy;
       send.addEventListener("click", supSendReply);
       c.area.addEventListener("keydown", e => {
@@ -463,7 +461,7 @@ window.TaboraAccountPane = (function () {
         thread.scrollTop = thread.scrollHeight;
       });
       return [el("moz-card", { role: "presentation", class: "tabora-acc-group tabora-sup-card" }, [
-        el("moz-fieldset", { label: t.subject, description: `Обращение № ${t.id} · ${supStatus(t.status, staffView)}${staffView && t.author ? ` · ${t.author}` : ""}`, headinglevel: "2" }, [
+        el("moz-fieldset", { label: t.subject, description: tt`Обращение № ${t.id} · ${supStatus(t.status, staffView)}${staffView && t.author ? ` · ${t.author}` : ""}`, headinglevel: "2" }, [
           el("div", { class: "tabora-sup-form" }, [el("div", { class: "tabora-sup-buttons" }, [back, toggle]), info, thread, c.node, el("div", { class: "tabora-sup-buttons" }, [send, c.pick])]),
         ]),
       ])];
@@ -473,7 +471,7 @@ window.TaboraAccountPane = (function () {
     if (sup.lists[sup.scope] === null || sup.stale) {
       supLoadList();
     }
-    const create = button("Новое обращение", () => {
+    const create = button(tt`Новое обращение`, () => {
       sup.view = "new";
       render();
     }, { type: "primary" });
@@ -481,7 +479,7 @@ window.TaboraAccountPane = (function () {
     const list = loaded || [];
     const row = t => {
       const staffView = sup.scope === "all" && sup.staff;
-      const b = button("Открыть", () => supOpen(t.id), { type: t.unread ? "primary" : "default" });
+      const b = button(tt`Открыть`, () => supOpen(t.id), { type: t.unread ? "primary" : "default" });
       return item(
         `${t.unread ? "● " : ""}${t.subject}`,
         `№ ${t.id} · ${supStatus(t.status, staffView)}${staffView && t.author ? ` · ${t.author}` : ""} · ${supWhen(t.updatedAt)}`,
@@ -490,7 +488,7 @@ window.TaboraAccountPane = (function () {
     };
     const scope = sup.staff
       ? (() => {
-          const seg = el("div", { class: "tabora-acc-tabs tabora-sup-scope", role: "tablist", "aria-label": "Какие обращения показывать" }, [["mine", "Мои обращения"], ["all", "Очередь поддержки"]].map(([id, label]) => {
+          const seg = el("div", { class: "tabora-acc-tabs tabora-sup-scope", role: "tablist", "aria-label": tt`Какие обращения показывать` }, [["mine", tt`Мои обращения`], ["all", tt`Очередь поддержки`]].map(([id, label]) => {
             const b = el("button", { class: "tabora-acc-tab", type: "button", role: "tab", "aria-selected": String(sup.scope === id) }, [el("span", { class: "tabora-acc-tab-label", "data-label": label }, label)]);
             b.addEventListener("click", () => {
               if (sup.scope !== id) {
@@ -506,14 +504,14 @@ window.TaboraAccountPane = (function () {
       : null;
     return [
       scope,
-      group(sup.scope === "all" && sup.staff ? "Очередь поддержки" : "Поддержка", sup.scope === "all" && sup.staff ? "Обращения всех пользователей: сначала те, что изменились последними." : head, [
-        sup.scope === "all" && sup.staff ? null : item("Что-то не работает или есть идея?", "Опишите, приложите снимок экрана — и следите за ответом здесь.", [create]),
-        sup.error ? item("Обращения не загрузились", sup.error, [button("Повторить", () => {
+      group(sup.scope === "all" && sup.staff ? tt`Очередь поддержки` : tt`Поддержка`, sup.scope === "all" && sup.staff ? tt`Обращения всех пользователей: сначала те, что изменились последними.` : head, [
+        sup.scope === "all" && sup.staff ? null : item(tt`Что-то не работает или есть идея?`, tt`Опишите, приложите снимок экрана — и следите за ответом здесь.`, [create]),
+        sup.error ? item(tt`Обращения не загрузились`, sup.error, [button(tt`Повторить`, () => {
           sup.stale = true;
           render();
         })]) : null,
-        ...(loaded === null && !sup.error ? [item("Загружаю обращения…", "")] : list.map(row)),
-        loaded && !list.length && !sup.error && sup.scope === "all" ? item("Очередь пуста", "Новых обращений нет.") : null,
+        ...(loaded === null && !sup.error ? [item(tt`Загружаю обращения…`, "")] : list.map(row)),
+        loaded && !list.length && !sup.error && sup.scope === "all" ? item(tt`Очередь пуста`, tt`Новых обращений нет.`) : null,
       ]),
     ];
   }
@@ -528,8 +526,8 @@ window.TaboraAccountPane = (function () {
     profile() {
       const colors = Shell?.AVATAR_COLORS || [];
       const current = Shell?.accountAvatarColor();
-      const names = { "#c8f25a": "лаймовый", "#7cc4ff": "голубой", "#b9a6ff": "сиреневый", "#ff9f5a": "оранжевый", "#5ee0d0": "бирюзовый", "#ff8fb3": "розовый" };
-      const swatches = el("div", { class: "tabora-acc-swatches", role: "radiogroup", "aria-label": "Цвет аватара", slot: "actions" }, colors.map(color => {
+      const names = { "#c8f25a": tt`лаймовый`, "#7cc4ff": tt`голубой`, "#b9a6ff": tt`сиреневый`, "#ff9f5a": tt`оранжевый`, "#5ee0d0": tt`бирюзовый`, "#ff8fb3": tt`розовый` };
+      const swatches = el("div", { class: "tabora-acc-swatches", role: "radiogroup", "aria-label": tt`Цвет аватара`, slot: "actions" }, colors.map(color => {
         const b = el("button", { class: "tabora-acc-swatch", type: "button", role: "radio", "aria-checked": String(color === current), "aria-label": names[color] || color, title: names[color] || color });
         b.style.setProperty("--avatar", color);
         b.addEventListener("click", () => {
@@ -545,30 +543,30 @@ window.TaboraAccountPane = (function () {
       } catch (e) {}
       const link = Account.needsServerLink;
       const mailbox = Account.isLocalMode
-        ? "Ящик заработает, когда аккаунт подключат к серверу Tabora."
+        ? tt`Ящик заработает, когда аккаунт подключат к серверу Tabora.`
         : link
-          ? "Ящик заработает после подключения аккаунта к серверу."
-          : `Письма на ${Account.email} приходят на сервер Tabora и открываются в разделе «Почта».`;
+          ? tt`Ящик заработает после подключения аккаунта к серверу.`
+          : tt`Письма на ${Account.email} приходят на сервер Tabora и открываются в разделе «Почта».`;
       return [
         link
-          ? group("Сервер Tabora", "", [
-              item("Аккаунт не подключён к серверу", "Он создан на этом компьютере. Подключите его, чтобы заработали почта на этом адресе и вход с других компьютеров. Понадобится пароль аккаунта.", [
-                button("Подключить", shell(s => s.accountDialog("link")), { type: "primary" }),
+          ? group(tt`Сервер Tabora`, "", [
+              item(tt`Аккаунт не подключён к серверу`, tt`Он создан на этом компьютере. Подключите его, чтобы заработали почта на этом адресе и вход с других компьютеров. Понадобится пароль аккаунта.`, [
+                button(tt`Подключить`, shell(s => s.accountDialog("link")), { type: "primary" }),
               ]),
             ])
           : null,
-        group("Адрес и вид", "Аккаунт Tabora — это адрес почты и один пароль для входа и для сейфа.", [
-          item("Адрес почты", Account.email, [button("Скопировать", shell(s => {
+        group(tt`Адрес и вид`, tt`Аккаунт Tabora — это адрес почты и один пароль для входа и для сейфа.`, [
+          item(tt`Адрес почты`, Account.email, [button(tt`Скопировать`, shell(s => {
             Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(Account.email);
-            s.notice("Адрес скопирован");
+            s.notice(tt`Адрес скопирован`);
           }))]),
-          item("Цвет аватара", "Кружок с первой буквой адреса виден в правом верхнем углу окна и в почте.", [swatches]),
-          Account.data?.createdAt ? item("Аккаунт создан", "", [value(date(Account.data.createdAt))]) : null,
-          Account.data?.lastLoginAt ? item("Последний вход на этом компьютере", "", [value(date(Account.data.lastLoginAt))]) : null,
+          item(tt`Цвет аватара`, tt`Кружок с первой буквой адреса виден в правом верхнем углу окна и в почте.`, [swatches]),
+          Account.data?.createdAt ? item(tt`Аккаунт создан`, "", [value(date(Account.data.createdAt))]) : null,
+          Account.data?.lastLoginAt ? item(tt`Последний вход на этом компьютере`, "", [value(date(Account.data.lastLoginAt))]) : null,
         ]),
-        group("Почта", "Адрес аккаунта — это и почтовый ящик. Для сайтов браузер создаёт отдельные адреса-алиасы, чтобы основной адрес никто не знал.", [
-          item("Почтовый ящик", mailbox, [button("Открыть почту", shell(s => s.openMail()))]),
-          item("Алиасы", aliases ? `${aliases} ${plural(aliases, "адрес", "адреса", "адресов")} для сайтов. Выключенный алиас перестаёт принимать письма.` : "Пока нет. Алиас создаётся при регистрации на сайте.", [button("Открыть алиасы", shell(s => s.openMail("aliases")))]),
+        group(tt`Почта`, tt`Адрес аккаунта — это и почтовый ящик. Для сайтов браузер создаёт отдельные адреса-алиасы, чтобы основной адрес никто не знал.`, [
+          item(tt`Почтовый ящик`, mailbox, [button(tt`Открыть почту`, shell(s => s.openMail()))]),
+          item(tt`Алиасы`, aliases ? tt`${aliases} ${plural(aliases, tt`адрес|адреса|адресов`)} для сайтов. Выключенный алиас перестаёт принимать письма.` : tt`Пока нет. Алиас создаётся при регистрации на сайте.`, [button(tt`Открыть алиасы`, shell(s => s.openMail("aliases")))]),
         ]),
       ].filter(Boolean);
     },
@@ -578,8 +576,8 @@ window.TaboraAccountPane = (function () {
       const offServer = !!rkAt && !!Account.data?.recoveryOffServer;
       const upgrade = !!rkAt && (Account.recoveryNeedsUpgrade || offServer);
       const silent = Vault.hasOsKey && Vault.osUnlockEnabled;
-      const unlockTitle = Vault.osUnlockEnabled ? "Спрашивать пароль при запуске" : "Открывать сейф через связку ключей";
-      const toggle = el("moz-toggle", { slot: "actions", "aria-label": "Открывать сейф через связку ключей macOS" });
+      const unlockTitle = Vault.osUnlockEnabled ? tt`Спрашивать пароль при запуске` : tt`Открывать сейф через связку ключей`;
+      const toggle = el("moz-toggle", { slot: "actions", "aria-label": tt`Открывать сейф через связку ключей macOS` });
       toggle.pressed = !!silent;
       toggle.disabled = !Vault.hasPassword;
       toggle.addEventListener("toggle", () => {
@@ -587,30 +585,30 @@ window.TaboraAccountPane = (function () {
         toggle.pressed = !!silent;
         shell(s => s.vaultOwnerCheck(unlockTitle, async () => {
           await Vault.setOsUnlock(!Vault.osUnlockEnabled);
-          s.notice(Vault.osUnlockEnabled ? "Сейф снова открывается сам через связку ключей" : "Сейф будет спрашивать пароль при запуске");
+          s.notice(Vault.osUnlockEnabled ? tt`Сейф снова открывается сам через связку ключей` : tt`Сейф будет спрашивать пароль при запуске`);
           render();
         }))();
       });
       return [
         signInGroup(),
-        group("Пароль и восстановление", "Пароли сайтов, коды входа и почта на этом компьютере зашифрованы ключом сейфа. Открыть его можно паролем аккаунта или ключом восстановления.", [
-          item("Пароль", "Один для входа в аккаунт и для сейфа. Меняются всегда вместе.", [button("Сменить пароль", shell(s => s.accountDialog("change")))]),
+        group(tt`Пароль и восстановление`, tt`Пароли сайтов, коды входа и почта на этом компьютере зашифрованы ключом сейфа. Открыть его можно паролем аккаунта или ключом восстановления.`, [
+          item(tt`Пароль`, tt`Один для входа в аккаунт и для сейфа. Меняются всегда вместе.`, [button(tt`Сменить пароль`, shell(s => s.accountDialog("change")))]),
           item(
-            "Ключ восстановления",
+            tt`Ключ восстановления`,
             !rkAt
-              ? "Не создан. Если забудете пароль, сейф открыть будет нечем."
+              ? tt`Не создан. Если забудете пароль, сейф открыть будет нечем.`
               : offServer
-                ? `Создан ${date(rkAt)}, до подключения к серверу: сейф он откроет, но сбросить им забытый пароль аккаунта нельзя. Создайте новый.`
+                ? tt`Создан ${date(rkAt)}, до подключения к серверу: сейф он откроет, но сбросить им забытый пароль аккаунта нельзя. Создайте новый.`
                 : upgrade
-                  ? `Создан ${date(rkAt)}, но защищён по прежней схеме. Создайте новый: тогда сервер будет хранить только открытый ключ.`
-                  : `Создан ${date(rkAt)}. Откроет сейф, если вы забудете пароль.`,
-            [button(rkAt ? "Создать новый" : "Создать ключ", shell(s => s.vaultRecoveryCreateSheet()), { type: !rkAt || upgrade ? "primary" : "default" })]
+                  ? tt`Создан ${date(rkAt)}, но защищён по прежней схеме. Создайте новый: тогда сервер будет хранить только открытый ключ.`
+                  : tt`Создан ${date(rkAt)}. Откроет сейф, если вы забудете пароль.`,
+            [button(rkAt ? tt`Создать новый` : tt`Создать ключ`, shell(s => s.vaultRecoveryCreateSheet()), { type: !rkAt || upgrade ? "primary" : "default" })]
           ),
         ]),
-        group("Сейф", "", [
-          item("Открывать сейф через связку ключей macOS", silent ? "Сейф открывается сам при запуске браузера на этом компьютере." : "При каждом запуске браузер спрашивает пароль.", [toggle]),
-          item("Состояние", Vault.unlocked ? "Сейф открыт: пароли и коды подставляются на сайтах." : "Сейф заблокирован: пароли и коды закрыты до проверки.", [
-            Vault.unlocked ? button("Заблокировать", shell(s => s.accountLockVault())) : button("Разблокировать", shell(s => s.vaultUnlockByUser()), { type: "primary" }),
+        group(tt`Сейф`, "", [
+          item(tt`Открывать сейф через связку ключей macOS`, silent ? tt`Сейф открывается сам при запуске браузера на этом компьютере.` : tt`При каждом запуске браузер спрашивает пароль.`, [toggle]),
+          item(tt`Состояние`, Vault.unlocked ? tt`Сейф открыт: пароли и коды подставляются на сайтах.` : tt`Сейф заблокирован: пароли и коды закрыты до проверки.`, [
+            Vault.unlocked ? button(tt`Заблокировать`, shell(s => s.accountLockVault())) : button(tt`Разблокировать`, shell(s => s.vaultUnlockByUser()), { type: "primary" }),
           ]),
         ]),
       ];
@@ -621,38 +619,38 @@ window.TaboraAccountPane = (function () {
       const here = Account.deviceId();
       const list = state.devices || [];
       const devices = list.length
-        ? list.map(dev => item(dev.name || "Устройство", dev.id === here ? "Этот компьютер" : "", [value(dev.at ? `вход ${date(dev.at)}` : "")]))
-        : [item(Account.deviceName(), "Этот компьютер")];
+        ? list.map(dev => item(dev.name || tt`Устройство`, dev.id === here ? tt`Этот компьютер` : "", [value(dev.at ? tt`вход ${date(dev.at)}` : "")]))
+        : [item(Account.deviceName(), tt`Этот компьютер`)];
       const offline = local || Account.needsServerLink;
       const st = Sync.status();
       const on = st.enabled && !offline;
-      const when = st.at ? new Date(st.at).toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }) : "";
+      const when = st.at ? new Date(st.at).toLocaleString(ttLocale(), { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }) : "";
       // что сейчас происходит и что с этим можно сделать
       const now = offline
-        ? ["Аккаунт есть только на этом компьютере: синхронизировать не с чем. Подключите его к серверу на вкладке «Профиль».", null]
+        ? [tt`Аккаунт есть только на этом компьютере: синхронизировать не с чем. Подключите его к серверу на вкладке «Профиль».`, null]
         : !st.enabled
-          ? [st.erased ? "Выключена: данные синхронизации стёрли с сервера с другого компьютера. Здешние данные на месте." : "Выключена: пароли, коды, закладки и вкладки остаются на каждом компьютере свои.", null]
+          ? [st.erased ? tt`Выключена: данные синхронизации стёрли с сервера с другого компьютера. Здешние данные на месте.` : tt`Выключена: пароли, коды, закладки и вкладки остаются на каждом компьютере свои.`, null]
           : st.busy
-            ? ["Идёт сверка…", null]
+            ? [tt`Идёт сверка…`, null]
             : {
-                ok: [when ? `Данные сверены ${when}.` : "Данные сверены.", ["Сверить сейчас", () => Sync.syncNow()]],
-                unknown: ["Первая сверка начнётся через несколько секунд.", ["Сверить сейчас", () => Sync.syncNow()]],
-                locked: ["Сейф закрыт: сверка продолжится, когда он откроется.", ["Разблокировать", shell(s => s.vaultUnlockByUser())]],
-                key: ["Ключа аккаунта на этом компьютере пока нет. Верните его паролем аккаунта в разделе «Почта → Ключи шифрования»: этим же ключом зашифрованы данные синхронизации.", ["Открыть ключи", shell(s => s.openMail("keys"))]],
-                unsupported: ["Сервер Tabora пока не принимает данные синхронизации: это появится после его обновления. Настройка сохранена, сверка начнётся сама.", null],
-                offline: ["Сервер не отвечает. Сверка повторится сама, когда соединение вернётся.", ["Повторить", () => Sync.syncNow()]],
-                "signed-out": ["Вход в аккаунт не выполнен.", null],
-                error: [`Сверка не удалась: ${st.error || "неизвестная ошибка"}`, ["Повторить", () => Sync.syncNow()]],
+                ok: [when ? tt`Данные сверены ${when}.` : tt`Данные сверены.`, [tt`Сверить сейчас`, () => Sync.syncNow()]],
+                unknown: [tt`Первая сверка начнётся через несколько секунд.`, [tt`Сверить сейчас`, () => Sync.syncNow()]],
+                locked: [tt`Сейф закрыт: сверка продолжится, когда он откроется.`, [tt`Разблокировать`, shell(s => s.vaultUnlockByUser())]],
+                key: [tt`Ключа аккаунта на этом компьютере пока нет. Верните его паролем аккаунта в разделе «Почта → Ключи шифрования»: этим же ключом зашифрованы данные синхронизации.`, [tt`Открыть ключи`, shell(s => s.openMail("keys"))]],
+                unsupported: [tt`Сервер Tabora пока не принимает данные синхронизации: это появится после его обновления. Настройка сохранена, сверка начнётся сама.`, null],
+                offline: [tt`Сервер не отвечает. Сверка повторится сама, когда соединение вернётся.`, [tt`Повторить`, () => Sync.syncNow()]],
+                "signed-out": [tt`Вход в аккаунт не выполнен.`, null],
+                error: [tt`Сверка не удалась: ${st.error || tt`неизвестная ошибка`}`, [tt`Повторить`, () => Sync.syncNow()]],
               }[st.state] || ["", null];
-      const master = el("moz-toggle", { slot: "actions", "aria-label": "Синхронизация" });
+      const master = el("moz-toggle", { slot: "actions", "aria-label": tt`Синхронизация` });
       master.pressed = on;
       master.disabled = offline;
       master.addEventListener("toggle", () => Sync.setEnabled(master.pressed));
       const what = [
-        ["passwords", "Пароли сайтов", "Логины и пароли из сейфа.", ["пароль", "пароля", "паролей"]],
-        ["codes", "Коды входа", "Одноразовые коды двухфакторной защиты.", ["код", "кода", "кодов"]],
-        ["bookmarks", "Закладки", "Папки и ссылки из раздела «Закладки».", ["запись", "записи", "записей"]],
-        ["tabs", "Вкладки и пространства", "Список открытых вкладок, ярлыки стартовой страницы и пространства.", null],
+        ["passwords", tt`Пароли сайтов`, tt`Логины и пароли из сейфа.`, tt`пароль|пароля|паролей`],
+        ["codes", tt`Коды входа`, tt`Одноразовые коды двухфакторной защиты.`, tt`код|кода|кодов`],
+        ["bookmarks", tt`Закладки`, tt`Папки и ссылки из раздела «Закладки».`, tt`запись|записи|записей`],
+        ["tabs", tt`Вкладки и пространства`, tt`Список открытых вкладок, ярлыки стартовой страницы и пространства.`, null],
       ];
       const rows = [];
       for (const [id, label, text, words] of what) {
@@ -661,14 +659,14 @@ window.TaboraAccountPane = (function () {
         toggle.pressed = on && g.on;
         toggle.disabled = !on;
         toggle.addEventListener("toggle", () => Sync.setGroup(id, toggle.pressed));
-        const count = on && g.on && words && g.count ? ` На сервере ${g.count} ${plural(g.count, ...words)}.` : "";
+        const count = on && g.on && words && g.count ? tt` На сервере ${g.count} ${plural(g.count, words)}.` : "";
         rows.push(item(label, text + count, [toggle]));
         if (on && g.hold) {
           // с этого компьютера разом пропала заметная часть записей: удаления не отправлены, решает пользователь
           rows.push(item(
-            `«${label}»: здесь пропало ${g.hold.missing} из ${g.hold.of} ${plural(g.hold.of, "записи", "записей", "записей")}`,
-            "На другие компьютеры эти удаления не отправлены. Если вы удаляли записи сами — подтвердите; если они пропали — верните их с сервера.",
-            [button("Вернуть с сервера", () => Sync.resolveHold(g.hold.name, "restore"), { type: "primary" }), button("Удалить везде", () => Sync.resolveHold(g.hold.name, "delete"))]
+            tt`«${label}»: здесь пропало ${g.hold.missing} из ${g.hold.of} ${plural(g.hold.of, tt`записи|записей|записей`)}`,
+            tt`На другие компьютеры эти удаления не отправлены. Если вы удаляли записи сами — подтвердите; если они пропали — верните их с сервера.`,
+            [button(tt`Вернуть с сервера`, () => Sync.resolveHold(g.hold.name, "restore"), { type: "primary" }), button(tt`Удалить везде`, () => Sync.resolveHold(g.hold.name, "delete"))]
           ));
         }
       }
@@ -686,38 +684,38 @@ window.TaboraAccountPane = (function () {
         }), frame.left + r.right, frame.top + r.bottom + 6, { end: true }))();
       };
       return [
-        group("Синхронизация", "Пароли, коды, закладки и вкладки переносятся между вашими компьютерами. Всё шифруется на этом компьютере ключом аккаунта: сервер хранит только зашифрованные копии и прочитать их не может.", [
-          item("Синхронизировать этот компьютер", now[0], [now[1] ? button(now[1][0], now[1][1]) : null, master]),
+        group(tt`Синхронизация`, tt`Пароли, коды, закладки и вкладки переносятся между вашими компьютерами. Всё шифруется на этом компьютере ключом аккаунта: сервер хранит только зашифрованные копии и прочитать их не может.`, [
+          item(tt`Синхронизировать этот компьютер`, now[0], [now[1] ? button(now[1][0], now[1][1]) : null, master]),
           ...rows,
-          item("Фраза восстановления кошелька", "Не синхронизируется никогда: остаётся только на том компьютере, где её ввели.", [value("никогда", true)]),
+          item(tt`Фраза восстановления кошелька`, tt`Не синхронизируется никогда: остаётся только на том компьютере, где её ввели.`, [value(tt`никогда`, true)]),
         ]),
         tabsOf.length
-          ? group("Вкладки на других компьютерах", "Что открыто на остальных компьютерах аккаунта. Вкладка открывается здесь по нажатию.", tabsOf.map(dev => item(
+          ? group(tt`Вкладки на других компьютерах`, tt`Что открыто на остальных компьютерах аккаунта. Вкладка открывается здесь по нажатию.`, tabsOf.map(dev => item(
               dev.name,
-              `${dev.tabs.length} ${plural(dev.tabs.length, "вкладка", "вкладки", "вкладок")}${dev.at ? `, список от ${date(dev.at)}` : ""}`,
-              [button("Показать", tabsMenu(dev))]
+              `${dev.tabs.length} ${plural(dev.tabs.length, tt`вкладка|вкладки|вкладок`)}${dev.at ? tt`, список от ${date(dev.at)}` : ""}`,
+              [button(tt`Показать`, tabsMenu(dev))]
             )))
           : null,
-        group("Устройства", offline ? "Список появится, когда аккаунт подключат к серверу." : "Компьютеры, на которых выполнен вход в этот аккаунт.", devices),
+        group(tt`Устройства`, offline ? tt`Список появится, когда аккаунт подключат к серверу.` : tt`Компьютеры, на которых выполнен вход в этот аккаунт.`, devices),
         on || st.at
-          ? group("Данные на сервере", "", [
-              item("Стереть данные синхронизации с сервера", "Зашифрованные копии на сервере будут удалены, синхронизация выключится на всех компьютерах аккаунта. Данные на самих компьютерах останутся.", [button("Стереть", async e => {
+          ? group(tt`Данные на сервере`, "", [
+              item(tt`Стереть данные синхронизации с сервера`, tt`Зашифрованные копии на сервере будут удалены, синхронизация выключится на всех компьютерах аккаунта. Данные на самих компьютерах останутся.`, [button(tt`Стереть`, async e => {
                 const b = e.currentTarget;
                 if (b.dataset.sure !== "1") {
                   // второе нажатие подтверждает: окна подтверждения у страницы настроек нет
                   b.dataset.sure = "1";
-                  b.label = "Точно стереть";
+                  b.label = tt`Точно стереть`;
                   setTimeout(() => {
                     b.dataset.sure = "";
-                    b.label = "Стереть";
+                    b.label = tt`Стереть`;
                   }, 5000);
                   return;
                 }
                 try {
                   await Sync.erase();
-                  shell(s => s.notice("Данные синхронизации стёрты с сервера"))();
+                  shell(s => s.notice(tt`Данные синхронизации стёрты с сервера`))();
                 } catch (err) {
-                  shell(s => s.notice(`Не удалось стереть: ${err.message}`))();
+                  shell(s => s.notice(tt`Не удалось стереть: ${err.message}`))();
                 }
               })]),
             ])
@@ -727,39 +725,39 @@ window.TaboraAccountPane = (function () {
 
     data() {
       return [
-        group("Принести в Tabora", "Закладки, историю и пароли из другого браузера переносит «Импорт данных браузера» ниже.", [
-          item("Пароли из файла CSV", "Подходят файлы из Chrome, Firefox, Safari, Bitwarden и 1Password.", [button("Выбрать файл", shell(s => s.accountImportPasswords()))]),
-          item("Коды входа", "Экспорт Google Authenticator, Aegis, 2FAS или список ссылок otpauth://.", [button("Выбрать файл", shell(s => s.otpImportFile()))]),
+        group(tt`Принести в Tabora`, tt`Закладки, историю и пароли из другого браузера переносит «Импорт данных браузера» ниже.`, [
+          item(tt`Пароли из файла CSV`, tt`Подходят файлы из Chrome, Firefox, Safari, Bitwarden и 1Password.`, [button(tt`Выбрать файл`, shell(s => s.accountImportPasswords()))]),
+          item(tt`Коды входа`, tt`Экспорт Google Authenticator, Aegis, 2FAS или список ссылок otpauth://.`, [button(tt`Выбрать файл`, shell(s => s.otpImportFile()))]),
         ]),
-        group("Забрать из Tabora", "", [
-          item("Пароли в файл CSV", "Файл не зашифрован: кто его откроет, увидит все пароли. Удалите его сразу после переноса.", [button("Сохранить файл", shell(s => s.accountExportPasswords()))]),
+        group(tt`Забрать из Tabora`, "", [
+          item(tt`Пароли в файл CSV`, tt`Файл не зашифрован: кто его откроет, увидит все пароли. Удалите его сразу после переноса.`, [button(tt`Сохранить файл`, shell(s => s.accountExportPasswords()))]),
         ]),
       ];
     },
 
     accounts() {
       const others = (state.profiles || []).filter(p => !p.current);
-      const stateText = p => (p.email ? (p.signedIn ? "Вход выполнен." : "Выход выполнен.") : p.fresh ? "Аккаунт ещё не создан." : "Аккаунта в этом профиле нет.");
+      const stateText = p => (p.email ? (p.signedIn ? tt`Вход выполнен.` : tt`Выход выполнен.`) : p.fresh ? tt`Аккаунт ещё не создан.` : tt`Аккаунта в этом профиле нет.`);
       return [
-        group("Аккаунты на этом компьютере", "У каждого аккаунта свой профиль браузера: свои вкладки, история, сейф, кошелёк и почта. Между аккаунтами ничего не передаётся.", [
-          item(Account.email, "Этот профиль.", [value("открыт сейчас", true)]),
+        group(tt`Аккаунты на этом компьютере`, tt`У каждого аккаунта свой профиль браузера: свои вкладки, история, сейф, кошелёк и почта. Между аккаунтами ничего не передаётся.`, [
+          item(Account.email, tt`Этот профиль.`, [value(tt`открыт сейчас`, true)]),
           ...others.map(p =>
-            item(p.email || (p.fresh ? "Новый аккаунт" : "Профиль без аккаунта"), stateText(p), [
-              button("Открыть", shell(s => s.accountOpen(p))),
-              button("Удалить", shell(s => s.accountDialog("remove", { profile: p })), { type: "destructive" }),
+            item(p.email || (p.fresh ? tt`Новый аккаунт` : tt`Профиль без аккаунта`), stateText(p), [
+              button(tt`Открыть`, shell(s => s.accountOpen(p))),
+              button(tt`Удалить`, shell(s => s.accountDialog("remove", { profile: p })), { type: "destructive" }),
             ])
           ),
-          item("Добавить аккаунт", "Откроется новое окно: в нём создают аккаунт или входят в существующий.", [button("Добавить", shell(s => s.accountAdd()))]),
+          item(tt`Добавить аккаунт`, tt`Откроется новое окно: в нём создают аккаунт или входят в существующий.`, [button(tt`Добавить`, shell(s => s.accountAdd()))]),
         ]),
       ];
     },
 
     exit() {
       return [
-        group("Выход", "После выхода кошелёк, коды, пароли и почта закрыты до следующего входа. Данные остаются на этом компьютере зашифрованными.", [
-          item("Выйти из аккаунта", Account.email, [button("Выйти", shell(s => s.accountLogout({ thenLogin: false })))]),
+        group(tt`Выход`, tt`После выхода кошелёк, коды, пароли и почта закрыты до следующего входа. Данные остаются на этом компьютере зашифрованными.`, [
+          item(tt`Выйти из аккаунта`, Account.email, [button(tt`Выйти`, shell(s => s.accountLogout({ thenLogin: false })))]),
         ]),
-        group("Удаление", "", [item("Удалить аккаунт", `Удаление аккаунта вместе с почтой ${LATER}.`, [button("Удалить", () => {}, { type: "destructive", disabled: true })])]),
+        group(tt`Удаление`, "", [item(tt`Удалить аккаунт`, tt`Удаление аккаунта вместе с почтой ${LATER}.`, [button(tt`Удалить`, () => {}, { type: "destructive", disabled: true })])]),
       ];
     },
   };
@@ -771,42 +769,42 @@ window.TaboraAccountPane = (function () {
     let twoFactor;
     let backup;
     if (!sec || sec.error) {
-      const text = sec?.error ? "Не удалось получить настройки с сервера. Проверьте соединение." : "Загружаем настройки с сервера.";
-      const retry = sec?.error ? [button("Повторить", () => loadSecurity(true))] : [];
-      twoFactor = item("Двухфакторная защита", text, retry);
-      backup = item("Резервный адрес", text);
+      const text = sec?.error ? tt`Не удалось получить настройки с сервера. Проверьте соединение.` : tt`Загружаем настройки с сервера.`;
+      const retry = sec?.error ? [button(tt`Повторить`, () => loadSecurity(true))] : [];
+      twoFactor = item(tt`Двухфакторная защита`, text, retry);
+      backup = item(tt`Резервный адрес`, text);
     } else if (sec.local || sec.unsupported) {
-      const later = sec.unsupported ? "Появится после обновления сервера Tabora." : "Появится, когда аккаунт подключат к серверу Tabora.";
-      twoFactor = item("Двухфакторная защита", later, [button("Включить", () => {}, { disabled: true })]);
-      backup = item("Резервный адрес", later, [button("Указать", () => {}, { disabled: true })]);
+      const later = sec.unsupported ? tt`Появится после обновления сервера Tabora.` : tt`Появится, когда аккаунт подключат к серверу Tabora.`;
+      twoFactor = item(tt`Двухфакторная защита`, later, [button(tt`Включить`, () => {}, { disabled: true })]);
+      backup = item(tt`Резервный адрес`, later, [button(tt`Указать`, () => {}, { disabled: true })]);
     } else {
       const on = sec.twoFactor.enabled;
       const left = sec.twoFactor.backupCodes;
       twoFactor = on
-        ? item("Двухфакторная защита", `Включена ${date(sec.twoFactor.since)}. Резервных кодов осталось: ${left}.`, [
-            button("Резервные коды", dialog("twofa-codes"), { type: left < 3 ? "primary" : "default" }),
-            button("Выключить", dialog("twofa-off")),
+        ? item(tt`Двухфакторная защита`, tt`Включена ${date(sec.twoFactor.since)}. Резервных кодов осталось: ${left}.`, [
+            button(tt`Резервные коды`, dialog("twofa-codes"), { type: left < 3 ? "primary" : "default" }),
+            button(tt`Выключить`, dialog("twofa-off")),
           ])
-        : item("Двухфакторная защита", "Выключена: для входа достаточно пароля. С защитой понадобится ещё код из приложения на телефоне.", [button("Включить", dialog("twofa"), { type: "primary" })]);
+        : item(tt`Двухфакторная защита`, tt`Выключена: для входа достаточно пароля. С защитой понадобится ещё код из приложения на телефоне.`, [button(tt`Включить`, dialog("twofa"), { type: "primary" })]);
       const set = sec.backupEmail;
       const pending = sec.backupEmailPending;
       if (pending) {
-        backup = item("Резервный адрес", `${pending.address} ждёт подтверждения: введите код из письма.${set ? ` Пока действует прежний адрес ${set.address}.` : ""}`, [
-          button("Ввести код", dialog("bemail-code", { address: pending.address, twoFactor: on }), { type: "primary" }),
-          button("Другой адрес", dialog("bemail", { twoFactor: on })),
+        backup = item(tt`Резервный адрес`, tt`${pending.address} ждёт подтверждения: введите код из письма.${set ? tt` Пока действует прежний адрес ${set.address}.` : ""}`, [
+          button(tt`Ввести код`, dialog("bemail-code", { address: pending.address, twoFactor: on }), { type: "primary" }),
+          button(tt`Другой адрес`, dialog("bemail", { twoFactor: on })),
         ]);
       } else if (set) {
-        backup = item("Резервный адрес", `${set.address}. Сюда придёт код, если вы забудете пароль.${on ? "" : " Тот, кто получит этот ящик, сможет сбросить пароль аккаунта: включите двухфакторную защиту."}`, [
-          button("Изменить", dialog("bemail", { twoFactor: on })),
-          button("Удалить", dialog("bemail-off", { address: set.address, twoFactor: on })),
+        backup = item(tt`Резервный адрес`, tt`${set.address}. Сюда придёт код, если вы забудете пароль.${on ? "" : tt` Тот, кто получит этот ящик, сможет сбросить пароль аккаунта: включите двухфакторную защиту.`}`, [
+          button(tt`Изменить`, dialog("bemail", { twoFactor: on })),
+          button(tt`Удалить`, dialog("bemail-off", { address: set.address, twoFactor: on })),
         ]);
       } else if (!sec.mail) {
-        backup = item("Резервный адрес", "Сервер сейчас не отправляет письма: указать адрес пока нельзя.", [button("Указать", () => {}, { disabled: true })]);
+        backup = item(tt`Резервный адрес`, tt`Сервер сейчас не отправляет письма: указать адрес пока нельзя.`, [button(tt`Указать`, () => {}, { disabled: true })]);
       } else {
-        backup = item("Резервный адрес", "Не указан. На него придёт код, если вы забудете пароль; без него пароль вернёт только ключ восстановления.", [button("Указать", dialog("bemail", { twoFactor: on }))]);
+        backup = item(tt`Резервный адрес`, tt`Не указан. На него придёт код, если вы забудете пароль; без него пароль вернёт только ключ восстановления.`, [button(tt`Указать`, dialog("bemail", { twoFactor: on }))]);
       }
     }
-    return group("Вход в аккаунт", "Защита входа в аккаунт на сервере: с неё начинается доступ к почте, кошельку, кодам и паролям.", [twoFactor, backup]);
+    return group(tt`Вход в аккаунт`, tt`Защита входа в аккаунт на сервере: с неё начинается доступ к почте, кошельку, кодам и паролям.`, [twoFactor, backup]);
   }
 
   /** Настройки входа хранит сервер: читаются при открытии вкладки и после каждой перемены. */
@@ -840,17 +838,17 @@ window.TaboraAccountPane = (function () {
     if (!Account.signedIn) {
       return el("div", { class: "tabora-acc-who out" }, [
         el("div", { class: "tabora-acc-id" }, [
-          el("b", {}, email ? "Вы вышли из аккаунта" : "Аккаунт Tabora"),
-          el("span", {}, email ? `${email}. Кошелёк, коды, пароли и почта этого профиля закрыты, пока вы не войдёте снова.` : "Адрес почты на tabora.app и один пароль для входа и сейфа. Кошелёк, коды и почта открываются после входа в аккаунт."),
+          el("b", {}, email ? tt`Вы вышли из аккаунта` : tt`Аккаунт Tabora`),
+          el("span", {}, email ? tt`${email}. Кошелёк, коды, пароли и почта этого профиля закрыты, пока вы не войдёте снова.` : tt`Адрес почты на tabora.app и один пароль для входа и сейфа. Кошелёк, коды и почта открываются после входа в аккаунт.`),
         ]),
         el("div", { class: "tabora-acc-actions" }, [
           (() => {
-            const b = button(email ? "Войти" : "Создать аккаунт", shell(s => s.accountDialog(email ? "login" : "register")), { type: "primary" });
+            const b = button(email ? tt`Войти` : tt`Создать аккаунт`, shell(s => s.accountDialog(email ? "login" : "register")), { type: "primary" });
             b.removeAttribute("slot");
             return b;
           })(),
           (() => {
-            const b = button(email ? "Другой аккаунт" : "Войти", shell(s => (email ? s.accountShowAccounts() : s.accountDialog("login"))));
+            const b = button(email ? tt`Другой аккаунт` : tt`Войти`, shell(s => (email ? s.accountShowAccounts() : s.accountDialog("login"))));
             b.removeAttribute("slot");
             return b;
           })(),
@@ -871,12 +869,12 @@ window.TaboraAccountPane = (function () {
     // значок «нужно действие» стоит на той вкладке, где это действие: подключение к серверу —
     // в «Профиле», ключ восстановления — в «Безопасности»
     const where = Account.needsServerLink ? "profile" : "security";
-    const bar = el("div", { class: "tabora-acc-tabs", role: "tablist", "aria-label": "Разделы аккаунта" }, TABS.map(([id, label]) => {
+    const bar = el("div", { class: "tabora-acc-tabs", role: "tablist", "aria-label": tt`Разделы аккаунта` }, TABS.map(([id, label]) => {
       const selected = id === state.tab;
       const b = el("button", { class: "tabora-acc-tab", type: "button", role: "tab", id: `tabora-acc-tab-${id}`, "aria-selected": String(selected), tabindex: selected ? "0" : "-1" }, [
         el("span", { class: "tabora-acc-tab-label", "data-label": label }, label),
-        id === where && attention ? el("span", { class: "tabora-acc-badge", "aria-label": "нужно действие" }, "1") : null,
-        id === "support" && Shell?.account?.support?.count ? el("span", { class: "tabora-acc-badge", "aria-label": "есть ответ поддержки" }, String(Shell.account.support.count)) : null,
+        id === where && attention ? el("span", { class: "tabora-acc-badge", "aria-label": tt`нужно действие` }, "1") : null,
+        id === "support" && Shell?.account?.support?.count ? el("span", { class: "tabora-acc-badge", "aria-label": tt`есть ответ поддержки` }, String(Shell.account.support.count)) : null,
       ]);
       b.addEventListener("click", () => select(id));
       return b;
@@ -913,7 +911,7 @@ window.TaboraAccountPane = (function () {
     // под нашими группами показывается штатный «Импорт данных браузера»
     state.pane?.setAttribute("data-acc-tab", signedIn ? state.tab : "out");
     if (!signedIn) {
-      root.replaceChildren(who(), el("p", { class: "tabora-acc-contact" }, "Не получается войти? Напишите нам на hello@tabora.app."));
+      root.replaceChildren(who(), el("p", { class: "tabora-acc-contact" }, tt`Не получается войти? Напишите нам на hello@tabora.app.`));
       return;
     }
     // появление панели проигрывается только при смене вкладки: перерисовка на месте (пришли данные,
@@ -1008,8 +1006,8 @@ window.TaboraAccountPane = (function () {
     if (header) {
       // заголовок раздела: «Аккаунт» вместо «Аккаунт и синхронизация» Firefox
       header.removeAttribute("data-l10n-id");
-      header.setAttribute("heading", "Аккаунт");
-      header.heading = "Аккаунт";
+      header.setAttribute("heading", tt`Аккаунт`);
+      header.heading = tt`Аккаунт`;
       header.after(state.root);
     } else {
       section.prepend(state.root);

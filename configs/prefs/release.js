@@ -171,9 +171,17 @@ pref("browser.startup.page", 1);
 pref("browser.startup.homepage", "about:blank");
 pref("browser.newtab.preload", false);
 
-// Язык интерфейса: русский. Перевод встроен в сборку (mach package-multi-locale из
-// firefox-l10n, бренд Tabora из нашего брендинга), подпись дополнений не снимается.
-pref("intl.locale.requested", "ru,en-US");
+// Язык интерфейса — язык системы: русский, английский, украинский, испанский (любой другой —
+// английский). Пустое значение означает «как в системе». Переводы встроены в сборку
+// (mach package-multi-locale из firefox-l10n, бренд Tabora из нашего брендинга), подпись
+// дополнений не снимается. Надписи Tabora идут за тем же языком: tabora/i18n/I18n.sys.mjs.
+pref("intl.locale.requested", "");
+// Язык меняется в «Настройки → Языки» из встроенных, после перезапуска: надписи Tabora
+// загружаются один раз при запуске. Чужие языковые пакеты не скачиваются.
+pref("intl.multilingual.enabled", true);
+pref("intl.multilingual.downloadEnabled", false);
+pref("intl.multilingual.liveReload", false);
+pref("intl.multilingual.aboutWelcome.languageMismatchEnabled", false);
 
 // Настройки: без разделов Mozilla (управление ИИ, профили Firefox)
 pref("browser.preferences.aiControls", false);

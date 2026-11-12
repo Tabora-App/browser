@@ -1,3 +1,4 @@
+import { tt } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -24,7 +25,7 @@ const RULES = [
   ["#cookiescript_reject", "#cookiescript_accept"],
   [".cc-btn.cc-deny, .cc-deny", ".cc-btn.cc-allow, .cc-allow"],
   ["#CookieBoxSaveButton, .cookie-consent__reject", ".cookie-consent__accept"],
-  ["button[title='Reject All'], button[title='Отклонить все'], button[title='Reject all']", "button[title='Accept All'], button[title='Принять все']"],
+  [`button[title='Reject All'], button[title='Отклонить все'], button[title='Reject all']`, `button[title='Accept All'], button[title='Принять все']`],
   ["#gdpr-cookie-reject, .gdpr-reject", "#gdpr-cookie-accept"],
   ["button[data-id='button-all'].reject", "button[data-id='button-all']"],
 ];

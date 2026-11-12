@@ -1,3 +1,4 @@
+import { tt } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -63,7 +64,7 @@ export class TaboraMediaChild extends JSWindowActorChild {
       return null;
     }
     if (!this.allowed(doc)) {
-      return message.name === "TaboraMedia:Collect" ? [] : { error: "агент работает только с обычными сайтами (http и https)" };
+      return message.name === "TaboraMedia:Collect" ? [] : { error: tt`агент работает только с обычными сайтами (http и https)` };
     }
     const data = message.data || {};
     switch (message.name) {
@@ -577,26 +578,26 @@ export class TaboraMediaChild extends JSWindowActorChild {
     const pending = this._pendingFill;
     this._pendingFill = null;
     if (!pending || pending.token !== token || !confirmed) {
-      return { error: "страница изменилась, заполните поля заново" };
+      return { error: tt`страница изменилась, заполните поля заново` };
     }
     const done = [];
     const win = doc.defaultView;
     for (const { f, el, kind } of pending.items) {
       const ref = f.id || f.label || f.selector;
       if (!el || !el.isConnected) {
-        done.push({ field: ref, ok: false, reason: "поле не найдено" });
+        done.push({ field: ref, ok: false, reason: tt`поле не найдено` });
         continue;
       }
       if (el.localName === "input" && el.type === "file") {
-        done.push({ field: ref, ok: false, reason: "поля выбора файла агент не заполняет" });
+        done.push({ field: ref, ok: false, reason: tt`поля выбора файла агент не заполняет` });
         continue;
       }
       if (el.disabled || el.readOnly) {
-        done.push({ field: ref, ok: false, reason: "поле недоступно для ввода" });
+        done.push({ field: ref, ok: false, reason: tt`поле недоступно для ввода` });
         continue;
       }
       if (this.sensitiveKind(el) !== kind) {
-        done.push({ field: ref, ok: false, reason: "поле изменилось, пока ждали подтверждения" });
+        done.push({ field: ref, ok: false, reason: tt`поле изменилось, пока ждали подтверждения` });
         continue;
       }
       const value = f.value === undefined || f.value === null ? "" : f.value;
@@ -692,14 +693,14 @@ export class TaboraMediaChild extends JSWindowActorChild {
     if (!token) {
       const el = this.findButton(doc, { id, selector, text });
       if (!el) {
-        return { ok: false, reason: "элемент не найден" };
+        return { ok: false, reason: tt`элемент не найден` };
       }
       if (el.localName === "input" && el.type === "file") {
-        return { ok: false, reason: "выбор файла агент не нажимает: пусть файл выберет пользователь" };
+        return { ok: false, reason: tt`выбор файла агент не нажимает: пусть файл выберет пользователь` };
       }
       const info = this.clickInfo(doc, el);
       if (info.blocked) {
-        return { ok: false, reason: "агент не нажимает почтовые ссылки и ссылки внешних приложений (mailto:, tel: и подобные)" };
+        return { ok: false, reason: tt`агент не нажимает почтовые ссылки и ссылки внешних приложений (mailto:, tel: и подобные)` };
       }
       this._pendingClick = { token: this.token(), el, kind: info.kind, target: info.target_url || "" };
       return { needConfirm: true, token: this._pendingClick.token, invisible: !this.isVisible(el), ...info };
@@ -707,12 +708,12 @@ export class TaboraMediaChild extends JSWindowActorChild {
     const pending = this._pendingClick;
     this._pendingClick = null;
     if (!pending || pending.token !== token || !confirmed || !pending.el.isConnected) {
-      return { ok: false, reason: "страница изменилась, найдите кнопку заново" };
+      return { ok: false, reason: tt`страница изменилась, найдите кнопку заново` };
     }
     const el = pending.el;
     const now = this.clickInfo(doc, el);
     if (now.blocked || now.kind !== pending.kind || (now.target_url || "") !== pending.target) {
-      return { ok: false, reason: "элемент изменился, пока ждали подтверждения: найдите его заново" };
+      return { ok: false, reason: tt`элемент изменился, пока ждали подтверждения: найдите его заново` };
     }
     el.scrollIntoView({ block: "center" });
     if (trusted) {

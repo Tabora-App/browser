@@ -1,3 +1,4 @@
+import { tt } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -56,27 +57,27 @@ const MAX_ATTACH_BYTES = 20 * 1024 * 1024;
 const TABORA = "tabora"; // id ящика аккаунта
 const CODE_RULES = 2; // версия правил распознавания кода: при смене коды в кэше пересчитываются
 
-export const SPACES = ["Личное", "Работа", "Проекты"];
+export const SPACES = [tt`Личное`, tt`Работа`, tt`Проекты`];
 export const SPACE_COLORS = { Личное: "#c8f25a", Работа: "#7cc4ff", Проекты: "#ff9f5a" };
 
 /** Настройки известных почтовых служб. note — что сказать пользователю про пароль. */
 const PRESETS = [
-  { domains: ["gmail.com", "googlemail.com"], imap: ["imap.gmail.com", 993], smtp: ["smtp.gmail.com", 465], savesSent: true, note: "Gmail пускает почтовые программы только по паролю приложения. Включите двухэтапную проверку и создайте пароль на myaccount.google.com/apppasswords" },
-  { domains: ["outlook.com", "hotmail.com", "live.com", "msn.com"], imap: ["outlook.office365.com", 993], smtp: ["smtp-mail.outlook.com", 587], note: "Outlook может потребовать пароль приложения: account.microsoft.com → Безопасность" },
-  { domains: ["yahoo.com", "ymail.com"], imap: ["imap.mail.yahoo.com", 993], smtp: ["smtp.mail.yahoo.com", 465], note: "Yahoo требует пароль приложения: Account security → Generate app password" },
-  { domains: ["icloud.com", "me.com", "mac.com"], imap: ["imap.mail.me.com", 993], smtp: ["smtp.mail.me.com", 587], note: "iCloud требует пароль приложения: account.apple.com → Вход и безопасность" },
-  { domains: ["yandex.ru", "ya.ru", "yandex.com", "yandex.by", "yandex.kz"], imap: ["imap.yandex.ru", 993], smtp: ["smtp.yandex.ru", 465], note: "Яндекс требует пароль приложения: id.yandex.ru → Безопасность → Пароли приложений" },
-  { domains: ["mail.ru", "bk.ru", "list.ru", "inbox.ru", "internet.ru"], imap: ["imap.mail.ru", 993], smtp: ["smtp.mail.ru", 465], note: "Mail.ru требует пароль для внешних приложений: Настройки → Безопасность" },
-  { domains: ["fastmail.com", "fastmail.fm"], imap: ["imap.fastmail.com", 993], smtp: ["smtp.fastmail.com", 465], note: "Fastmail требует пароль приложения: Settings → Privacy & Security" },
+  { domains: ["gmail.com", "googlemail.com"], imap: ["imap.gmail.com", 993], smtp: ["smtp.gmail.com", 465], savesSent: true, note: tt`Gmail пускает почтовые программы только по паролю приложения. Включите двухэтапную проверку и создайте пароль на myaccount.google.com/apppasswords` },
+  { domains: ["outlook.com", "hotmail.com", "live.com", "msn.com"], imap: ["outlook.office365.com", 993], smtp: ["smtp-mail.outlook.com", 587], note: tt`Outlook может потребовать пароль приложения: account.microsoft.com → Безопасность` },
+  { domains: ["yahoo.com", "ymail.com"], imap: ["imap.mail.yahoo.com", 993], smtp: ["smtp.mail.yahoo.com", 465], note: tt`Yahoo требует пароль приложения: Account security → Generate app password` },
+  { domains: ["icloud.com", "me.com", "mac.com"], imap: ["imap.mail.me.com", 993], smtp: ["smtp.mail.me.com", 587], note: tt`iCloud требует пароль приложения: account.apple.com → Вход и безопасность` },
+  { domains: ["yandex.ru", "ya.ru", "yandex.com", "yandex.by", "yandex.kz"], imap: ["imap.yandex.ru", 993], smtp: ["smtp.yandex.ru", 465], note: tt`Яндекс требует пароль приложения: id.yandex.ru → Безопасность → Пароли приложений` },
+  { domains: ["mail.ru", "bk.ru", "list.ru", "inbox.ru", "internet.ru"], imap: ["imap.mail.ru", 993], smtp: ["smtp.mail.ru", 465], note: tt`Mail.ru требует пароль для внешних приложений: Настройки → Безопасность` },
+  { domains: ["fastmail.com", "fastmail.fm"], imap: ["imap.fastmail.com", 993], smtp: ["smtp.fastmail.com", 465], note: tt`Fastmail требует пароль приложения: Settings → Privacy & Security` },
   { domains: ["gmx.com", "gmx.net", "gmx.de"], imap: ["imap.gmx.com", 993], smtp: ["mail.gmx.com", 465] },
   { domains: ["zoho.com", "zohomail.com"], imap: ["imap.zoho.com", 993], smtp: ["smtp.zoho.com", 465] },
 ];
 
 function accessError(code) {
   const text = {
-    "signed-out": "Почта доступна после входа в аккаунт Tabora",
-    "vault-busy": "Сейф заканчивает смену ключа: почта откроется через несколько секунд",
-  }[code] || "Сейф заблокирован: разблокируйте его, чтобы открыть почту";
+    "signed-out": tt`Почта доступна после входа в аккаунт Tabora`,
+    "vault-busy": tt`Сейф заканчивает смену ключа: почта откроется через несколько секунд`,
+  }[code] || tt`Сейф заблокирован: разблокируйте его, чтобы открыть почту`;
   return Object.assign(new Error(text), { code });
 }
 
@@ -117,6 +118,8 @@ export const MailStore = {
   _writing: Promise.resolve(),
   _observing: false,
   _ops: Promise.resolve(),
+  // письма, чьи пометки пользователь меняет прямо сейчас: id → { n: действий в очереди, done: когда ушло последнее }
+  _flagHolds: new Map(),
   _syncTimer: null,
   _syncRun: null,
   _seq: 0,
@@ -131,7 +134,7 @@ export const MailStore = {
       return;
     }
     this._observing = true;
-    lazy.AsyncShutdown.profileBeforeChange.addBlocker("Tabora: запись кэша почты", () => this.flush());
+    lazy.AsyncShutdown.profileBeforeChange.addBlocker(tt`Tabora: запись кэша почты`, () => this.flush());
     Services.obs.addObserver((s, t, what) => {
       if (what === "signed-out") {
         this.forget();
@@ -231,7 +234,7 @@ export const MailStore = {
         data = JSON.parse(new TextDecoder().decode(bytes));
         bytes.fill(0);
       } else if (raw?.v > FORMAT) {
-        unreadable = new Error("файл записан более новой версией"); // прежние форматы хранили демонстрационные письма
+        unreadable = new Error(tt`файл записан более новой версией`); // прежние форматы хранили демонстрационные письма
       }
     } catch (e) {
       if (e.name !== "NotFoundError") {
@@ -271,7 +274,7 @@ export const MailStore = {
     this.data = data;
     this._seq = data.messages.reduce((n, m) => (/^m\d+$/.test(m.id) ? Math.max(n, Number(m.id.slice(1))) : n), 0);
     if (unreadable) {
-      this._fail(new Error("Сохранённая почта не прочиталась и начата заново: письма вернутся с сервера, внешние ящики нужно подключить ещё раз"), "чтение кэша");
+      this._fail(new Error(tt`Сохранённая почта не прочиталась и начата заново: письма вернутся с сервера, внешние ящики нужно подключить ещё раз`), tt`чтение кэша`);
     }
     this.syncSoon(0);
   },
@@ -422,7 +425,7 @@ export const MailStore = {
   senders() {
     const out = [];
     for (const a of this.data?.accounts || []) {
-      out.push({ address: a.address, account: a.id, note: a.kind === TABORA ? "ящик Tabora" : "внешний ящик" });
+      out.push({ address: a.address, account: a.id, note: a.kind === TABORA ? tt`ящик Tabora` : tt`внешний ящик` });
       if (a.id === TABORA) {
         for (const al of this.aliases.filter(x => x.on)) {
           out.push({ address: al.address, account: a.id, note: al.site });
@@ -462,7 +465,7 @@ export const MailStore = {
     if (acc.id === TABORA) {
       const a = await Account.mailAccess();
       if (!a) {
-        throw Object.assign(new Error("Нет доступа к ящику аккаунта: войдите в аккаунт заново"), { code: "auth" });
+        throw Object.assign(new Error(tt`Нет доступа к ящику аккаунта: войдите в аккаунт заново`), { code: "auth" });
       }
       return { imap: a.imap, smtp: a.smtp, login: a.login, password: a.password };
     }
@@ -531,20 +534,20 @@ export const MailStore = {
     await this.ready();
     const address = String(settings.address || "").trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
-      throw new Error("Проверьте адрес почты");
+      throw new Error(tt`Проверьте адрес почты`);
     }
     if (!settings.password) {
-      throw new Error("Введите пароль");
+      throw new Error(tt`Введите пароль`);
     }
     if (this.data.accounts.some(a => a.address === address)) {
-      throw new Error("Этот ящик уже добавлен");
+      throw new Error(tt`Этот ящик уже добавлен`);
     }
     const clean = s => ({ host: String(s?.host || "").trim().toLowerCase(), port: Number(s?.port) || 0, security: s?.security === "starttls" ? "starttls" : s?.security === "tls" ? "tls" : security(s?.port) });
     const imap = clean(settings.imap);
     const smtp = clean(settings.smtp);
     for (const s of [imap, smtp]) {
       if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(s.host) || s.port < 1 || s.port > 65535) {
-        throw new Error("Проверьте адреса и порты серверов");
+        throw new Error(tt`Проверьте адреса и порты серверов`);
       }
     }
     const login = String(settings.login || address).trim();
@@ -564,7 +567,7 @@ export const MailStore = {
   async removeAccount(id) {
     await this.ready();
     if (id === TABORA) {
-      throw new Error("Ящик аккаунта отключается выходом из аккаунта");
+      throw new Error(tt`Ящик аккаунта отключается выходом из аккаунта`);
     }
     this.data.accounts = this.data.accounts.filter(a => a.id !== id);
     this.data.messages = this.data.messages.filter(m => m.account !== id);
@@ -614,7 +617,7 @@ export const MailStore = {
           acc.syncedAt = Date.now();
         } catch (e) {
           acc.error = e.message || String(e);
-          this._fail(e, `сверка ящика ${acc.address}`);
+          this._fail(e, tt`сверка ящика ${acc.address}`);
         }
       }
       if (this.data) {
@@ -731,8 +734,8 @@ export const MailStore = {
     }
     const one = fresh.length === 1 ? fresh[0] : null;
     const names = [...new Set(fresh.map(m => m.from?.name || m.from?.email).filter(Boolean))];
-    const title = one ? one.from?.name || one.from?.email || "Новое письмо" : `Новых писем: ${fresh.length}`;
-    const text = one ? one.subject || "(без темы)" : `${names.slice(0, 3).join(", ")}${names.length > 3 ? ` и ещё ${names.length - 3}` : ""}`;
+    const title = one ? one.from?.name || one.from?.email || tt`Новое письмо` : tt`Новых писем: ${fresh.length}`;
+    const text = one ? one.subject || tt`(без темы)` : `${names.slice(0, 3).join(", ")}${names.length > 3 ? tt` и ещё ${names.length - 3}` : ""}`;
     const thread = one ? one.thread : "";
     this._alert(title.slice(0, 120), text.slice(0, 240), () => {
       const target = lazy.BrowserWindowTracker.getTopWindow();
@@ -798,6 +801,7 @@ export const MailStore = {
       delete st.seen;
     }
     st.uidValidity = box.uidValidity;
+    const readAt = Date.now();
     const win = await client.window(WINDOW[role] || 40);
     // О письмах с номером больше уже виденного сообщается уведомлением (_announce). При первой
     // сверке ящика уведомлять не о чем: все письма в нём «старые».
@@ -813,7 +817,9 @@ export const MailStore = {
       seen.add(w.uid);
       const rec = have.get(w.uid);
       if (rec) {
-        if (!rec.busy) {
+        // Пометки, которые пользователь меняет в эту минуту, сервер в этом ответе ещё не знает:
+        // без проверки сверка вернула бы на экран только что снятую звезду.
+        if (!rec.busy && !this._flagsHeld(rec.id, readAt)) {
           this._applyFlags(rec, w.flags, role);
         }
       } else {
@@ -853,6 +859,30 @@ export const MailStore = {
     }
   },
 
+  /** Действие с пометками письма встало в очередь: до его конца сверка пометки не трогает. */
+  _holdFlags(id, where, fn) {
+    const hold = this._flagHolds.get(id) || { n: 0, done: 0 };
+    hold.n++;
+    this._flagHolds.set(id, hold);
+    return this._enqueue(where, () => Promise.resolve().then(fn).finally(() => {
+      hold.n--;
+      hold.done = Date.now();
+    }));
+  },
+
+  /** Ответ сервера, прочитанный в момент readAt, может не знать о пометках этого письма. */
+  _flagsHeld(id, readAt) {
+    const hold = this._flagHolds.get(id);
+    if (!hold) {
+      return false;
+    }
+    if (hold.n > 0 || hold.done >= readAt) {
+      return true;
+    }
+    this._flagHolds.delete(id);
+    return false;
+  },
+
   _applyFlags(rec, flags, role) {
     const f = new Set((flags || []).map(x => String(x).toLowerCase()));
     rec.unread = !f.has("\\seen") && role !== "sent" && role !== "drafts";
@@ -887,7 +917,7 @@ export const MailStore = {
       id: "", account: acc.id, thread: `t${hash(`${acc.id}|${root}`)}`, folder: role,
       at: { role, path, uid: item.uid, uidValidity },
       unread: false, starred: false, labels,
-      from: outgoing ? { name: "Я", email: parsed.from.email || acc.address } : parsed.from,
+      from: outgoing ? { name: tt`Я`, email: parsed.from.email || acc.address } : parsed.from,
       to: parsed.to.length ? parsed.to : [acc.address], cc: parsed.cc, replyTo: parsed.replyTo || "",
       alias, date: parsed.date || new Date().toISOString(), subject: parsed.subject,
       messageId: parsed.messageId, refs: [...parsed.references, parsed.inReplyTo].filter(Boolean).slice(-12),
@@ -911,8 +941,8 @@ export const MailStore = {
       Object.defineProperty(rec, "_pgp", { value: parsed.pgp, enumerable: false, writable: true });
       if (parsed.pgp.kind !== "signed") {
         rec.pgp = { encrypted: true, pending: true };
-        rec.body = [{ p: "Письмо зашифровано. Расшифровываем…" }];
-        rec.snippet = "Зашифрованное письмо";
+        rec.body = [{ p: tt`Письмо зашифровано. Расшифровываем…` }];
+        rec.snippet = tt`Зашифрованное письмо`;
         rec.attachments = [];
       }
     }
@@ -1054,8 +1084,8 @@ export const MailStore = {
   _pgpFailed(rec, e) {
     const error = e.code === "no-key" ? "no-key" : e.code === "signed-out" ? "locked" : "failed";
     rec.pgp = { encrypted: true, error };
-    rec.body = [{ p: error === "no-key" ? "Письмо зашифровано ключом, которого нет в этом профиле. Прочитать его можно там, где этот ключ есть." : "Письмо зашифровано, но расшифровать его не удалось: оно повреждено или зашифровано неизвестным способом." }];
-    rec.snippet = "Зашифрованное письмо";
+    rec.body = [{ p: error === "no-key" ? tt`Письмо зашифровано ключом, которого нет в этом профиле. Прочитать его можно там, где этот ключ есть.` : tt`Письмо зашифровано, но расшифровать его не удалось: оно повреждено или зашифровано неизвестным способом.` }];
+    rec.snippet = tt`Зашифрованное письмо`;
   },
 
   /** Письмо OpenPGP после получения: расшифровать или проверить подпись. Большое зашифрованное
@@ -1096,7 +1126,7 @@ export const MailStore = {
   /** Исходник письма целиком с сервера и расшифрованная часть: { kind, bin } либо бросает ошибку. */
   async _fetchDecrypted(rec) {
     if (!rec.at?.uid) {
-      throw new Error("Письмо ещё не на сервере");
+      throw new Error(tt`Письмо ещё не на сервере`);
     }
     let raw = "";
     await this._ops;
@@ -1105,7 +1135,7 @@ export const MailStore = {
     });
     const parsed = lazy.Mime.parseMessage(raw);
     if (!parsed.pgp || parsed.pgp.kind === "signed") {
-      throw new Error("Письмо на сервере не зашифровано");
+      throw new Error(tt`Письмо на сервере не зашифровано`);
     }
     const { bytes, signature } = await lazy.Pgp.decrypt(parsed.pgp.armored, { from: this._pgpSender(rec) });
     return { kind: parsed.pgp.kind, bytes, signature };
@@ -1206,16 +1236,16 @@ export const MailStore = {
     if (!m.local && m.at) {
       if (m.unread !== before.unread) {
         const unread = m.unread;
-        this._enqueue("отметка «прочитано»", () => this._withFolder(m, c => c.setFlags([m.at.uid], ["\\Seen"], !unread)));
+        this._holdFlags(m.id, tt`отметка «прочитано»`, () => this._withFolder(m, c => c.setFlags([m.at.uid], ["\\Seen"], !unread)));
       }
       if (m.starred !== before.starred) {
         const starred = m.starred;
-        this._enqueue("звезда", () => this._withFolder(m, c => c.setFlags([m.at.uid], ["\\Flagged"], starred)));
+        this._holdFlags(m.id, tt`звезда`, () => this._withFolder(m, c => c.setFlags([m.at.uid], ["\\Flagged"], starred)));
       }
       if (m.folder !== before.folder && ROLES.includes(m.folder)) {
         const to = m.folder;
         m.busy = true; // до ответа сервера сверка эту запись не трогает
-        this._enqueue("перенос письма", () => this._move(m, to));
+        this._enqueue(tt`перенос письма`, () => this._move(m, to));
       }
     }
     this.save({ soon: !m.local }); // черновик есть только здесь, пометки письма помнит сервер
@@ -1234,7 +1264,7 @@ export const MailStore = {
           dest = acc.folders.archive = "Archive";
         }
         if (!dest) {
-          throw new Error("На сервере нет такой папки");
+          throw new Error(tt`На сервере нет такой папки`);
         }
         const r = await client.move([m.at.uid], dest);
         const uid = r?.map?.[m.at.uid] || 0;
@@ -1254,7 +1284,7 @@ export const MailStore = {
     }
     if (message.folder === "sent" && !message.local) {
       // прежний вызов «добавить отправленное»: отправляем; ошибка придёт уведомлением
-      this.send(message).catch(e => this._fail(e, "отправка письма"));
+      this.send(message).catch(e => this._fail(e, tt`отправка письма`));
       return;
     }
     // черновики живут на этом компьютере
@@ -1272,7 +1302,7 @@ export const MailStore = {
     }
     this.data.messages = this.data.messages.filter(x => x !== m);
     if (!m.local && m.at?.uid) {
-      this._enqueue("удаление письма", () => this._withFolder(m, c => c.destroy([m.at.uid])));
+      this._enqueue(tt`удаление письма`, () => this._withFolder(m, c => c.destroy([m.at.uid])));
     }
     this.save({ soon: !m.local });
   },
@@ -1291,12 +1321,12 @@ export const MailStore = {
     const from = String(message.from?.email || this.primaryAddress).toLowerCase();
     const acc = this._senderAccount(from);
     if (!acc) {
-      throw new Error("Нет ящика для отправки: добавьте ящик или подключите аккаунт к серверу");
+      throw new Error(tt`Нет ящика для отправки: добавьте ящик или подключите аккаунт к серверу`);
     }
     const to = (message.to || []).map(s => String(s).trim()).filter(Boolean);
     const cc = (message.cc || []).map(s => String(s).trim()).filter(Boolean);
     if (!to.length) {
-      throw new Error("Укажите получателя");
+      throw new Error(tt`Укажите получателя`);
     }
     let text = typeof message.text === "string" ? message.text : (message.body || []).map(b => b.p || b.h || b.q || "").filter(Boolean).join("\n\n");
     // Оформление: разметка из редактора строится заново из разрешённого (RichText.clean), что бы
@@ -1319,7 +1349,7 @@ export const MailStore = {
       let type = a.type || "";
       if (a.path) {
         bytes = await IOUtils.read(a.path).catch(() => {
-          throw new Error(`Файл «${a.name}» не читается: возможно, он перемещён или удалён`);
+          throw new Error(tt`Файл «${a.name}» не читается: возможно, он перемещён или удалён`);
         });
       } else if (a.source) {
         const got = await this.attachment(a.source.id, a.source.index);
@@ -1330,7 +1360,7 @@ export const MailStore = {
       }
       total += bytes.length;
       if (total > MAX_ATTACH_BYTES) {
-        throw new Error("Вложения больше 20 МБ не отправятся: уберите часть файлов");
+        throw new Error(tt`Вложения больше 20 МБ не отправятся: уберите часть файлов`);
       }
       attachments.push({ name: a.name, type, bytes });
     }
@@ -1338,7 +1368,7 @@ export const MailStore = {
     // зашифровано; у алиасов и внешних ящиков своего ключа нет.
     const keyed = acc.id === TABORA && from === Account.email;
     if (message.encrypt && !keyed) {
-      throw new Error("Зашифровать можно только письмо с адреса аккаунта Tabora");
+      throw new Error(tt`Зашифровать можно только письмо с адреса аккаунта Tabora`);
     }
     let entity = lazy.Mime.buildEntity({ text, html, attachments });
     const extraHeaders = [];
@@ -1348,7 +1378,7 @@ export const MailStore = {
         if (autocrypt) {
           extraHeaders.push(lazy.Mime.foldHeader("Autocrypt", autocrypt));
         } else if (message.encrypt) {
-          throw new Error("Ключ шифрования аккаунта на этом компьютере недоступен: откройте в почте раздел «Шифрование»");
+          throw new Error(tt`Ключ шифрования аккаунта на этом компьютере недоступен: откройте в почте раздел «Шифрование»`);
         }
       } catch (e) {
         if (message.encrypt) {
@@ -1361,7 +1391,7 @@ export const MailStore = {
       entity = lazy.Mime.encryptedEntity(await lazy.Pgp.encrypt(lazy.Mime.bytesOf(entity), [...to, ...cc]));
     }
     const built = lazy.Mime.buildMessage({
-      from: { name, email: from }, to, cc, subject: message.subject || "(без темы)", entity, extraHeaders,
+      from: { name, email: from }, to, cc, subject: message.subject || tt`(без темы)`, entity, extraHeaders,
       inReplyTo: original?.messageId || "", references: original ? [...(original.refs || []), original.messageId].filter(Boolean).slice(-10) : [],
     });
     const creds = await this._creds(acc);
@@ -1378,8 +1408,8 @@ export const MailStore = {
     }
     const rec = {
       id: `m${++this._seq}`, account: acc.id, thread: original?.thread || message.thread || `t${hash(`${acc.id}|${built.messageId}`)}`, folder: "sent", local: true,
-      unread: false, starred: false, labels: message.labels || [], from: { name: "Я", email: from }, to, cc, alias: from,
-      date: new Date().toISOString(), subject: message.subject || "(без темы)", messageId: built.messageId,
+      unread: false, starred: false, labels: message.labels || [], from: { name: tt`Я`, email: from }, to, cc, alias: from,
+      date: new Date().toISOString(), subject: message.subject || tt`(без темы)`, messageId: built.messageId,
       refs: original ? [...(original.refs || []), original.messageId].filter(Boolean) : [], body: lazy.Mime.toBlocks({ text, html: "", subject: message.subject || "" }).body,
       attachments: attachments.map(a => ({ name: a.name, size: a.bytes.length })),
     };
@@ -1393,7 +1423,7 @@ export const MailStore = {
     this.save();
     // копия в «Отправленные» на сервере (Gmail кладёт её сам)
     if (!acc.savesSent) {
-      this._enqueue("копия в «Отправленные»", async () => {
+      this._enqueue(tt`копия в «Отправленные»`, async () => {
         const client = await this._connect(acc);
         try {
           const path = acc.folders?.sent || (await client.list()).find(f => f.role === "sent")?.path;
@@ -1414,7 +1444,7 @@ export const MailStore = {
     const m = this.byId(id);
     const att = m?.attachments?.[index];
     if (!m || !att || !m.at?.uid) {
-      throw new Error("Вложение недоступно");
+      throw new Error(tt`Вложение недоступно`);
     }
     if (att.inner) {
       // вложение внутри зашифрованного письма: сервер видит только шифртекст
@@ -1425,7 +1455,7 @@ export const MailStore = {
       }
       const part = lazy.Mime.findSection(inner, att.section);
       if (!part) {
-        throw new Error("Вложение недоступно");
+        throw new Error(tt`Вложение недоступно`);
       }
       return { name: att.name, type: att.type, bytes: lazy.Mime.decodeAttachment(part.bin, part.encoding) };
     }
@@ -1442,8 +1472,8 @@ export const MailStore = {
   _aliasView(a, prev) {
     const agent = a.by === "agent";
     return {
-      id: a.id, address: a.address, site: a.site || "без привязки к сайту", by: agent ? "агент" : "вручную", agent,
-      count: prev?.count || 0, created: a.created, space: a.space || SPACES[0], on: !!a.on, ...(a.on ? {} : { warn: "выключен" }),
+      id: a.id, address: a.address, site: a.site || tt`без привязки к сайту`, by: agent ? tt`агент` : tt`вручную`, agent,
+      count: prev?.count || 0, created: a.created, space: a.space || SPACES[0], on: !!a.on, ...(a.on ? {} : { warn: tt`выключен` }),
     };
   },
 

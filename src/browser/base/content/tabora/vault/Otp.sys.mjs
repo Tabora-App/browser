@@ -1,3 +1,4 @@
+import { tt } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -45,7 +46,7 @@ function cleanText(text, max = 64) {
 export function base32Decode(str) {
   const clean = String(str).toUpperCase().replace(/[\s-]/g, "").replace(/=+$/, "");
   if (!clean || /[^A-Z2-7]/.test(clean)) {
-    throw new Error("Секрет должен быть в кодировке Base32 (буквы A–Z и цифры 2–7)");
+    throw new Error(tt`Секрет должен быть в кодировке Base32 (буквы A–Z и цифры 2–7)`);
   }
   const out = [];
   let bits = 0;
@@ -108,13 +109,13 @@ export async function totp(secret, { algorithm = "SHA1", digits = 6, period = 30
 
 function checkParams({ algorithm, digits, period }) {
   if (!ALG[algorithm]) {
-    throw new Error(`Алгоритм ${algorithm} не поддерживается`);
+    throw new Error(tt`Алгоритм ${algorithm} не поддерживается`);
   }
   if (![6, 7, 8].includes(digits)) {
-    throw new Error("Длина кода: 6, 7 или 8 цифр");
+    throw new Error(tt`Длина кода: 6, 7 или 8 цифр`);
   }
   if (!(period >= 15 && period <= 120)) {
-    throw new Error("Период от 15 до 120 секунд");
+    throw new Error(tt`Период от 15 до 120 секунд`);
   }
 }
 
@@ -122,17 +123,17 @@ function checkParams({ algorithm, digits, period }) {
 export function parseOtpauth(input) {
   const text = String(input || "").trim();
   if (!/^otpauth:\/\//i.test(text)) {
-    throw new Error("Это не ссылка otpauth://");
+    throw new Error(tt`Это не ссылка otpauth://`);
   }
   let url;
   try {
     url = new URL(text);
   } catch (e) {
-    throw new Error("Ссылка otpauth:// повреждена");
+    throw new Error(tt`Ссылка otpauth:// повреждена`);
   }
   const type = (url.host || url.pathname.split("/")[0] || "").toLowerCase();
   if (type !== "totp") {
-    throw new Error(type === "hotp" ? "Коды со счётчиком (HOTP) пока не поддерживаются" : "Неизвестный тип кода");
+    throw new Error(type === "hotp" ? tt`Коды со счётчиком (HOTP) пока не поддерживаются` : tt`Неизвестный тип кода`);
   }
   let label = url.pathname.replace(/^\/+/, "");
   try {
@@ -141,7 +142,7 @@ export function parseOtpauth(input) {
   const p = url.searchParams;
   const secret = p.get("secret") || "";
   if (!secret) {
-    throw new Error("В ссылке нет секрета");
+    throw new Error(tt`В ссылке нет секрета`);
   }
   let issuer = p.get("issuer") || "";
   let account = label;
@@ -176,7 +177,7 @@ function pbDecode(bytes) {
     let shift = 0n;
     for (;;) {
       if (i >= bytes.length) {
-        throw new Error("protobuf: обрыв");
+        throw new Error(tt`protobuf: обрыв`);
       }
       const b = bytes[i++];
       v |= BigInt(b & 0x7f) << shift;
@@ -185,7 +186,7 @@ function pbDecode(bytes) {
         return v;
       }
       if (shift > 70n) {
-        throw new Error("protobuf: varint слишком длинный");
+        throw new Error(tt`protobuf: varint слишком длинный`);
       }
     }
   };
@@ -198,7 +199,7 @@ function pbDecode(bytes) {
     } else if (wire === 2) {
       const len = Number(varint());
       if (len < 0 || i + len > bytes.length) {
-        throw new Error("protobuf: длина вне данных");
+        throw new Error(tt`protobuf: длина вне данных`);
       }
       out.push({ field, wire, value: bytes.slice(i, i + len) });
       i += len;
@@ -207,7 +208,7 @@ function pbDecode(bytes) {
     } else if (wire === 5) {
       i += 4;
     } else {
-      throw new Error("protobuf: неизвестный тип поля");
+      throw new Error(tt`protobuf: неизвестный тип поля`);
     }
   }
   return out;
@@ -223,16 +224,16 @@ function b64ToBytes(str) {
 export function parseMigration(input) {
   const text = String(input || "").trim();
   if (!/^otpauth-migration:\/\//i.test(text)) {
-    throw new Error("Это не ссылка экспорта Google Authenticator");
+    throw new Error(tt`Это не ссылка экспорта Google Authenticator`);
   }
   let data;
   try {
     data = new URL(text).searchParams.get("data");
   } catch (e) {
-    throw new Error("Ссылка экспорта повреждена");
+    throw new Error(tt`Ссылка экспорта повреждена`);
   }
   if (!data) {
-    throw new Error("В ссылке экспорта нет данных");
+    throw new Error(tt`В ссылке экспорта нет данных`);
   }
   const payload = pbDecode(b64ToBytes(decodeURIComponent(data)));
   const dec = new TextDecoder();
@@ -250,17 +251,17 @@ export function parseMigration(input) {
     const algorithm = { 1: "SHA1", 2: "SHA256", 3: "SHA512" }[Number(get(4) ?? 1n)] || null;
     const digits = { 1: 6, 2: 8 }[Number(get(5) ?? 1n)] || 6;
     const type = Number(get(6) ?? 2n);
-    const label = issuer || name || "запись";
+    const label = issuer || name || tt`запись`;
     if (type !== 2) {
-      skipped.push(`${label}: коды со счётчиком (HOTP) не поддерживаются`);
+      skipped.push(tt`${label}: коды со счётчиком (HOTP) не поддерживаются`);
       continue;
     }
     if (!algorithm) {
-      skipped.push(`${label}: алгоритм не поддерживается`);
+      skipped.push(tt`${label}: алгоритм не поддерживается`);
       continue;
     }
     if (!secret || !secret.length) {
-      skipped.push(`${label}: нет секрета`);
+      skipped.push(tt`${label}: нет секрета`);
       continue;
     }
     let account = cleanText(name, 96);
@@ -279,7 +280,7 @@ export function parseMigration(input) {
 export function parseImportText(text) {
   const raw = String(text || "").trim();
   if (!raw) {
-    throw new Error("Файл пустой");
+    throw new Error(tt`Файл пустой`);
   }
   const out = [];
   const skipped = [];
@@ -297,36 +298,36 @@ export function parseImportText(text) {
     try {
       json = JSON.parse(raw);
     } catch (e) {
-      throw new Error("Файл не разбирается как JSON");
+      throw new Error(tt`Файл не разбирается как JSON`);
     }
     if (json?.header?.slots || json?.db === undefined && json?.header?.params) {
-      throw new Error("Это зашифрованный экспорт Aegis: экспортируйте без шифрования");
+      throw new Error(tt`Это зашифрованный экспорт Aegis: экспортируйте без шифрования`);
     }
     if (json?.servicesEncrypted) {
-      throw new Error("Это зашифрованный экспорт 2FAS: экспортируйте без пароля");
+      throw new Error(tt`Это зашифрованный экспорт 2FAS: экспортируйте без пароля`);
     }
     const aegis = json?.db?.entries;
     const twofas = json?.services;
     if (Array.isArray(aegis)) {
       for (const e of aegis) {
-        const label = e.issuer || e.name || "запись";
+        const label = e.issuer || e.name || tt`запись`;
         if ((e.type || "totp").toLowerCase() !== "totp") {
-          skipped.push(`${label}: тип ${e.type} не поддерживается`);
+          skipped.push(tt`${label}: тип ${e.type} не поддерживается`);
           continue;
         }
         push({ issuer: cleanText(e.issuer, 48), account: cleanText(e.name, 96), secret: String(e.info?.secret || ""), algorithm: String(e.info?.algo || "SHA1").toUpperCase().replace("-", ""), digits: Number(e.info?.digits || 6), period: Number(e.info?.period || 30) }, label);
       }
     } else if (Array.isArray(twofas)) {
       for (const sv of twofas) {
-        const label = sv.name || sv.otp?.issuer || "запись";
+        const label = sv.name || sv.otp?.issuer || tt`запись`;
         if ((sv.otp?.tokenType || "TOTP").toUpperCase() !== "TOTP") {
-          skipped.push(`${label}: тип ${sv.otp?.tokenType} не поддерживается`);
+          skipped.push(tt`${label}: тип ${sv.otp?.tokenType} не поддерживается`);
           continue;
         }
         push({ issuer: cleanText(sv.otp?.issuer || sv.name, 48), account: cleanText(sv.otp?.account || sv.otp?.label || "", 96), secret: String(sv.secret || ""), algorithm: String(sv.otp?.algorithm || "SHA1").toUpperCase().replace("-", ""), digits: Number(sv.otp?.digits || 6), period: Number(sv.otp?.period || 30) }, label);
       }
     } else {
-      throw new Error("Формат файла не распознан (поддерживаются Aegis и 2FAS без шифрования)");
+      throw new Error(tt`Формат файла не распознан (поддерживаются Aegis и 2FAS без шифрования)`);
     }
   } else {
     for (const line of raw.split(/\r?\n/)) {
@@ -345,12 +346,12 @@ export function parseImportText(text) {
           skipped.push(`${l.slice(0, 40)}…: ${e.message}`);
         }
       } else {
-        skipped.push(`${l.slice(0, 40)}: не ссылка otpauth://`);
+        skipped.push(tt`${l.slice(0, 40)}: не ссылка otpauth://`);
       }
     }
   }
   if (!out.length && !skipped.length) {
-    throw new Error("В файле нет записей");
+    throw new Error(tt`В файле нет записей`);
   }
   return { entries: out, skipped };
 }
@@ -388,7 +389,7 @@ export const Otp = {
 
   _require() {
     if (!this.allowed) {
-      throw Object.assign(new Error("Коды доступны после входа в аккаунт Tabora"), { code: "signed-out" });
+      throw Object.assign(new Error(tt`Коды доступны после входа в аккаунт Tabora`), { code: "signed-out" });
     }
     Vault.requireUnlocked();
   },
@@ -434,14 +435,14 @@ export const Otp = {
       if (e.name !== "NotFoundError") {
         // файл есть, но не читается: не перезаписываем его пустым
         console.error("Tabora otp: файл кодов не читается", e);
-        this.loadError = { reason: `файл не читается (${e.message})`, unreadable: true, missing: false, movedTo: null, backup: await this._readBackup() };
+        this.loadError = { reason: tt`файл не читается (${e.message})`, unreadable: true, missing: false, movedTo: null, backup: await this._readBackup() };
       } else {
         // Файла нет, но остались его копия или отложенный повреждённый файл: это не «кодов
         // ещё не было». Пустой список поверх не пишем, копию не трогаем — решает пользователь.
         const traces = await this._traces();
         if (traces) {
           console.error(`Tabora otp: файла кодов нет, но ${traces}`);
-          this.loadError = { reason: `файл кодов пропал, но ${traces}`, unreadable: false, missing: true, movedTo: null, backup: await this._readBackup() };
+          this.loadError = { reason: tt`файл кодов пропал, но ${traces}`, unreadable: false, missing: true, movedTo: null, backup: await this._readBackup() };
         }
       }
       this._loaded = true;
@@ -469,7 +470,7 @@ export const Otp = {
     }
     console.error("Tabora otp: файл кодов повреждён");
     this.data = { version: 1, macs: 1, entries: [] };
-    this.loadError = { reason: data ? "неизвестный формат файла" : "файл не разбирается как JSON", unreadable: false, missing: false, movedTo, backup: await this._readBackup() };
+    this.loadError = { reason: data ? tt`неизвестный формат файла` : tt`файл не разбирается как JSON`, unreadable: false, missing: false, movedTo, backup: await this._readBackup() };
     this._loaded = true;
   },
 
@@ -486,7 +487,7 @@ export const Otp = {
     try {
       corrupt = (await IOUtils.getChildren(PathUtils.profileDir)).some(p => CORRUPT_RE.test(PathUtils.filename(p)));
     } catch (e) {}
-    return [bak ? "осталась запасная копия" : "", corrupt ? "остался повреждённый файл" : ""].filter(Boolean).join(" и ");
+    return [bak ? tt`осталась запасная копия` : "", corrupt ? tt`остался повреждённый файл` : ""].filter(Boolean).join(tt` и `);
   },
 
   async _readBackup() {
@@ -605,7 +606,7 @@ export const Otp = {
 
   async save() {
     if (this.loadError) {
-      throw new Error("Файл кодов повреждён: сначала восстановите его из копии или начните список заново");
+      throw new Error(tt`Файл кодов повреждён: сначала восстановите его из копии или начните список заново`);
     }
     this.data.updatedAt = new Date().toISOString();
     await this._write(this.data);
@@ -616,7 +617,7 @@ export const Otp = {
   async restoreBackup() {
     const b = this.loadError?.backup;
     if (!b) {
-      throw new Error("Запасной копии кодов нет");
+      throw new Error(tt`Запасной копии кодов нет`);
     }
     const before = { data: this.data, loadError: this.loadError };
     this.forget();
@@ -643,7 +644,7 @@ export const Otp = {
         await IOUtils.setPermissions(aside, 0o600).catch(() => {});
       }
     } catch (e) {
-      throw new Error(`Прежняя запасная копия кодов не перенесена: ${e.message}`);
+      throw new Error(tt`Прежняя запасная копия кодов не перенесена: ${e.message}`);
     }
     this.forget();
     this.data = { version: 1, macs: 1, entries: [] };
@@ -732,10 +733,10 @@ export const Otp = {
     await this.ready();
     this._require();
     if (this.loadError) {
-      throw new Error("Файл кодов повреждён: сначала восстановите его из копии или начните список заново");
+      throw new Error(tt`Файл кодов повреждён: сначала восстановите его из копии или начните список заново`);
     }
     if (this.entries.length >= MAX_ENTRIES) {
-      throw new Error("Слишком много записей");
+      throw new Error(tt`Слишком много записей`);
     }
     const algorithm = String(fields.algorithm || "SHA1").toUpperCase();
     const digits = Number(fields.digits || 6);
@@ -743,13 +744,13 @@ export const Otp = {
     checkParams({ algorithm, digits, period });
     const secret = base32Decode(fields.secret);
     if (secret.length < 8) {
-      throw new Error("Секрет слишком короткий");
+      throw new Error(tt`Секрет слишком короткий`);
     }
     await hotp(secret, 0, { algorithm, digits }); // проверка, что секрет и алгоритм рабочие
     const issuer = cleanText(fields.issuer, 48);
     const account = cleanText(fields.account, 96);
     if (!issuer && !account) {
-      throw new Error("Укажите сервис или аккаунт");
+      throw new Error(tt`Укажите сервис или аккаунт`);
     }
     // номер и время создания задаёт синхронизация: запись с другого компьютера сохраняет свои
     const given = typeof fields.id === "string" && /^[a-z0-9]{6,40}$/.test(fields.id) && !this.entries.some(e => e.id === fields.id) ? fields.id : "";
@@ -809,10 +810,10 @@ export const Otp = {
     this._require();
     const entry = this.entries.find(e => e.id === id);
     if (!entry) {
-      throw new Error("Запись не найдена");
+      throw new Error(tt`Запись не найдена`);
     }
     if (!this.isAuthentic(entry)) {
-      throw new Error("Запись изменена вне браузера: удалите её и добавьте код заново");
+      throw new Error(tt`Запись изменена вне браузера: удалите её и добавьте код заново`);
     }
     const next = { ...entry };
     if ("issuer" in fields) {
@@ -825,7 +826,7 @@ export const Otp = {
       next.sites = this.normalizeSites(fields.sites);
     }
     if (!next.issuer && !next.account) {
-      throw new Error("Укажите сервис или аккаунт");
+      throw new Error(tt`Укажите сервис или аккаунт`);
     }
     this._sign(next);
     Object.assign(entry, next);
@@ -892,10 +893,10 @@ export const Otp = {
     if (!s) {
       const entry = this.entries.find(e => e.id === id);
       if (!entry) {
-        throw new Error("Запись не найдена");
+        throw new Error(tt`Запись не найдена`);
       }
       if (!this.isAuthentic(entry)) {
-        throw new Error("Запись изменена вне браузера: код не выдаётся");
+        throw new Error(tt`Запись изменена вне браузера: код не выдаётся`);
       }
       s = await Vault.decrypt("otp", entry.secret);
       this._secrets.set(id, s);
@@ -907,7 +908,7 @@ export const Otp = {
   async code(id, now = Date.now()) {
     const entry = this.entries.find(e => e.id === id);
     if (!entry) {
-      throw new Error("Запись не найдена");
+      throw new Error(tt`Запись не найдена`);
     }
     const secret = await this.secretOf(id);
     const offset = Services.prefs.getIntPref("tabora.otp.clockOffsetMs", 0);
@@ -948,11 +949,11 @@ export const Otp = {
         const rtt = Date.now() - t0;
         const server = Date.parse(res.headers.get("date") || "");
         if (!server || rtt > 5000) {
-          throw new Error("нет заголовка Date");
+          throw new Error(tt`нет заголовка Date`);
         }
         const offset = Math.round(server + rtt / 2 - Date.now());
         if (Math.abs(offset) > 86400000) {
-          throw new Error("неправдоподобное время сервера");
+          throw new Error(tt`неправдоподобное время сервера`);
         }
         const applied = Math.abs(offset) > 5000 ? offset : 0;
         Services.prefs.setIntPref(this.CLOCK_OFFSET_PREF, applied);
@@ -965,14 +966,14 @@ export const Otp = {
         clearTimeout(timer);
       }
     }
-    throw new Error(`Не удалось сверить время: ${lastError?.message || "сеть недоступна"}`);
+    throw new Error(tt`Не удалось сверить время: ${lastError?.message || tt`сеть недоступна`}`);
   },
 
   /** Ссылка otpauth:// для переноса записи в другое приложение (только по явному действию). */
   async otpauthUrl(id) {
     const entry = this.entries.find(e => e.id === id);
     if (!entry) {
-      throw new Error("Запись не найдена");
+      throw new Error(tt`Запись не найдена`);
     }
     const secret = base32Encode(await this.secretOf(id));
     const label = encodeURIComponent(entry.issuer ? `${entry.issuer}:${entry.account}` : entry.account);
@@ -990,7 +991,7 @@ export const Otp = {
 Vault.registerRekey("otp", async ctx => {
   await Otp.ready();
   if (Otp.loadError) {
-    throw new Error("файл кодов повреждён");
+    throw new Error(tt`файл кодов повреждён`);
   }
   if (!Otp.entries.length) {
     return;

@@ -1,3 +1,4 @@
+import { tt } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -118,11 +119,11 @@ export const Profiles = {
   /** Путь профиля по имени каталога; имя должно быть одним звеном пути внутри root. */
   _path(dir) {
     if (typeof dir !== "string" || !dir || dir.length > 255 || dir === "." || dir === ".." || /[/\\\0]/.test(dir)) {
-      throw fail("Недопустимое имя профиля", "bad-dir");
+      throw fail(tt`Недопустимое имя профиля`, "bad-dir");
     }
     const path = PathUtils.join(this.root, dir);
     if (PathUtils.parent(path) !== this.root || PathUtils.filename(path) !== dir) {
-      throw fail("Недопустимое имя профиля", "bad-dir");
+      throw fail(tt`Недопустимое имя профиля`, "bad-dir");
     }
     return path;
   },
@@ -294,7 +295,7 @@ export const Profiles = {
         }
       }
       if (!dir) {
-        throw fail("Не удалось выбрать каталог для нового профиля", "no-dir");
+        throw fail(tt`Не удалось выбрать каталог для нового профиля`, "no-dir");
       }
       const path = this._path(dir);
       await IOUtils.makeDirectory(path, { permissions: 0o700, ignoreExisting: false });
@@ -353,10 +354,10 @@ export const Profiles = {
     }
     const reg = await this._registry();
     if (!reg.profiles.some(p => p.dir === dir) || !reg.profiles.some(p => p.dir === this.dir)) {
-      throw fail("Этого аккаунта нет в списке компьютера", "unknown");
+      throw fail(tt`Этого аккаунта нет в списке компьютера`, "unknown");
     }
     if (!(await this._isDir(path))) {
-      throw fail("Профиль этого аккаунта удалён с компьютера", "missing");
+      throw fail(tt`Профиль этого аккаунта удалён с компьютера`, "missing");
     }
     try {
       this._remote().sendCommandLine(path, [ACTIVATE_FLAG], true);
@@ -379,22 +380,22 @@ export const Profiles = {
     return this._serial(async () => {
       const path = this._path(dir);
       if (dir === this.dir) {
-        throw fail("Профиль, в котором вы работаете, удаляется из окна другого аккаунта", "current");
+        throw fail(tt`Профиль, в котором вы работаете, удаляется из окна другого аккаунта`, "current");
       }
       const reg = await this._registry();
       if (!reg.profiles.some(p => p.dir === dir) || !reg.profiles.some(p => p.dir === this.dir)) {
-        throw fail("Этого аккаунта нет в списке компьютера", "unknown");
+        throw fail(tt`Этого аккаунта нет в списке компьютера`, "unknown");
       }
       const file = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
       file.initWithPath(path);
       if (file.exists()) {
         if (file.isSymlink() || !file.isDirectory() || !(await IOUtils.exists(PathUtils.join(path, CARD)))) {
-          throw fail("Каталог не похож на профиль Tabora: удалите его вручную", "not-profile");
+          throw fail(tt`Каталог не похож на профиль Tabora: удалите его вручную`, "not-profile");
         }
         try {
           await Cc["@mozilla.org/toolkit/profile-service;1"].getService(Ci.nsIToolkitProfileService).removeProfileFilesByPath(file, null, 0);
         } catch (e) {
-          throw fail("Этот аккаунт сейчас открыт в другом окне. Закройте его окно и повторите", "in-use");
+          throw fail(tt`Этот аккаунт сейчас открыт в другом окне. Закройте его окно и повторите`, "in-use");
         }
         await IOUtils.remove(path, { recursive: true, ignoreAbsent: true }).catch(() => {});
       }

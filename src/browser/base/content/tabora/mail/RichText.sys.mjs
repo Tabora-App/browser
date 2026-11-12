@@ -1,3 +1,4 @@
+import { tt } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -42,11 +43,11 @@ ChromeUtils.defineLazyGetter(lazy, "parser", () => {
 
 // css — как шрифт записывается в письме; первое имя служит и для узнавания при разборе
 export const FONTS = [
-  { id: "sans", label: "Без засечек", css: "Arial, Helvetica, sans-serif" },
-  { id: "serif", label: "С засечками", css: "'Times New Roman', Times, serif" },
-  { id: "mono", label: "Моноширинный", css: "'Courier New', Courier, monospace" },
-  { id: "wide", label: "Широкий", css: "'Arial Black', Arial, sans-serif" },
-  { id: "narrow", label: "Узкий", css: "'Arial Narrow', Arial, sans-serif" },
+  { id: "sans", label: tt`Без засечек`, css: "Arial, Helvetica, sans-serif" },
+  { id: "serif", label: tt`С засечками`, css: "'Times New Roman', Times, serif" },
+  { id: "mono", label: tt`Моноширинный`, css: "'Courier New', Courier, monospace" },
+  { id: "wide", label: tt`Широкий`, css: "'Arial Black', Arial, sans-serif" },
+  { id: "narrow", label: tt`Узкий`, css: "'Arial Narrow', Arial, sans-serif" },
   { id: "georgia", label: "Georgia", css: "Georgia, serif" },
   { id: "garamond", label: "Garamond", css: "Garamond, 'Times New Roman', serif" },
   { id: "tahoma", label: "Tahoma", css: "Tahoma, Geneva, sans-serif" },
@@ -57,23 +58,23 @@ export const FONTS = [
 
 // font — значение для команды редактора fontSize (1–7), px — размер в письме
 export const SIZES = [
-  { id: "small", label: "Мелкий", font: "1", px: 11 },
-  { id: "normal", label: "Обычный", font: "3", px: 0 },
-  { id: "large", label: "Крупный", font: "5", px: 18 },
-  { id: "huge", label: "Огромный", font: "6", px: 26 },
+  { id: "small", label: tt`Мелкий`, font: "1", px: 11 },
+  { id: "normal", label: tt`Обычный`, font: "3", px: 0 },
+  { id: "large", label: tt`Крупный`, font: "5", px: 18 },
+  { id: "huge", label: tt`Огромный`, font: "6", px: 26 },
 ];
 
 export const COLORS = [
-  { label: "Чёрный", hex: "#16171a" },
-  { label: "Серый", hex: "#6e737d" },
-  { label: "Красный", hex: "#d93025" },
-  { label: "Оранжевый", hex: "#e8710a" },
-  { label: "Жёлтый", hex: "#f2b600" },
-  { label: "Зелёный", hex: "#188038" },
-  { label: "Бирюзовый", hex: "#129eaf" },
-  { label: "Синий", hex: "#1a56c4" },
-  { label: "Фиолетовый", hex: "#8430ce" },
-  { label: "Розовый", hex: "#d01884" },
+  { label: tt`Чёрный`, hex: "#16171a" },
+  { label: tt`Серый`, hex: "#6e737d" },
+  { label: tt`Красный`, hex: "#d93025" },
+  { label: tt`Оранжевый`, hex: "#e8710a" },
+  { label: tt`Жёлтый`, hex: "#f2b600" },
+  { label: tt`Зелёный`, hex: "#188038" },
+  { label: tt`Бирюзовый`, hex: "#129eaf" },
+  { label: tt`Синий`, hex: "#1a56c4" },
+  { label: tt`Фиолетовый`, hex: "#8430ce" },
+  { label: tt`Розовый`, hex: "#d01884" },
 ];
 
 /** «Цвет по умолчанию»: у редактора нет команды «снять цвет», поэтому он красит текст этим

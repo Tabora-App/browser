@@ -12,3 +12,8 @@ geckoview.jar:
     content/tabora/shield/ShieldEngine.sys.mjs         (/browser/base/content/tabora/shield/ShieldEngine.sys.mjs)
     content/tabora/actors/TaboraShieldParent.sys.mjs   (/browser/base/content/tabora/actors/TaboraShieldParent.sys.mjs)
     content/tabora/actors/TaboraShieldChild.sys.mjs    (/browser/base/content/tabora/actors/TaboraShieldChild.sys.mjs)
+# языки надписей: модули блокировщика берут тег перевода отсюда
+    content/tabora/i18n/I18n.sys.mjs                   (/browser/base/content/tabora/i18n/I18n.sys.mjs)
+    content/tabora/i18n/en.json                        (/browser/base/content/tabora/i18n/en.json)
+    content/tabora/i18n/uk.json                        (/browser/base/content/tabora/i18n/uk.json)
+    content/tabora/i18n/es.json                        (/browser/base/content/tabora/i18n/es.json)

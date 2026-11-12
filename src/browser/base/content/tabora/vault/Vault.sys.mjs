@@ -1,3 +1,4 @@
+import { tt, tr } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -65,7 +66,7 @@ function rkFormat(bytes) {
 function rkParse(text) {
   const clean = String(text || "").toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/0/g, "O").replace(/1/g, "L").replace(/8/g, "B");
   if (clean.length !== 32 || /[^A-Z2-7]/.test(clean)) {
-    throw new Error("Ключ восстановления: 32 символа в 8 группах по 4");
+    throw new Error(tt`Ключ восстановления: 32 символа в 8 группах по 4`);
   }
   const out = [];
   let bits = 0;
@@ -138,10 +139,10 @@ export async function writeJsonVerified(path, data) {
   try {
     back = JSON.stringify(await IOUtils.readJSON(path));
   } catch (e) {
-    throw new Error(`Файл ${PathUtils.filename(path)} не читается после записи: ${e.message}`);
+    throw new Error(tt`Файл ${PathUtils.filename(path)} не читается после записи: ${e.message}`);
   }
   if (back !== text) {
-    throw new Error(`Файл ${PathUtils.filename(path)} записан с ошибкой`);
+    throw new Error(tt`Файл ${PathUtils.filename(path)} записан с ошибкой`);
   }
 }
 
@@ -168,7 +169,7 @@ async function deriveKey(password, salt, kdf) {
   const dkLen = Number(kdf?.dkLen);
   // параметры приходят из файла: вне границ это повреждение или попытка подвесить браузер
   if (!(t >= 1 && t <= 10) || !(m >= 8192 && m <= 1 << 20) || !(p >= 1 && p <= 4) || dkLen !== 32 || !(salt?.length >= 8)) {
-    throw new Error("Файл сейфа повреждён: параметры KDF вне допустимых границ");
+    throw new Error(tt`Файл сейфа повреждён: параметры KDF вне допустимых границ`);
   }
   return argon2idAsync(utf8ToBytes(password.normalize("NFKC")), salt, { t, m, p, dkLen });
 }
@@ -199,11 +200,26 @@ async function readCheck(key, check) {
 
 function checkPasswordLength(password) {
   if (typeof password !== "string" || password.length < MIN_PASSWORD) {
-    throw new Error(`Мастер-пароль не короче ${MIN_PASSWORD} символов`);
+    throw new Error(tt`Мастер-пароль не короче ${MIN_PASSWORD} символов`);
   }
 }
 
 /* ---------- стойкость пароля ---------- */
+
+/* Сама оценка (от COMMON до следующего раздела) — общий с веб-версией код, копии сверяет
+ * tools/web/test/parity.test.mjs. Сообщения в нём записаны по-русски и переводятся здесь. */
+function strengthOf(password) {
+  const s = passwordStrength(password);
+  return { ...s, label: tr(s.label) };
+}
+
+function requireStrong(password) {
+  try {
+    return checkNewPassword(password);
+  } catch (e) {
+    throw new Error(tr(e.message));
+  }
+}
 
 const COMMON = new Set(["password", "password1", "password12", "password123", "password1234", "passwordpassword", "qwerty", "qwerty12", "qwerty123", "qwerty123456", "qwertyuiop", "qwertyuiop12", "qwertyuiopas", "123456", "1234567", "12345678", "123456789", "1234567890", "123456789012", "1234567890ab", "111111", "000000", "123123", "123123123123", "111111111111", "000000000000", "abc123", "abcdef", "abcdefghijkl", "aaaaaaaaaaaa", "iloveyou", "iloveyou1234", "admin", "admin123", "administrator", "welcome", "welcome1", "welcome12345", "letmein", "letmein12345", "monkey", "dragon", "sunshine", "sunshine1234", "princess", "princess1234", "football", "football1234", "baseball", "baseball1234", "superman", "superman1234", "trustno1", "trustno1trustno1", "passw0rd", "passw0rdpassw0rd", "1q2w3e4r", "1q2w3e4r5t6y", "zaq12wsx", "zaq12wsxcde3", "пароль", "пароль123", "йцукен", "qazwsx", "master", "tabora", "tabora123"]);
 const SEQUENCES = ["0123456789", "abcdefghijklmnopqrstuvwxyz", "qwertyuiop", "asdfghjkl", "zxcvbnm", "йцукенгшщзхъ", "фывапролджэ", "ячсмитьбю", "абвгдеёжзийклмнопрстуфхцчшщъыьэюя", "1qaz2wsx3edc", "qazwsxedc"];
@@ -392,8 +408,8 @@ const Guard = {
     }
     if (now < d.lockedUntil) {
       const s = Math.ceil((d.lockedUntil - now) / 1000);
-      const wait = s >= 120 ? `${Math.ceil(s / 60)} мин` : `${s} с`;
-      throw Object.assign(new Error(`Слишком много неверных попыток: подождите ${wait}`), { code: "locked-out", retryAt: d.lockedUntil });
+      const wait = s >= 120 ? tt`${Math.ceil(s / 60)} мин` : tt`${s} с`;
+      throw Object.assign(new Error(tt`Слишком много неверных попыток: подождите ${wait}`), { code: "locked-out", retryAt: d.lockedUntil });
     }
     return d;
   },
@@ -476,16 +492,16 @@ function validBox(b) {
 /** Пустая строка, если файл сейфа похож на настоящий, иначе причина. */
 function validate(data) {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
-    return "файл не похож на сейф";
+    return tt`файл не похож на сейф`;
   }
   if (data.version !== 1) {
-    return "неизвестная версия файла";
+    return tt`неизвестная версия файла`;
   }
   if (!validBox(data.check)) {
-    return "нет проверочного блока";
+    return tt`нет проверочного блока`;
   }
   if (!(data.os?.ct || validBox(data.pw) || validBox(data.rk))) {
-    return "нет ни одной обёртки ключа";
+    return tt`нет ни одной обёртки ключа`;
   }
   return "";
 }
@@ -495,8 +511,8 @@ Services.obs.addObserver(() => Vault._onQuit(), "quit-application-granted");
 export const Vault = {
   TOPIC: "tabora-vault-changed",
   MIN_PASSWORD,
-  passwordStrength,
-  checkNewPassword,
+  passwordStrength: strengthOf,
+  checkNewPassword: requireStrong,
   guard: Guard,
   data: null, // файл: обёртки ключа и настройки, секретов здесь нет
   state: "unknown", // absent | ok | corrupt
@@ -547,7 +563,7 @@ export const Vault = {
         // стали бы нечитаемыми, а запасная копия была бы затёрта). Решает пользователь.
         console.error(`Tabora vault: файла сейфа нет, но в профиле остались: ${traces.join(", ")}`);
         this.state = "corrupt";
-        this.corrupt = { reason: `файл сейфа пропал, а в профиле остались ${traces.join(", ")}`, missing: true, unreadable: false, movedTo: null, backup: await this._readBackup(), salvage: await this._salvageFromCorrupt() };
+        this.corrupt = { reason: tt`файл сейфа пропал, а в профиле остались ${traces.join(", ")}`, missing: true, unreadable: false, movedTo: null, backup: await this._readBackup(), salvage: await this._salvageFromCorrupt() };
         this._loaded = true;
         return;
       }
@@ -555,7 +571,7 @@ export const Vault = {
       console.error("Tabora vault: файл сейфа не читается", e);
       this.data = null;
       this.state = "corrupt";
-      this.corrupt = { reason: `файл не читается (${e.message})`, unreadable: true, movedTo: null, backup: await this._readBackup(), salvage: null };
+      this.corrupt = { reason: tt`файл не читается (${e.message})`, unreadable: true, movedTo: null, backup: await this._readBackup(), salvage: null };
       this._loaded = true;
       return;
     }
@@ -565,7 +581,7 @@ export const Vault = {
       data = JSON.parse(raw);
       reason = validate(data);
     } catch (e) {
-      reason = "файл не разбирается как JSON";
+      reason = tt`файл не разбирается как JSON`;
     }
     if (!reason) {
       this.data = data;
@@ -638,13 +654,13 @@ export const Vault = {
     };
     const names = await this._profileNames();
     if (await exists("tabora-vault.json.bak")) {
-      out.push("запасная копия сейфа");
+      out.push(tt`запасная копия сейфа`);
     }
     if (names.some(n => VAULT_CORRUPT_RE.test(n))) {
-      out.push("повреждённый файл сейфа");
+      out.push(tt`повреждённый файл сейфа`);
     }
     if (Services.prefs.getBoolPref(REKEYED_PREF, false) && (await exists("logins.db"))) {
-      out.push("пароли сайтов");
+      out.push(tt`пароли сайтов`);
     }
     let otp = false;
     for (const name of ["tabora-otp.json", "tabora-otp.json.bak"]) {
@@ -653,15 +669,15 @@ export const Vault = {
       otp ||= !!f && !(f.data && typeof f.data === "object" && Array.isArray(f.data.entries) && !f.data.entries.length);
     }
     if (otp || names.some(n => OTP_CORRUPT_RE.test(n))) {
-      out.push("коды");
+      out.push(tt`коды`);
     }
     const agent = await json("tabora-agent.json");
     if (agent && (agent.data === undefined || agent.data?.key)) {
-      out.push("ключ агента");
+      out.push(tt`ключ агента`);
     }
     const mail = await json("tabora-mail.json");
     if (mail && (mail.data === undefined || mail.data?.enc)) {
-      out.push("кэш почты");
+      out.push(tt`кэш почты`);
     }
     return out;
   },
@@ -716,7 +732,7 @@ export const Vault = {
 
   requireUnlocked() {
     if (!this._key) {
-      throw new Error("Сейф заблокирован");
+      throw new Error(tt`Сейф заблокирован`);
     }
   },
 
@@ -806,10 +822,10 @@ export const Vault = {
    * записью любой обёртки: завернуть затёртый ключ значило бы потерять сейф. */
   async _assertKey(key, check) {
     if (isZeroKey(key)) {
-      throw new Error("Сейф заблокирован: ключ недоступен, изменения не записаны");
+      throw new Error(tt`Сейф заблокирован: ключ недоступен, изменения не записаны`);
     }
     if (!(await readCheck(key, check))) {
-      throw new Error("Ключ не проходит проверку сейфа: изменения не записаны");
+      throw new Error(tt`Ключ не проходит проверку сейфа: изменения не записаны`);
     }
   },
 
@@ -819,7 +835,7 @@ export const Vault = {
     const key = this._key.slice();
     if (isZeroKey(key) || !(await this._verify(key))) {
       wipe(key);
-      throw new Error("Сейф заблокирован: ключ недоступен, изменения не записаны");
+      throw new Error(tt`Сейф заблокирован: ключ недоступен, изменения не записаны`);
     }
     this._stillLive(key);
     return key;
@@ -828,7 +844,7 @@ export const Vault = {
   /** Пока шла операция (Argon2, система), ключ в памяти не заменили и не стёрли. */
   _stillLive(copy) {
     if (isZeroKey(this._key) || !sameBytes(this._key, copy)) {
-      throw new Error("Сейф заблокирован во время операции: изменения не записаны");
+      throw new Error(tt`Сейф заблокирован во время операции: изменения не записаны`);
     }
   },
 
@@ -892,7 +908,7 @@ export const Vault = {
     try {
       return await decrypt(raw, box);
     } catch (e) {
-      throw Object.assign(new Error("Неверный мастер-пароль"), { code: "bad-password" });
+      throw Object.assign(new Error(tt`Неверный мастер-пароль`), { code: "bad-password" });
     } finally {
       wipe(raw);
     }
@@ -940,7 +956,7 @@ export const Vault = {
 
   async _requireAccount() {
     if (!(await this._accountAllows())) {
-      throw Object.assign(new Error("Сейф открывается после входа в аккаунт Tabora"), { code: "signed-out" });
+      throw Object.assign(new Error(tt`Сейф открывается после входа в аккаунт Tabora`), { code: "signed-out" });
     }
   },
 
@@ -955,7 +971,7 @@ export const Vault = {
       if (timeoutMs) {
         w.timer = setTimeout(() => {
           this._waiters = this._waiters.filter(x => x !== w);
-          reject(Object.assign(new Error("Сейф не разблокирован"), { code: "timeout" }));
+          reject(Object.assign(new Error(tt`Сейф не разблокирован`), { code: "timeout" }));
           this.notify("waiting-done");
         }, timeoutMs);
       }
@@ -981,7 +997,7 @@ export const Vault = {
     for (const w of this._waiters) {
       if (w.cancellable) {
         clearTimeout(w.timer);
-        w.reject(Object.assign(new Error("Разблокировка отменена"), { code: "cancelled" }));
+        w.reject(Object.assign(new Error(tt`Разблокировка отменена`), { code: "cancelled" }));
       } else {
         keep.push(w);
       }
@@ -995,7 +1011,7 @@ export const Vault = {
     this._waiters = [];
     for (const w of waiters) {
       clearTimeout(w.timer);
-      w.reject(new Error("Браузер закрывается"));
+      w.reject(new Error(tt`Браузер закрывается`));
     }
   },
 
@@ -1069,10 +1085,10 @@ export const Vault = {
     return this._exclusive(async () => {
       await this.ready();
       if (this.state === "corrupt") {
-        throw new Error("Файл сейфа повреждён: выберите восстановление или создайте новый сейф осознанно");
+        throw new Error(tt`Файл сейфа повреждён: выберите восстановление или создайте новый сейф осознанно`);
       }
       if (this.exists) {
-        throw new Error("Сейф уже создан");
+        throw new Error(tt`Сейф уже создан`);
       }
       return this._create({ password, checkStrength });
     });
@@ -1081,7 +1097,7 @@ export const Vault = {
   async _create({ password = "", checkStrength = true } = {}) {
     if (password) {
       if (checkStrength) {
-        checkNewPassword(password);
+        requireStrong(password);
       } else {
         checkPasswordLength(password);
       }
@@ -1099,7 +1115,7 @@ export const Vault = {
     };
     if (!data.os && !data.pw) {
       wipe(key);
-      throw new Error("Хранилище ключей системы недоступно: задайте мастер-пароль");
+      throw new Error(tt`Хранилище ключей системы недоступно: задайте мастер-пароль`);
     }
     const before = { data: this.data, state: this.state };
     try {
@@ -1141,7 +1157,7 @@ export const Vault = {
     return this._exclusive(async () => {
       const backup = this.corrupt?.backup;
       if (this.state !== "corrupt" || !backup) {
-        throw new Error("Запасной копии сейфа нет");
+        throw new Error(tt`Запасной копии сейфа нет`);
       }
       const before = this.corrupt;
       this.data = backup;
@@ -1166,7 +1182,7 @@ export const Vault = {
       const c = this.corrupt;
       const box = c?.backup?.rk || c?.salvage?.rk;
       if (this.state !== "corrupt" || !box) {
-        throw new Error("Обёртка ключа восстановления не сохранилась: восстановить этим способом нельзя");
+        throw new Error(tt`Обёртка ключа восстановления не сохранилась: восстановить этим способом нельзя`);
       }
       const rk = rkParse(text);
       const k = rkDerive(rk);
@@ -1174,14 +1190,14 @@ export const Vault = {
       try {
         key = await decrypt(k, box);
       } catch (e) {
-        throw new Error("Неверный ключ восстановления");
+        throw new Error(tt`Неверный ключ восстановления`);
       } finally {
         wipe(k, rk);
       }
       const check = c.backup?.check || c.salvage?.check;
       if (check && !(await this._verify(key, check))) {
         wipe(key);
-        throw new Error("Ключ восстановления от другого сейфа");
+        throw new Error(tt`Ключ восстановления от другого сейфа`);
       }
       const base = c.backup ? { ...c.backup } : { version: 1, createdAt: new Date().toISOString(), rev: 0, settings: { osUnlock: true }, rk: box, pw: null };
       base.check = check || (await encrypt(key, utf8ToBytes(CHECK)));
@@ -1211,7 +1227,7 @@ export const Vault = {
   async startOverAfterCorrupt() {
     return this._exclusive(async () => {
       if (this.state !== "corrupt") {
-        throw new Error("Сейф не повреждён");
+        throw new Error(tt`Сейф не повреждён`);
       }
       const tag = `vault-lost-${stamp()}`;
       // данные под прежним ключом, отложенные повреждённые файлы кодов и прежняя запасная
@@ -1252,13 +1268,13 @@ export const Vault = {
     return this._exclusive(async () => {
       await this._requireAccount();
       if (this.state === "corrupt") {
-        throw new Error("Файл сейфа повреждён: выберите восстановление в разделе «Коды»");
+        throw new Error(tt`Файл сейфа повреждён: выберите восстановление в разделе «Коды»`);
       }
       if (!this.exists) {
-        throw new Error("Сейфа в этом профиле нет");
+        throw new Error(tt`Сейфа в этом профиле нет`);
       }
       if (this.unlocked) {
-        throw new Error("Сейф открыт: заменять его незачем");
+        throw new Error(tt`Сейф открыт: заменять его незачем`);
       }
       checkPasswordLength(password);
       const tag = `vault-replaced-${stamp()}`;
@@ -1301,7 +1317,7 @@ export const Vault = {
    * тихо не открывается. С user: true — системная проверка (Touch ID или пароль macOS);
    * reauth: false вместе с user — проверку владельца вызывающий только что провёл сам
    * (confirmOwner). Возвращает true, если удалось. */
-  async unlock({ user = false, prompt = "разблокировать сейф Tabora", reauth = true } = {}) {
+  async unlock({ user = false, prompt = tt`разблокировать сейф Tabora`, reauth = true } = {}) {
     await this.ready();
     if (this.unlocked) {
       return true;
@@ -1356,16 +1372,16 @@ export const Vault = {
   async unlockWithPassword(password, { count = true } = {}) {
     await this.ready();
     if (!this.exists) {
-      throw new Error(this.state === "corrupt" ? "Файл сейфа повреждён" : "Сейф не создан");
+      throw new Error(this.state === "corrupt" ? tt`Файл сейфа повреждён` : tt`Сейф не создан`);
     }
     if (!this.data.pw) {
-      throw new Error("Мастер-пароль не задан: сейф открывается только на этом компьютере");
+      throw new Error(tt`Мастер-пароль не задан: сейф открывается только на этом компьютере`);
     }
     await this._requireAccount();
     const key = await this._checkedUnwrap(password, count);
     if (!(await this._verify(key))) {
       wipe(key);
-      throw new Error("Файл сейфа повреждён");
+      throw new Error(tt`Файл сейфа повреждён`);
     }
     if (this.unlocked) {
       wipe(key);
@@ -1424,7 +1440,7 @@ export const Vault = {
   async verifyPassword(password, { count = true } = {}) {
     await this.ready();
     if (!this.data?.pw) {
-      throw new Error("Мастер-пароль не задан");
+      throw new Error(tt`Мастер-пароль не задан`);
     }
     wipe(await this._checkedUnwrap(password, count));
     return true;
@@ -1432,7 +1448,7 @@ export const Vault = {
 
   /** Системная проверка владельца (Touch ID или пароль системы) без мастер-пароля: перед
    * действиями, которые меняют способ открытия сейфа. false — отказ или ошибка. */
-  async confirmOwner(reason = "подтвердить действие с сейфом Tabora") {
+  async confirmOwner(reason = tt`подтвердить действие с сейфом Tabora`) {
     try {
       let win = null;
       try {
@@ -1463,7 +1479,7 @@ export const Vault = {
    * checkStrength: false — пароль уже принят раньше (пароль существующего аккаунта). */
   async setPassword(password, { checkStrength = true } = {}) {
     if (checkStrength) {
-      checkNewPassword(password);
+      requireStrong(password);
     } else {
       checkPasswordLength(password);
     }
@@ -1478,7 +1494,7 @@ export const Vault = {
    * восстановления, если прежний был и его пришлось заменить при смене K. */
   async changePassword(oldPassword, newPassword, { rotate = false } = {}) {
     this.requireUnlocked();
-    checkNewPassword(newPassword);
+    requireStrong(newPassword);
     await this.verifyPassword(oldPassword);
     if (rotate) {
       return this.rotateKey({ password: newPassword, reason: "password" });
@@ -1548,7 +1564,7 @@ export const Vault = {
       const k = rkDerive(rk);
       try {
         if (this.data.rk) {
-          throw new Error("Ключ восстановления уже создан: повторите");
+          throw new Error(tt`Ключ восстановления уже создан: повторите`);
         }
         const box = { ...(await encrypt(k, key)), createdAt: new Date().toISOString() };
         this._stillLive(key);
@@ -1576,10 +1592,10 @@ export const Vault = {
   async unlockWithRecoveryKey(text) {
     await this.ready();
     if (!this.exists) {
-      throw new Error(this.state === "corrupt" ? "Файл сейфа повреждён" : "Сейф не создан");
+      throw new Error(this.state === "corrupt" ? tt`Файл сейфа повреждён` : tt`Сейф не создан`);
     }
     if (!this.data.rk) {
-      throw new Error("Ключ восстановления для этого сейфа не создавался");
+      throw new Error(tt`Ключ восстановления для этого сейфа не создавался`);
     }
     await this._requireAccount();
     const rk = rkParse(text);
@@ -1588,13 +1604,13 @@ export const Vault = {
     try {
       key = await decrypt(k, this.data.rk);
     } catch (e) {
-      throw new Error("Неверный ключ восстановления");
+      throw new Error(tt`Неверный ключ восстановления`);
     } finally {
       wipe(k, rk);
     }
     if (!(await this._verify(key))) {
       wipe(key);
-      throw new Error("Файл сейфа повреждён");
+      throw new Error(tt`Файл сейфа повреждён`);
     }
     if (this.unlocked) {
       wipe(key);
@@ -1611,11 +1627,11 @@ export const Vault = {
       const key = await this._liveKey();
       try {
         if (!enabled && !this.data.pw) {
-          throw new Error("Сначала задайте мастер-пароль, иначе сейф будет не открыть");
+          throw new Error(tt`Сначала задайте мастер-пароль, иначе сейф будет не открыть`);
         }
         const os = enabled ? await this._wrapOs(key) : null;
         if (enabled && !os) {
-          throw new Error("Хранилище ключей системы недоступно");
+          throw new Error(tt`Хранилище ключей системы недоступно`);
         }
         this._stillLive(key);
         await this._update(d => {
@@ -1742,7 +1758,7 @@ export const Vault = {
         // осталась бы под прежним K, который после завершения стирается.
         const hasDb = await IOUtils.exists(PathUtils.join(PathUtils.profileDir, "logins.db")).catch(() => true);
         if (this.passwordsMode === "vault" || hasDb) {
-          throw new Error("Хранилище паролей не готово к смене ключа: повторите позже");
+          throw new Error(tt`Хранилище паролей не готово к смене ключа: повторите позже`);
         }
       }
     }
@@ -1760,7 +1776,7 @@ export const Vault = {
     let open = true;
     const sub = (key, info) => {
       if (!open) {
-        throw new Error("Перешифровка уже завершена");
+        throw new Error(tt`Перешифровка уже завершена`);
       }
       return subkeyOf(key, info);
     };
@@ -1843,14 +1859,14 @@ export const Vault = {
     if (this.rekeyPending) {
       await this.resumeRekey();
       if (this.rekeyPending) {
-        throw new Error("Предыдущая смена ключа ещё не завершена: повторите позже");
+        throw new Error(tt`Предыдущая смена ключа ещё не завершена: повторите позже`);
       }
     }
     await this._prepareRekeyParticipants();
     return this._exclusive(async () => {
       this.requireUnlocked();
       if (this.data.pw && !password) {
-        throw new Error("Для смены ключа нужен мастер-пароль");
+        throw new Error(tt`Для смены ключа нужен мастер-пароль`);
       }
       const oldKey = await this._liveKey(); // собственная проверенная копия прежнего K
       const newKey = randomBytes(32);
@@ -1862,7 +1878,7 @@ export const Vault = {
         data.check = await encrypt(newKey, utf8ToBytes(checkPlain(flags)));
         data.os = this.osUnlockEnabled ? await this._wrapOs(newKey) : null;
         if (before.os && this.osUnlockEnabled && !data.os) {
-          throw new Error("Хранилище ключей системы недоступно: ключ не сменён");
+          throw new Error(tt`Хранилище ключей системы недоступно: ключ не сменён`);
         }
         data.pw = password ? await this._wrapPassword(newKey, password) : null;
         const wantRk = recovery === "new" || (recovery === "auto" && !!before.rk);
@@ -1880,7 +1896,7 @@ export const Vault = {
           data.rk = null;
         }
         if (!data.os && !data.pw && !data.rk) {
-          throw new Error("Без связки ключей и мастер-пароля новый ключ было бы не открыть");
+          throw new Error(tt`Без связки ключей и мастер-пароля новый ключ было бы не открыть`);
         }
         // прежний K остаётся под новым, пока все данные не перешифрованы (точка невозврата — запись файла)
         data.prev = { ...(await encrypt(newKey, oldKey)), at: new Date().toISOString(), reason };
@@ -1892,7 +1908,7 @@ export const Vault = {
         const prevOk = sameBytes(back, oldKey);
         wipe(back);
         if (!prevOk) {
-          throw new Error("Прежний ключ не сохранился под новым: ключ не сменён");
+          throw new Error(tt`Прежний ключ не сохранился под новым: ключ не сменён`);
         }
         this._stillLive(oldKey);
         this.data = data;

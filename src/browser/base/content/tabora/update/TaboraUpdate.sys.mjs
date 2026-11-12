@@ -1,3 +1,4 @@
+import { tt } from "chrome://tabora/content/i18n/I18n.sys.mjs";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -54,7 +55,7 @@ const TIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 // поля берутся из подписанного манифеста
 const UPDATE_ATTRS = Object.freeze(["taboraVersion", "appVersion", "buildID"]);
 const PATCH_ATTRS = Object.freeze(["type", "URL", "size", "hashFunction", "hashValue"]);
-const STALE_TEXT = "Сведения об обновлениях устарели: действительный манифест не получен. Проверьте новую версию на сайте Tabora";
+const STALE_TEXT = tt`Сведения об обновлениях устарели: действительный манифест не получен. Проверьте новую версию на сайте Tabora`;
 
 /** Открытые ключи Ed25519, которыми подписываются манифесты (сырые 32 байта, base64).
  * keyid — первые 16 hex-символов SHA-256 от ключа. Основной ключ лежит рядом с ключом
@@ -68,7 +69,7 @@ export const MANIFEST_KEYS = Object.freeze({
 const VERSION_RE = /^(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})$/;
 const HTTPS_RE = /^https:\/\/[^\/?#@\s\\]+(\/[^\s]*)?$/;
 
-const EXPIRED = "манифест просрочен";
+const EXPIRED = tt`манифест просрочен`;
 
 export function isVersion(v) {
   return typeof v === "string" && VERSION_RE.test(v);
@@ -134,15 +135,15 @@ function fromBase64(s) {
 /** Проверка подписи манифеста. Возвращает разобранную подписанную часть или бросает. */
 export async function verifyManifestText(text, keys = MANIFEST_KEYS) {
   if (typeof text !== "string" || !text || text.length > MANIFEST_MAX_BYTES) {
-    throw new Error("манифест пустой или слишком большой");
+    throw new Error(tt`манифест пустой или слишком большой`);
   }
   const outer = JSON.parse(text);
   if (!outer || typeof outer.signed !== "string" || !Array.isArray(outer.signatures)) {
-    throw new Error("манифест без подписи");
+    throw new Error(tt`манифест без подписи`);
   }
   // одиночные суррогаты TextEncoder заменяет на U+FFFD: подпись сошлась бы на другом тексте
   if (!outer.signed.isWellFormed()) {
-    throw new Error("манифест: недопустимые символы");
+    throw new Error(tt`манифест: недопустимые символы`);
   }
   const data = new TextEncoder().encode(outer.signed);
   for (const s of outer.signatures.slice(0, 4)) {
@@ -159,7 +160,7 @@ export async function verifyManifestText(text, keys = MANIFEST_KEYS) {
       // неверный base64 или ключ — пробуем следующую подпись
     }
   }
-  throw new Error("подпись манифеста недействительна");
+  throw new Error(tt`подпись манифеста недействительна`);
 }
 
 /** Проверка полей подписанной части. Возвращает нормализованную запись канала или бросает.
@@ -169,46 +170,46 @@ export function validateManifest(p, { channel, target, now = Date.now() }) {
     throw new Error(msg);
   };
   if (!p || typeof p !== "object" || Array.isArray(p)) {
-    fail("пустой манифест");
+    fail(tt`пустой манифест`);
   }
   if (p.format !== MANIFEST_FORMAT) {
-    fail("неизвестный формат манифеста");
+    fail(tt`неизвестный формат манифеста`);
   }
   if (p.channel !== channel) {
-    fail("манифест другого канала");
+    fail(tt`манифест другого канала`);
   }
   if (p.target !== target) {
-    fail("манифест другой платформы");
+    fail(tt`манифест другой платформы`);
   }
   if (!isVersion(p.version)) {
-    fail("неверная версия в манифесте");
+    fail(tt`неверная версия в манифесте`);
   }
   if (p.minimum != null && !isVersion(p.minimum)) {
-    fail("неверная минимальная версия");
+    fail(tt`неверная минимальная версия`);
   }
   if (p.minimum && compareVersions(p.minimum, p.version) > 0) {
-    fail("минимальная версия выше последней");
+    fail(tt`минимальная версия выше последней`);
   }
   if (p.notes != null && (typeof p.notes !== "string" || p.notes.length > 2000)) {
-    fail("слишком длинные заметки");
+    fail(tt`слишком длинные заметки`);
   }
   if (p.notesUrl != null && (typeof p.notesUrl !== "string" || p.notesUrl.length > 512 || !HTTPS_RE.test(p.notesUrl))) {
-    fail("адрес заметок не https");
+    fail(tt`адрес заметок не https`);
   }
   if (typeof p.published !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(p.published)) {
-    fail("неверная дата выпуска");
+    fail(tt`неверная дата выпуска`);
   }
   const time = v => (typeof v === "string" && TIME_RE.test(v) ? Date.parse(v) : NaN);
   const issued = time(p.issued);
   if (!Number.isFinite(issued)) {
-    fail("неверное время подписи манифеста");
+    fail(tt`неверное время подписи манифеста`);
   }
   const expires = time(p.expires);
   if (!Number.isFinite(expires) || expires <= issued || expires - issued > MANIFEST_MAX_VALID_MS) {
-    fail("неверный срок действия манифеста");
+    fail(tt`неверный срок действия манифеста`);
   }
   if (issued > now + CLOCK_SKEW_MS) {
-    fail("манифест подписан в будущем (проверьте часы)");
+    fail(tt`манифест подписан в будущем (проверьте часы)`);
   }
   if (now > expires) {
     fail(EXPIRED);
@@ -217,22 +218,22 @@ export function validateManifest(p, { channel, target, now = Date.now() }) {
   if (p.update != null) {
     const u = p.update;
     if (typeof u !== "object" || Array.isArray(u)) {
-      fail("неверное описание пакета");
+      fail(tt`неверное описание пакета`);
     }
     if (typeof u.url !== "string" || u.url.length > 1024 || !HTTPS_RE.test(u.url)) {
-      fail("адрес пакета не https");
+      fail(tt`адрес пакета не https`);
     }
     if (typeof u.sha512 !== "string" || !/^[0-9a-f]{128}$/.test(u.sha512)) {
-      fail("неверный sha512 пакета");
+      fail(tt`неверный sha512 пакета`);
     }
     if (!Number.isSafeInteger(u.size) || u.size <= 0 || u.size > 4 * 1024 ** 3) {
-      fail("неверный размер пакета");
+      fail(tt`неверный размер пакета`);
     }
     if (typeof u.buildID !== "string" || !/^\d{14}$/.test(u.buildID)) {
-      fail("неверный buildID пакета");
+      fail(tt`неверный buildID пакета`);
     }
     if (typeof u.appVersion !== "string" || !/^[0-9][0-9a-z.]{0,31}$/.test(u.appVersion)) {
-      fail("неверная версия движка пакета");
+      fail(tt`неверная версия движка пакета`);
     }
     update = { url: u.url, sha512: u.sha512, size: u.size, buildID: u.buildID, appVersion: u.appVersion };
   }
@@ -428,7 +429,7 @@ export const TaboraUpdate = {
   async _fetchManifest() {
     const template = defaultHttpsPref(MANIFEST_URL_PREF);
     if (!template) {
-      this.manifestError = "адрес манифеста не задан";
+      this.manifestError = tt`адрес манифеста не задан`;
       return this.channel;
     }
     const ctrl = new AbortController();
@@ -442,21 +443,21 @@ export const TaboraUpdate = {
         signal: ctrl.signal,
       });
       if (!sameHttpsHost(url, res.url)) {
-        throw new Error("ответ с другого адреса");
+        throw new Error(tt`ответ с другого адреса`);
       }
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
       const length = Number(res.headers.get("Content-Length") || 0);
       if (length > MANIFEST_MAX_BYTES) {
-        throw new Error("манифест слишком большой");
+        throw new Error(tt`манифест слишком большой`);
       }
       const payload = await verifyManifestText(await res.text());
       const now = Date.now();
       const m = validateManifest(payload, { channel: this.channelName, target: this.buildTarget, now });
       // откат: подписанный, но более старый манифест (с прежней версией или minimum)
       if (m.issued < this.seenIssued) {
-        throw new Error("манифест старее уже полученного (откат)");
+        throw new Error(tt`манифест старее уже полученного (откат)`);
       }
       this.channel = m;
       this._seenIssued = m.issued;
@@ -466,7 +467,7 @@ export const TaboraUpdate = {
       this._expiredSeen = false;
       this.manifestError = null;
     } catch (e) {
-      this.manifestError = e.name === "AbortError" ? "нет ответа" : e.message || String(e);
+      this.manifestError = e.name === "AbortError" ? tt`нет ответа` : e.message || String(e);
       if (this.manifestError === EXPIRED) {
         this._expiredSeen = true;
       }
@@ -591,48 +592,48 @@ export const TaboraUpdate = {
       return STALE_TEXT;
     }
     if (this.manifestError) {
-      return `Манифест обновлений недоступен: ${this.manifestError}`;
+      return tt`Манифест обновлений недоступен: ${this.manifestError}`;
     }
     if (this.available) {
-      return `Доступна версия ${this.channel.version}${noPackage ? ", но пакет для этой системы не найден" : ""}`;
+      return tt`Доступна версия ${this.channel.version}${noPackage ? tt`, но пакет для этой системы не найден` : ""}`;
     }
-    return "Установлена последняя версия";
+    return tt`Установлена последняя версия`;
   },
 
   _statusText(S) {
     switch (this.status) {
       case S.CHECKING:
-        return "Проверяем обновления…";
+        return tt`Проверяем обновления…`;
       case S.NO_UPDATES_FOUND:
         return this._idleText(true);
       case S.DOWNLOADING: {
         const p = this.progress;
         if (p && p.total > 0) {
           const mb = n => (n / 1048576).toFixed(1).replace(".", ",");
-          return `Скачиваем обновление: ${mb(p.done)} из ${mb(p.total)} МБ`;
+          return tt`Скачиваем обновление: ${mb(p.done)} из ${mb(p.total)} МБ`;
         }
-        return "Скачиваем обновление…";
+        return tt`Скачиваем обновление…`;
       }
       case S.STAGING:
-        return "Подготавливаем установку…";
+        return tt`Подготавливаем установку…`;
       case S.READY_FOR_RESTART:
-        return "Обновление готово, нужен перезапуск";
+        return tt`Обновление готово, нужен перезапуск`;
       case S.DOWNLOAD_FAILED:
-        return "Не удалось скачать обновление, попробуем позже";
+        return tt`Не удалось скачать обновление, попробуем позже`;
       case S.CHECKING_FAILED:
-        return "Не удалось связаться с сервером обновлений";
+        return tt`Не удалось связаться с сервером обновлений`;
       case S.UPDATE_DISABLED_BY_POLICY:
-        return "Обновления отключены настройкой";
+        return tt`Обновления отключены настройкой`;
       case S.NO_UPDATER:
-        return "В этой сборке нет обновлятора";
+        return tt`В этой сборке нет обновлятора`;
       case S.MANUAL_UPDATE:
-        return "Эту версию нужно обновить вручную";
+        return tt`Эту версию нужно обновить вручную`;
       case S.UNSUPPORTED_SYSTEM:
-        return "Система больше не поддерживается";
+        return tt`Система больше не поддерживается`;
       case S.INTERNAL_ERROR:
-        return "Внутренняя ошибка обновлятора";
+        return tt`Внутренняя ошибка обновлятора`;
       case S.OTHER_INSTANCE_HANDLING_UPDATES:
-        return "Обновление ставит другая копия браузера";
+        return tt`Обновление ставит другая копия браузера`;
       default:
         return this._idleText(false);
     }
