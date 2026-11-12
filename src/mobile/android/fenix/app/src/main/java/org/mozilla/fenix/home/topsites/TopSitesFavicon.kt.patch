@@ -1,0 +1,21 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/home/topsites/TopSitesFavicon.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/home/topsites/TopSitesFavicon.kt
+index 4dc418e073..f854e8c70e 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/home/topsites/TopSitesFavicon.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/home/topsites/TopSitesFavicon.kt
+@@ -6,6 +6,7 @@ package org.mozilla.fenix.home.topsites
+ 
+ import androidx.annotation.DrawableRes
+ import mozilla.components.feature.top.sites.TopSite
++import org.mozilla.fenix.R
+ 
+ /** Represents the favicon of a top site. */
+ sealed class TopSitesFavicon {
+@@ -31,6 +32,8 @@ internal fun getTopSitesFavicon(topSite: TopSite): TopSitesFavicon {
+     }
+ 
+     return when (topSite.url) {
++        // Tabora: у ярлыка почты свой знак, а не буква
++        "https://app.tabora.app/" -> TopSitesFavicon.Drawable(R.drawable.ic_tabora_mark)
+         "https://tenki.jp/" -> TopSitesFavicon.ImageUrl(imageUrl = "https://tenki.jp/favicon.ico")
+         "https://m.yahoo.co.jp/" ->
+             TopSitesFavicon.ImageUrl(imageUrl = "https://s.yimg.jp/c/icon/s/bsc/2.0/favicon.ico")

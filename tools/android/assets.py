@@ -161,9 +161,9 @@ def write(rel: str, text: str, base: Path = APP) -> None:
     print(f"  {rel}")
 
 
-def mark_vector(w: float, h: float) -> str:
-    """Знак Tabora в поле w×h dp: в значках до 24 dp занимает всё поле, в картинках — 64 %."""
-    side = min(w, h) * (1.0 if min(w, h) <= 24 else 0.64)
+def mark_vector(w: float, h: float, full: bool = False) -> str:
+    """Знак Tabora в поле w×h dp: в значках до 24 dp (и при full) занимает всё поле, в картинках — 64 %."""
+    side = min(w, h) * (1.0 if full or min(w, h) <= 24 else 0.64)
     left, top = (w - side) / 2, (h - side) / 2
     bar, stem, dot = t_paths(left + side / 2, top + side * 133 / 256, side * 144 / 256)
     ink, lime = INK.upper(), LIME.upper()
@@ -183,6 +183,8 @@ def mark_vector(w: float, h: float) -> str:
 def mascots() -> None:
     for rel, w, h in MASCOTS:
         write(rel, mark_vector(w, h), ANDROID)
+    # Значок ярлыка «Почта Tabora» на стартовой странице (TopSitesFavicon.kt)
+    write(FENIX_RES + "drawable/ic_tabora_mark.xml", mark_vector(48, 48, full=True), ANDROID)
     # Анимация с лисой (подсказка о группах вкладок): пустая композиция того же размера
     write(FENIX_RES + "raw/mozac_ic_kit_tab_groups_animation.json",
           '{"v":"5.7.4","fr":30,"ip":0,"op":30,"w":144,"h":80,"nm":"tabora","ddd":0,"assets":[],"layers":[]}\n', ANDROID)
