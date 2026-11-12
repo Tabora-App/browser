@@ -1,0 +1,46 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/share/ShareController.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/share/ShareController.kt
+index e2f33a00a7..ebe3264635 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/share/ShareController.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/share/ShareController.kt
+@@ -27,6 +27,7 @@ import kotlinx.coroutines.CoroutineDispatcher
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Deferred
+ import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.async
+ import kotlinx.coroutines.launch
+ import mozilla.components.concept.engine.prompt.ShareData
+ import mozilla.components.concept.sync.Device
+@@ -44,8 +45,10 @@ import org.mozilla.fenix.R
+ import org.mozilla.fenix.components.AppStore
+ import org.mozilla.fenix.components.accounts.FenixFxAEntryPoint
+ import org.mozilla.fenix.components.appstate.AppAction.ShareAction
++import org.mozilla.fenix.ext.components
+ import org.mozilla.fenix.ext.nav
+ import org.mozilla.fenix.share.listadapters.AppShareOption
++import org.mozilla.fenix.tabora.TaboraAccount
+ 
+ /**
+  * [ShareFragment] controller.
+@@ -199,14 +202,17 @@ class DefaultShareController(
+     }
+ 
+     override fun handleShareToDevice(device: Device) {
+-        SyncAccount.sendTab.record(NoExtras())
+-        shareToDevicesWithRetry(listOf(device.id)) {
+-            sendTabUseCases.sendToDeviceAsync(device.id, shareData.toTabData())
+-        }
++        shareToDevicesWithRetry(listOf(device.id)) { sendThroughTabora(listOf(device.id)) }
+     }
+ 
+     override fun handleShareToAllDevices(devices: List<Device>) {
+-        shareToDevicesWithRetry(devices.map { it.id }) { sendTabUseCases.sendToAllAsync(shareData.toTabData()) }
++        shareToDevicesWithRetry(devices.map { it.id }) { sendThroughTabora(devices.map { it.id }) }
++    }
++
++    /** Tabora: the pages go to the devices through the Tabora account. */
++    private fun sendThroughTabora(to: List<String>): Deferred<Boolean> {
++        val pages = shareData.toTabData().map { TaboraAccount.Tab(it.title, it.url) }
++        return applicationScope.async { context.components.core.taboraAccount.sendTabs(to, pages) }
+     }
+ 
+     override fun handleSignIn() {

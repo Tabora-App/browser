@@ -1,0 +1,27 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/snackbar/SnackbarBinding.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/snackbar/SnackbarBinding.kt
+index 30432b9c33..b46b3feefd 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/snackbar/SnackbarBinding.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/snackbar/SnackbarBinding.kt
+@@ -232,19 +232,10 @@ class SnackbarBinding(
+                             isError = true,
+                             action = R.string.sync_sent_tab_error_snackbar_action,
+                         ) {
+-                            sendTabUseCases ?: return@show
+-
+                             applicationScope.launch(ioDispatcher) {
+-                                val operation =
+-                                    when (state.destination.size) {
+-                                        1 ->
+-                                            sendTabUseCases.sendToDeviceAsync(
+-                                                deviceId = state.destination[0],
+-                                                tabs = state.tabs,
+-                                            )
+-                                        else -> sendTabUseCases.sendToAllAsync(tabs = state.tabs)
+-                                    }
+-                                when (operation.await()) {
++                                // Tabora: the retry goes through the Tabora account as well
++                                val pages = state.tabs.map { org.mozilla.fenix.tabora.TaboraAccount.Tab(it.title, it.url) }
++                                when (context.components.core.taboraAccount.sendTabs(state.destination, pages)) {
+                                     true ->
+                                         appStore.dispatch(
+                                             ShareAction.SharedTabsSuccessfully(

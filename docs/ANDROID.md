@@ -68,8 +68,9 @@ What lives where:
   on that device at its next sync. A page sent to the phone opens as a new tab of the current
   space, with a note saying which device it came from; pages that were sent before the sign-in
   are not opened. The rules are the same as on desktop (`web/src/phone/sent.js`,
-  `sync/SyncSources.sys.mjs`). The action is in the system share sheet, so for now it needs
-  Android 14 or newer; the in-app share screen of older versions does not have it yet.
+  `sync/SyncSources.sys.mjs`). On Android 14 and newer it is an action of the system share
+  sheet; on older versions it is a block of the in-app share screen, shown when the account
+  has other devices.
 - A sync runs: after sign-in and at startup, a few seconds after a change in tabs, when the
   tab list is opened and every ten minutes. On desktop, sync is on from the moment of account
   sign-in; it is turned off there too: "Settings → Account → Sync".

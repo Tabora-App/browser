@@ -1,0 +1,29 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/share/ShareFragment.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/share/ShareFragment.kt
+index 8609bfe18c..8d851780bc 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/share/ShareFragment.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/share/ShareFragment.kt
+@@ -13,6 +13,7 @@ import androidx.appcompat.app.AppCompatDialogFragment
+ import androidx.appcompat.content.res.AppCompatResources
+ import androidx.compose.ui.platform.ViewCompositionStrategy
+ import androidx.core.content.getSystemService
++import androidx.core.view.isVisible
+ import androidx.fragment.app.clearFragmentResult
+ import androidx.fragment.app.setFragmentResult
+ import androidx.fragment.app.viewModels
+@@ -56,6 +57,7 @@ class ShareFragment : AppCompatDialogFragment() {
+                     queryIntentActivitiesCompat = { intent ->
+                         app.packageManagerCompatHelper.queryIntentActivitiesCompat(intent, 0).orEmpty()
+                     },
++                    tabora = requireComponents.core.taboraAccount,
+                 )
+                     as T
+             }
+@@ -168,6 +170,8 @@ class ShareFragment : AppCompatDialogFragment() {
+         viewLifecycleOwner.lifecycleScope.launch {
+             viewModel.uiState.collect { state ->
+                 shareToAccountDevicesView.setShareTargets(state.devices)
++                // Tabora: "Send to device" is shown when the Tabora account has other devices
++                view.findViewById<View>(R.id.devicesShareGroup)?.isVisible = state.devices.isNotEmpty()
+                 shareToAppsView.setShareTargets(state.otherApps)
+                 shareToAppsView.setRecentShareTargets(state.recentApps)
+             }

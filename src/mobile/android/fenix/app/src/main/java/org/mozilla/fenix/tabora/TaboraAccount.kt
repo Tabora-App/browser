@@ -51,6 +51,9 @@ import mozilla.components.concept.storage.BookmarkNodeType
 import mozilla.components.concept.storage.BookmarksStorage
 import mozilla.components.concept.storage.LoginEntry
 import mozilla.components.concept.storage.LoginsStorage
+import mozilla.components.concept.sync.Device as SyncDevice
+import mozilla.components.concept.sync.DeviceCapability
+import mozilla.components.concept.sync.DeviceType
 import mozilla.components.feature.qr.QrScanActivity
 import mozilla.components.lib.dataprotect.SecureAbove22Preferences
 import mozilla.components.lib.state.ext.flow
@@ -185,6 +188,25 @@ class TaboraAccount(
             controller.sendBackgroundMessage(JSONObject().put("type", "sync"))
         }
     }
+
+    /**
+     * The devices a page can be sent to, in the form the engine's share screens draw. Empty
+     * without a sign-in. A phone's ID starts with its platform, a computer's does not.
+     */
+    fun sendDevices(): List<SyncDevice> =
+        state.value.targets.map {
+            val phone = it.id.startsWith("and-") || it.id.startsWith("ios-")
+            SyncDevice(
+                id = it.id,
+                displayName = it.name,
+                deviceType = if (phone) DeviceType.MOBILE else DeviceType.DESKTOP,
+                isCurrentDevice = false,
+                lastAccessTime = null,
+                capabilities = listOf(DeviceCapability.SEND_TAB),
+                subscriptionExpired = false,
+                subscription = null,
+            )
+        }
 
     /**
      * Send pages to other devices of the account: each opens there on that device's next sync.

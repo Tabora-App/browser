@@ -134,8 +134,10 @@ export const Sync = {
     Services.prefs.setBoolPref(PREF + group, !!on);
     this.notify("settings");
     if (!on && group === "tabs") {
-      // список вкладок этого компьютера другим больше не нужен
-      this._retire("tabs", lazy.Account.deviceId()).catch(() => {});
+      // список вкладок этого компьютера другим больше не нужен; the pages it sent are not either
+      this._retire("tabs", lazy.Account.deviceId())
+        .then(() => this._retire("sent", lazy.Account.deviceId()))
+        .catch(() => {});
     }
     this.soon(0);
   },

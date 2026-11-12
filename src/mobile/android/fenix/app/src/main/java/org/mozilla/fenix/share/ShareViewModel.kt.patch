@@ -1,0 +1,66 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/share/ShareViewModel.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/share/ShareViewModel.kt
+index 5bf3d0b578..3fa571bdeb 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/share/ShareViewModel.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/share/ShareViewModel.kt
+@@ -28,6 +28,7 @@ import mozilla.components.service.fxa.manager.FxaAccountManager
+ import org.mozilla.fenix.ext.isOnline
+ import org.mozilla.fenix.share.listadapters.AppShareOption
+ import org.mozilla.fenix.share.listadapters.SyncShareOption
++import org.mozilla.fenix.tabora.TaboraAccount
+ 
+ /**
+  * [androidx.lifecycle.ViewModel] responsible for managing the data required for the Share functionality.
+@@ -56,6 +57,7 @@ class ShareViewModel(
+     private val packageName: String,
+     private val getCopyApp: () -> AppShareOption? = { null },
+     private val queryIntentActivitiesCompat: (Intent) -> List<ResolveInfo> = { emptyList() },
++    private val tabora: TaboraAccount? = null,
+ ) : ViewModel() {
+     companion object {
+         internal const val RECENT_APPS_LIMIT = 6
+@@ -143,8 +145,8 @@ class ShareViewModel(
+ 
+     private fun refreshDevices(network: Network?) {
+         viewModelScope.launch {
+-            // Trigger FxA refresh
+-            fxaAccountManager.authenticatedAccount()?.deviceConstellation()?.refreshDevices()
++            // Tabora: the devices come from the Tabora account; ask it to sync now
++            tabora?.syncNow()
+ 
+             val devices = buildDeviceList(network)
+             _uiState.update { it.copy(devices = devices) }
+@@ -201,30 +203,14 @@ class ShareViewModel(
+     @VisibleForTesting
+     internal suspend fun buildDeviceList(network: Network? = null): List<SyncShareOption> =
+         withContext(ioDispatcher) {
+-            val account = fxaAccountManager.authenticatedAccount()
++            // Tabora: the other devices of the Tabora account. Without a connection, a sign-in or
++            // another device the list is empty and the screen does not show the block at all.
+             when {
+-                // No network
+-                isOffline(network) -> listOf(SyncShareOption.Offline)
+-                // No account signed in
+-                account == null -> listOf(SyncShareOption.SignIn)
+-                // Account needs to be re-authenticated
+-                fxaAccountManager.accountNeedsReauth() -> listOf(SyncShareOption.Reconnect)
+-                // Signed in
++                isOffline(network) -> emptyList()
+                 else -> {
+-                    val shareableDevices =
+-                        account
+-                            .deviceConstellation()
+-                            .state()
+-                            ?.otherDevices
+-                            .orEmpty()
+-                            .filter { it.capabilities.contains(DeviceCapability.SEND_TAB) }
+-                            .sortedByDescending { it.lastAccessTime }
++                    val shareableDevices = tabora?.sendDevices().orEmpty()
+ 
+                     val list = mutableListOf<SyncShareOption>()
+-                    if (shareableDevices.isEmpty()) {
+-                        // Show add device button if there are no devices
+-                        list.add(SyncShareOption.AddNewDevice)
+-                    }
+ 
+                     shareableDevices.mapTo(list) { SyncShareOption.SingleDevice(it) }
+ 
