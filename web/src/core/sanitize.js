@@ -72,7 +72,14 @@ function dropStyles(html) {
  * @returns {{ doc: Document, css: string, blocked: number, body: { style: string, bgcolor: string, text: string } }}
  */
 export function sanitizeMail(html, { inline = {}, remote = false, context = null } = {}) {
-  const doc = parseInert(String(html || "").slice(0, 2_000_000), context);
+  // Скрипты и обработчики событий вырезаются ещё из текста: в неактивном документе они и так не
+  // исполняются, но браузер на каждый пишет в консоль «исполнение скрипта заблокировано». После
+  // разбора их, как и всё остальное запрещённое, убирает обход дерева ниже — текстовая чистка тут
+  // не защита, а тишина. Обработчики ищутся только внутри тегов: текст письма не меняется.
+  const quiet = String(html || "").slice(0, 2_000_000)
+    .replace(/<script\b[\s\S]*?<\/script\s*>/gi, "").replace(/<\/?script\b[^>]*>/gi, "")
+    .replace(/<[a-zA-Z][^<>]*>/g, tag => tag.replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, ""));
+  const doc = parseInert(quiet, context);
   let blocked = 0;
   let count = 0;
   const css = [];

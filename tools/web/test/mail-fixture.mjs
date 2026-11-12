@@ -81,6 +81,9 @@ try {
     // письма без метки в тексте (зашифрованные): по теме
     const [q2] = await mail.jmap.call([["Email/query", { filter: { subject: tag }, limit: 200 }]]);
     q2.ids.forEach(id => ids.add(id));
+    // письма сервера о входах проверочных устройств
+    const [q3] = await mail.jmap.call([["Email/query", { filter: { subject: "Tabora: вход с нового устройства" }, limit: 200 }]]);
+    q3.ids.forEach(id => ids.add(id));
     if (ids.size) {
       await mail.remove([...ids], { forever: true });
     }
