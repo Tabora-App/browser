@@ -1,0 +1,34 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/account/TurnOnSyncFragment.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/account/TurnOnSyncFragment.kt
+index 9f2eb44912..d7dbb011e1 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/account/TurnOnSyncFragment.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/account/TurnOnSyncFragment.kt
+@@ -25,6 +25,7 @@ import mozilla.components.support.ktx.android.view.hideKeyboard
+ import mozilla.telemetry.glean.private.NoExtras
+ import org.mozilla.fenix.GleanMetrics.SyncAuth
+ import org.mozilla.fenix.HomeActivity
++import org.mozilla.fenix.NavGraphDirections
+ import org.mozilla.fenix.R
+ import org.mozilla.fenix.components.appstate.AppAction
+ import org.mozilla.fenix.databinding.FragmentTurnOnSyncBinding
+@@ -89,16 +90,11 @@ class TurnOnSyncFragment : Fragment(), AccountObserver, SystemInsetsPaddedFragme
+ 
+     override fun onCreate(savedInstanceState: Bundle?) {
+         super.onCreate(savedInstanceState)
+-        requireComponents.backgroundServices.accountManager.register(this, owner = this)
+-        SyncAuth.opened.record(NoExtras())
+-
+-        // App can be installed on devices with no camera modules. Like Android TV boxes.
+-        // Let's skip presenting the option to sign in by scanning a qr code in this case
+-        // and default to login with email and password.
+-        shouldLoginJustWithEmail = !requireContext().hasCamera()
+-        if (shouldLoginJustWithEmail) {
+-            navigateToPairWithEmail()
+-        }
++        // Tabora: входа в аккаунт Mozilla в приложении нет. Все оставшиеся переходы на этот экран
++        // (закладки, «Поделиться», автозаполнение, ссылки) открывают «Аккаунт Tabora». Сам экран
++        // остаётся без вида и закрывается, когда человек возвращается (см. onResume).
++        shouldLoginJustWithEmail = true
++        findNavController().navigate(NavGraphDirections.actionGlobalTaboraAccountFragment())
+     }
+ 
+     override fun onDestroy() {
