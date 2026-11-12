@@ -14,6 +14,9 @@
 | Имя пакета `app.tabora.browser`, без общего пользователя с Firefox, ссылки `tabora://` | `src/mobile/android/fenix/app/build.gradle.patch`, `src/release/AndroidManifest.xml.patch`, `src/release/res/xml/shortcuts.xml.patch` |
 | Название в надписях («Firefox» → «Tabora» во всех переводах) | `rebrand_android_strings` в `tools/build.py` — по месту, только для цели android |
 | Значок, заставка, знак в уведомлениях, знак и надпись на стартовой странице | `src/mobile/android/fenix/app/src/{main,release}/res/…`; рисует `tools/android/assets.py` |
+| Картинки с лисой и логотипом Firefox (плашки, пустые экраны, ошибки) — знак Tabora того же размера | список `MASCOTS` в `tools/android/assets.py` |
+| Цвета оформления: нейтральный фон и лаймовый/оливковый акцент вместо фиолетовой палитры | `NovaColors.kt.patch`, `nova_colors.xml.patch` (меняются только числа палитры), `colors.xml.patch` |
+| Выключатель блокировщика рекламы в настройках | `preferences.xml.patch`, `SettingsFragment.kt.patch`, надписи — `res/values*/tabora_strings.xml` |
 | Названия для движка (страницы ошибок) | `src/mobile/android/branding/tabora/` |
 | Блокировщик рекламы — те же модули, что на компьютере | `src/mobile/shared/tabora/jar.mn`, запуск в `GeckoViewStartup.sys.mjs.patch` |
 | Ярлыки стартовой страницы | `src/main/res/raw/default_shortcuts.json`, `default_pinned_shortcuts.json` |
@@ -48,10 +51,10 @@
 Правки Kotlin сделаны так, чтобы менять как можно меньше: значение по умолчанию, условие показа,
 элемент списка. Сборка идёт с «предупреждения = ошибки», а проверить её можно только на GitHub.
 
-Ещё не сделано (следующие шаги): цвета оформления (у Firefox фиолетовая палитра), выключатель
-блокировщика рекламы в настройках, ссылка «Кто может видеть мои действия» в приватном режиме
-(ведёт в справку Mozilla), «Сообщить о проблеме с сайтом», библиотеки Google (Firebase, Play
-Services) в составе приложения, картинки прежних значков Firefox внутри файла приложения.
+Ещё не сделано (следующие шаги): разделы аккаунта Tabora в приложении; ссылки «Подробнее» в
+настройках и «Кто может видеть мои действия» в приватном режиме ведут в справку Mozilla;
+библиотеки Google (Firebase, Play Services) в составе приложения; картинки прежних значков Firefox
+(выбор значка скрыт, но файлы остались внутри приложения).
 
 ## Сборка
 
@@ -72,6 +75,24 @@ python3 tools/build.py package     # проверка и dist/tabora-<верси
 
 Версия приложения — `displayVersion` из `browser.json` (та же, что у браузера для компьютера).
 Номер сборки (versionCode) растёт со временем сам.
+
+## Местная сборка приложения (без движка)
+
+Правки интерфейса не требуют пересборки движка. `tools/android/local.sh` собирает одно
+приложение поверх готового движка за несколько минут — так проверяются Kotlin (сборка идёт с
+«предупреждения = ошибки») и внешний вид в эмуляторе:
+
+```sh
+tools/android/local.sh setup <файл с GitHub>.apk              # движок из нашей сборки
+tools/android/local.sh setup geckoview-omni-arm64-v8a-….aar --mozilla   # или готовый движок Mozilla той же версии
+tools/android/local.sh build       # приложение: engine/obj-android-local/gradle/…/outputs/apk/release/
+tools/android/local.sh compile     # только проверить, что Kotlin собирается
+```
+
+С движком Mozilla нет блокировщика рекламы и наших настроек движка: он годится, чтобы смотреть
+интерфейс, пока нет своей сборки. Такой файл никуда не выкладывается. Для эмулятора его
+подписывают отдельным проверочным ключом (`TABORA_ANDROID_KEYS_DIR=<каталог> tools/android/sign.sh init`),
+а не ключом выпуска.
 
 ## Подпись
 
