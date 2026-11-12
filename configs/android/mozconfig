@@ -1,0 +1,51 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Android: движок (GeckoView) и приложение из того же дерева исходников (mobile/android/fenix).
+# Цель (--target), набор названий и канал подставляет tools/build.py. Этот файл самодостаточен:
+# configs/common/mozconfig описывает браузер для компьютера и сюда не подключается.
+ac_add_options --enable-project=mobile/android
+# Локальная сборка на ноутбуке: не забирать все ядра и память (в CI переменная CI задана)
+if test -z "$CI"; then
+  mk_add_options MOZ_PARALLEL_BUILD=8
+fi
+# BROWSER_RELEASE=1 — сборка для распространения (те же правила, что для компьютера)
+if test "$BROWSER_RELEASE"; then
+  ac_add_options --enable-optimize
+  ac_add_options --enable-release
+  ac_add_options --disable-debug
+  ac_add_options --disable-debug-symbols
+  ac_add_options --disable-debug-js-modules
+  ac_add_options --disable-tests
+  ac_add_options --disable-geckodriver
+  ac_add_options --disable-rust-tests
+  # configure сам скачивает недостающие тулчейны Mozilla (clang, sysroot); SDK, NDK и JDK ставит
+  # mach bootstrap (tools/build.py bootstrap)
+  if ! test "$BROWSER_DISABLE_BOOTSTRAP"; then
+    ac_add_options --enable-bootstrap=-sccache
+  fi
+  if test "$BROWSER_DISABLE_LTO"; then
+    ac_add_options --disable-lto
+  else
+    export MOZ_LTO=cross,thin
+    ac_add_options --enable-lto=cross,thin
+  fi
+  mk_add_options MOZILLA_OFFICIAL=1
+  MOZILLA_OFFICIAL=1
+  export MOZILLA_OFFICIAL=1
+  mk_add_options AUTOCLOBBER=1
+  export AUTOCLOBBER=1
+fi
+# Google Safe Browsing: ключ из файла вне репозитория, как для компьютера (docs/UPDATES.md).
+# Здесь нельзя ничего печатать (echo): mach разбирает вывод mozconfig.
+_tabora_sb_key="${TABORA_SAFEBROWSING_KEYFILE:-$HOME/.config/tabora/safebrowsing.key}"
+if test -s "$_tabora_sb_key"; then
+  ac_add_options --with-google-safebrowsing-api-keyfile="$_tabora_sb_key"
+fi
+unset _tabora_sb_key
+# Отчёты о сбоях и телеметрия Mozilla выключены сборкой: нет сборщика дампов и адреса их
+# отправки, телеметрия движка не собирается. Отправку данных самим приложением выключают
+# правки в src/mobile/android/fenix (docs/ANDROID.md).
+ac_add_options --disable-crashreporter
+ac_add_options MOZ_TELEMETRY_REPORTING=

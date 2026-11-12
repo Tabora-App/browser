@@ -1,0 +1,11 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/FeatureFlags.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/FeatureFlags.kt
+index dd13cf1515..c9f9639138 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/FeatureFlags.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/FeatureFlags.kt
+@@ -25,5 +25,5 @@ object FeatureFlags {
+      *
+      * ⚠️ DO NOT MODIFY THIS FLAG IN PRODUCTION.
+      */
+-    val onboardingFeatureEnabled = !Config.channel.isDebug
++    val onboardingFeatureEnabled = false
+ }

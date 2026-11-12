@@ -1,0 +1,48 @@
+diff --git a/mobile/android/fenix/app/build.gradle b/mobile/android/fenix/app/build.gradle
+index e8032b0120..3adb1840df 100644
+--- a/mobile/android/fenix/app/build.gradle
++++ b/mobile/android/fenix/app/build.gradle
+@@ -46,7 +46,8 @@ android {
+             arg("room.schemaLocation", "$projectDir/schemas".toString())
+         }
+ 
+-        applicationId "org.mozilla"
++        // Tabora: свой пакет (app.tabora.browser в выпуске), с Firefox не пересекается
++        applicationId "app.tabora"
+         minSdk config.minSdkVersion
+         targetSdk config.targetSdkVersion
+         versionCode 1
+@@ -139,18 +140,11 @@ android {
+         }
+         release releaseTemplate >> {
+             buildConfigField "boolean", "USE_RELEASE_VERSIONING", "true"
+-            applicationIdSuffix ".firefox"
+-            def deepLinkSchemeValue = "fenix"
++            applicationIdSuffix ".browser"
++            def deepLinkSchemeValue = "tabora"
+             buildConfigField "String", "DEEP_LINK_SCHEME", "\"$deepLinkSchemeValue\""
++            // Tabora: без sharedUserId Firefox — с ним приложение не встанет рядом с Firefox
+             manifestPlaceholders.putAll([
+-                    // This release type is meant to replace Firefox (Release channel) and therefore needs to inherit
+-                    // its sharedUserId for all eternity. See:
+-                    // https://searchfox.org/mozilla-esr68/search?q=moz_android_shared_id&case=false&regexp=false&path=
+-                    // Shipping an app update without sharedUserId can have
+-                    // fatal consequences. For example see:
+-                    //  - https://issuetracker.google.com/issues/36924841
+-                    //  - https://issuetracker.google.com/issues/36905922
+-                    "sharedUserId": "org.mozilla.firefox.sharedID",
+                     "deepLinkScheme": deepLinkSchemeValue,
+             ])
+         }
+@@ -343,8 +337,9 @@ androidComponents {
+ // -------------------------------------------------------------------------------------------------
+ 
+ android.defaultConfig.with {
+-    buildConfigField 'boolean', 'CRASH_REPORTING', 'true'
+-    buildConfigField 'boolean', 'TELEMETRY', 'true'
++    // Tabora: отчёты о сбоях и сбор данных Mozilla выключены сборкой
++    buildConfigField 'boolean', 'CRASH_REPORTING', 'false'
++    buildConfigField 'boolean', 'TELEMETRY', 'false'
+ 
+     // Reading the sentry token from a local file (if it exists). In a release task on taskcluster it will be available.
+     buildConfigField 'String', 'SENTRY_TOKEN', 'null'

@@ -1,0 +1,17 @@
+diff --git a/mobile/android/fenix/app/nimbus.fml.yaml b/mobile/android/fenix/app/nimbus.fml.yaml
+index 0fb0a2cc86..8efd3e73ca 100644
+--- a/mobile/android/fenix/app/nimbus.fml.yaml
++++ b/mobile/android/fenix/app/nimbus.fml.yaml
+@@ -45,9 +45,9 @@ features:
+           {
+             "top-sites": true,
+             "jump-back-in": true,
+-            "pocket": true,
+-            "pocket-sponsored-stories": true,
+-            "synced-tabs": true,
++            "pocket": false,
++            "pocket-sponsored-stories": false,
++            "synced-tabs": false,
+             "collections": true,
+             "privacy-report": true,
+           }

@@ -1,0 +1,12 @@
+diff --git a/mobile/android/fenix/app/src/release/AndroidManifest.xml b/mobile/android/fenix/app/src/release/AndroidManifest.xml
+index bd5999c8d4..5fb6f37eb8 100644
+--- a/mobile/android/fenix/app/src/release/AndroidManifest.xml
++++ b/mobile/android/fenix/app/src/release/AndroidManifest.xml
+@@ -10,6 +10,5 @@
+                 - https://issuetracker.google.com/issues/36924841
+                 - https://issuetracker.google.com/issues/36905922
+ -->
+-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:sharedUserId="${sharedUserId}">
++<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+ </manifest>

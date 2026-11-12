@@ -1,0 +1,15 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/experiments/NimbusSetup.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/experiments/NimbusSetup.kt
+index fef47df19c..dd25fe5a70 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/experiments/NimbusSetup.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/experiments/NimbusSetup.kt
+@@ -55,7 +55,9 @@ fun createNimbus(
+             isFirstRun = isAppFirstRun,
+         )
+ 
+-    val serverSettings: NimbusServerSettings? = remoteSettingsService?.let { service ->
++    // Tabora: эксперименты и удалённые изменения Mozilla не загружаются
++    val serverSettings: NimbusServerSettings? =
++        remoteSettingsService?.takeIf { settings.nimbusUsePreview }?.let { service ->
+         NimbusServerSettings(
+             rsService = service,
+             collectionName =

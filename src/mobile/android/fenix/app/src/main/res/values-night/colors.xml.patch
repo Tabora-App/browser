@@ -1,0 +1,13 @@
+diff --git a/mobile/android/fenix/app/src/main/res/values-night/colors.xml b/mobile/android/fenix/app/src/main/res/values-night/colors.xml
+index 95480ff5ef..9470e4d8ff 100644
+--- a/mobile/android/fenix/app/src/main/res/values-night/colors.xml
++++ b/mobile/android/fenix/app/src/main/res/values-night/colors.xml
+@@ -57,7 +57,7 @@
+     <color name="fx_mobile_icon_private">@color/novaViolet50</color>
+     <color name="fx_mobile_scrim">@color/novaBlackA50</color>
+ 
+-    <color name="fx_mobile_splashscreen_background">#210340</color>
++    <color name="fx_mobile_splashscreen_background">#0F1013</color>
+ 
+     <!-- Design system color variables -->
+ 

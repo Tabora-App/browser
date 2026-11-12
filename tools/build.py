@@ -85,6 +85,11 @@ LOCALE_RE = re.compile(r"^[a-z]{2,3}(-[A-Z]{2}|-[a-zA-Z]{4,8})?$")
 TEAM_ID_RE = re.compile(r"^[A-Z0-9]{10}$")
 MOZILLA_TEAM_ID = "43AQ936H96"
 NO_SAFEBROWSING_KEY = "no-google-safebrowsing-api-key"
+# Android: приложение собирается из mobile/android/fenix типом сборки release; имя пакета задаёт
+# src/mobile/android/fenix/app/build.gradle.patch, здесь оно сверяется в готовом файле
+ANDROID_BUILD_TYPE = "release"
+ANDROID_APP_ID = "app.tabora.browser"
+ANDROID_ABI = "arm64-v8a"
 HOST_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")
 
 
@@ -152,6 +157,10 @@ def target_triple() -> str:
         return f"{arch}-apple-darwin"
     if plat == "linux":
         return "aarch64-linux-gnu" if arch == "aarch64" else "x86_64-pc-linux"
+    if plat == "android":
+        if arch != "aarch64":
+            die("для Android собирается только aarch64 (телефоны arm64-v8a): задайте TARGET_ARCH=aarch64")
+        return "aarch64-linux-android"
     die("Windows пока не поддерживается этим инструментом")
     return ""
 
@@ -504,6 +513,8 @@ def cmd_import(args: argparse.Namespace) -> None:
     apply_branding(config, brand)
     apply_src()
     verify_mar_certs()
+    if target_platform() == "android":
+        rebrand_android_strings()
     write_mozconfig(config, brand)
     log("import завершён")
 
@@ -789,6 +800,9 @@ def cmd_export(args: argparse.Namespace) -> None:
             continue
         if (ENGINE / rel).is_symlink():
             continue
+        if rel.startswith("mobile/android/") and "/res/values" in rel and rel.endswith(ANDROID_STRING_FILES):
+            # название в надписях Android заменяет rebrand_android_strings, патчи не нужны
+            continue
         # сырой вывод без strip(): хвостовые пустые строки контекста — часть патча
         diff = run(["git", "diff", "--", rel], cwd=ENGINE, capture=True).stdout
         if not diff.strip():
@@ -805,10 +819,36 @@ def cmd_export(args: argparse.Namespace) -> None:
 # ---------------------------------------------------------------------------
 # mozconfig, bootstrap, build, run, package
 
+def write_android_mozconfig(config: dict, brand: str, changeset: str) -> Path:
+    """mozconfig для Android: движок GeckoView и приложение (mobile/android/fenix) из одного дерева.
+    Имя пакета, название и версия приложения задаются не здесь, а в его настройках сборки
+    (src/mobile/android/fenix/app/build.gradle.patch) и параметрами gradle в cmd_build."""
+    header = f"""# Сгенерировано tools/build.py, не редактировать: правьте configs/android/mozconfig
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-android-{target_arch()}
+
+ac_add_options --target={target_triple()}
+ac_add_options --with-branding=mobile/android/branding/tabora
+ac_add_options --enable-update-channel={brand}
+
+export MOZ_SOURCE_REPO={config.get('repository', '')}
+export MOZ_SOURCE_CHANGESET={changeset}
+export MOZ_INCLUDE_SOURCE_INFO=1
+export BROWSER_BRAND={brand}
+export TARGET_PLATFORM=android
+export TARGET_ARCH={target_arch()}
+"""
+    path = CONFIGS / "android" / "mozconfig"
+    out = ENGINE / "mozconfig"
+    out.write_text(header + "\n# ---- configs/android/mozconfig ----\n" + path.read_text())
+    return out
+
+
 def write_mozconfig(config: dict, brand: str) -> Path:
     info = config["brands"][brand]
     plat = target_platform()
     changeset = git(["rev-parse", "--short", "HEAD"], cwd=ROOT, check=False) or "unknown"
+    if plat == "android":
+        return write_android_mozconfig(config, brand, changeset)
     app_basename = config["name"].replace(" ", "")
     # Хост для [AppUpdate] URL в application.ini (иначе Firefox подставит aus5.mozilla.org).
     # Сам адрес не используется: update.xml берётся из tabora.update.url (настройки по умолчанию).
@@ -861,7 +901,9 @@ def cmd_bootstrap(args: argparse.Namespace) -> None:
     config = load_config()
     brand = brand_name(config, args.brand)
     log("ставлю тулчейны Mozilla (mach bootstrap), это долго при первом запуске")
-    mach(["--no-interactive", "bootstrap", "--application-choice", "browser"], config, brand)
+    # для Android bootstrap ставит ещё Android SDK, NDK и JDK в ~/.mozbuild
+    choice = "mobile_android" if target_platform() == "android" else "browser"
+    mach(["--no-interactive", "bootstrap", "--application-choice", choice], config, brand)
 
 
 def dev_resource_roots() -> list[Path]:
@@ -910,10 +952,139 @@ def register_dev_locales(config: dict) -> None:
         log(f"встроенные переводы в dist/bin: {', '.join(ready)}")
 
 
+# ---------------------------------------------------------------------------
+# Android
+
+ANDROID_STRING_FILES = ("strings.xml", "static_strings.xml")
+_XML_COMMENT_RE = re.compile(r"(<!--.*?-->)", re.S)
+
+
+def rebrand_android_strings() -> None:
+    """Название в надписях приложения для Android: «Firefox» → название продукта.
+
+    У приложения название почти везде подставляется из app_name, но в части надписей (в каждом из
+    ~90 переводов) оно написано прямо. Править это патчами — сотни файлов, поэтому замена делается
+    здесь, по месту в engine/, только для цели android. Комментарии переводчикам и адреса
+    (firefox.com — строчными) не трогаются; файлы, подключённые из src/, тоже."""
+    need_engine()
+    brand = load_config()["name"]
+    android = ENGINE / "mobile" / "android"
+    roots = [android / "fenix" / "app" / "src", android / "android-components" / "components"]
+    changed = 0
+    for root in roots:
+        for name in ANDROID_STRING_FILES:
+            for path in root.glob(f"**/res/values*/{name}"):
+                if path.is_symlink():
+                    continue
+                text = path.read_text(encoding="utf-8")
+                parts = _XML_COMMENT_RE.split(text)
+                new = "".join(part if part.startswith("<!--") else part.replace("Firefox", brand) for part in parts)
+                if new != text:
+                    path.write_text(new, encoding="utf-8")
+                    changed += 1
+    log(f"надписи приложения для Android: название заменено в {changed} файлах" if changed
+        else "надписи приложения для Android: название уже заменено")
+
+
+def _apk_problems(apk: Path) -> List[str]:
+    """Готовый файл приложения: тот ли это продукт и всё ли в нём на месте."""
+    import io
+    import zipfile
+    problems = []
+    try:
+        with zipfile.ZipFile(apk) as z:
+            names = set(z.namelist())
+            for need in (f"lib/{ANDROID_ABI}/libxul.so", "assets/omni.ja", "AndroidManifest.xml", "classes.dex"):
+                if need not in names:
+                    problems.append(f"в {apk.name} нет {need}")
+            manifest = z.read("AndroidManifest.xml") if "AndroidManifest.xml" in names else b""
+            # общий пользователь с Firefox (sharedUserId): с ним приложение не встанет на телефон,
+            # где уже есть Firefox, — подписи разные
+            if b"sharedID" in manifest or "sharedID".encode("utf-16-le") in manifest:
+                problems.append(f"в описании приложения остался общий пользователь с Firefox (sharedUserId): "
+                                f"пакет должен быть {ANDROID_APP_ID} без него")
+            if ANDROID_APP_ID.encode() not in manifest and ANDROID_APP_ID.encode("utf-16-le") not in manifest:
+                problems.append(f"имя пакета в {apk.name} не {ANDROID_APP_ID}")
+            if any(n.startswith("META-INF/") and n.endswith((".RSA", ".DSA", ".EC")) for n in names):
+                problems.append(f"{apk.name} уже подписан: сборка должна отдавать неподписанный файл "
+                                "(подпись — tools/android/sign.sh)")
+            if "assets/omni.ja" in names:
+                with zipfile.ZipFile(io.BytesIO(z.read("assets/omni.ja"))) as omni:
+                    inside = set(omni.namelist())
+                for rel in ("shield/Shield.sys.mjs", "shield/ShieldEngine.sys.mjs",
+                            "actors/TaboraShieldParent.sys.mjs", "actors/TaboraShieldChild.sys.mjs"):
+                    if f"chrome/geckoview/content/tabora/{rel}" not in inside:
+                        problems.append(f"в движке нет блокировщика рекламы: chrome/geckoview/content/tabora/{rel}")
+    except (OSError, zipfile.BadZipFile) as e:
+        problems.append(f"{apk.name} не читается: {e}")
+    return problems
+
+
+def package_android(config: dict, brand: str) -> None:
+    """Кладёт собранное приложение в dist/ и проверяет его. Файл неподписанный: поставить его
+    на телефон нельзя, пока он не подписан ключом Tabora (tools/android/sign.sh)."""
+    version = config["brands"][brand].get("displayVersion", "")
+    found = android_apks(ANDROID_ABI)
+    if len(found) != 1:
+        die(f"в {android_apk_dir()} ожидался один файл для {ANDROID_ABI}, найдено {len(found)}: "
+            "сначала tools/build.py build")
+    apk = found[0]
+    problems = _apk_problems(apk) + _engine_sync_problems()
+    release = is_release_env()
+    if not release:
+        warn("BROWSER_RELEASE не задана: пакет для разработки, файл в dist/ с суффиксом -dev")
+    for problem in problems:
+        warn(problem)
+    if problems:
+        die(f"приложение для Android не прошло проверку ({len(problems)}): в dist/ не кладётся")
+    DIST.mkdir(exist_ok=True)
+    name = f"tabora-{version}-android-{ANDROID_ABI}-unsigned.apk"
+    if not release:
+        name = _dev_name(name)
+    shutil.copy(apk, DIST / name)
+    digest = hashlib.sha256((DIST / name).read_bytes()).hexdigest()
+    log(f"→ dist/{name} ({apk.stat().st_size >> 20} МБ, sha256 {digest})")
+
+
+def android_apk_dir() -> Path:
+    return objdir() / "gradle" / "build" / "mobile" / "android" / "fenix" / "app" / "outputs" / "apk"
+
+
+def android_apks(abi: str = "") -> List[Path]:
+    """Собранные файлы приложения нужного типа сборки (по одному на архитектуру процессора)."""
+    return sorted(p for p in android_apk_dir().rglob("*.apk")
+                  if f"-{ANDROID_BUILD_TYPE}" in p.name and (not abi or f"-{abi}-" in p.name))
+
+
+def build_android(config: dict, brand: str) -> None:
+    """Android: сначала движок (mach build собирает GeckoView и кладёт его в хранилище gradle
+    внутри objdir), потом приложение. Приложение выходит неподписанным: подпись своим ключом —
+    отдельный шаг вне сборки (tools/android/sign.sh), как у версии для компьютера."""
+    version = config["brands"][brand].get("displayVersion", "")
+    if not TABORA_VERSION_RE.match(version):
+        die(f"displayVersion бренда {brand} должна быть вида X.Y.Z, сейчас {version!r}")
+    rebrand_android_strings()
+    log(f"полная сборка android/{target_arch()}, бренд «{brand}»: движок")
+    mach(["build"], config, brand)
+    log(f"сборка приложения Tabora {version} для Android")
+    mach(["gradle", f"fenix:assemble{ANDROID_BUILD_TYPE.capitalize()}", f"-PversionName={version}",
+          "-PdisableDebugSigning"], config, brand)
+    apks = android_apks()
+    if not apks:
+        die(f"приложение не собрано: в {android_apk_dir()} нет файлов .apk")
+    for apk in apks:
+        log(f"собрано: {apk.relative_to(ENGINE)} ({apk.stat().st_size >> 20} МБ)")
+
+
 def cmd_build(args: argparse.Namespace) -> None:
     config = load_config()
     brand = brand_name(config, args.brand)
     verify_mar_certs()
+    if target_platform() == "android":
+        if args.ui:
+            die("--ui для Android не поддерживается: приложение собирается целиком")
+        build_android(config, brand)
+        return
     if args.ui:
         log("пересборка интерфейса (mach build faster)")
         mach(["build", "faster"], config, brand)
@@ -1228,6 +1399,9 @@ def _prepare_distribution_dir() -> None:
 def cmd_package(args: argparse.Namespace) -> None:
     config = load_config()
     brand = brand_name(config, args.brand)
+    if target_platform() == "android":
+        package_android(config, brand)
+        return
     verify_mar_certs()
     _prepare_distribution_dir()
     locales = [loc for loc in config.get("locales", []) if loc != "en-US"]

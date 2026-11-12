@@ -1,0 +1,14 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/Analytics.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/Analytics.kt
+index 6774a4eb6c..defb4d085f 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/Analytics.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/Analytics.kt
+@@ -147,7 +147,8 @@ class Analytics(
+                     appName = context.getString(R.string.app_name),
+                     organizationName = "Mozilla",
+                 ),
+-            enabled = true,
++            // Tabora: отчёты о сбоях в Mozilla не собираются и не предлагаются
++            enabled = false,
+             nonFatalCrashIntent = pendingIntent,
+             useLegacyReporting = settings.crashReportOption() != CrashReportOption.Auto,
+             runtimeTagProviders =

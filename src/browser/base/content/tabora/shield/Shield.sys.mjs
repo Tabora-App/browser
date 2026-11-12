@@ -272,7 +272,8 @@ export const Shield = {
       return;
     }
     // селектор проверяется разбором: негодный не попадает в таблицу стилей
-    const css = Services.wm.getMostRecentWindow("navigator:browser")?.CSS;
+    // окно браузера на компьютере, окно GeckoView на Android
+    const css = (Services.wm.getMostRecentWindow("navigator:browser") || Services.wm.getMostRecentWindow("navigator:geckoview"))?.CSS;
     const engine = new Engine({ validSelector: css ? s => css.supports(`selector(${s})`) : () => true });
     texts.forEach(([, text]) => engine.scanBadfilters(text));
     for (const [kind, text] of texts) {

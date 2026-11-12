@@ -1,0 +1,10 @@
+diff --git a/mobile/shared/moz.build b/mobile/shared/moz.build
+index dc2e3f94c7..a78e57079e 100644
+--- a/mobile/shared/moz.build
++++ b/mobile/shared/moz.build
+@@ -14,4 +14,5 @@ DIRS += [
+     "chrome",
+     "components",
+     "modules",
++    "tabora",
+ ]
