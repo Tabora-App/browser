@@ -68,3 +68,10 @@
 .compat { max-width: 420px; margin: 18vh auto 0; padding: 0 24px; display: flex; flex-direction: column; gap: 12px; }
 .compat h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
 .compat p { color: var(--text-3); line-height: 1.55; }
+
+/* Вход по QR-коду с другого устройства */
+.auth-or { display: flex; flex-direction: column; gap: 10px; padding-top: 18px; border-top: 1px solid var(--line-2); }
+.auth-or .btn { gap: 10px; }
+.pair-code { display: flex; justify-content: center; gap: 18px; padding: 22px 12px; border-radius: var(--r); background: var(--card); border: 1px solid var(--line-2); font: 700 38px/1 var(--mono); letter-spacing: 0.1em; font-variant-numeric: tabular-nums; }
+.pair-wait { display: flex; align-items: center; gap: 10px; color: var(--text-3); font-size: 14px; }
+.pair-account { padding: 14px 16px; border-radius: var(--r); background: var(--card); border: 1px solid var(--line-2); font-weight: 650; font-size: 16px; overflow-wrap: anywhere; }

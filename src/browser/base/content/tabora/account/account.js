@@ -147,11 +147,15 @@ Object.assign(Tabora, {
     root.querySelector(".ta-card").replaceChildren();
     this.account.step = null;
     this.account.after = null;
+    this.accountPairStop(); // показанный код входа на телефоне больше не действует
     Account.cancelLogin(); // сервер уже впустил, а сейф не открыли: такая сессия не нужна
   },
 
   accountRender(step, opts = {}) {
     const card = this.account.el.querySelector(".ta-card");
+    if (step !== "pair" && step !== "pair-confirm") {
+      this.accountPairStop(); // окно занято другим шагом: показанный код входа больше не ждём
+    }
     this.account.step = step;
     const builders = {
       welcome: this.accountWelcome, register: this.accountRegister, recovery: this.accountRecovery, done: this.accountDone, login: this.accountLogin, change: this.accountChange, link: this.accountLink,
@@ -159,6 +163,7 @@ Object.assign(Tabora, {
       vault: this.accountVault, forgot: this.accountForgot, "forgot-key": this.accountForgotKey, "forgot-mail": this.accountForgotMail,
       twofa: this.accountTwoFactor, "twofa-scan": this.accountTwoFactorScan, "twofa-off": this.accountTwoFactorOff, "twofa-codes": this.accountTwoFactorCodes, codes: this.accountBackupCodes,
       bemail: this.accountBackupEmail, "bemail-code": this.accountBackupEmailCode, "bemail-off": this.accountBackupEmailOff,
+      pair: this.accountPair, "pair-confirm": this.accountPairConfirm,
     };
     card.replaceChildren(builders[step].call(this, opts));
     setTimeout(() => card.querySelector("input:not([type=checkbox])")?.focus(), 60);
@@ -876,7 +881,7 @@ Object.assign(Tabora, {
    * после входа. Резервные коды показываются один раз. */
 
   /** QR-код как SVG: тёмные модули на белом поле с положенным отступом в четыре модуля. */
-  accountQr(text, size = 168) {
+  accountQr(text, size = 168, label = tt`QR-код для приложения кодов`) {
     const NS = "http://www.w3.org/2000/svg";
     const modules = this.qrModules(text);
     const quiet = 4;
@@ -884,7 +889,7 @@ Object.assign(Tabora, {
     modules.forEach((row, y) => row.forEach((dark, x) => (d += dark ? `M${x + quiet} ${y + quiet}h1v1h-1z` : "")));
     const svg = document.createElementNS(NS, "svg");
     const side = modules.length + quiet * 2;
-    for (const [k, v] of Object.entries({ viewBox: `0 0 ${side} ${side}`, width: size, height: size, class: "ta-qr", role: "img", "aria-label": tt`QR-код для приложения кодов`, "shape-rendering": "crispEdges" })) {
+    for (const [k, v] of Object.entries({ viewBox: `0 0 ${side} ${side}`, width: size, height: size, class: "ta-qr", role: "img", "aria-label": label, "shape-rendering": "crispEdges" })) {
       svg.setAttribute(k, v);
     }
     const bg = document.createElementNS(NS, "rect");
@@ -940,6 +945,109 @@ Object.assign(Tabora, {
         this.accountRender("codes", { codes: r.backupCodes });
       },
     });
+  },
+
+  /* ---- Вход на телефоне по QR-коду ----------------------------------------------------
+   * Компьютер показывает код, телефон считывает его и входит без пароля. Человек сверяет шесть
+   * цифр на двух экранах и разрешает вход здесь: считать код с чужого экрана мало. */
+
+  accountPairStop() {
+    const offer = this.account.pair;
+    this.account.pair = null;
+    offer?.cancel();
+  },
+
+  accountPair() {
+    const h = (t, a, x, c) => this.html(t, a, x, c);
+    const { Account } = this.accountMod();
+    this.accountPairStop();
+    const box = h("div", { class: "ta-pair-box" });
+    const note = h("p", { class: "ta-hint" });
+    const waiting = text => box.replaceChildren(h("span", { class: "ta-spinner", "aria-hidden": "true" }), h("span", {}, text));
+    const failed = e => {
+      note.textContent = "";
+      box.replaceChildren(
+        h("p", { class: "ta-error" }, e.code === "pair-gone" ? tt`Код устарел: он действует три минуты.` : e.message || String(e)),
+        this.taButton(tt`Показать новый код`, "primary", show)
+      );
+    };
+    const show = async () => {
+      waiting(tt`Готовим код…`);
+      let offer = null;
+      try {
+        offer = await Account.pairOffer();
+        if (this.account.step !== "pair" || !box.isConnected) {
+          offer.cancel();
+          return;
+        }
+        this.accountPairStop();
+        this.account.pair = offer;
+        box.replaceChildren(this.accountQr(offer.link, 216, tt`QR-код для входа на телефоне`));
+        note.textContent = tt`Код действует три минуты и подходит один раз. Не показывайте его посторонним и не отправляйте снимком.`;
+        const seen = await offer.joined();
+        if (this.account.pair === offer) {
+          this.accountRender("pair-confirm", { offer, seen });
+        }
+      } catch (e) {
+        if (e.code !== "pair-cancelled" && (!offer || this.account.pair === offer) && box.isConnected) {
+          this.account.pair = null;
+          failed(e);
+        }
+      }
+    };
+    show();
+    return h("div", { class: "ta-step ta-pair" }, null, [
+      h("div", { class: "ta-brand" }, null, [this.markSvg("ta-mark"), h("span", {}, "Tabora"), h("i", {}, tt`аккаунт`)]),
+      h("h2", {}, tt`Вход на телефоне`),
+      h("p", { class: "ta-text" }, tt`Откройте Tabora на телефоне: «Настройки → Аккаунт Tabora → Войти по QR-коду» и наведите камеру на этот код. Пароль вводить не придётся.`),
+      box,
+      note,
+      this.taButton(tt`Закрыть`, "ghost", () => this.accountClose()),
+    ]);
+  },
+
+  /** Код считан: сверка шести цифр и разрешение входа. */
+  accountPairConfirm({ offer, seen }) {
+    const h = (t, a, x, c) => this.html(t, a, x, c);
+    const { Account } = this.accountMod();
+    const err = h("div", { class: "ta-error", hidden: "true" });
+    const done = () => {
+      if (this.account.pair === offer) {
+        this.account.pair = null; // обмен завершён: при закрытии окна отменять нечего
+      }
+    };
+    const allow = this.taButton(tt`Разрешить вход`, "primary", async () => {
+      allow.disabled = deny.disabled = true;
+      err.hidden = true;
+      try {
+        await seen.approve();
+        done();
+        this.accountClose();
+        this.notice(tt`Вход разрешён: «${seen.deviceName}» появится в списке устройств`);
+        setTimeout(() => Account.devicesChanged(), 6000);
+      } catch (e) {
+        allow.disabled = deny.disabled = false;
+        err.textContent = e.code === "pair-gone" ? tt`Код устарел: он действует три минуты. Покажите новый.` : e.message || String(e);
+        err.hidden = false;
+      }
+    });
+    const deny = this.taButton(tt`Отклонить`, "ghost", async () => {
+      allow.disabled = deny.disabled = true;
+      await seen.deny();
+      done();
+      this.accountClose();
+      this.notice(tt`Вход отклонён`);
+    });
+    return h("div", { class: "ta-step ta-pair" }, null, [
+      h("div", { class: "ta-brand" }, null, [this.markSvg("ta-mark"), h("span", {}, "Tabora"), h("i", {}, tt`аккаунт`)]),
+      h("h2", {}, tt`Разрешить вход?`),
+      h("p", { class: "ta-text" }, tt`В аккаунт хочет войти устройство «${seen.deviceName}». На его экране должен быть этот же код.`),
+      h("div", { class: "ta-pair-code", role: "img", "aria-label": tt`Код сверки: ${seen.code.split("").join(" ")}` }, null, [h("span", {}, seen.code.slice(0, 3)), h("span", {}, seen.code.slice(3))]),
+      h("p", { class: "ta-hint" }, tt`Если на телефоне кода нет или он другой — отклоните: код считал кто-то ещё. Устройство получит доступ к почте, паролям и кодам входа аккаунта.`),
+      err,
+      allow,
+      deny,
+    ]);
   },
 
   /** Резервные коды: показываются один раз, каждый подходит один раз. */

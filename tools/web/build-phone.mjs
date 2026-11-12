@@ -118,8 +118,8 @@ const fill = (name, values) => {
 // писем, поэтому разрешает оформление внутри письма и картинки; скрипты — только свои файлы.
 // Каждая страница и каждая рамка дополнительно сужает её своей (обе действуют вместе).
 const scripts = "script-src 'self' 'wasm-unsafe-eval'";
-const manifestCsp = `default-src 'none'; ${scripts}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src ${api}; worker-src 'self'; frame-src 'self'; media-src 'self' blob:; base-uri 'none'; form-action 'none'`;
-const pageCsp = `default-src 'none'; ${scripts}; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src ${api}; worker-src 'self'; frame-src 'self'; media-src 'self' blob:; base-uri 'none'; form-action 'none'`;
+const manifestCsp = `default-src 'none'; ${scripts}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src ${api}${fillTest ? ` ${fillTest}` : ""}; worker-src 'self'; frame-src 'self'; media-src 'self' blob:; base-uri 'none'; form-action 'none'`;
+const pageCsp = `default-src 'none'; ${scripts}; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src ${api}${fillTest ? ` ${fillTest}` : ""}; worker-src 'self'; frame-src 'self'; media-src 'self' blob:; base-uri 'none'; form-action 'none'`;
 const frameCsp = remote => `default-src 'none'; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'; img-src data: blob:${remote ? " https:" : ""}`;
 fill("index.html", { __APP_JS__: outName(app, entries.app), __APP_CSS__: outName(app, entries.style), __PAGE_CSP__: pageCsp });
 fill("codes.html", { __CODES_JS__: outName(app, entries.codes), __APP_CSS__: outName(app, entries.style), __PAGE_CSP__: pageCsp });

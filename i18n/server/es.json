@@ -163,5 +163,9 @@
  "у аккаунта нет ящика или почта выключена": "la cuenta no tiene buzón o el correo está desactivado",
  "Некорректный запрос: адрес файла": "Solicitud no válida: dirección del archivo",
  "Некорректный запрос: не JSON": "Solicitud no válida: no es JSON",
- "Некорректный запрос: тип файла": "Solicitud no válida: tipo de archivo"
+ "Некорректный запрос: тип файла": "Solicitud no válida: tipo de archivo",
+ "Код для входа устарел. Покажите новый на устройстве, где вы уже вошли": "El código de acceso ha caducado. Muestra uno nuevo en el dispositivo donde ya has iniciado sesión",
+ "Неверный запрос входа по коду": "Solicitud de acceso con código no válida",
+ "Вход отклонён на устройстве, где вы уже вошли": "El acceso se rechazó en el dispositivo donde ya has iniciado sesión",
+ "В аккаунт вошли с устройства, которого раньше не было: «{0}». Вход подтверждён по коду с другого вашего устройства.\n\nЕсли это были вы, делать ничего не нужно. Если нет — смените пароль в настройках аккаунта: остальные устройства выйдут из него.": "Se ha iniciado sesión en tu cuenta desde un dispositivo que no se había usado antes: «{0}». El acceso se confirmó con un código desde otro de tus dispositivos.\n\nSi has sido tú, no tienes que hacer nada. Si no, cambia la contraseña en los ajustes de la cuenta: los demás dispositivos cerrarán sesión."
 }

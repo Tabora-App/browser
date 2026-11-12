@@ -340,6 +340,11 @@ class LocalBackend {
     return Object.entries(d.users[email]?.devices || {}).map(([id, v]) => ({ id, ...v }));
   }
 
+  // вход на другом устройстве идёт через сервер
+  async pairStart() {
+    this._noServer();
+  }
+
   // обращения в поддержку принимает сервер
   async supportTickets() {
     this._noServer();
@@ -594,6 +599,24 @@ class HttpBackend {
 
   devices({ session }) {
     return this._call("GET", "/v1/account/devices", null, session?.token);
+  }
+
+  /* Вход на другом устройстве по QR-коду (server/src/pair.rs). */
+
+  pairStart({ session }) {
+    return this._call("POST", "/v1/pair/start", {}, session?.token);
+  }
+
+  pairStatus({ session, id }) {
+    return this._call("GET", `/v1/pair/${encodeURIComponent(id)}`, null, session?.token);
+  }
+
+  pairApprove({ session, id, payload }) {
+    return this._call("POST", `/v1/pair/${encodeURIComponent(id)}/approve`, { payload }, session?.token);
+  }
+
+  pairDeny({ session, id }) {
+    return this._call("POST", `/v1/pair/${encodeURIComponent(id)}/deny`, {}, session?.token);
   }
 
   mailPassword({ session }) {
@@ -1795,6 +1818,74 @@ export const Account = {
       return [];
     }
     return this.backend.devices({ email: this.email, session: this.data.session });
+  },
+
+  /* ---- вход на телефоне по QR-коду ----------------------------------------------------------
+   * Этот компьютер показывает код, телефон считывает его и входит без пароля. Порядок обмена —
+   * server/src/pair.rs, шифрование — account/Pair.sys.mjs. */
+
+  /**
+   * Начать вход на другом устройстве. link — текст QR-кода; joined() ждёт, пока код считают, и
+   * отдаёт имя устройства, код сверки (тот же показан на нём) и действия: approve() разрешает вход
+   * и передаёт ключ данных аккаунта, deny() отклоняет. cancel() отменяет показанный код.
+   */
+  async pairOffer() {
+    await this.ready();
+    const session = this._session();
+    if (this.needsServerLink) {
+      throw Object.assign(new Error(tt`Вход на телефоне появится, когда аккаунт подключат к серверу Tabora`), { code: "no-server" });
+    }
+    const P = ChromeUtils.importESModule("chrome://tabora/content/account/Pair.sys.mjs");
+    const mine = await P.pairKeys();
+    const { id, expiresAt } = await this.backend.pairStart({ session });
+    let stopped = false;
+    const joined = async () => {
+      for (;;) {
+        if (stopped) {
+          throw Object.assign(new Error(tt`Вход отменён`), { code: "pair-cancelled" });
+        }
+        let r = null;
+        try {
+          r = await this.backend.pairStatus({ session, id });
+        } catch (e) {
+          if (e.code !== "offline") {
+            throw e;
+          }
+        }
+        if (r?.state === "joined" && typeof r.public === "string") {
+          const secrets = await P.pairSecrets(mine.privateKey, r.public, { id, starter: mine.public, joiner: r.public });
+          return {
+            deviceName: String(r.deviceName || "").slice(0, 64),
+            code: secrets.code,
+            approve: async () => {
+              // без ключа данных телефон войдёт, но пароли и коды откроет только паролем аккаунта
+              const key = await lazy.Pgp.accountDataKey().catch(() => null);
+              const payload = await P.pairSeal(secrets.key, id, { dataKey: key ? base64.encode(key) : null });
+              key?.fill(0);
+              await this.backend.pairApprove({ session, id, payload });
+              secrets.key.fill(0);
+            },
+            deny: async () => {
+              secrets.key.fill(0);
+              await this.backend.pairDeny({ session, id }).catch(() => {});
+            },
+          };
+        }
+        await new Promise(done => setTimeout(done, 1500));
+      }
+    };
+    const cancel = () => {
+      if (!stopped) {
+        stopped = true;
+        this.backend.pairDeny({ session, id }).catch(() => {});
+      }
+    };
+    return { link: P.pairLink(id, mine.public), expiresAt: Number(expiresAt) || 0, joined, cancel };
+  },
+
+  /** Список устройств аккаунта изменился (вход на телефоне разрешён): окна настроек перечитают его. */
+  devicesChanged() {
+    Services.obs.notifyObservers(null, this.TOPIC, "devices");
   },
 
   /* ---- обращения в поддержку (хранит сервер) ---------------------------------------------- */

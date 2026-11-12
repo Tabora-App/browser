@@ -28,7 +28,12 @@ boot(t`Аккаунт Tabora`, (root, service) => {
     clear(root);
     current = want === "account"
       ? mountPhoneAccount(root, { service })
-      : mountAuth(root, { account, embedded: true, intro: { title: t`Вход`, text: t`Войдите, чтобы вкладки, пароли и коды входа были общими для этого телефона и других ваших устройств.` } });
+      : mountAuth(root, {
+          account,
+          embedded: true,
+          intro: { title: t`Вход`, text: t`Войдите, чтобы вкладки, пароли и коды входа были общими для этого телефона и других ваших устройств.` },
+          pair: { scan: () => service.scanQr(), shares: t`Вкладки, пароли и коды входа этого телефона станут общими с этим аккаунтом и другими его устройствами.` },
+        });
   }
 
   const off = account.subscribe(what => {

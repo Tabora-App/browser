@@ -29,6 +29,7 @@ mod db;
 mod i18n;
 mod limit;
 mod mail;
+mod pair;
 mod pgp;
 mod security;
 mod support;

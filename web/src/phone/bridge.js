@@ -21,7 +21,9 @@
  *   { type: "state", signedIn, email, tabsOn, codesOn, codes, status, at, devices: [{ id, name, at, tabs: [{ t, u }] }] }
  *   { type: "auth", rid }                попросить человека подтвердить, что телефон в его руках
  *                                        (отпечаток, лицо или код блокировки) → reply { ok }
- *   { type: "open", page }               открыть экран модуля: "account" или "codes" */
+ *   { type: "open", page }               открыть экран модуля: "account" или "codes"
+ *   { type: "qr-scan", rid }             открыть сканер QR-кодов → reply { text } (пусто — закрыли)
+ *                                        или { denied: true } — нет доступа к камере */
 
 const APP = "tabora";
 

@@ -163,5 +163,9 @@
  "у аккаунта нет ящика или почта выключена": "the account has no mailbox or mail is turned off",
  "Некорректный запрос: адрес файла": "Invalid request: file path",
  "Некорректный запрос: не JSON": "Invalid request: not JSON",
- "Некорректный запрос: тип файла": "Invalid request: file type"
+ "Некорректный запрос: тип файла": "Invalid request: file type",
+ "Код для входа устарел. Покажите новый на устройстве, где вы уже вошли": "The sign-in code has expired. Show a new one on the device where you’re already signed in",
+ "Неверный запрос входа по коду": "Invalid code sign-in request",
+ "Вход отклонён на устройстве, где вы уже вошли": "The sign-in was declined on the device where you’re already signed in",
+ "В аккаунт вошли с устройства, которого раньше не было: «{0}». Вход подтверждён по коду с другого вашего устройства.\n\nЕсли это были вы, делать ничего не нужно. Если нет — смените пароль в настройках аккаунта: остальные устройства выйдут из него.": "Someone signed in to your account from a device that wasn’t used before: “{0}”. The sign-in was confirmed with a code from another of your devices.\n\nIf this was you, you don’t need to do anything. If not, change your password in the account settings: the other devices will be signed out."
 }

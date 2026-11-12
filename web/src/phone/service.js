@@ -338,6 +338,25 @@ export class Service {
     this.bridge.post({ type: "open", page });
   }
 
+  /** Открыть сканер QR-кодов приложения. Текст кода или пустая строка, если сканер закрыли. */
+  async scanQr() {
+    if (this.fillTestOrigin) {
+      // проверочная сборка: код подкладывает проверочный сервер, камера эмулятору не нужна
+      try {
+        const res = await fetch(`${this.fillTestOrigin}/qr.txt`, { cache: "no-store", credentials: "omit" });
+        const text = res.ok ? (await res.text()).trim() : "";
+        if (text) {
+          return text.slice(0, 512);
+        }
+      } catch (e) {}
+    }
+    const r = await this.bridge.call({ type: "qr-scan" }, 180000);
+    if (r.denied) {
+      throw Object.assign(new Error(t`Чтобы считать код, разрешите Tabora доступ к камере в настройках телефона`), { code: "no-camera" });
+    }
+    return typeof r.text === "string" ? r.text.slice(0, 512) : "";
+  }
+
   /** Выход: список вкладок телефона убирается с сервера, сессия завершается, вход и копия данных стираются. */
   async signOut() {
     if (this.tabs.enabled) {

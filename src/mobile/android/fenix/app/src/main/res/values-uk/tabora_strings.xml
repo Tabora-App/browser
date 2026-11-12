@@ -27,4 +27,6 @@
     </plurals>
     <!-- Экран и пункт меню: почта аккаунта внутри приложения -->
     <string name="tabora_mail_title">Пошта Tabora</string>
+    <!-- Вхід за QR-кодом з іншого пристрою: підказка у сканері -->
+    <string name="tabora_pair_scan_hint">Наведіть камеру на QR-код на екрані комп’ютера</string>
 </resources>

@@ -19,12 +19,16 @@
 
 import { b64, open, random, randomId, same, seal, text, tryB64, utf8, wipe } from "./bytes.js";
 import { KDF_CURRENT, passwordKeys } from "./kdf.js";
+import { pairClaim, pairKeys, pairLink, pairOpen, pairParse, pairSeal, pairSecrets } from "./pair.js";
 import { checkNewPassword } from "./password.js";
 import { armorBody, pgpCall } from "./pgp.js";
 import { rkNew, rkSignReset, rkVerifier, rkWrapKey } from "./recovery.js";
 import { t } from "./i18n.js";
 
 const PENDING_TTL = 3 * 60 * 1000;
+const PAIR_POLL = 1500;
+const PAIR_LIFE = 200000; // обмен на сервере живёт три минуты; небольшой запас на дорогу
+const pause = ms => new Promise(done => setTimeout(done, ms));
 const ARMOR_RE = /-----BEGIN PGP PUBLIC KEY BLOCK-----[\s\S]+-----END PGP PUBLIC KEY BLOCK-----/;
 
 function fail(message, code, extra = {}) {
@@ -244,6 +248,140 @@ export class Account {
     }
     await this._persist();
     this._entered(hold);
+  }
+
+  /* ---- вход по QR-коду (порядок обмена — server/src/pair.rs, шифрование — pair.js) ---- */
+
+  /**
+   * Новое устройство считало QR-код с устройства, где человек уже вошёл. Возвращает код сверки
+   * (тот же показан там) и wait(): она ждёт, пока вход разрешат, и отдаёт адрес аккаунта с двумя
+   * действиями — enter() входит, decline() отказывается, и выданная сессия тут же завершается.
+   * Адрес показывают человеку до входа: подсунутый чужой код ввёл бы его в чужой аккаунт.
+   */
+  async pairJoin(qrText) {
+    const offer = pairParse(qrText);
+    if (!offer) {
+      throw fail(t`Это не код входа Tabora. Код для входа показывает Tabora на компьютере: «Настройки → Аккаунт → Синхронизация → Войти на телефоне»`, "pair-invalid");
+    }
+    const mine = await pairKeys();
+    const { secret, claim } = await pairClaim();
+    const secrets = await pairSecrets(mine.privateKey, offer.public, { id: offer.id, starter: offer.public, joiner: mine.public });
+    await this.api.pairJoin({ id: offer.id, public: mine.public, claim, deviceId: this.store.deviceId(), deviceName: this.deviceName() });
+    let stopped = false;
+    const wait = async () => {
+      const until = Date.now() + PAIR_LIFE;
+      for (;;) {
+        if (stopped) {
+          throw fail(t`Вход отменён`, "pair-cancelled");
+        }
+        let r = null;
+        try {
+          r = await this.api.pairPoll({ id: offer.id, secret });
+        } catch (e) {
+          if (e.code !== "offline" || Date.now() > until) {
+            throw e;
+          }
+        }
+        if (r?.state === "approved") {
+          return this._paired(offer.id, secrets.key, r);
+        }
+        if (Date.now() > until) {
+          throw fail(t`Код для входа устарел. Покажите новый на устройстве, где вы уже вошли`, "pair-gone");
+        }
+        await pause(PAIR_POLL);
+      }
+    };
+    return { code: secrets.code, wait, cancel: () => (stopped = true) };
+  }
+
+  async _paired(id, key, r) {
+    const token = r.session?.token;
+    const email = typeof r.email === "string" ? r.email : "";
+    const data = token && email.endsWith(`@${this.domain}`) ? await pairOpen(key, id, r.payload) : null;
+    wipe(key);
+    const decline = async () => {
+      if (token) {
+        await this.api.logout(token).catch(() => {});
+      }
+    };
+    if (!data) {
+      // ответ зашифрован не тем устройством, чей код считан: входить по нему нельзя
+      await decline();
+      throw fail(t`Не удалось проверить устройство, которое разрешило вход. Покажите код заново и повторите`, "pair-broken");
+    }
+    const dataKey = tryB64(data.dataKey);
+    return {
+      email,
+      decline: async () => {
+        wipe(dataKey);
+        await decline();
+      },
+      enter: async () => {
+        this.session = { email, userId: r.userId, token, expiresAt: r.session.expiresAt, kdf: r.kdf || KDF_CURRENT, mail: r.mail || null };
+        this.keys = { state: "offline" };
+        this._step(t`Открываем ключи`);
+        try {
+          await this._openKeys({ dataKey: dataKey?.length === 32 ? dataKey : null });
+        } catch (e) {
+          console.error("Tabora: ключи аккаунта не открыты", e);
+          if (this.keys.state !== "locked") {
+            this.keys = { state: "offline" };
+          }
+        }
+        await this._persist();
+        this._entered(false);
+        return { email };
+      },
+    };
+  }
+
+  /**
+   * Устройство, где человек уже вошёл, показывает QR-код: link — его текст. joined() ждёт, пока
+   * новое устройство считает код, и отдаёт его имя, код сверки и два действия: approve() разрешает
+   * вход и передаёт ключ данных аккаунта, deny() отклоняет.
+   */
+  async pairOffer() {
+    const token = this.token;
+    const mine = await pairKeys();
+    const { id, expiresAt } = await this.api.pairStart(token);
+    let stopped = false;
+    const joined = async () => {
+      for (;;) {
+        if (stopped) {
+          throw fail(t`Вход отменён`, "pair-cancelled");
+        }
+        let r = null;
+        try {
+          r = await this.api.pairStatus(token, id);
+        } catch (e) {
+          if (e.code !== "offline") {
+            throw e;
+          }
+        }
+        if (r?.state === "joined" && typeof r.public === "string") {
+          const secrets = await pairSecrets(mine.privateKey, r.public, { id, starter: mine.public, joiner: r.public });
+          return {
+            deviceName: String(r.deviceName || "").slice(0, 64),
+            code: secrets.code,
+            approve: async () => {
+              const dataKey = this.keys.state === "ok" && this.keys.dataKey ? b64(this.keys.dataKey) : null;
+              await this.api.pairApprove(token, id, await pairSeal(secrets.key, id, { dataKey }));
+              wipe(secrets.key);
+            },
+            deny: async () => {
+              wipe(secrets.key);
+              await this.api.pairDeny(token, id).catch(() => {});
+            },
+          };
+        }
+        await pause(PAIR_POLL);
+      }
+    };
+    const cancel = () => {
+      stopped = true;
+      this.api.pairDeny(token, id).catch(() => {});
+    };
+    return { link: pairLink(id, mine.public), expiresAt, joined, cancel };
   }
 
   async signOut() {

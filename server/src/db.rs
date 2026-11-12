@@ -260,6 +260,10 @@ pub async fn user_by_email<C: GenericClient>(c: &C, email: &str) -> Result<Optio
     Ok(c.query_opt(&format!("SELECT {USER_COLS} FROM users WHERE email = $1"), &[&email]).await?.as_ref().map(user))
 }
 
+pub async fn user_by_id<C: GenericClient>(c: &C, id: i64) -> Result<Option<User>, DbError> {
+    Ok(c.query_opt(&format!("SELECT {USER_COLS} FROM users WHERE id = $1"), &[&id]).await?.as_ref().map(user))
+}
+
 /// Занято ли имя: ящиком, алиасом (в том числе удалённым) или именем удалённого ящика.
 pub async fn name_taken<C: GenericClient>(c: &C, local: &str, email: &str) -> Result<bool, DbError> {
     let row = c

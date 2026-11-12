@@ -4,11 +4,17 @@
 
 package org.mozilla.fenix.tabora
 
+import android.Manifest
+import android.app.Activity
 import android.app.KeyguardManager
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.SystemClock
 import android.provider.Settings
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
@@ -34,6 +40,7 @@ import mozilla.components.concept.engine.webextension.Port
 import mozilla.components.concept.engine.webextension.WebExtensionRuntime
 import mozilla.components.concept.storage.LoginEntry
 import mozilla.components.concept.storage.LoginsStorage
+import mozilla.components.feature.qr.QrScanActivity
 import mozilla.components.lib.dataprotect.SecureAbove22Preferences
 import mozilla.components.lib.state.ext.flow
 import mozilla.components.support.base.log.logger.Logger
@@ -53,7 +60,8 @@ import org.mozilla.fenix.R
  *  - модулю передаётся список открытых вкладок (без приватных);
  *  - от модуля приходит состояние: кто вошёл, вкладки других устройств аккаунта, сколько кодов входа;
  *  - по просьбе модуля приложение спрашивает у человека отпечаток, лицо или код блокировки (перед
- *    показом и вставкой кодов входа) и открывает экраны модуля;
+ *    показом и вставкой кодов входа), открывает экраны модуля и сканер QR-кодов (вход по коду с
+ *    другого устройства);
  *  - модуль читает и меняет хранилище паролей приложения, чтобы слить его с паролями аккаунта.
  *
  * Сообщения описаны в web/src/phone/bridge.js.
@@ -187,6 +195,14 @@ class TaboraAccount(
                         authenticate { ok -> port.postMessage(JSONObject().put("type", "reply").put("rid", rid).put("ok", ok)) }
                     }
                     "open" -> openPage(json.optString("page"))
+                    "qr-scan" -> {
+                        val rid = json.optInt("rid")
+                        scanQr { text, denied ->
+                            port.postMessage(
+                                JSONObject().put("type", "reply").put("rid", rid).put("text", text ?: "").put("denied", denied)
+                            )
+                        }
+                    }
                     "logins-list", "logins-add", "logins-update", "logins-delete" -> {
                         val rid = json.optInt("rid")
                         scope.launch(Dispatchers.Main) {
@@ -336,6 +352,58 @@ class TaboraAccount(
                     .setAllowedAuthenticators(authenticators)
                     .build()
             )
+    }
+
+    /**
+     * Сканер QR-кодов: вход по коду, который показывает другое устройство аккаунта. Отдаёт считанный
+     * текст (null — сканер закрыли); denied — человек не дал приложению доступ к камере. Что делать
+     * с текстом, решает модуль: приложение его не разбирает.
+     */
+    private fun scanQr(onResult: (text: String?, denied: Boolean) -> Unit) {
+        val activity = host?.get()
+        if (activity == null || activity.isFinishing || !activity.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            onResult(null, false)
+            return
+        }
+        val registry = activity.activityResultRegistry
+        val id = SystemClock.elapsedRealtimeNanos()
+        val scan = {
+            var launcher: ActivityResultLauncher<Intent>? = null
+            val opened =
+                registry.register("tabora-qr-scan-$id", ActivityResultContracts.StartActivityForResult()) { result ->
+                    launcher?.unregister()
+                    val text =
+                        if (result.resultCode == Activity.RESULT_OK) {
+                            result.data?.getStringExtra(QrScanActivity.EXTRA_SCAN_RESULT_DATA)
+                        } else {
+                            null
+                        }
+                    onResult(text, false)
+                }
+            launcher = opened
+            runCatching { opened.launch(QrScanActivity.newIntent(activity, R.string.tabora_pair_scan_hint)) }
+                .onFailure {
+                    logger.error("сканер QR-кодов не открыт", it)
+                    opened.unregister()
+                    onResult(null, false)
+                }
+        }
+        if (ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            scan()
+            return
+        }
+        var asking: ActivityResultLauncher<String>? = null
+        val ask =
+            registry.register("tabora-qr-camera-$id", ActivityResultContracts.RequestPermission()) { granted ->
+                asking?.unregister()
+                if (granted) {
+                    scan()
+                } else {
+                    onResult(null, true)
+                }
+            }
+        asking = ask
+        ask.launch(Manifest.permission.CAMERA)
     }
 
     /** Открыть экран модуля: «Аккаунт Tabora», «Коды входа» или «Почта». */

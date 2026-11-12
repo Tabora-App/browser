@@ -617,7 +617,8 @@ window.TaboraAccountPane = (function () {
     sync() {
       const local = Account.isLocalMode;
       const here = Account.deviceId();
-      const list = state.devices || [];
+      // устройства, из которых вышли, сервер помнит, но в списке они ни к чему
+      const list = (state.devices || []).filter(dev => dev.id === here || dev.active !== false);
       const devices = list.length
         ? list.map(dev => item(dev.name || tt`Устройство`, dev.id === here ? tt`Этот компьютер` : "", [value(dev.at ? tt`вход ${date(dev.at)}` : "")]))
         : [item(Account.deviceName(), tt`Этот компьютер`)];
@@ -696,7 +697,10 @@ window.TaboraAccountPane = (function () {
               [button(tt`Показать`, tabsMenu(dev))]
             )))
           : null,
-        group(tt`Устройства`, offline ? tt`Список появится, когда аккаунт подключат к серверу.` : tt`Компьютеры, на которых выполнен вход в этот аккаунт.`, devices),
+        group(tt`Устройства`, offline ? tt`Список появится, когда аккаунт подключат к серверу.` : tt`Компьютеры и телефоны, на которых выполнен вход в этот аккаунт.`, [
+          offline ? null : item(tt`Войти на телефоне`, tt`Покажите QR-код приложению Tabora на телефоне: оно войдёт в аккаунт без ввода пароля.`, [button(tt`Показать код`, shell(s => s.accountDialog("pair")), { type: "primary" })]),
+          ...devices,
+        ].filter(Boolean)),
         on || st.at
           ? group(tt`Данные на сервере`, "", [
               item(tt`Стереть данные синхронизации с сервера`, tt`Зашифрованные копии на сервере будут удалены, синхронизация выключится на всех компьютерах аккаунта. Данные на самих компьютерах останутся.`, [button(tt`Стереть`, async e => {

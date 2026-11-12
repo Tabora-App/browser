@@ -411,6 +411,37 @@
   gap: 10px;
 }
 
+/* Вход на телефоне по QR-коду: код на белом поле по центру, затем шесть цифр сверки */
+#tabora-account-dialog .ta-pair-box {
+  min-height: 216px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font: 400 13px/1.4 var(--tabora-font);
+  color: var(--tabora-text-3);
+}
+
+#tabora-account-dialog .ta-pair-box .ta-error {
+  align-self: stretch;
+}
+
+#tabora-account-dialog .ta-pair-code {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding: 18px 12px;
+  border: 1px solid var(--tabora-field-border);
+  border-radius: 12px;
+  background: var(--tabora-field);
+  color: var(--tabora-text-strong);
+  font: 700 34px/1 var(--tabora-mono);
+  letter-spacing: 0.1em;
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+}
+
 /* Двухфакторная защита: QR-код и секрет для приложения кодов, резервные коды */
 #tabora-account-dialog .ta-scan {
   display: flex;

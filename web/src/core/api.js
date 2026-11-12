@@ -90,6 +90,32 @@ export class Api {
     return this.call("POST", "/v1/account/logout", {}, token);
   }
 
+  /* ---- вход на новом устройстве по QR-коду (server/src/pair.rs) ---- */
+
+  pairStart(token) {
+    return this.call("POST", "/v1/pair/start", {}, token);
+  }
+
+  pairStatus(token, id) {
+    return this.call("GET", `/v1/pair/${encodeURIComponent(id)}`, null, token);
+  }
+
+  pairApprove(token, id, payload) {
+    return this.call("POST", `/v1/pair/${encodeURIComponent(id)}/approve`, { payload }, token);
+  }
+
+  pairDeny(token, id) {
+    return this.call("POST", `/v1/pair/${encodeURIComponent(id)}/deny`, {}, token);
+  }
+
+  pairJoin(data) {
+    return this.call("POST", "/v1/pair/join", data);
+  }
+
+  pairPoll(data) {
+    return this.call("POST", "/v1/pair/poll", data, null, { timeout: 40000 });
+  }
+
   devices(token) {
     return this.call("GET", "/v1/account/devices", null, token);
   }

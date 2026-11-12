@@ -6,6 +6,9 @@
 @import "./shell.css";
 @import "./misc.css";
 
+/* Экраны аккаунта и кодов бывают длиннее экрана телефона. В веб-версии сама страница не
+   прокручивается (у почты свои области прокрутки), поэтому здесь прокручивается корень экрана. */
+#app:has(> .phone-page) { height: 100dvh; overflow-y: auto; overscroll-behavior: contain; }
 .phone-page { max-width: 560px; margin: 0 auto; padding: 16px max(16px, env(safe-area-inset-right, 0px)) calc(28px + var(--safe-bottom)) max(16px, env(safe-area-inset-left, 0px)); }
 .phone-profile { display: flex; align-items: center; gap: 14px; padding: 16px; }
 .phone-profile .kv-text span { font-size: 16px; font-weight: 700; }

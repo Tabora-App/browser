@@ -52,11 +52,15 @@ function head(title, text = "") {
 
 /**
  * @param {HTMLElement} root
- * @param {{ account: import("../core/account.js").Account, intro?: { title: string, text: string }, embedded?: boolean }} ctx
- *   intro — заголовок и пояснение на экране входа; embedded — экран внутри приложения для телефона.
+ * @param {{ account: import("../core/account.js").Account, intro?: { title: string, text: string }, embedded?: boolean,
+ *   pair?: { scan(): Promise<string>, shares: string } }} ctx
+ *   intro — заголовок и пояснение на экране входа; embedded — экран внутри приложения для телефона;
+ *   pair — вход по QR-коду с другого устройства: scan открывает сканер и отдаёт считанный текст
+ *   (пусто — сканер закрыли), shares — что станет общим с аккаунтом после входа.
  */
-export function mountAuth(root, { account, intro = null, embedded = false }) {
+export function mountAuth(root, { account, intro = null, embedded = false, pair = null }) {
   let name = "";
+  let pairing = null; // идущий вход по QR-коду: его отменяют, уходя с экрана
   const shell = content => page(content, embedded);
 
   function show(view) {
@@ -97,12 +101,100 @@ export function mountAuth(root, { account, intro = null, embedded = false }) {
         account.onStep = null;
       }
     });
+    const byQr = pair && h("button", { class: "btn large block", type: "button" }, icon("qr", 18), t`Войти по QR-коду`);
+    byQr?.addEventListener("click", async () => {
+      error.set("");
+      try {
+        const join = await busy(byQr, async () => {
+          const text = await pair.scan();
+          return text ? account.pairJoin(text) : null;
+        }, t`Открываем камеру`);
+        if (join) {
+          pairCode(join);
+        }
+      } catch (err) {
+        error.set(errorText(err));
+      }
+    });
     show(shell([
       head(intro?.title || t`Почта Tabora`, intro?.text || t`Войдите, чтобы открыть свой ящик.`),
       form,
+      byQr && h("div", { class: "auth-or" }, byQr, h("p", { class: "auth-fine" }, t`Код показывает Tabora на компьютере: «Настройки → Аккаунт → Синхронизация → Войти на телефоне».`)),
       h("div", { class: "auth-links" },
         h("button", { class: "link-btn", type: "button", onclick: () => { name = user.value.trim(); forgot(); } }, t`Забыли пароль?`),
         h("button", { class: "link-btn", type: "button", onclick: () => { name = user.value.trim(); register(); } }, t`Создать аккаунт`)),
+    ]));
+  }
+
+  /* ---- вход по QR-коду ---- */
+
+  function leavePairing() {
+    pairing?.cancel();
+    pairing = null;
+  }
+
+  /** Код считан: на обоих экранах один код сверки, ждём разрешения на устройстве с QR-кодом. */
+  function pairCode(join) {
+    pairing = join;
+    const back = () => {
+      leavePairing();
+      login();
+    };
+    show(shell([
+      head(t`Сверьте код`, t`Такой же код должен быть на экране компьютера. Если он совпадает, нажмите там «Разрешить вход».`),
+      h("div", { class: "pair-code", role: "img", "aria-label": t`Код сверки: ${join.code.split("").join(" ")}` }, h("span", {}, join.code.slice(0, 3)), h("span", {}, join.code.slice(3))),
+      h("p", { class: "pair-wait", role: "status" }, h("span", { class: "spinner", "aria-hidden": "true" }), t`Ждём разрешения на компьютере`),
+      h("div", { class: "auth-links" }, h("button", { class: "link-btn", type: "button", onclick: back }, t`Отмена`)),
+    ]));
+    join.wait().then(
+      granted => {
+        if (pairing === join) {
+          pairing = null;
+          pairConfirm(granted);
+        } else {
+          granted.decline(); // человек ушёл с экрана раньше, чем пришло разрешение
+        }
+      },
+      err => {
+        if (pairing === join) {
+          pairing = null;
+          login();
+          toast(errorText(err), { ms: 7000 });
+        }
+      },
+    );
+  }
+
+  /** Вход разрешён: человек видит, в какой аккаунт входит, и подтверждает. */
+  function pairConfirm(granted) {
+    const error = formError();
+    const enter = h("button", { class: "btn primary large block", type: "button" }, t`Войти`);
+    const cancel = h("button", { class: "btn large block", type: "button" }, t`Не входить`);
+    enter.addEventListener("click", async () => {
+      error.set("");
+      cancel.disabled = true;
+      try {
+        await busy(enter, async step => {
+          account.onStep = step;
+          await granted.enter();
+        }, t`Входим`);
+      } catch (err) {
+        cancel.disabled = false;
+        error.set(errorText(err));
+      } finally {
+        account.onStep = null;
+      }
+    });
+    cancel.addEventListener("click", async () => {
+      await busy(cancel, () => granted.decline(), t`Отменяем`);
+      login();
+    });
+    show(shell([
+      head(t`Войти в этот аккаунт?`),
+      h("div", { class: "pair-account" }, granted.email),
+      pair?.shares && h("p", { class: "auth-fine" }, pair.shares),
+      error.el,
+      h("div", { class: "auth-choices" }, enter, cancel),
     ]));
   }
 
@@ -337,5 +429,5 @@ export function mountAuth(root, { account, intro = null, embedded = false }) {
   }
 
   login();
-  return { destroy() { clear(root); } };
+  return { destroy() { leavePairing(); clear(root); } };
 }
