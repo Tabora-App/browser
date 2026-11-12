@@ -802,4 +802,189 @@ const sent = {
   },
 };
 
-export const SOURCES = { logins, otp, marks, spaces, start, tabs, sent };
+/* ---- history of visits ------------------------------------------------------------------------
+ * Every device publishes only its own visits, one record per day ("<device ID>-<yyyymmdd>", the
+ * day in UTC): the pages of the day with the time of the last visit and the number of visits.
+ * Records of other devices are only read. They are shown in "History" next to the local visits,
+ * under the device's name, and are never written into this computer's history database. So a
+ * page deleted from history here disappears from this computer's records, and nothing comes
+ * back from another device by itself. Private windows leave no history, so they are not here. */
+
+const HIST_DAYS = 60;
+const HIST_DAY_PAGES = 250;
+const HIST_DAY_BYTES = 48 * 1024;
+const DAY_MS = 86400000;
+// visits that are not pages a person opened: embedded content, downloads, frames
+const HIST_SKIP_TYPES = "4, 7, 8";
+const HIST_DAY_RE = /^\d{8}$/;
+
+const histDay = ms => new Date(ms).toISOString().slice(0, 10).replaceAll("-", "");
+const histDayStart = day => Date.UTC(Number(day.slice(0, 4)), Number(day.slice(4, 6)) - 1, Number(day.slice(6, 8)));
+const histFirstDay = (now = Date.now()) => histDay(now - HIST_DAYS * DAY_MS);
+
+function histPage(p) {
+  return p && typeof p.u === "string" && /^https?:\/\/[^/@]+(\/|$)/i.test(p.u) && p.u.length <= 2048 && Number(p.at) > 0
+    ? { u: p.u, t: str(p.t, 200), at: Number(p.at), ...(Number(p.n) > 1 ? { n: Math.min(Math.floor(Number(p.n)), 9999) } : {}) }
+    : null;
+}
+
+const history = {
+  name: "history",
+  noHold: true, // clearing history removes many records at once, and that is what was asked for
+  ownFile: true, // the copy of other devices' history is too large for the common state file
+  _remote: new Map(), // record ID → { name, day, p }
+  _own: null, // Map day → record of this computer; null: read anew
+  _dirty: new Set(), // days of this computer to read anew
+
+  owns(id) {
+    return id.startsWith(`${lazy.Account.deviceId()}-`);
+  },
+
+  /** Pages this computer visited from `since` to `until` (ms), by day: Map day → [page]. */
+  async _read(since, until) {
+    const db = await lazy.PlacesUtils.promiseDBConnection();
+    const rows = await db.executeCached(
+      `SELECT p.url AS url, p.title AS title, MAX(v.visit_date) AS last, COUNT(*) AS n
+       FROM moz_historyvisits v JOIN moz_places p ON p.id = v.place_id
+       WHERE v.visit_date >= :since AND v.visit_date < :until AND p.hidden = 0
+         AND v.visit_type NOT IN (${HIST_SKIP_TYPES})
+       GROUP BY CAST(v.visit_date / ${DAY_MS * 1000} AS INTEGER), p.id`,
+      { since: since * 1000, until: until * 1000 }
+    );
+    const days = new Map();
+    for (const row of rows) {
+      const page = histPage({ u: row.getResultByName("url"), t: row.getResultByName("title") || "", at: Math.floor(row.getResultByName("last") / 1000), n: row.getResultByName("n") });
+      if (!page) {
+        continue;
+      }
+      const day = histDay(page.at);
+      if (!days.has(day)) {
+        days.set(day, []);
+      }
+      days.get(day).push(page);
+    }
+    for (const [day, pages] of days) {
+      pages.sort((a, b) => b.at - a.at);
+      pages.splice(HIST_DAY_PAGES);
+      // a day that does not fit loses its earliest pages
+      while (pages.length > 1 && JSON.stringify(pages).length > HIST_DAY_BYTES) {
+        pages.splice(Math.ceil(pages.length * 0.9));
+      }
+      days.set(day, pages);
+    }
+    return days;
+  },
+
+  async list() {
+    const now = Date.now();
+    const first = histFirstDay(now);
+    if (!this._own) {
+      this._dirty.clear();
+      this._own = await this._read(histDayStart(first), now + DAY_MS);
+    } else if (this._dirty.size) {
+      const dirty = [...this._dirty];
+      this._dirty.clear();
+      for (const day of dirty) {
+        const pages = (await this._read(histDayStart(day), histDayStart(day) + DAY_MS)).get(day);
+        if (pages?.length) {
+          this._own.set(day, pages);
+        } else {
+          this._own.delete(day);
+        }
+      }
+    }
+    const me = lazy.Account.deviceId();
+    const name = str(lazy.Account.deviceName(), 80);
+    const out = new Map();
+    for (const [day, pages] of this._own) {
+      if (day >= first) {
+        out.set(`${me}-${day}`, { name, day, p: pages });
+      }
+    }
+    return out;
+  },
+
+  hashable: d => ({ day: d.day, p: d.p }),
+
+  async apply(changes) {
+    const first = histFirstDay();
+    for (const { id, data } of changes) {
+      if (this.owns(id)) {
+        continue; // this computer's records are made from its own history, never the other way
+      }
+      if (data && HIST_DAY_RE.test(data.day || "") && data.day >= first && Array.isArray(data.p)) {
+        this._remote.set(id, { name: str(data.name, 80), day: data.day, p: data.p.map(histPage).filter(Boolean).slice(0, HIST_DAY_PAGES * 2) });
+      } else {
+        this._remote.delete(id);
+      }
+    }
+    return {};
+  },
+
+  dump() {
+    const first = histFirstDay();
+    return { remote: [...this._remote].filter(([, d]) => d.day >= first) };
+  },
+
+  restore(saved) {
+    const first = histFirstDay();
+    for (const [id, d] of Array.isArray(saved?.remote) ? saved.remote : []) {
+      if (ID_RE.test(id) && !this.owns(id) && d && HIST_DAY_RE.test(d.day || "") && d.day >= first && Array.isArray(d.p)) {
+        this._remote.set(id, { name: str(d.name, 80), day: d.day, p: d.p.map(histPage).filter(Boolean) });
+      }
+    }
+  },
+
+  /** The group was turned off: other devices' history is no longer kept here. */
+  forget() {
+    this._remote.clear();
+  },
+
+  watch(notify) {
+    PlacesObservers.addListener(["page-visited", "page-title-changed", "page-removed", "history-cleared"], events => {
+      for (const e of events) {
+        if (e.type === "page-visited") {
+          this._dirty.add(histDay(e.visitTime));
+        } else if (e.type === "page-title-changed") {
+          this._dirty.add(histDay(Date.now()));
+        } else {
+          this._own = null;
+        }
+      }
+      notify();
+    });
+  },
+
+  /**
+   * Pages visited on other devices, most recent first; one entry per address.
+   *
+   * @param {{ query?: string, since?: number, limit?: number }} [filter] words of `query` are
+   *   looked for in the title and the address; `since` is a time in ms.
+   * @returns {{ url: string, title: string, at: number, device: string }[]}
+   */
+  others({ query = "", since = 0, limit = 300 } = {}) {
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const first = histFirstDay();
+    const best = new Map();
+    for (const rec of this._remote.values()) {
+      if (rec.day < first) {
+        continue;
+      }
+      for (const page of rec.p) {
+        if (page.at < since || (best.get(page.u)?.at || 0) >= page.at) {
+          continue;
+        }
+        if (words.length) {
+          const text = `${page.t} ${page.u}`.toLowerCase();
+          if (!words.every(w => text.includes(w))) {
+            continue;
+          }
+        }
+        best.set(page.u, { url: page.u, title: page.t, at: page.at, device: rec.name });
+      }
+    }
+    return [...best.values()].sort((a, b) => b.at - a.at).slice(0, limit);
+  },
+};
+
+export const SOURCES = { logins, otp, marks, spaces, start, tabs, sent, history };

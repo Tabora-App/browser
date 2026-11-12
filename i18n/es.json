@@ -3145,5 +3145,8 @@
  "Отправить на устройство": "Enviar a un dispositivo",
  "Отправить вкладку на устройство «{0}»": "Enviar la pestaña a «{0}»",
  "Страница откроется там при следующей синхронизации": "La página se abrirá allí en la próxima sincronización",
- "send отправить вкладку устройство телефон компьютер": "send enviar pestaña dispositivo teléfono ordenador"
+ "send отправить вкладку устройство телефон компьютер": "send enviar pestaña dispositivo teléfono ordenador",
+ "Страницы, открытые за последние два месяца: адрес, заголовок и время. История других устройств видна в разделе «История»; приватные окна в неё не попадают.": "Páginas abiertas durante los últimos dos meses: dirección, título y hora. El historial de tus otros dispositivos aparece en la sección «Historial»; las ventanas privadas no se incluyen.",
+ "Открыто на другом устройстве": "Abierto en otro dispositivo",
+ "{0}, открыто на устройстве «{1}»": "{0}, abierto en «{1}»"
 }

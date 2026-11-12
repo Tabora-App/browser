@@ -33,7 +33,11 @@
    stored on the account server as records encrypted with a key derived from the account's data
    key. Merge rules are written so that a merge mistake cannot cost data. "Send to device" lives in
    the same storage: each device keeps a record with the pages it sent lately, the addressee
-   opens a page once and remembers it.
+   opens a page once and remembers it. History is synced the same way, per device: a device
+   publishes only its own visits of the last two months (a record per day), reads the records of
+   the others and shows them in "History" under the device's name without writing them into its
+   own history database. Deleting a page from history removes it from the device's records;
+   turning history sync off removes them all.
 10. **Web app and Android account module** (`web/`): the same account, sync and mail code
     (`web/src/core`) runs in the web app and, as a built-in extension, inside the Android app.
 

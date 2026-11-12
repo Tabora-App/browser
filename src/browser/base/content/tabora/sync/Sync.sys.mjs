@@ -39,6 +39,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
 });
 
 const FILE = () => PathUtils.join(PathUtils.profileDir, "tabora-sync.json");
+// a source's own copy that is too large for the common state file (history of other devices)
+const CACHE_FILE = c => PathUtils.join(PathUtils.profileDir, `tabora-sync-${c}.cache`);
 const FORMAT = 1;
 const PREF = "tabora.sync.";
 const PULL_LIMIT = 500;
@@ -58,6 +60,7 @@ export const GROUPS = {
   codes: ["otp"],
   bookmarks: ["marks"],
   tabs: ["spaces", "start", "tabs", "sent"],
+  history: ["history"],
 };
 
 const te = new TextEncoder();
@@ -139,6 +142,19 @@ export const Sync = {
         .then(() => this._retire("sent", lazy.Account.deviceId()))
         .catch(() => {});
     }
+    if (group === "history") {
+      const src = lazy.SOURCES.history;
+      if (!on) {
+        // this computer's history leaves the server, and the history of other devices leaves this computer
+        this._retireOwn("history").catch(e => console.error("Tabora sync: history is not removed from the server", e));
+        src.forget();
+        IOUtils.remove(CACHE_FILE("history"), { ignoreAbsent: true }).catch(() => {});
+        this.notify("applied");
+      } else {
+        // what other devices published while the group was off is read from the beginning
+        this._load().then(state => (state.cur.history = 0)).catch(() => {});
+      }
+    }
     this.soon(0);
   },
 
@@ -196,6 +212,42 @@ export const Sync = {
 
   /** Сервер начал новое поколение данных (сброс) или сменился ключ: тени больше ничему не
    * соответствуют. Локальные данные остаются, следующая сверка объединит их с сервером. */
+  /** The copy a source keeps between launches (what it read from other devices and the like). */
+  async _cacheSave(keys, state, c, src) {
+    const blob = await this._seal(keys, "cache", c, src.dump(), { local: true });
+    if (!src.ownFile) {
+      state.cache[c] = blob;
+      return;
+    }
+    await IOUtils.writeUTF8(CACHE_FILE(c), blob, { tmpPath: `${CACHE_FILE(c)}.tmp` });
+    try {
+      await IOUtils.setPermissions(CACHE_FILE(c), 0o600);
+    } catch (e) {}
+  },
+
+  async _cacheLoad(keys, state, c, src) {
+    let blob = state.cache[c];
+    if (src.ownFile) {
+      try {
+        blob = await IOUtils.readUTF8(CACHE_FILE(c));
+      } catch (e) {
+        blob = "";
+      }
+    }
+    return blob ? this._open(keys, "cache", c, blob) : null;
+  },
+
+  /** Drop the sources' copies: the data on the server is erased or belongs to another start. */
+  _cacheDrop(state) {
+    state.cache = {};
+    for (const src of Object.values(lazy.SOURCES)) {
+      src.forget?.();
+      if (src.ownFile) {
+        IOUtils.remove(CACHE_FILE(src.name), { ignoreAbsent: true }).catch(() => {});
+      }
+    }
+  },
+
   _forget(state, gen = 0) {
     state.gen = gen;
     state.cur = {};
@@ -235,9 +287,10 @@ export const Sync = {
 
   /** Блок записи: версия формата, nonce, шифртекст. Привязан к набору и номеру записи; длина
    * открытого текста выровнена пробелами до 64 байт (JSON их не замечает). */
-  async _seal(keys, coll, id, data) {
+  async _seal(keys, coll, id, data, { local = false } = {}) {
     let plain = te.encode(JSON.stringify(data));
-    if (plain.length > MAX_PLAIN) {
+    // local: a copy that stays on this computer, so the server's record limit does not apply
+    if (!local && plain.length > MAX_PLAIN) {
       throw fail(tt`Запись слишком велика для синхронизации`, "too-large");
     }
     const padded = new Uint8Array(Math.ceil((plain.length + 1) / 64) * 64).fill(0x20);
@@ -357,7 +410,7 @@ export const Sync = {
       if (this.state) {
         this._forget(this.state, 0);
         this.state.keyId = "";
-        this.state.cache = {};
+        this._cacheDrop(this.state);
         this.state.at = 0;
         this._save().catch(() => {});
       }
@@ -512,7 +565,7 @@ export const Sync = {
     const owns = id => !src.owns || src.owns(id);
     if (src.restore && !src._restored) {
       src._restored = true;
-      const saved = state.cache[c] ? await this._open(keys, "cache", c, state.cache[c]) : null;
+      const saved = await this._cacheLoad(keys, state, c, src);
       if (saved) {
         src.restore(saved);
       }
@@ -523,7 +576,7 @@ export const Sync = {
     if (src.unsaved && src.dump) {
       // the source changed what it keeps in its copy by itself (sent tabs: the outbox, what was opened)
       src.unsaved = false;
-      state.cache[c] = await this._seal(keys, "cache", c, src.dump());
+      await this._cacheSave(keys, state, c, src);
     }
     let hashes = await this._hashes(keys, c, src, local);
     const apply = [];
@@ -549,6 +602,13 @@ export const Sync = {
       }
       const hR = await this._hash(keys, c, src, r.data);
       if (has && hL === hR) {
+        shadow[id] = [r.rev, hR];
+        continue;
+      }
+      if (src.owns) {
+        // A record this computer alone keeps (its tabs, sent pages, history): what is here is the
+        // truth. The server's version is only noted; the local one goes up below if it differs,
+        // and a record that is no longer kept here is removed from the server.
         shadow[id] = [r.rev, hR];
         continue;
       }
@@ -584,7 +644,7 @@ export const Sync = {
         }
       }
       if (src.dump) {
-        state.cache[c] = await this._seal(keys, "cache", c, src.dump());
+        await this._cacheSave(keys, state, c, src);
       }
       Services.obs.notifyObservers(null, "tabora-sync-applied", c);
     }
@@ -603,7 +663,7 @@ export const Sync = {
     }
     const live = Object.keys(shadow).filter(id => owns(id) && shadow[id][1] && shadow[id][1] !== "!");
     const gone = live.filter(id => !local.has(id));
-    if (gone.length >= MASS_MIN && gone.length > live.length * MASS_SHARE && state.hold[c]?.allow !== true) {
+    if (!src.noHold && gone.length >= MASS_MIN && gone.length > live.length * MASS_SHARE && state.hold[c]?.allow !== true) {
       state.hold[c] = { missing: gone.length, of: live.length, at: Date.now() };
     } else {
       delete state.hold[c];
@@ -664,6 +724,27 @@ export const Sync = {
       rev = Math.max(rev, res.rev || 0);
     }
     return { clean, saved, rev };
+  },
+
+  /** Remove from the server all the records of a collection that belong to this computer. */
+  async _retireOwn(c) {
+    if (await this._blocker()) {
+      return;
+    }
+    const a = lazy.Account;
+    const src = lazy.SOURCES[c];
+    const state = await this._load();
+    const shadow = state.items[c] || {};
+    const ids = Object.keys(shadow).filter(id => shadow[id][1] && (!src.owns || src.owns(id)));
+    const keys = await this._key();
+    while (ids.length) {
+      const batch = ids.splice(0, PUSH_ITEMS);
+      const res = await a.backend.syncPush({ session: a._session(), gen: state.gen, keyId: keys.id, items: batch.map(id => ({ c, id, base: shadow[id][0], deleted: true })) });
+      for (const saved of res.saved || []) {
+        shadow[saved.id] = [saved.rev, ""];
+      }
+    }
+    await this._save();
   },
 
   /** Убрать с сервера одну свою запись (список вкладок этого компьютера, когда набор выключен). */
@@ -764,7 +845,7 @@ export const Sync = {
     Services.prefs.setBoolPref(`${PREF}enabled`, false);
     const state = await this._load();
     this._forget(state, 0);
-    state.cache = {};
+    this._cacheDrop(state);
     state.at = 0;
     await this._save();
     this._set("off", "");
@@ -774,6 +855,12 @@ export const Sync = {
   /** Вкладки других компьютеров аккаунта: [{ id, name, at, tabs: [{ t, u, p }] }]. */
   devicesTabs() {
     return this.groupOn("tabs") && this.enabled ? lazy.SOURCES.tabs.others() : [];
+  },
+
+  /** Pages visited on other devices of the account: [{ url, title, at, device }], recent first.
+   * Empty while history sync is off. See SOURCES.history.others for the filter. */
+  remoteHistory(filter = {}) {
+    return this.groupOn("history") && this.enabled ? lazy.SOURCES.history.others(filter) : [];
   },
 
   /** Other devices of the account that a page can be sent to: [{ id, name, at }]. */

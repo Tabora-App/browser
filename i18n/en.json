@@ -3145,5 +3145,8 @@
  "Отправить на устройство": "Send to device",
  "Отправить вкладку на устройство «{0}»": "Send tab to “{0}”",
  "Страница откроется там при следующей синхронизации": "The page will open there on the next sync",
- "send отправить вкладку устройство телефон компьютер": "send tab device phone computer share"
+ "send отправить вкладку устройство телефон компьютер": "send tab device phone computer share",
+ "Страницы, открытые за последние два месяца: адрес, заголовок и время. История других устройств видна в разделе «История»; приватные окна в неё не попадают.": "Pages opened during the last two months: address, title and time. History from your other devices appears in the “History” section; private windows are not included.",
+ "Открыто на другом устройстве": "Opened on another device",
+ "{0}, открыто на устройстве «{1}»": "{0}, opened on “{1}”"
 }

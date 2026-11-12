@@ -799,7 +799,7 @@ Object.assign(Tabora, {
         sub ? this.html("span", { class: "dsub" }, null, Array.isArray(sub) ? sub : [sub]) : this.html("span", { class: "dsub" }, ""),
       ]),
       meta ? this.html("span", { class: "dmeta" }, meta) : this.html("span", { class: "dmeta" }),
-      this.html("span", { class: "dacts" }, null, actions.map(a => {
+      this.html("span", { class: "dacts" }, null, actions.filter(Boolean).map(a => {
         const b = this.html("button", { class: `icon-btn ${a.danger ? "danger" : ""}`.trim(), type: "button", title: a.title, "aria-label": a.title }, null, [this.svg(a.icon, 14, 2)]);
         b.addEventListener("click", e => {
           e.stopPropagation();
@@ -992,6 +992,23 @@ Object.assign(Tabora, {
       items.push({ url: node.uri, title: node.title || this.hostOf(node.uri), time: new Date(node.time / 1000) });
     }
     root.containerOpen = false;
+    // Pages visited on other devices of the account (history sync). They are only shown: this
+    // computer's history is not changed by them. A page that was also opened here is added only
+    // if the other device opened it later.
+    try {
+      const { Sync } = ChromeUtils.importESModule("chrome://tabora/content/sync/Sync.sys.mjs");
+      const here = new Map(items.map(it => [it.url, it.time.getTime()]));
+      const since = d.filter === "today" ? new Date().setHours(0, 0, 0, 0) : d.filter === "week" ? now - 7 * 86400000 : 0;
+      for (const r of Sync.remoteHistory({ query: d.query || "", since, limit: 300 })) {
+        if (!(here.get(r.url) >= r.at)) {
+          items.push({ url: r.url, title: r.title || this.hostOf(r.url), time: new Date(r.at), device: r.device || tt`Другое устройство` });
+        }
+      }
+      items.sort((a, b) => b.time - a.time);
+      items.splice(300);
+    } catch (e) {
+      console.error("Tabora history of other devices", e);
+    }
     if (seq !== d.seq) {
       return;
     }
@@ -1006,13 +1023,15 @@ Object.assign(Tabora, {
         frag.append(this.groupNode(day));
         lastDay = day;
       }
+      const where = this.hostOf(it.url) + (new URL(it.url).pathname.length > 1 ? new URL(it.url).pathname.replace(/\/$/, "") : "");
       const row = this.rowNode({
         icon: this.favicon(it.url),
         title: it.title,
-        sub: this.hostOf(it.url) + (new URL(it.url).pathname.length > 1 ? new URL(it.url).pathname.replace(/\/$/, "") : ""),
+        sub: it.device ? [this.html("span", { class: "tag", title: tt`Открыто на другом устройстве` }, it.device), this.html("span", {}, where)] : where,
         meta: this.timeLabel(it.time),
         actions: [
-          { title: tt`Удалить из истории`, icon: ["M4 7h16", "M10 11v6M14 11v6", "M6 7l1 13h10l1-13", "M9 7V4h6v3"], danger: true, run: async () => {
+          // a page of another device is not in this computer's history: there is nothing to delete here
+          it.device ? null : { title: tt`Удалить из истории`, icon: ["M4 7h16", "M10 11v6M14 11v6", "M6 7l1 13h10l1-13", "M9 7V4h6v3"], danger: true, run: async () => {
             await PlacesUtils.history.remove(it.url);
             row.remove();
           } },
@@ -1023,17 +1042,21 @@ Object.assign(Tabora, {
           { label: tt`Открыть`, run: () => this.openInSpace(it.url, false) },
           { label: tt`Открыть в новой вкладке`, run: () => this.openInSpace(it.url, true) },
           { label: tt`Копировать ссылку`, run: () => this.copyText(it.url, tt`Ссылка скопирована`) },
-          { separator: true },
-          { label: tt`Удалить из истории`, danger: true, run: async () => {
-            await PlacesUtils.history.remove(it.url);
-            row.remove();
-          } },
-          { label: tt`Забыть этот сайт`, danger: true, run: async () => {
-            const { ForgetAboutSite } = ChromeUtils.importESModule("resource://gre/modules/ForgetAboutSite.sys.mjs");
-            await ForgetAboutSite.removeDataFromBaseDomain(this.hostOf(it.url));
-            this.drawerDirty("history");
-            this.renderDrawer();
-          } },
+          ...(it.device
+            ? []
+            : [
+                { separator: true },
+                { label: tt`Удалить из истории`, danger: true, run: async () => {
+                  await PlacesUtils.history.remove(it.url);
+                  row.remove();
+                } },
+                { label: tt`Забыть этот сайт`, danger: true, run: async () => {
+                  const { ForgetAboutSite } = ChromeUtils.importESModule("resource://gre/modules/ForgetAboutSite.sys.mjs");
+                  await ForgetAboutSite.removeDataFromBaseDomain(this.hostOf(it.url));
+                  this.drawerDirty("history");
+                  this.renderDrawer();
+                } },
+              ]),
         ],
         draggable: e => {
           e.dataTransfer.setData("text/uri-list", it.url);

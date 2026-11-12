@@ -32,7 +32,7 @@
 | **Crypto wallet** | Ethereum-compatible networks, Bitcoin, Solana and TRON. The recovery phrase stays on the device and is never synced. |
 | **AI agent** | Works inside your tabs: plans the steps, fills in forms, and asks before it sends anything. |
 | **Spaces** | Work, personal, a side project: each space has its own tabs and its own sign-ins on sites. |
-| **Sync** | Tabs, bookmarks, passwords, sign-in codes and spaces are shared between your devices. Everything is encrypted on the device with a key the server never sees. A phone signs in by scanning a QR code from the computer. |
+| **Sync** | Tabs, history, bookmarks, passwords, sign-in codes and spaces are shared between your devices. A page can be sent from one device to another. Everything is encrypted on the device with a key the server never sees. A phone signs in by scanning a QR code from the computer. |
 | **No telemetry** | Mozilla telemetry, studies, sponsored tiles and account prompts are switched off. |
 
 The interface is available in English, Russian, Ukrainian and Spanish.

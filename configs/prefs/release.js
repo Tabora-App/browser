@@ -230,6 +230,7 @@ pref("tabora.sync.passwords", true);
 pref("tabora.sync.codes", true);
 pref("tabora.sync.bookmarks", true);
 pref("tabora.sync.tabs", true);
+pref("tabora.sync.history", true);
 
 // Обновления: подписанный манифест цели и update.xml лежат в репозитории GitHub, пакеты —
 // в GitHub Releases. Адреса читаются только из настроек по умолчанию (значение пользователя

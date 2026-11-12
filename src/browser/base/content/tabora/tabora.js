@@ -3644,11 +3644,27 @@ var Tabora = {
           { q: like }
         )
       );
-      return rows.map(r => {
+      const found = rows.map(r => {
         const url = r.getResultByName("url");
         const title = r.getResultByName("title") || this.hostOf(url);
-        return { glyph: this.letterOf(title), icon: `page-icon:${url}`, title, note: this.hostOf(url), key: "", run: () => this.go(url) };
+        return { url, glyph: this.letterOf(title), icon: `page-icon:${url}`, title, note: this.hostOf(url), key: "", run: () => this.go(url) };
       });
+      // pages opened on other devices of the account (history sync), if they were not found here
+      try {
+        const { Sync } = ChromeUtils.importESModule("chrome://tabora/content/sync/Sync.sys.mjs");
+        for (const r of Sync.remoteHistory({ query: q, limit: 12 })) {
+          if (found.length >= 7) {
+            break;
+          }
+          if (!found.some(f => f.url === r.url)) {
+            const title = r.title || this.hostOf(r.url);
+            found.push({ url: r.url, glyph: this.letterOf(title), icon: `page-icon:${r.url}`, title, note: tt`${this.hostOf(r.url)}, открыто на устройстве «${r.device || tt`Другое устройство`}»`, key: "", run: () => this.go(r.url) });
+          }
+        }
+      } catch (e) {
+        console.error("Tabora cmd history of other devices", e);
+      }
+      return found;
     } catch (e) {
       console.error("Tabora cmd history", e);
       return [];
