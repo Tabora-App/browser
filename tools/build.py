@@ -1011,26 +1011,28 @@ def _apk_problems(apk: Path) -> List[str]:
                 problems.append(f"{apk.name} уже подписан: сборка должна отдавать неподписанный файл "
                                 "(подпись — tools/android/sign.sh)")
             if "assets/omni.ja" in names:
-                with zipfile.ZipFile(io.BytesIO(z.read("assets/omni.ja"))) as omni:
-                    inside = set(omni.namelist())
+                # omni.ja для Android упакован «оптимизированно» (оглавление в начале файла), и
+                # zipfile его не открывает; имена файлов в оглавлении записаны как есть — ищем их
+                omni = z.read("assets/omni.ja")
                 for rel in ("shield/Shield.sys.mjs", "shield/ShieldEngine.sys.mjs",
                             "actors/TaboraShieldParent.sys.mjs", "actors/TaboraShieldChild.sys.mjs"):
-                    if f"chrome/geckoview/content/tabora/{rel}" not in inside:
+                    if f"chrome/geckoview/content/tabora/{rel}".encode() not in omni:
                         problems.append(f"в движке нет блокировщика рекламы: chrome/geckoview/content/tabora/{rel}")
     except (OSError, zipfile.BadZipFile) as e:
         problems.append(f"{apk.name} не читается: {e}")
     return problems
 
 
-def _apk_engine_locales(apk: Path) -> str:
-    """Языки служебных страниц движка в готовом файле (res/multilocale.txt внутри omni.ja)."""
-    import io
+def _apk_has_engine_locale(apk: Path, locale: str) -> bool:
+    """Есть ли в готовом файле перевод служебных страниц движка на этот язык (по именам файлов
+    в оглавлении omni.ja; сам архив zipfile не открывает, см. _apk_problems)."""
     import zipfile
     try:
-        with zipfile.ZipFile(apk) as z, zipfile.ZipFile(io.BytesIO(z.read("assets/omni.ja"))) as omni:
-            return omni.read("res/multilocale.txt").decode("utf-8", "replace").strip()
+        with zipfile.ZipFile(apk) as z:
+            omni = z.read("assets/omni.ja")
     except (OSError, KeyError, zipfile.BadZipFile):
-        return ""
+        return False
+    return f"localization/{locale}/".encode() in omni or f"chrome/{locale}/locale/".encode() in omni
 
 
 def package_android(config: dict, brand: str) -> None:
@@ -1050,12 +1052,12 @@ def package_android(config: dict, brand: str) -> None:
         warn(problem)
     if problems:
         die(f"приложение для Android не прошло проверку ({len(problems)}): в dist/ не кладётся")
-    engine_locales = _apk_engine_locales(apk)
     wanted = [loc for loc in config.get("locales", []) if loc != "en-US"]
-    if any(loc not in engine_locales.split(",") for loc in wanted):
-        warn(f"служебные страницы движка только на: {engine_locales or 'en-US'} (нет {', '.join(wanted)})")
-    else:
-        log(f"языки служебных страниц движка: {engine_locales}")
+    missing = [loc for loc in wanted if not _apk_has_engine_locale(apk, loc)]
+    if missing:
+        warn(f"служебные страницы движка останутся английскими: в файле нет перевода на {', '.join(missing)}")
+    elif wanted:
+        log(f"служебные страницы движка переведены: {', '.join(wanted)}")
     DIST.mkdir(exist_ok=True)
     name = f"tabora-{version}-android-{ANDROID_ABI}-unsigned.apk"
     if not release:
