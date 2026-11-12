@@ -5,6 +5,9 @@
 /* Каркас приложения: разделы слева (на телефоне — внизу) и область раздела. Адрес раздела лежит
  * в части адреса после # (#/mail, #/passwords/…): серверу он не уходит, а кнопка «Назад» работает. */
 
+import { Jmap } from "../core/jmap.js";
+import { Mail } from "../core/mail.js";
+import { MailPgp } from "../core/mailpgp.js";
 import { clear, h, icon, mark } from "../lib/dom.js";
 import { menu } from "../lib/ui.js";
 import { mountAccount } from "./account.js";
@@ -60,8 +63,17 @@ export function mountShell(root, deps) {
     }
   };
 
+  const mail = new Mail({ account, jmap: new Jmap(account), pgp: new MailPgp(account) });
+  const mailListeners = new Set();
+
   const ctx = {
     ...deps,
+    mail,
+    /** Сообщать разделу почты, что в ящике что-то изменилось (пришло письмо, отметки с другого устройства). */
+    onMailChange(fn) {
+      mailListeners.add(fn);
+      return () => mailListeners.delete(fn);
+    },
     navigate,
     setBadge(section, n) {
       badges.set(section, n);
@@ -158,6 +170,24 @@ export function mountShell(root, deps) {
     }
   });
 
+  // новая почта: раз в 45 секунд и при возвращении на вкладку; счётчик непрочитанных виден из любого раздела
+  const pollMail = async () => {
+    if (document.visibilityState !== "visible" || !account.signedIn) {
+      return;
+    }
+    try {
+      const first = !mail.boxes;
+      const changed = await mail.changed();
+      ctx.setBadge("mail", mail.box("inbox")?.unread || 0);
+      if (changed && !first) {
+        mailListeners.forEach(fn => fn());
+      }
+    } catch (e) {}
+  };
+  pollMail();
+  timers.push(setInterval(pollMail, 45000));
+  document.addEventListener("visibilitychange", pollMail);
+
   // непрочитанные ответы поддержки
   const pollSupport = async () => {
     try {
@@ -173,6 +203,7 @@ export function mountShell(root, deps) {
     destroy() {
       window.removeEventListener("hashchange", route);
       document.removeEventListener("visibilitychange", refresh);
+      document.removeEventListener("visibilitychange", pollMail);
       timers.forEach(clearInterval);
       offKeys();
       active?.api.destroy?.();

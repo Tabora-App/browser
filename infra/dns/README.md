@@ -8,7 +8,8 @@ SRV для JMAP/IMAPS/SUBMISSIONS, MTA-STS, TLS-RPT, автонастройка)
 Правится руками, публикуется тем же `cloudflare/dns.sh`. Перед публикацией `infra/deploy.sh dns --plan`
 показывает, что изменится в Cloudflare, ничего не меняя.
 
-Адресные записи: только `mx` (A и AAAA, серое облако; адреса берутся с интерфейса сервера).
+Адресные записи: только `mx` (A и AAAA, серое облако; адреса берутся с интерфейса сервера);
+`app` (веб-версия) — CNAME на `mx` в `extra.zone`, тоже серое облако.
 `tabora.app`, `www` и `api` — CNAME на Cloudflare Tunnel (`cloudflare/setup-tunnel.sh`), публичного
 адреса у них нет. SRV для CalDAV/CardDAV/POP3 не публикуются: эти службы снаружи не доступны.
 Ротация DKIM в Stalwart заморожена, ключи не меняются без нашего участия.

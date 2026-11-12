@@ -5,9 +5,12 @@
 /* Доступ к почтовому ящику по JMAP (RFC 8620, 8621). Браузеру Tabora для этого служат IMAP и SMTP,
  * но веб-страница умеет только HTTPS — тот же почтовый сервер отвечает и по нему.
  *
- * Вход — пароль приложения, который сервер аккаунтов выдаёт каждому устройству при входе и
- * отзывает при выходе: основной пароль ящика страница не получает. Запросы идут на то же имя,
- * что и сама страница (/jmap/…): чужим сайтам ящик недоступен. */
+ * Запросы идут на сервер аккаунтов (/v1/mail/jmap…) с токеном сессии, а он пересылает их почтовому
+ * серверу от имени владельца ящика: почтового пароля у страницы нет вовсе, выход из аккаунта сразу
+ * закрывает и почту, а из методов доступны только почтовые (server/src/webmail.rs).
+ *
+ * Сервер аккаунтов прежней версии так не умеет и при входе выдаёт устройству пароль приложения;
+ * тогда запросы идут прямо на почтовый сервер (/jmap…) с этим паролем — как раньше. */
 
 import { b64, utf8 } from "./bytes.js";
 
@@ -19,29 +22,50 @@ function fail(message, code, extra = {}) {
 
 export class Jmap {
   /**
-   * @param {{ mailAccess(opts?: { refresh?: boolean }): Promise<{ login: string, password: string }> }} account
-   * @param {string} base пусто — тот же сайт; в проверках — адрес почтового сервера
+   * @param {import("./account.js").Account} account
+   * @param {{ proxy?: string, direct?: string }} bases адреса для проверок под Node: сервер аккаунтов
+   *   и почтовый сервер; в браузере оба пусты — то же имя, что у страницы
    */
-  constructor(account, base = "") {
+  constructor(account, { proxy = "", direct = "" } = {}) {
     this.account = account;
-    this.base = base.replace(/\/+$/, "");
+    this.proxy = proxy.replace(/\/+$/, "");
+    this.direct = direct.replace(/\/+$/, "");
     this.accountId = "";
     this._session = null;
   }
 
+  get bySession() {
+    return this.account.mailBySession;
+  }
+
+  _url(kind, ...parts) {
+    const seg = parts.map(encodeURIComponent);
+    if (this.bySession) {
+      return this.proxy + { session: "/v1/mail/jmap/session", api: "/v1/mail/jmap", upload: `/v1/mail/jmap/upload/${seg[0]}`, download: `/v1/mail/jmap/download/${seg.join("/")}` }[kind];
+    }
+    return this.direct + { session: "/jmap/session", api: "/jmap/", upload: `/jmap/upload/${seg[0]}/`, download: `/jmap/download/${seg.join("/")}` }[kind];
+  }
+
   async _auth(refresh = false) {
+    if (this.bySession) {
+      return `Bearer ${this.account.token}`;
+    }
     const m = await this.account.mailAccess({ refresh });
     return `Basic ${b64(utf8(`${m.login}:${m.password}`))}`;
   }
 
-  /** Запрос с входом; если пароль приложения отозван (вход с этого устройства заново) — берём новый. */
-  async _fetch(path, init = {}, { timeout = 30000 } = {}) {
+  /** Запрос с входом. По паролю приложения: если он отозван (вход с этого устройства заново) — берём новый. */
+  async _fetch(url, init = {}, { timeout = 30000 } = {}) {
     for (let attempt = 0; attempt < 2; attempt++) {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), timeout);
+      const bySession = this.bySession;
+      let token = "";
       let res;
       try {
-        res = await fetch(this.base + path, { ...init, headers: { ...(init.headers || {}), Authorization: await this._auth(attempt > 0) }, credentials: "omit", redirect: "error", cache: "no-store", signal: ctrl.signal });
+        const auth = await this._auth(attempt > 0);
+        token = bySession ? this.account.token : "";
+        res = await fetch(url, { ...init, headers: { ...(init.headers || {}), Authorization: auth }, credentials: "omit", redirect: "error", cache: "no-store", signal: ctrl.signal });
       } catch (e) {
         if (e.code) {
           throw e;
@@ -49,6 +73,13 @@ export class Jmap {
         throw fail("Почтовый сервер не отвечает. Проверьте соединение и повторите", "offline");
       } finally {
         clearTimeout(timer);
+      }
+      if (res.status === 401 && bySession) {
+        // сессия аккаунта завершена (выход с другого устройства, истёк срок): как для любого запроса
+        try {
+          this.account.api.onExpired?.(token);
+        } catch (e) {}
+        throw fail("Сессия истекла: войдите в аккаунт заново", "session-expired");
       }
       if (res.status === 401 && attempt === 0) {
         continue;
@@ -59,6 +90,9 @@ export class Jmap {
       if (res.status === 429) {
         throw fail("Слишком много запросов к почте. Повторите через минуту", "rate-limited");
       }
+      if (res.status === 503 || res.status === 502) {
+        throw fail("Почтовый сервер сейчас недоступен. Повторите позже", "mail-unavailable", { status: res.status });
+      }
       return res;
     }
     throw fail("Почтовый сервер не отвечает", "offline");
@@ -68,7 +102,7 @@ export class Jmap {
     if (this._session) {
       return this._session;
     }
-    const res = await this._fetch("/jmap/session");
+    const res = await this._fetch(this._url("session"));
     if (!res.ok) {
       throw fail("Почтовый сервер сейчас недоступен. Повторите позже", "mail-unavailable", { status: res.status });
     }
@@ -90,7 +124,7 @@ export class Jmap {
   async call(calls, { timeout = 30000 } = {}) {
     await this.session();
     const methodCalls = calls.map(([name, args], i) => [name, { accountId: this.accountId, ...args }, `c${i}`]);
-    const res = await this._fetch("/jmap/", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ using: USING, methodCalls }) }, { timeout });
+    const res = await this._fetch(this._url("api"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ using: USING, methodCalls }) }, { timeout });
     let json;
     try {
       json = await res.json();
@@ -117,7 +151,7 @@ export class Jmap {
   /** Содержимое блока (вложение, исходник письма): Uint8Array. */
   async download(blobId, { name = "file", type = "application/octet-stream", timeout = 120000 } = {}) {
     await this.session();
-    const res = await this._fetch(`/jmap/download/${encodeURIComponent(this.accountId)}/${encodeURIComponent(blobId)}/${encodeURIComponent(name)}?accept=${encodeURIComponent(type)}`, {}, { timeout });
+    const res = await this._fetch(`${this._url("download", this.accountId, blobId, name)}?accept=${encodeURIComponent(type)}`, {}, { timeout });
     if (!res.ok) {
       throw fail(res.status === 404 ? "Файл не найден на сервере" : "Не удалось скачать файл", "download", { status: res.status });
     }
@@ -127,7 +161,7 @@ export class Jmap {
   /** Загрузить байты на сервер: { blobId, type, size }. */
   async upload(bytes, type = "application/octet-stream", { timeout = 300000 } = {}) {
     await this.session();
-    const res = await this._fetch(`/jmap/upload/${encodeURIComponent(this.accountId)}/`, { method: "POST", headers: { "Content-Type": type }, body: bytes }, { timeout });
+    const res = await this._fetch(this._url("upload", this.accountId), { method: "POST", headers: { "Content-Type": type }, body: bytes }, { timeout });
     if (!res.ok) {
       throw fail(res.status === 413 ? "Файл слишком большой" : "Не удалось загрузить файл на сервер", "upload", { status: res.status });
     }

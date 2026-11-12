@@ -53,6 +53,9 @@ window.addEventListener("storage", e => {
 });
 
 (async () => {
+  if (window.__taboraUnsupported) {
+    return; // браузер не подходит: объяснение уже на странице (static/compat.js)
+  }
   try {
     await account.restore();
   } catch (e) {

@@ -23,6 +23,13 @@ certbot certonly --dns-cloudflare --dns-cloudflare-credentials "$INI" --dns-clou
   --cert-name "$MAIL_HOST" --non-interactive --agree-tos -m "$EMAIL" --keep-until-expiring
 tls_enabled || die "сертификата $MX_LIVE нет"
 
+# веб-версия (app.$DOMAIN) обслуживается напрямую, без туннеля, и потому ей нужен свой сертификат.
+# Запись DNS (infra/dns/extra.zone, CNAME на почтовый хост) для выпуска не нужна: проверка идёт через DNS-01.
+log "сертификат веб-версии $APP_HOST (DNS-01 через Cloudflare)"
+certbot certonly --dns-cloudflare --dns-cloudflare-credentials "$INI" --dns-cloudflare-propagation-seconds 30 \
+  -d "$APP_HOST" --cert-name "$APP_HOST" --non-interactive --agree-tos -m "$EMAIL" --keep-until-expiring
+app_tls_enabled || die "сертификата $APP_LIVE нет"
+
 install_lib "$HERE"
 install_nginx "$HERE/nginx"
 
@@ -30,4 +37,4 @@ log "Stalwart: сертификат почтового хоста"
 # Stalwart хранит сертификат в своей базе: загружаем PEM и назначаем по умолчанию; хук certbot повторяет это при продлении
 python3 "$LIB/stalwart/upload-cert.py" "$MX_LIVE"
 install_certbot_hook "$HERE"
-log "готово: https://$MAIL_HOST/jmap, SMTP/IMAP с сертификатом Let's Encrypt. Дальше: infra/deploy.sh dns"
+log "готово: https://$MAIL_HOST/jmap, SMTP/IMAP с сертификатом Let's Encrypt; веб-версия https://$APP_HOST. Дальше: infra/deploy.sh dns"

@@ -209,6 +209,30 @@ impl Stalwart {
         }
     }
 
+    /// Произвольный запрос HTTP к почтовому серверу от имени владельца ящика (почта веб-версии,
+    /// см. webmail.rs): path — путь с параметрами. Если основной пароль не подошёл, он
+    /// выставляется заново и запрос повторяется.
+    pub async fn user_http(&self, local: &str, public_id: &str, mail_id: &str, method: reqwest::Method, path: &str, content_type: Option<&str>, body: Option<axum::body::Bytes>) -> Result<reqwest::Response, MailError> {
+        let login = format!("{}@{}", local, self.domain);
+        let password = self.primary_password(public_id);
+        for attempt in 0..2 {
+            let mut req = self.http.request(method.clone(), format!("{}{}", self.base, path)).basic_auth(&login, Some(&password));
+            if let Some(ct) = content_type {
+                req = req.header(reqwest::header::CONTENT_TYPE, ct);
+            }
+            if let Some(b) = &body {
+                req = req.body(b.clone());
+            }
+            let res = req.send().await.map_err(|e| MailError::Unavailable(e.to_string()))?;
+            if res.status().as_u16() == 401 && attempt == 0 {
+                self.reset_primary(mail_id, public_id).await?;
+                continue;
+            }
+            return Ok(res);
+        }
+        Err(MailError::Unauthorized)
+    }
+
     /// Пароль приложения для одного устройства. Секрет почтовый сервер показывает один раз.
     pub async fn create_app_password(&self, local: &str, public_id: &str, mail_id: &str, description: &str) -> Result<AppPassword, MailError> {
         let args = json!({ "create": { "p": { "description": description, "permissions": { "@type": "Inherit" } } } });

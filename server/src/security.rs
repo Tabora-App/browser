@@ -315,6 +315,9 @@ pub struct ResetEmailBody {
     device_id: Option<String>,
     #[serde(default)]
     device_name: String,
+    /// "session" — доступ к почте по сессии (веб-версия), без пароля приложения
+    #[serde(default)]
+    mail_access: Option<String>,
 }
 
 /// Новый пароль по коду из письма. При включённой двухфакторной защите нужен и её код: пока его
@@ -357,6 +360,6 @@ pub async fn reset_email_confirm(State(app): State<Arc<App>>, headers: HeaderMap
     let session = app.new_session(&c, user.id, &device_id, now).await?;
     drop(c);
     // пароли приложений только что отозваны все: прежнего у устройства нет
-    let mail = app.issue_mail(&user, &device_id, &device_name, None).await;
+    let mail = app.device_mail(&user, &device_id, &device_name, None, b.mail_access.as_deref()).await;
     Ok(Json(json!({ "userId": user.public_id, "session": session, "kdf": 2, "mail": mail })))
 }

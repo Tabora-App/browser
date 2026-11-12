@@ -64,3 +64,7 @@
 .choice small { font-size: 12.5px; color: var(--text-3); line-height: 1.4; }
 .choice-icon { display: grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 12px; background: var(--raised); color: var(--text-2); }
 .choice > .icon { color: var(--text-4); }
+
+.compat { max-width: 420px; margin: 18vh auto 0; padding: 0 24px; display: flex; flex-direction: column; gap: 12px; }
+.compat h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
+.compat p { color: var(--text-3); line-height: 1.55; }

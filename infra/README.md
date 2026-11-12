@@ -10,13 +10,19 @@ API аккаунтов и синхронизации (`tabora-server`, PostgreSQ
 - Наружу открыты только 22 и почтовый хост `mx.tabora.app`: 25, 465, 587, 993 и 443 (JMAP,
   автонастройка, MTA-STS). Порты 80 и 4190 закрыты: сертификаты выпускаются через DNS-01, Sieve
   доступен через JMAP.
+- Веб-версия `app.tabora.app` (`nginx/app.conf`) — напрямую на 443 того же сервера, без туннеля:
+  через Cloudflare шли бы и скрипты, расшифровывающие данные в браузере, и открытый текст писем.
+  Приложение (статика `/var/www/app.tabora.app`, сборка `tools/web/build.mjs`) и сервер аккаунтов
+  (`/v1/…`) отвечают на одном имени; заголовки безопасности — `nginx/app-*.inc`, их сверяет с
+  `tools/web/headers.mjs` проверка `tools/web/test/headers.test.mjs`. Ввод в строй:
+  `deploy.sh tls` (сертификат имени), `deploy.sh dns` (CNAME `app` → `mx`), `deploy.sh web`.
 - На голый IP и чужие имена nginx ничего не отдаёт (443 — отказ в TLS-рукопожатии, 8081 — `444`).
 - Stalwart HTTP/JMAP только на `127.0.0.1:8080`; адрес клиента он берёт из `X-Forwarded-For`,
   который nginx заполняет `$remote_addr`.
 
 | Что | Где |
 |---|---|
-| Развёртывание с ноутбука | `infra/deploy.sh setup` (идемпотентно, можно в любой момент), `site`, `server`, `nginx` (только настройки nginx), `tunnel`, `tls`, `dns` |
+| Развёртывание с ноутбука | `infra/deploy.sh setup` (идемпотентно, можно в любой момент), `site`, `web` (сборка и выкладка веб-версии), `server`, `nginx` (только настройки nginx), `tunnel`, `tls`, `dns` |
 | Каталог ключей почты (WKD) | `https://tabora.app/.well-known/openpgpkey/…` → `tabora-server`; записи `openpgpkey` в DNS быть не должно: с ней программы ищут ключ на поддомене и на основной домен не возвращаются |
 | Скрипты на сервере | `/usr/local/lib/tabora` (копия `infra/`, из неё работают хук certbot и таймеры) |
 | Stalwart | `/opt/stalwart`: `bin/` (root, sha256 сверяется), `etc/config.json` (только хранилище RocksDB), `data/`; служба `stalwart`, журнал `journalctl -u stalwart` |

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Развёртывание с ноутбука: копирует infra/ и site/ на сервер (/root/tabora-infra) и запускает
-# нужный скрипт. Использование: infra/deploy.sh [setup|site|downloads|server|nginx|tls|tunnel|dns]
+# нужный скрипт. Использование: infra/deploy.sh [setup|site|web|downloads|server|nginx|tls|tunnel|dns]
 # `infra/deploy.sh dns --plan` показывает, какие записи DNS изменились бы, ничего не меняя.
 set -euo pipefail
 HOST=${HOST:-tabora}
@@ -12,6 +12,20 @@ rsync -az --delete "$ROOT/site/" "$HOST:/root/tabora-infra/site/"
 case "$what" in
   setup)  ssh "$HOST" 'bash /root/tabora-infra/infra/setup.sh' ;;
   site)   ssh "$HOST" 'rsync -a --delete --chown=root:root --chmod=D755,F644 /root/tabora-infra/site/ /var/www/tabora.app/ && echo "сайт обновлён"' ;;
+  web)
+    # Веб-версия (app.tabora.app): сборка на этой машине (tools/web/build.mjs, версии пакетов
+    # закреплены) и выкладка в /var/www/app.<домен>. Сначала в соседний каталог, потом одной
+    # командой на место: посетитель не застанет страницу со ссылками на ещё не доехавшие файлы.
+    # Имя должно быть включено в nginx (сертификат: deploy.sh tls) и в DNS (deploy.sh dns).
+    (cd "$ROOT/tools/web" && npm ci --ignore-scripts --no-audit --no-fund --silent && node build.mjs "$ROOT/.build/web")
+    [ -f "$ROOT/.build/web/index.html" ] && [ -f "$ROOT/.build/web/build.json" ] || { echo "сборка веб-версии не получилась"; exit 1; }
+    ssh "$HOST" 'set -euo pipefail; DOMAIN=${DOMAIN:-tabora.app}; install -d -m 755 -o root -g root "/var/www/app.$DOMAIN" "/var/www/app.$DOMAIN.next"'
+    rsync -az --delete "$ROOT/.build/web/" "$HOST:/var/www/app.${DOMAIN:-tabora.app}.next/"
+    ssh "$HOST" 'set -euo pipefail; DOMAIN=${DOMAIN:-tabora.app}
+      rsync -a --delete --chown=root:root --chmod=D755,F644 "/var/www/app.$DOMAIN.next/" "/var/www/app.$DOMAIN/"
+      rm -rf "/var/www/app.$DOMAIN.next"
+      echo "веб-версия обновлена: $(python3 -c "import json; d = json.load(open(\"/var/www/app.$DOMAIN/build.json\")); print(\"версия\", d[\"version\"], \"файлов\", len(d[\"files\"]))")"'
+    ;;
   downloads)
     # Установщики из .build/signed → /var/www/downloads (nginx отдаёт как /downloads/). Старые версии
     # на сервере не удаляются. В конце печатает sha256 с сервера: сверьте с суммой на сайте.
@@ -79,5 +93,5 @@ case "$what" in
   tls)    ssh "$HOST" 'bash /root/tabora-infra/infra/enable-tls.sh' ;;
   tunnel) ssh "$HOST" 'bash /root/tabora-infra/infra/cloudflare/setup-tunnel.sh' ;;
   dns)    if [ "${2:-}" = "--plan" ]; then ssh "$HOST" 'bash /root/tabora-infra/infra/cloudflare/dns.sh --plan'; else ssh "$HOST" 'bash /root/tabora-infra/infra/cloudflare/dns.sh'; fi ;;
-  *) echo "setup | site | downloads | server | tls | tunnel | dns"; exit 1 ;;
+  *) echo "setup | site | web | downloads | server | nginx | tls | tunnel | dns"; exit 1 ;;
 esac

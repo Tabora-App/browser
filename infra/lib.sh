@@ -4,6 +4,8 @@
 
 LIB=/usr/local/lib/tabora        # копия infra/ на сервере: её используют хук certbot и таймеры
 MX_LIVE=/etc/letsencrypt/live/$MAIL_HOST
+APP_HOST=${APP_HOST:-app.$DOMAIN}   # веб-версия (nginx/app.conf)
+APP_LIVE=/etc/letsencrypt/live/$APP_HOST
 
 log() { printf '\033[1;32m›\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m✗\033[0m %s\n' "$*" >&2; exit 1; }
@@ -25,6 +27,7 @@ install_lib() {
 }
 
 tls_enabled() { [ -f "$MX_LIVE/fullchain.pem" ] && [ -f "$MX_LIVE/privkey.pem" ]; }
+app_tls_enabled() { [ -f "$APP_LIVE/fullchain.pem" ] && [ -f "$APP_LIVE/privkey.pem" ]; }
 
 # Конфигурация nginx одна и та же до и после TLS: сайт и API на 127.0.0.1:8081 (только для туннеля),
 # публично только 443; почтовый хост включается, когда есть сертификат. Порт 80 не слушается вовсе:
@@ -38,6 +41,9 @@ install_nginx() {
   install -m 644 "$src/security.inc" /etc/nginx/snippets/tabora-security.conf
   install -m 644 "$src/site-headers.inc" /etc/nginx/snippets/tabora-site-headers.conf
   install -m 644 "$src/proxy.inc" /etc/nginx/snippets/tabora-proxy.conf
+  install -m 644 "$src/app-headers.inc" /etc/nginx/snippets/tabora-app-headers.conf
+  install -m 644 "$src/app-frame-headers.inc" /etc/nginx/snippets/tabora-app-frame-headers.conf
+  install -m 644 "$src/app-frame-remote-headers.inc" /etc/nginx/snippets/tabora-app-frame-remote-headers.conf
   # список логинов администраторов Stalwart пишет stalwart/configure.py; до него — только «admin»
   [ -f /etc/nginx/tabora-privileged-logins.map ] || printf '"~*(^|%%)admin(@|%%|$)" 1;\n' > /etc/nginx/tabora-privileged-logins.map
   # список логинов администраторов читает только главный процесс nginx (root)
@@ -57,6 +63,14 @@ install_nginx() {
     ln -sfn /etc/nginx/sites-available/tabora-mx /etc/nginx/sites-enabled/tabora-mx
   else
     rm -f /etc/nginx/sites-enabled/tabora-mx /etc/nginx/sites-available/tabora-mx
+  fi
+  # веб-версия: имя включается, когда выпущен его сертификат (enable-tls.sh)
+  install -d -m 755 -o root -g root "/var/www/$APP_HOST"
+  if app_tls_enabled; then
+    render "$src/app.conf" /etc/nginx/sites-available/tabora-app
+    ln -sfn /etc/nginx/sites-available/tabora-app /etc/nginx/sites-enabled/tabora-app
+  else
+    rm -f /etc/nginx/sites-enabled/tabora-app /etc/nginx/sites-available/tabora-app
   fi
   nginx -t -q
   systemctl enable nginx >/dev/null 2>&1

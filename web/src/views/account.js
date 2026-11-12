@@ -242,7 +242,7 @@ export function mountAccount(el, ctx) {
         row("Адрес", account.email, [h("button", { class: "icon-btn", "aria-label": "Скопировать адрес", onclick: () => copyText(account.email, "Адрес скопирован") }, icon("copy", 18))]),
         row("Вход на этом устройстве", account.session.remember ? "Сохранён до выхода" : "До закрытия вкладки", [h("button", { class: "btn small", onclick: () => account.signOut() }, "Выйти")])),
       card("Защита входа",
-        row("Пароль", "Знаете только вы; на сервере его нет", [h("button", { class: "btn small", onclick: changePassword }, "Сменить")]),
+        row("Пароль", "Знаете только вы; на сервере его нет", [h("button", { class: "btn small", onclick: changePassword }, "Сменить")], { wrap: true }),
         row("Двухфакторная защита", !security ? "…" : two.enabled ? `Включена${two.since ? ` с ${shortDate(two.since)}` : ""}, резервных кодов: ${two.backupCodes}` : "Выключена: для входа достаточно пароля", !security ? [] : two.enabled ? [
           h("button", { class: "btn small", onclick: () => reauth({ title: "Новые резервные коды", text: "Прежние резервные коды перестанут действовать.", confirm: "Создать", run: ({ loginHash, code }) => api.twoFactorCodes(account.token, loginHash, code), done: r => showBackupCodes(r.backupCodes, "Новые резервные коды") }) }, "Коды"),
           h("button", { class: "btn small", onclick: () => reauth({ title: "Выключить двухфакторную защиту", text: "Для входа снова будет достаточно одного пароля.", confirm: "Выключить", danger: true, run: ({ loginHash, code }) => api.twoFactorDisable(account.token, loginHash, code), done: () => toast("Двухфакторная защита выключена") }) }, "Выключить"),
@@ -258,7 +258,7 @@ export function mountAccount(el, ctx) {
         k.fingerprint ? row("Отпечаток ключа почты", h("span", { class: "mono wrap small-text" }, formatFingerprint(k.fingerprint)), [h("button", { class: "icon-btn", "aria-label": "Скопировать отпечаток", onclick: () => copyText(formatFingerprint(k.fingerprint), "Отпечаток скопирован") }, icon("copy", 18))], { tall: true }) : null,
         row("Данные с других устройств", sync.loaded ? `Пароли: ${sync.list("logins").length}, коды: ${sync.list("otp").length}, закладки: ${sync.list("marks").filter(m => m.data.k === 1).length}` : k.state === "ok" ? "Загружаются…" : "Недоступны, пока ключ закрыт", [], { wrap: true })),
       card("Устройства",
-        devices ? devices.slice().sort((a, b) => Number(b.current) - Number(a.current) || (b.at || 0) - (a.at || 0)).map(d => row(d.current ? "Это устройство" : `Был в сети ${shortDate(d.at)}`, d.name || "Устройство", d.current ? [] : [h("button", { class: "btn small", onclick: () => revoke(d) }, "Завершить")], { wrap: true })) : row("", "…")),
+        devices ? devices.filter(d => d.current || d.active !== false).sort((a, b) => Number(b.current) - Number(a.current) || (b.at || 0) - (a.at || 0)).map(d => row(d.current ? "Это устройство" : `Был в сети ${shortDate(d.at)}`, d.name || "Устройство", d.current ? [] : [h("button", { class: "btn small", onclick: () => revoke(d) }, "Завершить")], { wrap: true })) : row("", "…")),
       h("p", { class: "settings-foot" }, `Веб-версия Tabora${typeof __APP_VERSION__ === "string" && __APP_VERSION__ ? ` ${__APP_VERSION__}` : ""} · `, h("a", { href: "https://tabora.app/", target: "_blank", rel: "noopener" }, "tabora.app"), " · ", h("a", { href: "https://github.com/Tabora-App/browser", target: "_blank", rel: "noopener noreferrer" }, "исходный код")));
   }
 

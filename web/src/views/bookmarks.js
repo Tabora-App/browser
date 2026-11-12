@@ -102,10 +102,15 @@ export function mountBookmarks(el, ctx, rest) {
     // путь к открытой папке
     const path = [];
     for (let cur = folderId ? byId.get(folderId) : null; cur; cur = cur.parent ? byId.get(cur.parent.id) : null) {
-      path.unshift(cur.node);
+      // панель закладок в пути не показывается: её содержимое и есть «Все закладки»
+      if (cur.node.id !== MARK_ROOTS.toolbar || cur.node.id === folderId) {
+        path.unshift(cur.node);
+      }
     }
     clear(crumbs, path.length ? [h("a", { href: "#/bookmarks" }, "Все закладки"), path.map((n, i) => [icon("forwardChevron", 13), i === path.length - 1 ? h("span", { "aria-current": "page" }, n.n) : h("a", { href: `#/bookmarks/${encodeURIComponent(n.id)}` }, n.n)])] : []);
-    const nodes = folderId ? byId.get(folderId).node.children : tree.filter(r => r.children.length || r.id === MARK_ROOTS.toolbar);
+    // в начале — содержимое панели закладок; остальные корни браузера (меню, «Другие») — папками ниже
+    const toolbar = tree.find(r => r.id === MARK_ROOTS.toolbar);
+    const nodes = folderId ? byId.get(folderId).node.children : [...toolbar.children, ...tree.filter(r => r.id !== MARK_ROOTS.toolbar && r.children.length)];
     clear(listBody, nodes.length ? nodes.map(row) : emptyState({ iconName: "folder", title: "Папка пуста", text: "Добавьте сюда закладку или вложенную папку." }));
   }
 

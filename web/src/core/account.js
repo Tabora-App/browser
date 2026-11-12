@@ -186,7 +186,7 @@ export class Account {
     this._step("Входим");
     let r;
     try {
-      r = await this.api.login({ email, loginHash: p.loginHash, deviceId: this.store.deviceId(), deviceName: deviceLabel(), ...(totp ? { totp: String(totp).replace(/\s+/g, "") } : {}) });
+      r = await this.api.login({ email, loginHash: p.loginHash, deviceId: this.store.deviceId(), deviceName: deviceLabel(), mailAccess: "session", ...(totp ? { totp: String(totp).replace(/\s+/g, "") } : {}) });
     } catch (e) {
       if (e.code !== "2fa-required" && e.code !== "bad-2fa") {
         this._forgetPending();
@@ -467,7 +467,7 @@ export class Account {
     const k = await this._derive(email, password, KDF_CURRENT);
     try {
       this._step("Создаём аккаунт");
-      const r = await this.api.register({ email, loginHash: k.loginHash, kdf: KDF_CURRENT, deviceId: this.store.deviceId(), deviceName: deviceLabel() });
+      const r = await this.api.register({ email, loginHash: k.loginHash, kdf: KDF_CURRENT, deviceId: this.store.deviceId(), deviceName: deviceLabel(), mailAccess: "session" });
       this.session = { email, userId: r.userId, token: r.session.token, expiresAt: r.session.expiresAt, kdf: KDF_CURRENT, remember: !!remember, mail: r.mail || null };
       this.keys = { state: "offline" };
       // ключ восстановления: единственный способ вернуть данные, если пароль забыт
@@ -586,7 +586,7 @@ export class Account {
     this._step("Меняем пароль");
     let r;
     try {
-      r = await this.api.resetEmailConfirm({ email, code: String(code).replace(/\s+/g, ""), newLoginHash: p.loginHash, kdf: KDF_CURRENT, deviceId: this.store.deviceId(), deviceName: deviceLabel(), ...(totp ? { totp: String(totp).replace(/\s+/g, "") } : {}) });
+      r = await this.api.resetEmailConfirm({ email, code: String(code).replace(/\s+/g, ""), newLoginHash: p.loginHash, kdf: KDF_CURRENT, deviceId: this.store.deviceId(), deviceName: deviceLabel(), mailAccess: "session", ...(totp ? { totp: String(totp).replace(/\s+/g, "") } : {}) });
     } catch (e) {
       if (e.code !== "2fa-required" && e.code !== "bad-2fa") {
         this._forgetPending();
@@ -612,7 +612,13 @@ export class Account {
 
   /* ---- доступ к ящику ---- */
 
-  /** Логин и пароль приложения для почтового сервера (выдаются этому устройству при входе). */
+  /** Веб-версия ходит к ящику по сессии аккаунта (core/jmap.js): почтового пароля у страницы нет.
+   * Сервер аккаунтов прежней версии этого не умеет и выдаёт пароль приложения — тогда он здесь. */
+  get mailBySession() {
+    return !this.session?.mail?.password;
+  }
+
+  /** Логин и пароль приложения для почтового сервера (только с сервером аккаунтов прежней версии). */
   async mailAccess({ refresh = false } = {}) {
     if (!refresh && this.session?.mail?.password) {
       return this.session.mail;

@@ -45,6 +45,11 @@ PostgreSQL, почтовый сервер Stalwart по JMAP на том же х
 | `PATCH /v1/mail/aliases/:id { on?, site?, space? }` | выключенный алиас отвечает отправителю «ящика нет» |
 | `DELETE /v1/mail/aliases/:id` | алиас перестаёт принимать почту навсегда |
 | `GET /v1/health` | `{ ok, mail }` |
+| `POST /v1/account/register`, `/login`, `/reset/email/confirm` с `mailAccess: "session"` | доступ к почте по сессии (веб-версия): пароль приложения не выдаётся, в ответе `mail: { address, session: true }`; прежний пароль приложения устройства отзывается |
+| `GET /v1/mail/jmap/session` (Bearer) | описание ящика от почтового сервера (номер учётки, пределы) |
+| `POST /v1/mail/jmap { using, methodCalls }` | вызовы JMAP от имени владельца ящика; только почтовые возможности и методы (`Mailbox/*`, `Thread/*`, `Email/*`, `SearchSnippet/get`, `Identity/*`, `EmailSubmission/get\|set`), иначе `403 mail-forbidden`; тело до 4 МиБ, до 32 вызовов |
+| `GET /v1/mail/jmap/download/:account/:blob/:name?accept=тип` | содержимое вложения или письма: `Content-Disposition: attachment`, `nosniff`, без кэша |
+| `POST /v1/mail/jmap/upload/:account` | загрузить вложение или исходник письма (до 52 МиБ): `{ accountId, blobId, type, size }` |
 | `GET /v1/account/devices` (Bearer) | `[{ id, name, at, current, active }]` — `active`: у устройства есть действующая сессия |
 | `POST /v1/account/devices/:id/revoke { loginHash }` | сеанс другого устройства завершён: его сессии удалены, пароль приложения почты отозван, устройство убрано из списка; своё устройство — `400`, неизвестное — `404 not-found` |
 | `POST /v1/account/login { …, totp? }` | при включённой защите без кода — `401 2fa-required`, с неверным — `401 bad-2fa`; `totp` — код приложения или резервный код |
@@ -76,6 +81,16 @@ PostgreSQL, почтовый сервер Stalwart по JMAP на том же х
 
 `loginHash` в настройках входа — повторная проверка пароля; `code` — второй фактор, обязателен,
 если защита включена.
+
+Почта веб-версии (`src/webmail.rs`). Браузер ходит на почтовый сервер сам, с паролем приложения
+устройства; веб-странице это не подходит: паролей приложений у ящика считаные штуки (предел
+почтового сервера — пять), а закрытая вкладка держала бы свой до истечения сессии. Поэтому
+веб-версия работает с ящиком через этот сервер по токену сессии: в браузере нет почтового пароля,
+выход или завершение сеанса сразу закрывает и почту, а из методов доступны только почтовые —
+настройки ящика и пароли приложений через этот путь недоступны. Запросы пересылаются почтовому
+серверу от имени владельца ящика (основной пароль ящика, вход только с 127.0.0.1); отказ в методе
+до почтового сервера не доходит. Предел — 1500 запросов в минуту на пользователя. Проверки:
+`tests/webmail.mjs` с имитацией почтового сервера `tests/fake-jmap.mjs`.
 
 Ключи почты (`src/pgp.rs`). Закрытый ключ приходит уже зашифрованным: браузер шифрует его случайным
 ключом данных, а ключ данных — ключом из пароля (тот же тяжёлый KDF, что у хеша входа, другая
@@ -137,7 +152,7 @@ Tabora на тот же путь сервера аккаунтов.
 Коды: `bad-credentials`, `session-expired`, `rate-limited`, `taken`, `bad-nonce`, `bad-proof`,
 `no-recovery`, `mail-unavailable`, `signup-closed`, `signup-paused`, `alias-limit`, `old-client`,
 `2fa-required`, `bad-2fa`, `2fa-on`, `2fa-off`, `2fa-setup-expired`, `bad-address`, `same-address`,
-`bad-code`, `no-code`, `sync-invalid`, `sync-limit`, `sync-key`, `sync-reset`, `support-invalid`,
+`bad-code`, `no-code`, `sync-invalid`, `sync-limit`, `sync-key`, `sync-reset`, `mail-forbidden`, `support-invalid`,
 `support-limit`, `not-found`.
 
 ## Ограничения

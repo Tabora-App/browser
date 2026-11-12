@@ -17,7 +17,7 @@ const password = readFileSync(process.env.TABORA_MAIL_PASSWORD_FILE, "utf8").tri
 const account = new Account({ api: new Api(process.env.TABORA_API || "https://api.tabora.app"), store: new MemoryStore() });
 await account.signIn(name, password);
 const pgp = new MailPgp(account);
-const mail = new Mail({ account, jmap: new Jmap(account, process.env.TABORA_JMAP || "https://mx.tabora.app"), pgp });
+const mail = new Mail({ account, jmap: new Jmap(account, { proxy: process.env.TABORA_API || "https://api.tabora.app", direct: process.env.TABORA_JMAP || "https://mx.tabora.app" }), pgp });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const stamp = Date.now().toString(36);
 const cleanup = [];

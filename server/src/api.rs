@@ -197,6 +197,23 @@ impl App {
         })
     }
 
+    /// Доступ к почте для устройства при входе. Браузер получает пароль приложения; веб-версия
+    /// просит доступ по сессии (`mailAccess: "session"`, см. webmail.rs) — тогда пароль приложения
+    /// не выдаётся, а прежний, если у устройства был, отзывается.
+    pub(crate) async fn device_mail(&self, user: &User, device_id: &str, device_name: &str, old: Option<String>, access: Option<&str>) -> Option<Value> {
+        if access != Some("session") {
+            return self.issue_mail(user, device_id, device_name, old).await;
+        }
+        if !self.mail.enabled() {
+            return None;
+        }
+        user.mail_id.as_deref()?;
+        if old.is_some() {
+            self.revoke_mail(user, &[(device_id.to_string(), old)]).await;
+        }
+        Some(json!({ "address": user.email, "session": true }))
+    }
+
     /// Пароль приложения для устройства: прежний отзывается, новый отдаётся клиенту один раз.
     pub(crate) async fn issue_mail(&self, user: &User, device_id: &str, device_name: &str, old: Option<String>) -> Option<Value> {
         if !self.mail.enabled() {
@@ -426,6 +443,9 @@ struct RegisterBody {
     device_id: String,
     #[serde(default)]
     device_name: String,
+    /// "session" — доступ к почте по сессии (веб-версия), без пароля приложения
+    #[serde(default)]
+    mail_access: Option<String>,
 }
 
 pub(crate) fn check_device(id: &str) -> Result<(), ApiError> {
@@ -484,7 +504,7 @@ async fn register(State(app): State<Arc<App>>, headers: HeaderMap, body: Bytes) 
         return Err(e.into());
     }
     let user = User { id: user_id, public_id: public_id.clone(), email: email.clone(), salt: salt.to_vec(), verifier: verifier.to_vec(), kdf: 2, recovery: None, mail_id };
-    let mail = app.issue_mail(&user, &b.device_id, &device_name, None).await;
+    let mail = app.device_mail(&user, &b.device_id, &device_name, None, b.mail_access.as_deref()).await;
     eprintln!("аккаунт создан: {public_id}");
     Ok(Json(json!({ "userId": public_id, "session": session, "mail": mail })))
 }
@@ -500,6 +520,9 @@ struct LoginBody {
     /// код приложения или резервный код, если у аккаунта включена двухфакторная защита
     #[serde(default)]
     totp: Option<String>,
+    /// "session" — доступ к почте по сессии (веб-версия), без пароля приложения
+    #[serde(default)]
+    mail_access: Option<String>,
 }
 
 async fn login(State(app): State<Arc<App>>, headers: HeaderMap, body: Bytes) -> ApiResult {
@@ -538,7 +561,7 @@ async fn login(State(app): State<Arc<App>>, headers: HeaderMap, body: Bytes) -> 
     let old_cred = db::upsert_device(&c, user.id, &b.device_id, &device_name, now).await?;
     let session = app.new_session(&c, user.id, &b.device_id, now).await?;
     drop(c);
-    let mail = app.issue_mail(&user, &b.device_id, &device_name, old_cred).await;
+    let mail = app.device_mail(&user, &b.device_id, &device_name, old_cred, b.mail_access.as_deref()).await;
     Ok(Json(json!({ "userId": user.public_id, "session": session, "kdf": user.kdf, "mail": mail })))
 }
 
@@ -948,6 +971,10 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/v1/account/devices", get(devices))
         .route("/v1/account/devices/:id/revoke", post(device_revoke))
         .route("/v1/mail/password", post(mail_password))
+        .route("/v1/mail/jmap/session", get(crate::webmail::session))
+        .route("/v1/mail/jmap", post(crate::webmail::call).layer(DefaultBodyLimit::max(crate::webmail::MAX_CALL)).layer(session_first()))
+        .route("/v1/mail/jmap/download/:account/:blob/:name", get(crate::webmail::download))
+        .route("/v1/mail/jmap/upload/:account", post(crate::webmail::upload).layer(DefaultBodyLimit::max(crate::webmail::MAX_UPLOAD)).layer(session_first()))
         .route("/v1/mail/pgp", get(pgp::keys_get).put(pgp::keys_put))
         .route("/.well-known/openpgpkey/hu/:hash", get(pgp::wkd_key))
         .route("/.well-known/openpgpkey/policy", get(pgp::wkd_policy))
