@@ -1,0 +1,19 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/trustpanel/ui/ProtectionPanelBanner.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/trustpanel/ui/ProtectionPanelBanner.kt
+index a37791022b..c558544cf2 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/trustpanel/ui/ProtectionPanelBanner.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/trustpanel/ui/ProtectionPanelBanner.kt
+@@ -48,10 +48,10 @@ import org.mozilla.fenix.R
+ import org.mozilla.fenix.theme.FirefoxTheme
+ 
+ private val BANNER_IMAGE_SIZE = 80.dp
+-private val GradientAISubtleStop2Light = Color(0xFFE9DAFB)
+-private val GradientAISubtleStop3Light = Color(0xFFFFE3CE)
+-private val GradientAISubtleStop2Dark = Color(0xFFAB71FF)
+-private val GradientAISubtleStop3Dark = Color(0xFFFF8A50)
++private val GradientAISubtleStop2Light = Color(0xFFE8F7B7)
++private val GradientAISubtleStop3Light = Color(0xFFF4FBDC)
++private val GradientAISubtleStop2Dark = Color(0xFF2C3D07)
++private val GradientAISubtleStop3Dark = Color(0xFF1D2025)
+ 
+ @Immutable
+ private data class ProtectionPanelBannerContent(

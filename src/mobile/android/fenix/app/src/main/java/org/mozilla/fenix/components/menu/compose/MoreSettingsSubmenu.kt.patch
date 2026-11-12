@@ -1,0 +1,30 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/compose/MoreSettingsSubmenu.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/compose/MoreSettingsSubmenu.kt
+index 235e476483..4f6b52481a 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/compose/MoreSettingsSubmenu.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/compose/MoreSettingsSubmenu.kt
+@@ -21,6 +21,7 @@ import mozilla.components.compose.base.theme.PreviewThemeProvider
+ import mozilla.components.compose.base.theme.Theme
+ import mozilla.components.compose.base.theme.information
+ import mozilla.components.ui.icons.R as iconsR
++import org.mozilla.fenix.BuildConfig
+ import org.mozilla.fenix.R
+ import org.mozilla.fenix.components.menu.store.SummarizationMenuState
+ import org.mozilla.fenix.components.menu.store.TranslationInfo
+@@ -70,10 +71,13 @@ internal fun MoreSettingsSubmenu(
+             isPrivate = isPrivate,
+             onMoveToNonPrivateTabMenuClick = onMoveToNonPrivateTabMenuClick,
+         )
+-        WebCompatReporterMenuItem(
+-            isWebCompatEnabled = isWebCompatEnabled,
+-            onWebCompatReporterClick = onWebCompatReporterClick,
+-        )
++        // Tabora: отчёт о сломанном сайте уходит в Mozilla вместе со сбором данных; без него пункт не нужен
++        if (BuildConfig.TELEMETRY) {
++            WebCompatReporterMenuItem(
++                isWebCompatEnabled = isWebCompatEnabled,
++                onWebCompatReporterClick = onWebCompatReporterClick,
++            )
++        }
+         ShortcutsSection(
+             showShortcuts = showShortcuts,
+             isPinned = isPinned,
