@@ -296,7 +296,10 @@ def cmd_build(args: argparse.Namespace) -> None:
         cmd += ["-configuration", "Firefox", "-destination", "generic/platform=iOS", "CODE_SIGNING_ALLOWED=NO"]
     else:
         # конфигурация Debug проекта — это сборка «Fennec» для разработки (Client/Configuration/Fennec.xcconfig)
-        cmd += ["-configuration", "Debug", "-destination", f"platform=iOS Simulator,name={SIMULATOR}", "CODE_SIGNING_ALLOWED=NO"]
+        # Подпись не отключается: для симулятора Xcode подписывает сам, без профилей, и только так
+        # приложение получает свои права — общее хранилище группы и связку ключей. Без них оно
+        # запускается, но не сохраняет вкладки и работает без части настроек.
+        cmd += ["-configuration", "Debug", "-destination", f"platform=iOS Simulator,name={SIMULATOR}"]
     cmd += ["build"]
     log(f"сборка ({'телефон' if args.device else 'симулятор'}): журнал {out.relative_to(ROOT)}")
     with out.open("w") as f:
