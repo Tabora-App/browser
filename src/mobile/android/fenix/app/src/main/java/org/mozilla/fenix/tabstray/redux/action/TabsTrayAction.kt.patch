@@ -1,0 +1,18 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/redux/action/TabsTrayAction.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/redux/action/TabsTrayAction.kt
+index b7eb04acb6..2afe58024f 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/redux/action/TabsTrayAction.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/redux/action/TabsTrayAction.kt
+@@ -66,6 +66,13 @@ sealed interface TabsTrayAction : Action {
+      */
+     data class UpdateInactiveExpanded(val expanded: Boolean) : TabsTrayAction
+ 
++    /**
++     * Tabora: вход в аккаунт или выход, пока список вкладок открыт.
++     *
++     * @property isSignedIn Вошёл ли человек в аккаунт Tabora.
++     */
++    data class UpdateSyncSignedIn(val isSignedIn: Boolean) : TabsTrayAction
++
+     /** Updates the list of synced tabs in [org.mozilla.fenix.tabstray.redux.state.TabsTrayState.syncedTabs]. */
+     data class UpdateSyncedTabs(val tabs: List<SyncedTabsListItem>) : TabsTrayAction
+ 

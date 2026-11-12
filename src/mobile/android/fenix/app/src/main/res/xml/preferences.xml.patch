@@ -1,8 +1,19 @@
 diff --git a/mobile/android/fenix/app/src/main/res/xml/preferences.xml b/mobile/android/fenix/app/src/main/res/xml/preferences.xml
-index 78e2c51e3c..b7bc4cc4de 100644
+index 78e2c51e3c..b1f6ce67d1 100644
 --- a/mobile/android/fenix/app/src/main/res/xml/preferences.xml
 +++ b/mobile/android/fenix/app/src/main/res/xml/preferences.xml
-@@ -11,7 +11,8 @@
+@@ -6,12 +6,19 @@
+ <androidx.preference.PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+     xmlns:app="http://schemas.android.com/apk/res-auto">
+ 
++    <androidx.preference.Preference
++        android:key="@string/pref_key_tabora_account"
++        android:icon="@drawable/mozac_ic_avatar_circle_24"
++        android:title="@string/tabora_account_title"
++        android:summary="@string/tabora_account_summary" />
++
+     <androidx.preference.Preference
+         android:key="@string/pref_key_sign_in"
          android:layout="@layout/sign_in_preference"
          android:summary="@string/preferences_sign_in_description"
          android:title="@string/preferences_sign_in"
@@ -12,7 +23,7 @@ index 78e2c51e3c..b7bc4cc4de 100644
  
      <androidx.preference.PreferenceCategory
          android:key="@string/pref_key_account_category"
-@@ -145,6 +146,13 @@
+@@ -145,6 +152,13 @@
              app:iconSpaceReserved="false"
              android:title="@string/preference_enhanced_tracking_protection" />
  
@@ -26,7 +37,7 @@ index 78e2c51e3c..b7bc4cc4de 100644
          <androidx.preference.Preference
              android:key="@string/pref_key_site_permissions"
              app:iconSpaceReserved="false"
-@@ -168,7 +176,8 @@
+@@ -168,7 +182,8 @@
          <androidx.preference.Preference
              android:key="@string/pref_key_data_choices"
              app:iconSpaceReserved="false"
@@ -36,7 +47,7 @@ index 78e2c51e3c..b7bc4cc4de 100644
  
      </androidx.preference.PreferenceCategory>
  
-@@ -210,7 +219,8 @@
+@@ -210,7 +225,8 @@
          <androidx.preference.Preference
              android:key="@string/pref_key_firefox_labs"
              app:iconSpaceReserved="false"
@@ -46,7 +57,7 @@ index 78e2c51e3c..b7bc4cc4de 100644
  
          <androidx.preference.SwitchPreferenceCompat
              android:key="@string/pref_key_leakcanary"
-@@ -221,7 +231,8 @@
+@@ -221,7 +237,8 @@
          <androidx.preference.Preference
              android:key="@string/pref_key_remote_improvements"
              android:title="@string/preferences_remote_improvements"
@@ -56,7 +67,7 @@ index 78e2c51e3c..b7bc4cc4de 100644
  
          <androidx.preference.SwitchPreferenceCompat
              android:key="@string/pref_key_remote_debugging"
-@@ -248,7 +259,8 @@
+@@ -248,7 +265,8 @@
          <androidx.preference.Preference
              android:key="@string/pref_key_rate"
              app:iconSpaceReserved="false"

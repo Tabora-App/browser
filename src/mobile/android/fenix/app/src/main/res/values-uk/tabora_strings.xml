@@ -5,4 +5,13 @@
 <resources>
     <string name="preferences_tabora_shield">Блокування реклами</string>
     <string name="preferences_tabora_shield_summary">Приховує рекламу й трекери на сторінках. Списки фільтрів оновлюються самі.</string>
+    <!-- Экран и пункт настроек: вход в аккаунт Tabora и синхронизация -->
+    <string name="tabora_account_title">Обліковий запис Tabora</string>
+    <string name="tabora_account_summary">Увійдіть, щоб вкладки було видно на всіх ваших пристроях</string>
+    <!-- Список вкладок, страница вкладок других устройств -->
+    <string name="tabora_synced_tabs_off">Синхронізацію вкладок на цьому телефоні вимкнено. Увімкнути її можна в обліковому записі Tabora.</string>
+    <string name="tabora_synced_tabs_empty">Вкладок з інших пристроїв поки немає. На комп’ютері увімкніть синхронізацію: «Налаштування → Обліковий запис → Синхронізація».</string>
+    <string name="tabora_synced_tabs_signed_out_title">Вкладки з інших пристроїв</string>
+    <string name="tabora_synced_tabs_signed_out_text">Увійдіть в обліковий запис Tabora, щоб бачити тут вкладки з комп’ютера та інших пристроїв.</string>
+    <string name="tabora_synced_tabs_sign_in">Увійти</string>
 </resources>

@@ -1,0 +1,57 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/ui/TabManagementFragment.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/ui/TabManagementFragment.kt
+index 4797acfed6..7e365080a8 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/ui/TabManagementFragment.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/ui/TabManagementFragment.kt
+@@ -102,6 +102,7 @@ import org.mozilla.fenix.tabgroups.EditTabGroup
+ import org.mozilla.fenix.tabgroups.ExpandedTabGroup
+ import org.mozilla.fenix.tabgroups.ExpandedTabGroupActions
+ import org.mozilla.fenix.tabgroups.UngroupTabGroupConfirmationDialog
++import org.mozilla.fenix.tabora.TaboraSyncedTabsIntegration
+ import org.mozilla.fenix.tabstray.InactiveTabsBinding
+ import org.mozilla.fenix.tabstray.PbmLockStatusBinding
+ import org.mozilla.fenix.tabstray.TabManagerCfrController
+@@ -128,7 +129,6 @@ import org.mozilla.fenix.tabstray.redux.state.TabGroupFormState
+ import org.mozilla.fenix.tabstray.redux.state.TabsTrayState
+ import org.mozilla.fenix.tabstray.redux.store.TabsTrayStore
+ import org.mozilla.fenix.tabstray.repository.uistate.DefaultTabManagerUiStateRepository
+-import org.mozilla.fenix.tabstray.syncedtabs.SyncedTabsIntegration
+ import org.mozilla.fenix.tabstray.ui.animation.defaultPredictivePopTransitionSpec
+ import org.mozilla.fenix.tabstray.ui.animation.defaultTransitionSpec
+ import org.mozilla.fenix.tabstray.ui.animation.popTransitionSpec
+@@ -159,7 +159,7 @@ class TabManagementFragment : Fragment() {
+     private val inactiveTabsBinding = ViewBoundFeatureWrapper<InactiveTabsBinding>()
+     private val pbmLockStatusBinding = ViewBoundFeatureWrapper<PbmLockStatusBinding>()
+     private val secureTabManagerBinding = ViewBoundFeatureWrapper<SecureTabManagerBinding>()
+-    private val syncedTabsIntegration = ViewBoundFeatureWrapper<SyncedTabsIntegration>()
++    private val syncedTabsIntegration = ViewBoundFeatureWrapper<TaboraSyncedTabsIntegration>()
+     private val trackersBlockedFeature = ViewBoundFeatureWrapper<TrackersBlockedFeature>()
+     private lateinit var snackbarHostState: SnackbarHostState
+ 
+@@ -786,7 +786,7 @@ class TabManagementFragment : Fragment() {
+                     showCollectionsMigrationCard =
+                         requireComponents.collectionsMigrationRepository.shouldShowCollectionsMigrationCard()
+                 ),
+-            sync = TabsTrayState.SyncState(isSignedIn = settings.signedInFxaAccount),
++            sync = TabsTrayState.SyncState(isSignedIn = requireComponents.core.taboraAccount.state.value.signedIn),
+             config =
+                 TabsTrayState.TabsTrayConfig(
+                     tabGroupsEnabled = settings.tabGroupsEnabled,
+@@ -931,14 +931,12 @@ class TabManagementFragment : Fragment() {
+ 
+         syncedTabsIntegration.set(
+             feature =
+-                SyncedTabsIntegration(
++                TaboraSyncedTabsIntegration(
+                     store = tabsTrayStore,
+                     context = requireContext(),
+-                    navController = findNavController(),
+-                    storage = requireComponents.backgroundServices.syncedTabsStorage,
+-                    commands = requireComponents.backgroundServices.syncedTabsCommands,
+-                    accountManager = requireComponents.backgroundServices.accountManager,
+-                    lifecycleOwner = this,
++                    account = requireComponents.core.taboraAccount,
++                    lifecycleOwner = viewLifecycleOwner,
++                    onOpenAccount = tabManagerInteractor::onSignInClicked,
+                 ),
+             owner = this,
+             view = view,

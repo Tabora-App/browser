@@ -86,11 +86,12 @@ CONF
     esac
     unzip -o -q -j "$src" 'assets/omni.ja' -d "$gv/assets"
     [ -f "$gv/lib/arm64-v8a/libxul.so" ] || die "в $src нет движка (libxul.so для arm64-v8a)"
-    # название в надписях — как в настоящей сборке
+    # название в надписях и модуль аккаунта — как в настоящей сборке
     (cd "$ROOT" && python3 -c "
 import importlib.util
 spec = importlib.util.spec_from_file_location('build', 'tools/build.py'); b = importlib.util.module_from_spec(spec); spec.loader.exec_module(b)
-b.rebrand_android_strings()")
+b.rebrand_android_strings()
+b.build_phone_module()")
     echo "готово: движок из $(basename "$src"), дальше — tools/android/local.sh build"
     ;;
   build)

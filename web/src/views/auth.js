@@ -39,10 +39,11 @@ function strengthMeter(input) {
   return el;
 }
 
-function shell(content, footer = null) {
+function page(content, embedded = false) {
   return h("div", { class: "auth" },
     h("main", { class: "auth-card" }, content),
-    h("footer", { class: "auth-foot" }, languagePicker(), footer || [h("a", { href: "https://tabora.app/", rel: "noopener" }, t`О Tabora`), h("a", { href: "https://tabora.app/#download", rel: "noopener" }, t`Скачать браузер`)]));
+    // в приложении для телефона язык задаёт система, а ссылки на сайт и установку ни к чему
+    !embedded && h("footer", { class: "auth-foot" }, languagePicker(), h("a", { href: "https://tabora.app/", rel: "noopener" }, t`О Tabora`), h("a", { href: "https://tabora.app/#download", rel: "noopener" }, t`Скачать браузер`)));
 }
 
 function head(title, text = "") {
@@ -51,10 +52,12 @@ function head(title, text = "") {
 
 /**
  * @param {HTMLElement} root
- * @param {{ account: import("../core/account.js").Account }} ctx
+ * @param {{ account: import("../core/account.js").Account, intro?: { title: string, text: string }, embedded?: boolean }} ctx
+ *   intro — заголовок и пояснение на экране входа; embedded — экран внутри приложения для телефона.
  */
-export function mountAuth(root, { account }) {
+export function mountAuth(root, { account, intro = null, embedded = false }) {
   let name = "";
+  const shell = content => page(content, embedded);
 
   function show(view) {
     clear(root, view);
@@ -95,7 +98,7 @@ export function mountAuth(root, { account }) {
       }
     });
     show(shell([
-      head(t`Почта Tabora`, t`Войдите, чтобы открыть свой ящик.`),
+      head(intro?.title || t`Почта Tabora`, intro?.text || t`Войдите, чтобы открыть свой ящик.`),
       form,
       h("div", { class: "auth-links" },
         h("button", { class: "link-btn", type: "button", onclick: () => { name = user.value.trim(); forgot(); } }, t`Забыли пароль?`),

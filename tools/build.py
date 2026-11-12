@@ -515,6 +515,7 @@ def cmd_import(args: argparse.Namespace) -> None:
     verify_mar_certs()
     if target_platform() == "android":
         rebrand_android_strings()
+        build_phone_module()
     write_mozconfig(config, brand)
     log("import завершён")
 
@@ -988,6 +989,24 @@ def rebrand_android_strings() -> None:
         else "надписи приложения для Android: название уже заменено")
 
 
+ANDROID_ACCOUNT_MODULE = "mobile/android/fenix/app/src/main/assets/extensions/tabora"
+ACCOUNT_SERVER = "https://api.tabora.app"
+
+
+def build_phone_module() -> None:
+    """Модуль аккаунта для приложения Android: вход в аккаунт Tabora и синхронизация. Собирается
+    из того же кода, что веб-версия (web/src, tools/web/build-phone.mjs), и кладётся в исходники
+    приложения как встроенное расширение движка. В репозитории собранного модуля нет."""
+    need_engine()
+    for tool in ("i18n", "web"):
+        # версии пакетов закреплены в package-lock.json; уже поставленные заново не ставятся
+        if not (ROOT / "tools" / tool / "node_modules").is_dir():
+            run(["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund", "--silent"], cwd=ROOT / "tools" / tool)
+    # сборка не пройдёт, если в коде есть надпись без перевода
+    run(["node", "extract.mjs", "web", "--strict"], cwd=ROOT / "tools" / "i18n")
+    run(["node", str(ROOT / "tools" / "web" / "build-phone.mjs"), str(ENGINE / ANDROID_ACCOUNT_MODULE)])
+
+
 def _apk_problems(apk: Path) -> List[str]:
     """Готовый файл приложения: тот ли это продукт и всё ли в нём на месте."""
     import io
@@ -1010,6 +1029,16 @@ def _apk_problems(apk: Path) -> List[str]:
             if any(n.startswith("META-INF/") and n.endswith((".RSA", ".DSA", ".EC")) for n in names):
                 problems.append(f"{apk.name} уже подписан: сборка должна отдавать неподписанный файл "
                                 "(подпись — tools/android/sign.sh)")
+            # модуль аккаунта: на месте и собран для рабочего сервера (проверочная сборка с местным
+            # сервером в выпуск попасть не должна)
+            module = "assets/extensions/tabora/"
+            for need in ("manifest.json", "background.html", "index.html", "build.json"):
+                if module + need not in names:
+                    problems.append(f"в {apk.name} нет модуля аккаунта: {module}{need}")
+            if module + "build.json" in names:
+                info = json.loads(z.read(module + "build.json"))
+                if info.get("api") != ACCOUNT_SERVER or info.get("test"):
+                    problems.append(f"модуль аккаунта собран для сервера {info.get('api')!r}, а не для {ACCOUNT_SERVER}")
             if "assets/omni.ja" in names:
                 # omni.ja для Android упакован «оптимизированно» (оглавление в начале файла), и
                 # zipfile его не открывает; имена файлов в оглавлении записаны как есть — ищем их
@@ -1085,6 +1114,7 @@ def build_android(config: dict, brand: str) -> None:
     if not TABORA_VERSION_RE.match(version):
         die(f"displayVersion бренда {brand} должна быть вида X.Y.Z, сейчас {version!r}")
     rebrand_android_strings()
+    build_phone_module()
     # Демон gradle, запущенный в начале сборки движка (зависимости), иначе висит в памяти все
     # полтора часа компиляции: через две минуты простоя он выходит сам.
     os.environ.setdefault("GRADLE_OPTS", "-Dorg.gradle.daemon.idletimeout=120000")

@@ -5,4 +5,13 @@
 <resources>
     <string name="preferences_tabora_shield">Bloquear anuncios</string>
     <string name="preferences_tabora_shield_summary">Oculta anuncios y rastreadores en las páginas. Las listas de filtros se actualizan solas.</string>
+    <!-- Экран и пункт настроек: вход в аккаунт Tabora и синхронизация -->
+    <string name="tabora_account_title">Cuenta de Tabora</string>
+    <string name="tabora_account_summary">Inicia sesión para ver tus pestañas en todos tus dispositivos</string>
+    <!-- Список вкладок, страница вкладок других устройств -->
+    <string name="tabora_synced_tabs_off">La sincronización de pestañas está desactivada en este teléfono. Actívala en tu cuenta de Tabora.</string>
+    <string name="tabora_synced_tabs_empty">Aún no hay pestañas de tus otros dispositivos. En el ordenador, activa la sincronización: Ajustes → Cuenta → Sincronización.</string>
+    <string name="tabora_synced_tabs_signed_out_title">Pestañas de tus otros dispositivos</string>
+    <string name="tabora_synced_tabs_signed_out_text">Inicia sesión en tu cuenta de Tabora para ver aquí las pestañas del ordenador y de otros dispositivos.</string>
+    <string name="tabora_synced_tabs_sign_in">Iniciar sesión</string>
 </resources>

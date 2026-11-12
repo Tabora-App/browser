@@ -1,8 +1,8 @@
 diff --git a/mobile/shared/components/geckoview/GeckoViewStartup.sys.mjs b/mobile/shared/components/geckoview/GeckoViewStartup.sys.mjs
-index fb883b8efb..9a908c615d 100644
+index fb883b8efb..c0c3e7d294 100644
 --- a/mobile/shared/components/geckoview/GeckoViewStartup.sys.mjs
 +++ b/mobile/shared/components/geckoview/GeckoViewStartup.sys.mjs
-@@ -383,6 +383,16 @@ export class GeckoViewStartup {
+@@ -383,6 +383,32 @@ export class GeckoViewStartup {
            "network:request-local-network-permission"
          );
  
@@ -15,6 +15,22 @@ index fb883b8efb..9a908c615d 100644
 +        } catch (e) {
 +          console.error("Tabora shield", e);
 +        }
++
++        // Tabora: фоновые страницы расширений движок запускает, когда откроется первая страница
++        // (сигнал даёт её окно). Модуль аккаунта (assets/extensions/tabora) должен сверять вкладки
++        // и без неё — приложение открылось на домашнем экране, — поэтому сигнал даётся и отсюда,
++        // через несколько секунд после запуска, чтобы не мешать открытию первой страницы.
++        // ExtensionParent загружается заранее: сигнал ловит он, а без него сигнал пропал бы.
++        ChromeUtils.importESModule(
++          "resource://gre/modules/Timer.sys.mjs"
++        ).setTimeout(() => {
++          ChromeUtils.idleDispatch(() => {
++            ChromeUtils.importESModule(
++              "resource://gre/modules/ExtensionParent.sys.mjs"
++            );
++            Services.obs.notifyObservers(null, "extensions-late-startup");
++          });
++        }, 4000);
 +
          Services.obs.notifyObservers(null, "geckoview-startup-complete");
          break;

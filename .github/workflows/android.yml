@@ -87,8 +87,11 @@ jobs:
             echo "::warning::нет секрета SAFEBROWSING_API_KEY: Safe Browsing в этой сборке работать не будет"
           fi
 
+      # import заодно собирает модуль аккаунта для телефона из web/ (нужен Node.js — он есть на раннере)
       - name: Import branding and patches
-        run: python3 tools/build.py import
+        run: |
+          node --version
+          python3 tools/build.py import
 
       - name: Bootstrap Mozilla toolchains, Android SDK, NDK and JDK
         run: |

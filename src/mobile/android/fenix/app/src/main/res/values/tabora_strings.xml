@@ -8,4 +8,14 @@
     <!-- Settings switch: built-in ad blocker -->
     <string name="preferences_tabora_shield">Block ads</string>
     <string name="preferences_tabora_shield_summary">Hides ads and trackers on pages. Filter lists update on their own.</string>
+    <string name="pref_key_tabora_account" translatable="false">pref_key_tabora_account</string>
+    <!-- Экран и пункт настроек: вход в аккаунт Tabora и синхронизация -->
+    <string name="tabora_account_title">Tabora account</string>
+    <string name="tabora_account_summary">Sign in to share tabs between your devices</string>
+    <!-- Список вкладок, страница вкладок других устройств -->
+    <string name="tabora_synced_tabs_off">Tab sync is turned off on this phone. Turn it on in your Tabora account.</string>
+    <string name="tabora_synced_tabs_empty">No tabs from your other devices yet. On your computer, turn on sync: Settings → Account → Sync.</string>
+    <string name="tabora_synced_tabs_signed_out_title">Tabs from your other devices</string>
+    <string name="tabora_synced_tabs_signed_out_text">Sign in to your Tabora account to see tabs from your computer and other devices here.</string>
+    <string name="tabora_synced_tabs_sign_in">Sign in</string>
 </resources>

@@ -1,5 +1,5 @@
 diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SettingsFragment.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SettingsFragment.kt
-index 27584e3094..f5200059df 100644
+index 27584e3094..f9e037fffd 100644
 --- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SettingsFragment.kt
 +++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SettingsFragment.kt
 @@ -32,6 +32,7 @@ import androidx.navigation.fragment.navArgs
@@ -20,7 +20,45 @@ index 27584e3094..f5200059df 100644
  import mozilla.components.concept.sync.AccountObserver
  import mozilla.components.concept.sync.AuthType
  import mozilla.components.concept.sync.OAuthAccount
-@@ -619,6 +622,13 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment
+@@ -68,6 +71,7 @@ import org.mozilla.fenix.GleanMetrics.TrackingProtection
+ import org.mozilla.fenix.GleanMetrics.Translations
+ import org.mozilla.fenix.GleanMetrics.Vpn
+ import org.mozilla.fenix.HomeActivity
++import org.mozilla.fenix.NavGraphDirections
+ import org.mozilla.fenix.R
+ import org.mozilla.fenix.components.Components
+ import org.mozilla.fenix.components.accounts.FenixFxAEntryPoint
+@@ -234,6 +238,17 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment
+             }
+         }
+ 
++        // Tabora: под пунктом «Аккаунт Tabora» — адрес вошедшего или приглашение войти
++        viewLifecycleOwner.lifecycleScope.launch {
++            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
++                components.core.taboraAccount.state.collect { account ->
++                    requirePreference<Preference>(R.string.pref_key_tabora_account).summary =
++                        account.email.takeIf { account.signedIn && it.isNotEmpty() }
++                            ?: getString(R.string.tabora_account_summary)
++                }
++            }
++        }
++
+         snackbarBinding.set(
+             feature =
+                 SnackbarBinding(
+@@ -367,6 +382,11 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment
+ 
+         val directions: NavDirections? =
+             when (preference.key) {
++                // Tabora: вход и синхронизация
++                resources.getString(R.string.pref_key_tabora_account) -> {
++                    NavGraphDirections.actionGlobalTaboraAccountFragment()
++                }
++
+                 /* Top level account preferences.
+                 Note: Only ONE of these preferences is visible at a time. */
+                 resources.getString(R.string.pref_key_sign_in) -> {
+@@ -619,6 +639,13 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment
          val preferenceMakeDefaultBrowser =
              requirePreference<DefaultBrowserPreference>(R.string.pref_key_make_default_browser)
  
@@ -34,7 +72,7 @@ index 27584e3094..f5200059df 100644
          if (!Config.channel.isReleased) {
              preferenceLeakCanary?.setOnPreferenceChangeListener { _, newValue ->
                  val isEnabled = newValue == true
-@@ -898,6 +908,17 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment
+@@ -898,6 +925,17 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment
          }
      }
  

@@ -1,0 +1,21 @@
+{
+  "manifest_version": 2,
+  "name": "Tabora Account",
+  "description": "Вход в аккаунт Tabora и синхронизация в приложении для телефона. Встроен в приложение, отдельно не ставится.",
+  "version": "__VERSION__",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "account@tabora.app"
+    }
+  },
+  "background": {
+    "page": "background.html",
+    "persistent": true
+  },
+  "permissions": [
+    "nativeMessaging",
+    "geckoViewAddons",
+    "__API_PATTERN__"
+  ],
+  "content_security_policy": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src __API_ORIGIN__; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+}

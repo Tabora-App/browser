@@ -46,12 +46,15 @@ export function deviceLabel(ua = typeof navigator === "object" ? navigator.userA
 
 export class Account {
   /**
-   * @param {{ api: import("./api.js").Api, store: { load(): Promise<object|null>, save(data: object): Promise<void>, clear(): Promise<void>, deviceId(): string }, domain?: string }} deps
+   * @param {{ api: import("./api.js").Api, store: { load(): Promise<object|null>, save(data: object): Promise<void>, clear(): Promise<void>, deviceId(): string }, domain?: string, deviceName?: () => string }} deps
+   *   deviceName — как устройство называется в списке «Устройства» и в письмах о входе; у веб-версии
+   *   это название браузера, приложение для телефона подставляет имя телефона.
    */
-  constructor({ api, store, domain = "tabora.app" }) {
+  constructor({ api, store, domain = "tabora.app", deviceName = deviceLabel }) {
     this.api = api;
     this.store = store;
     this.domain = domain;
+    this.deviceName = () => String(deviceName() || "").slice(0, 64);
     this.session = null; // { email, userId, token, expiresAt, kdf, mail }
     this.keys = { state: "none" }; // { state, fingerprint, publicKey, privateKey, dataKey, canPassword, canRecovery, reason }
     this._pending = null; // ключи из пароля, пока вход ждёт кода второго фактора
@@ -187,7 +190,7 @@ export class Account {
     this._step(t`Входим`);
     let r;
     try {
-      r = await this.api.login({ email, loginHash: p.loginHash, deviceId: this.store.deviceId(), deviceName: deviceLabel(), mailAccess: "session", ...(totp ? { totp: String(totp).replace(/\s+/g, "") } : {}) });
+      r = await this.api.login({ email, loginHash: p.loginHash, deviceId: this.store.deviceId(), deviceName: this.deviceName(), mailAccess: "session", ...(totp ? { totp: String(totp).replace(/\s+/g, "") } : {}) });
     } catch (e) {
       if (e.code !== "2fa-required" && e.code !== "bad-2fa") {
         this._forgetPending();
@@ -468,7 +471,7 @@ export class Account {
     const k = await this._derive(email, password, KDF_CURRENT);
     try {
       this._step(t`Создаём аккаунт`);
-      const r = await this.api.register({ email, loginHash: k.loginHash, kdf: KDF_CURRENT, deviceId: this.store.deviceId(), deviceName: deviceLabel(), mailAccess: "session" });
+      const r = await this.api.register({ email, loginHash: k.loginHash, kdf: KDF_CURRENT, deviceId: this.store.deviceId(), deviceName: this.deviceName(), mailAccess: "session" });
       this.session = { email, userId: r.userId, token: r.session.token, expiresAt: r.session.expiresAt, kdf: KDF_CURRENT, mail: r.mail || null };
       this.keys = { state: "offline" };
       // ключ восстановления: единственный способ вернуть данные, если пароль забыт
@@ -587,7 +590,7 @@ export class Account {
     this._step(t`Меняем пароль`);
     let r;
     try {
-      r = await this.api.resetEmailConfirm({ email, code: String(code).replace(/\s+/g, ""), newLoginHash: p.loginHash, kdf: KDF_CURRENT, deviceId: this.store.deviceId(), deviceName: deviceLabel(), mailAccess: "session", ...(totp ? { totp: String(totp).replace(/\s+/g, "") } : {}) });
+      r = await this.api.resetEmailConfirm({ email, code: String(code).replace(/\s+/g, ""), newLoginHash: p.loginHash, kdf: KDF_CURRENT, deviceId: this.store.deviceId(), deviceName: this.deviceName(), mailAccess: "session", ...(totp ? { totp: String(totp).replace(/\s+/g, "") } : {}) });
     } catch (e) {
       if (e.code !== "2fa-required" && e.code !== "bad-2fa") {
         this._forgetPending();

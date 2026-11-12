@@ -1,0 +1,32 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/Core.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/Core.kt
+index 37f1465be7..8efc9c5eeb 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/Core.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/Core.kt
+@@ -150,6 +150,7 @@ import org.mozilla.fenix.summarization.onboarding.SummarizationFeatureDiscoveryC
+ import org.mozilla.fenix.tabgroups.middleware.TabGroupMiddleware
+ import org.mozilla.fenix.telemetry.TelemetryMiddleware
+ import org.mozilla.fenix.translations.TranslationsEnabledSettings
++import org.mozilla.fenix.tabora.TaboraAccount
+ import org.mozilla.fenix.utils.Settings.DeleteDownloadBehavior
+ import org.mozilla.fenix.utils.getUndoDelay
+ import org.mozilla.geckoview.GeckoRuntime
+@@ -320,6 +321,9 @@ class Core(
+     }
+ 
+     /** The [BrowserStore] holds the global [BrowserState]. */
++    /** Tabora: аккаунт и синхронизация (встроенный модуль assets/extensions/tabora). */
++    val taboraAccount by lazyMonitored { TaboraAccount(context, applicationScope) }
++
+     val store by lazyMonitored {
+         val searchExtraParamsNimbus = FxNimbus.features.searchExtraParams.value()
+         val searchExtraParams =
+@@ -419,6 +423,9 @@ class Core(
+                 // Install the "icons" WebExtension to automatically load icons for every visited website.
+                 icons.install(engine, this)
+ 
++                // Tabora: модуль аккаунта — вход и синхронизация
++                taboraAccount.install(engine, this)
++
+                 applicationScope.launch {
+                     val providerList =
+                         SerpTelemetryRepository(

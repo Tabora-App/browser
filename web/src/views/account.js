@@ -47,7 +47,7 @@ async function qrCanvas(text, size = 208) {
 }
 
 /** Окно: вернуть доступ к ключам аккаунта ключом восстановления или прежним паролем. */
-function unlockKeysDialog(ctx) {
+export function unlockKeysDialog(ctx) {
   const { account } = ctx;
   const canRecovery = account.keys.canRecovery;
   const canOld = account.keys.reason === "wrong-wrap";

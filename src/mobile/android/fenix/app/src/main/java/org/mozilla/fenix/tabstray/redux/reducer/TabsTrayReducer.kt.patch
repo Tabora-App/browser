@@ -1,0 +1,12 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/redux/reducer/TabsTrayReducer.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/redux/reducer/TabsTrayReducer.kt
+index 463ab32884..9f09b75016 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/redux/reducer/TabsTrayReducer.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/redux/reducer/TabsTrayReducer.kt
+@@ -45,6 +45,7 @@ internal object TabsTrayReducer {
+                 // Sync Actions
+                 is TabsTrayAction.SyncNow -> state.copy(sync = state.sync.copy(isSyncing = true))
+                 is TabsTrayAction.SyncCompleted -> state.copy(sync = state.sync.copy(isSyncing = false))
++                is TabsTrayAction.UpdateSyncSignedIn -> state.copy(sync = state.sync.copy(isSignedIn = action.isSignedIn))
+                 is TabsTrayAction.UpdateSyncedTabs -> handleSyncedTabUpdate(state, action)
+                 is TabsTrayAction.SyncedTabsHeaderToggled -> handleSyncedTabHeaderToggle(state, action)
+ 
