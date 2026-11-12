@@ -1,8 +1,8 @@
 diff --git a/firefox-ios/Client/Application/AppLaunchUtil.swift b/firefox-ios/Client/Application/AppLaunchUtil.swift
-index 3413154..f916fb3 100644
+index 3413154..562cb2e 100644
 --- a/firefox-ios/Client/Application/AppLaunchUtil.swift
 +++ b/firefox-ios/Client/Application/AppLaunchUtil.swift
-@@ -46,6 +46,26 @@ final class AppLaunchUtil: FeatureFlaggable, Sendable {
+@@ -46,6 +46,31 @@ final class AppLaunchUtil: FeatureFlaggable, Sendable {
              AppleIntelligenceUtil().processAvailabilityState()
          }
  
@@ -19,6 +19,11 @@ index 3413154..f916fb3 100644
 +        // выключается в «Настройки → Просмотр сайтов»
 +        if taboraDefaults.boolForKey(PrefsKeys.BlockAds) == nil {
 +            taboraDefaults.setBool(true, forKey: PrefsKeys.BlockAds)
++        }
++        // Tabora: плашки «сделать браузером по умолчанию» в меню нет, пока Apple не выдала приложению
++        // это право: без него такого выбора в настройках системы не существует
++        if taboraDefaults.boolForKey(PrefsKeys.defaultBrowserBannerShown) == nil {
++            taboraDefaults.setBool(true, forKey: PrefsKeys.defaultBrowserBannerShown)
 +        }
 +        // Tabora: защита от отслеживания с первого запуска строгая — блокируются и сами счётчики,
 +        // а не только их cookies (как в Tabora для компьютера). Режим меняется в настройках.

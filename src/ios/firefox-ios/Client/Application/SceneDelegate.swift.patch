@@ -1,8 +1,8 @@
 diff --git a/firefox-ios/Client/Application/SceneDelegate.swift b/firefox-ios/Client/Application/SceneDelegate.swift
-index 2fc8afe..750bdcb 100644
+index 2fc8afe..486500e 100644
 --- a/firefox-ios/Client/Application/SceneDelegate.swift
 +++ b/firefox-ios/Client/Application/SceneDelegate.swift
-@@ -55,6 +55,17 @@ class SceneDelegate: UIResponder,
+@@ -55,6 +55,29 @@ class SceneDelegate: UIResponder,
          self.window = sceneCoordinator.window
          sceneCoordinator.start()
          handle(connectionOptions: connectionOptions)
@@ -10,10 +10,22 @@ index 2fc8afe..750bdcb 100644
 +        // Tabora: в сборке для разработки нужный экран можно открыть при запуске — так проверки
 +        // снимают экраны в симуляторе без нажатий (ссылку снаружи система просит подтвердить):
 +        //   SIMCTL_CHILD_TABORA_OPEN="tabora://deep-link?url=/settings/general" xcrun simctl launch …
-+        if let string = ProcessInfo.processInfo.environment["TABORA_OPEN"], let url = URL(string: string) {
++        // Кроме ссылки понимаются слова menu (главное меню) и tabs (лоток вкладок).
++        if let target = ProcessInfo.processInfo.environment["TABORA_OPEN"] {
 +            Task { @MainActor [weak self] in
 +                try? await Task.sleep(nanoseconds: 3_000_000_000)
-+                self?.handleOpenURL(url)
++                let browser = self?.sceneCoordinator?.childCoordinators.first { $0 is BrowserCoordinator }
++                    as? BrowserCoordinator
++                switch target {
++                case "menu":
++                    browser?.showMainMenu()
++                case "tabs":
++                    browser?.showTabTray(selectedPanel: .tabs)
++                default:
++                    if let url = URL(string: target) {
++                        self?.handleOpenURL(url)
++                    }
++                }
 +            }
 +        }
 +        #endif
