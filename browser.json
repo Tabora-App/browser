@@ -31,6 +31,8 @@
     }
   },
   "locales": [
-    "ru"
+    "ru",
+    "uk",
+    "es-ES"
   ]
 }

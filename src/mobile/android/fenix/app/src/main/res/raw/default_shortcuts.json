@@ -3,7 +3,7 @@
     {
       "url": "https://app.tabora.app/",
       "order": 0,
-      "title": "Почта Tabora",
+      "title": "Tabora Mail",
       "schema": 1,
       "exclude_locales": [],
       "exclude_regions": [],
