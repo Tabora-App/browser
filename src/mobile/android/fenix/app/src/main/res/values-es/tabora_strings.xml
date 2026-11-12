@@ -29,4 +29,20 @@
     <string name="tabora_pair_scan_hint">Apunta la cámara al código QR en la pantalla del ordenador</string>
     <!-- Espacios: el que existe en todos los dispositivos -->
     <string name="tabora_space_personal">Personal</string>
+    <!-- Espacios: crear, editar y eliminar un espacio en el gestor de pestañas -->
+    <string name="tabora_space_add">Nuevo espacio</string>
+    <string name="tabora_space_edit_title">Espacio</string>
+    <string name="tabora_space_name">Nombre</string>
+    <string name="tabora_space_save">Guardar</string>
+    <string name="tabora_space_cancel">Cancelar</string>
+    <string name="tabora_space_edit">Editar</string>
+    <string name="tabora_space_move_left">Mover a la izquierda</string>
+    <string name="tabora_space_move_right">Mover a la derecha</string>
+    <string name="tabora_space_delete">Eliminar</string>
+    <string name="tabora_space_delete_title">¿Eliminar el espacio «%1$s»?</string>
+    <string name="tabora_space_delete_text">Los inicios de sesión en sitios de este espacio se borrarán del teléfono.</string>
+    <plurals name="tabora_space_delete_tabs">
+        <item quantity="one">Se cerrará %1$d pestaña de este espacio y los inicios de sesión en sitios de este espacio se borrarán del teléfono.</item>
+        <item quantity="other">Se cerrarán %1$d pestañas de este espacio y los inicios de sesión en sitios de este espacio se borrarán del teléfono.</item>
+    </plurals>
 </resources>

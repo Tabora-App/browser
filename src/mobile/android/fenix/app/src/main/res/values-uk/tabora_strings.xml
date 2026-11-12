@@ -31,4 +31,22 @@
     <string name="tabora_pair_scan_hint">Наведіть камеру на QR-код на екрані комп’ютера</string>
     <!-- Простори: той, що є на кожному пристрої -->
     <string name="tabora_space_personal">Особисте</string>
+    <!-- Простори: створення, редагування та видалення простору у списку вкладок -->
+    <string name="tabora_space_add">Новий простір</string>
+    <string name="tabora_space_edit_title">Простір</string>
+    <string name="tabora_space_name">Назва</string>
+    <string name="tabora_space_save">Зберегти</string>
+    <string name="tabora_space_cancel">Скасувати</string>
+    <string name="tabora_space_edit">Змінити</string>
+    <string name="tabora_space_move_left">Зсунути ліворуч</string>
+    <string name="tabora_space_move_right">Зсунути праворуч</string>
+    <string name="tabora_space_delete">Видалити</string>
+    <string name="tabora_space_delete_title">Видалити простір «%1$s»?</string>
+    <string name="tabora_space_delete_text">Входи на сайтах у цьому просторі буде стерто з телефона.</string>
+    <plurals name="tabora_space_delete_tabs">
+        <item quantity="one">Закриється %1$d вкладка цього простору, а входи на сайтах у ньому буде стерто з телефона.</item>
+        <item quantity="few">Закриються %1$d вкладки цього простору, а входи на сайтах у ньому буде стерто з телефона.</item>
+        <item quantity="many">Закриється %1$d вкладок цього простору, а входи на сайтах у ньому буде стерто з телефона.</item>
+        <item quantity="other">Закриється %1$d вкладки цього простору, а входи на сайтах у ньому буде стерто з телефона.</item>
+    </plurals>
 </resources>

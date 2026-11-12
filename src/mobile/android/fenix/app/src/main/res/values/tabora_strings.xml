@@ -34,4 +34,20 @@
     <string name="tabora_pair_scan_hint">Point the camera at the QR code on your computer screen</string>
     <!-- Spaces: the one every device has -->
     <string name="tabora_space_personal">Personal</string>
+    <!-- Spaces: creating, editing and deleting a space in the tab manager -->
+    <string name="tabora_space_add">New space</string>
+    <string name="tabora_space_edit_title">Space</string>
+    <string name="tabora_space_name">Name</string>
+    <string name="tabora_space_save">Save</string>
+    <string name="tabora_space_cancel">Cancel</string>
+    <string name="tabora_space_edit">Edit</string>
+    <string name="tabora_space_move_left">Move left</string>
+    <string name="tabora_space_move_right">Move right</string>
+    <string name="tabora_space_delete">Delete</string>
+    <string name="tabora_space_delete_title">Delete the space “%1$s”?</string>
+    <string name="tabora_space_delete_text">Sign-ins on sites in this space will be erased from the phone.</string>
+    <plurals name="tabora_space_delete_tabs">
+        <item quantity="one">Its %1$d tab will be closed, and sign-ins on sites in this space will be erased from the phone.</item>
+        <item quantity="other">Its %1$d tabs will be closed, and sign-ins on sites in this space will be erased from the phone.</item>
+    </plurals>
 </resources>

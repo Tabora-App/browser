@@ -99,7 +99,11 @@ What lives where:
     space. Tab storage and restoration still see all tabs: the common list of
     tabs is left untouched so that an empty space does not erase the saved tabs of the others;
   - private tabs do not belong to spaces; a space with open tabs is not erased by a
-    deletion made on another device. Creating and editing spaces from the phone is the next step.
+    deletion made on another device.
+  - spaces are managed in the same row: the last chip creates a space (name, color, icon: the
+    same set as on the desktop, `TaboraSpaceIcons.kt`), a long press opens the menu of a space
+    (edit, move left or right, delete). Deleting closes the tabs of the space and erases the site
+    data kept for it; every change is carried to the account right away.
 - **Mail** — the "Tabora Mail" screen (main menu, shortcut on the home screen), the module page
   `mail.html`: the same code as the web app, with the same sign-in as sync. Messages with
   HTML layout are shown in frames without scripts, third-party images load only on a button press, a link from
@@ -175,7 +179,8 @@ The built-in "make this your default browser" messages are turned off.
 Kotlin edits are made to change as little as possible: a default value, a visibility condition,
 a list item. The build runs with "warnings = errors", and it can only be checked on GitHub.
 
-Not done yet (next steps): creating and editing spaces from the phone,
+Not done yet (next steps): the label of the current space next to the address bar and opening a
+link in another space,
 adding a code from an `otpauth://` link on a website page; the "Learn more" links in
 settings and "Who might be able to see my activity?" in private mode lead to Mozilla help;
 Google libraries (Firebase, Play Services) are part of the app; images of the former Firefox icons

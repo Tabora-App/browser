@@ -24,24 +24,25 @@ import org.mozilla.fenix.R
 import org.mozilla.fenix.tabstray.data.TabData
 
 /**
- * Пространства в приложении: у каждого свои вкладки и свои данные сайтов (входы, cookies), как у
- * пространств браузера на компьютере. Движок умеет держать данные сайтов вкладки отдельно —
- * вкладке задаётся «контекст»; здесь список пространств, текущее пространство и правила:
+ * Spaces in the app: each has its own tabs and its own site data (sign-ins, cookies), like the
+ * spaces of the desktop browser. The engine can keep the site data of a tab apart: a tab is given
+ * a "context". This class holds the list of spaces, the current space and the rules:
  *
- *  - «Личное» есть всегда и живёт без контекста: в нём все вкладки, открытые до появления
- *    пространств;
- *  - новая вкладка открывается в текущем пространстве, вкладка из ссылки — в пространстве вкладки,
- *    из которой её открыли (см. [TaboraSpacesMiddleware]);
- *  - текущим становится пространство выбранной вкладки: открыл вкладку другого пространства —
- *    оказался в нём;
- *  - приватные вкладки к пространствам не относятся.
+ *  - "Personal" always exists and lives without a context: it holds every tab opened before
+ *    spaces appeared;
+ *  - a new tab opens in the current space, a tab opened from a link opens in the space of the tab
+ *    it came from (see [TaboraSpacesMiddleware]);
+ *  - the space of the selected tab becomes current: opening a tab of another space moves you
+ *    there;
+ *  - private tabs do not belong to spaces.
  *
- * Список общий с остальными устройствами аккаунта: его приносит и уносит модуль аккаунта
- * (web/src/phone/spaces.js). Номер пространства в аккаунте и контекст на телефоне — разные вещи:
- * контекст у каждого устройства свой и с пространством не расстаётся, даже когда номер меняется.
+ * The list is shared with the other devices of the account: the account module carries it to the
+ * server and back (web/src/phone/spaces.js). The ID of a space in the account and the context on
+ * the phone are different things: every device has its own context, and it stays with the space
+ * even when the ID changes.
  */
 class TaboraSpaces(private val context: Context) {
-    /** Пространство: [contextId] пуст у «Личного». */
+    /** A space; [contextId] is null for "Personal". */
     data class Space(
         val id: String,
         val name: String,
@@ -50,7 +51,7 @@ class TaboraSpaces(private val context: Context) {
         val contextId: String?,
     )
 
-    /** Список пространств («Личное» первым) и текущее. */
+    /** The list of spaces ("Personal" first) and the current one. */
     data class State(val spaces: List<Space>, val currentId: String) {
         val current: Space
             get() = spaces.firstOrNull { it.id == currentId } ?: spaces.first()
@@ -61,24 +62,27 @@ class TaboraSpaces(private val context: Context) {
 
     val state: StateFlow<State> = mutableState
 
+    /** Called after the person changed the list on this phone: the change goes to the account. */
+    var onLocalChange: (() -> Unit)? = null
+
     init {
         instance = this
     }
 
-    /** Контекст текущего пространства: с ним открываются новые вкладки. */
+    /** The context of the current space: new tabs open with it. */
     val currentContextId: String?
         get() = state.value.current.contextId
 
-    /** Пространство вкладки; вкладка с неизвестным контекстом считается личной. */
+    /** The space of a tab; a tab with an unknown context counts as personal. */
     fun spaceOf(tab: TabSessionState): Space {
         val spaces = state.value.spaces
         return spaces.firstOrNull { it.contextId != null && it.contextId == tab.contextId } ?: spaces.first()
     }
 
-    /** Видна ли вкладка в текущем пространстве (приватные видны всегда). */
+    /** Whether a tab is visible in the current space (private tabs always are). */
     fun shows(tab: TabSessionState): Boolean = tab.content.private || spaceOf(tab).id == state.value.current.id
 
-    /** Перейти в пространство. */
+    /** Move to a space. */
     fun select(id: String) {
         val now = state.value
         if (now.currentId != id && now.spaces.any { it.id == id }) {
@@ -87,22 +91,95 @@ class TaboraSpaces(private val context: Context) {
         }
     }
 
-    /** Выбрана вкладка: текущим становится её пространство. */
+    /** A tab was selected: its space becomes current. */
     fun follow(tab: TabSessionState?) {
         if (tab != null && !tab.content.private) {
             select(spaceOf(tab).id)
         }
     }
 
-    /** Вкладки для списка вкладок: обычные — только текущего пространства. */
+    /** Tabs for the tab manager: normal tabs of the current space only. */
     fun tabData(browser: Flow<BrowserState>): Flow<TabData> =
         combine(browser, state) { browserState, _ ->
             TabData(selectedTabId = browserState.selectedTabId, tabs = browserState.tabs.filter { shows(it) })
         }
 
-    /* ---- список для модуля аккаунта ---- */
+    /* ---- changes made on this phone ---- */
 
-    /** Пространства, кроме «Личного», в том виде, в каком они лежат в аккаунте. */
+    /** Create a space. Returns it, or null if the name is empty. */
+    fun create(name: String, icon: String, color: String): Space? {
+        val clean = name.trim().take(MAX_NAME)
+        if (clean.isEmpty()) {
+            return null
+        }
+        val now = state.value
+        val id = "space-" + System.currentTimeMillis().toString(ID_RADIX) + randomChars(ID_TAIL)
+        val space =
+            Space(
+                id = id,
+                name = clean,
+                icon = icon.takeIf { it in ICONS } ?: DEFAULT_ICON,
+                color = color.takeIf { it in COLORS } ?: DEFAULT_COLOR,
+                contextId = newContextId(),
+            )
+        write(now.spaces.drop(1) + space, now.currentId)
+        onLocalChange?.invoke()
+        return space
+    }
+
+    /** Change the name, icon or color of a space. */
+    fun update(id: String, name: String, icon: String, color: String) {
+        val clean = name.trim().take(MAX_NAME)
+        val now = state.value
+        val saved = now.spaces.drop(1)
+        if (clean.isEmpty() || saved.none { it.id == id }) {
+            return
+        }
+        val next =
+            saved.map { space ->
+                if (space.id == id) {
+                    space.copy(
+                        name = clean,
+                        icon = icon.takeIf { it in ICONS } ?: space.icon,
+                        color = color.takeIf { it in COLORS } ?: space.color,
+                    )
+                } else {
+                    space
+                }
+            }
+        write(next, now.currentId)
+        onLocalChange?.invoke()
+    }
+
+    /** Move a space one place left ([delta] = -1) or right (+1) in the list. */
+    fun move(id: String, delta: Int) {
+        val now = state.value
+        val saved = now.spaces.drop(1).toMutableList()
+        val from = saved.indexOfFirst { it.id == id }
+        val to = from + delta
+        if (from < 0 || to < 0 || to >= saved.size) {
+            return
+        }
+        saved.add(to, saved.removeAt(from))
+        write(saved, now.currentId)
+        onLocalChange?.invoke()
+    }
+
+    /**
+     * Delete a space; its tabs must be closed by now. Returns its context, so that the caller can
+     * erase the site data kept under it, or null if there is no such space.
+     */
+    fun delete(id: String): String? {
+        val now = state.value
+        val space = now.spaces.drop(1).firstOrNull { it.id == id } ?: return null
+        write(now.spaces.drop(1).filter { it.id != id }, if (now.currentId == id) PERSONAL else now.currentId)
+        onLocalChange?.invoke()
+        return space.contextId
+    }
+
+    /* ---- the list for the account module ---- */
+
+    /** Spaces except "Personal", in the form they are kept in the account. */
     fun list(): JSONArray {
         val out = JSONArray()
         state.value.spaces.drop(1).forEachIndexed { index, space ->
@@ -119,11 +196,12 @@ class TaboraSpaces(private val context: Context) {
     }
 
     /**
-     * Перемены из аккаунта разом: [changes] — список `{ id, data: { n, i, col, o } | null, from? }`.
-     * `data: null` — пространство удалено; с открытыми вкладками оно не удаляется (вкладки остались
-     * бы без пространства). `from` — прежний номер того же пространства, заведённого здесь до
-     * сверки: номер меняется, контекст и вкладки остаются. Порядок — как на остальных устройствах:
-     * пришедшие встают на свои места, остальные держат прежний.
+     * Changes from the account, all at once: [changes] is a list of
+     * `{ id, data: { n, i, col, o } | null, from? }`. `data: null` means the space was deleted; a
+     * space with open tabs is not deleted (the tabs would be left without a space). `from` is the
+     * previous ID of the same space, created here before the first sync: the ID changes, the
+     * context and the tabs stay. The order is the same as on the other devices: spaces that came
+     * take their places, the rest keep theirs.
      */
     fun apply(changes: JSONArray, inUse: (String) -> Boolean) {
         val now = state.value
@@ -175,7 +253,7 @@ class TaboraSpaces(private val context: Context) {
         write(ordered.map { it.first }, current)
     }
 
-    /* ---- хранение ---- */
+    /* ---- storage ---- */
 
     private fun personal() =
         Space(PERSONAL, context.getString(R.string.tabora_space_personal), "fingerprint", "yellow", null)
@@ -208,26 +286,30 @@ class TaboraSpaces(private val context: Context) {
         mutableState.value = State(listOf(personal()) + saved, current)
     }
 
-    private fun newContextId(): String {
+    private fun randomChars(count: Int): String {
         val abc = "abcdefghijklmnopqrstuvwxyz0123456789"
         val random = java.security.SecureRandom()
-        return "tabora-space-" + (1..CONTEXT_CHARS).map { abc[random.nextInt(abc.length)] }.joinToString("")
+        return (1..count).map { abc[random.nextInt(abc.length)] }.joinToString("")
     }
 
+    private fun newContextId(): String = "tabora-space-" + randomChars(CONTEXT_CHARS)
+
     companion object {
-        /** Номер «Личного»: оно есть на каждом устройстве и в аккаунт не записывается. */
+        /** The ID of "Personal": it exists on every device and is not written to the account. */
         const val PERSONAL = "personal"
         private const val PREFS = "tabora_spaces"
         private const val KEY_LIST = "list"
         private const val KEY_CURRENT = "current"
         private const val MAX_NAME = 60
         private const val CONTEXT_CHARS = 12
+        private const val ID_RADIX = 36
+        private const val ID_TAIL = 3
         private const val HALF = 0.5
         private const val DEFAULT_ICON = "circle"
         private const val DEFAULT_COLOR = "blue"
         private val ID = Regex("^[A-Za-z0-9_-]{1,64}$")
 
-        /** Значки и цвета пространств — те же, что на компьютере. */
+        /** Icons and colors of spaces: the same as on the desktop. */
         val ICONS =
             listOf(
                 "fingerprint", "briefcase", "dollar", "cart", "circle", "gift", "vacation",
@@ -238,23 +320,23 @@ class TaboraSpaces(private val context: Context) {
         @Volatile private var instance: TaboraSpaces? = null
 
         /**
-         * Вкладки, которые видит человек: обычные — текущего пространства, приватные — все. Для
-         * счётчика вкладок, перелистывания и «закрыть все»; хранению и восстановлению вкладок нужен
-         * полный список, поэтому общий перечень вкладок не трогается.
+         * The tabs a person sees: normal tabs of the current space, all private tabs. For the tab
+         * counter, swiping between tabs and "close all". Saving and restoring tabs need the full
+         * list, which is why the common list of tabs is left alone.
          */
         fun visibleTabs(state: BrowserState, private: Boolean): List<TabSessionState> {
             val tabs = state.getNormalOrPrivateTabs(private)
             return if (private) tabs else tabs.filter { shows(it) }
         }
 
-        /** Видна ли вкладка в текущем пространстве; пока пространства не запущены, видны все. */
+        /** Whether a tab is visible in the current space; until spaces start, every tab is. */
         fun shows(tab: TabSessionState): Boolean = instance?.shows(tab) ?: true
     }
 }
 
 /**
- * Правила пространств для вкладок: в каком пространстве открывается новая вкладка, что происходит
- * с текущим пространством при выборе и закрытии вкладок.
+ * The rules of spaces for tabs: which space a new tab opens in, and what happens to the current
+ * space when tabs are selected and closed.
  */
 class TaboraSpacesMiddleware(
     private val spaces: () -> TaboraSpaces,
@@ -277,7 +359,7 @@ class TaboraSpacesMiddleware(
                 spaces().follow(store.state.selectedTab)
             }
             is TabListAction.RemoveAllNormalTabsAction -> {
-                // «закрыть все вкладки» закрывает вкладки текущего пространства, а не всех
+                // "Close all tabs" closes the tabs of the current space, not of every space
                 val visible = TaboraSpaces.visibleTabs(store.state, private = false).map { it.id }
                 removed(store, next, TabListAction.RemoveTabsAction(visible))
             }
@@ -286,7 +368,7 @@ class TaboraSpacesMiddleware(
         }
     }
 
-    /** Новая обычная вкладка без пространства получает пространство родителя или текущее. */
+    /** A new normal tab without a space gets the space of its parent or the current one. */
     private fun inSpace(state: BrowserState, action: TabListAction.AddTabAction): TabListAction.AddTabAction {
         val tab = action.tab
         if (tab.content.private || tab.contextId != null) {
@@ -296,7 +378,7 @@ class TaboraSpacesMiddleware(
         val contextId =
             when {
                 parent != null -> parent.contextId
-                // у вкладки уже есть сеанс движка без контекста: менять его поздно
+                // the tab already has an engine session without a context: too late to change it
                 tab.engineState.engineSession != null -> null
                 else -> spaces().currentContextId
             }
@@ -304,9 +386,9 @@ class TaboraSpacesMiddleware(
     }
 
     /**
-     * Вкладки закрыты. Если закрыта выбранная, движок выбирает соседнюю — она может оказаться из
-     * другого пространства. Тогда выбирается последняя открытая вкладка того же пространства, а если
-     * в нём вкладок не осталось, человек остаётся в нём на домашнем экране.
+     * Tabs were closed. When the selected tab is closed, the engine selects a neighbour, which may
+     * belong to another space. Then the most recently used tab of the same space is selected, and
+     * if the space has no tabs left, the person stays in it on the home screen.
      */
     private fun removed(store: Store<BrowserState, BrowserAction>, next: (BrowserAction) -> Unit, action: BrowserAction) {
         val before = store.state.selectedTab
