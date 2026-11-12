@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+<!-- Надписи Tabora, которых нет в Firefox. Перевод — в values-ru/tabora_strings.xml. -->
+<resources>
+    <string name="pref_key_tabora_shield" translatable="false">pref_key_tabora_shield</string>
+    <!-- Settings switch: built-in ad blocker -->
+    <string name="preferences_tabora_shield">Block ads</string>
+    <string name="preferences_tabora_shield_summary">Hides ads and trackers on pages. Filter lists update on their own.</string>
+</resources>

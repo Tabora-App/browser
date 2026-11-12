@@ -1,0 +1,54 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SettingsFragment.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SettingsFragment.kt
+index 27584e3094..f5200059df 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SettingsFragment.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SettingsFragment.kt
+@@ -32,6 +32,7 @@ import androidx.navigation.fragment.navArgs
+ import androidx.preference.Preference
+ import androidx.preference.PreferenceCategory
+ import androidx.preference.PreferenceFragmentCompat
++import androidx.preference.SwitchPreferenceCompat
+ import androidx.recyclerview.widget.RecyclerView
+ import com.google.android.material.dialog.MaterialAlertDialogBuilder
+ import java.lang.ref.WeakReference
+@@ -40,7 +41,9 @@ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.delay
+ import kotlinx.coroutines.launch
+ import mozilla.components.browser.state.state.selectedOrDefaultSearchEngine
++import mozilla.components.ExperimentalAndroidComponentsApi
+ import mozilla.components.concept.engine.Engine
++import mozilla.components.concept.engine.preferences.Branch
+ import mozilla.components.concept.sync.AccountObserver
+ import mozilla.components.concept.sync.AuthType
+ import mozilla.components.concept.sync.OAuthAccount
+@@ -619,6 +622,13 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment
+         val preferenceMakeDefaultBrowser =
+             requirePreference<DefaultBrowserPreference>(R.string.pref_key_make_default_browser)
+ 
++        // Tabora: выключатель блокировщика рекламы — настройка движка tabora.shield.enabled
++        requirePreference<SwitchPreferenceCompat>(R.string.pref_key_tabora_shield).onPreferenceChangeListener =
++            Preference.OnPreferenceChangeListener { _, newValue ->
++                setShieldEnabled(newValue == true)
++                true
++            }
++
+         if (!Config.channel.isReleased) {
+             preferenceLeakCanary?.setOnPreferenceChangeListener { _, newValue ->
+                 val isEnabled = newValue == true
+@@ -898,6 +908,17 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment
+         }
+     }
+ 
++    @OptIn(ExperimentalAndroidComponentsApi::class)
++    private fun setShieldEnabled(enabled: Boolean) {
++        requireComponents.core.engine.setBrowserPref(
++            pref = "tabora.shield.enabled",
++            value = enabled,
++            branch = Branch.USER,
++            onSuccess = {},
++            onError = {},
++        )
++    }
++
+     @VisibleForTesting
+     internal fun setupHttpsOnlyPreferences(settings: Settings) {
+         val httpsOnlyPreference = requirePreference<Preference>(R.string.pref_key_https_only_settings)

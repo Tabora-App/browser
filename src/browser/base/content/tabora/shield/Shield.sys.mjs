@@ -85,12 +85,21 @@ export const Shield = {
   },
 
   setEnabled(on) {
+    const changed = this.enabled !== !!on;
     Services.prefs.setBoolPref(`${PREF}enabled`, !!on);
-    this._pages.clear();
-    if (on && !this._engine) {
-      this._load().catch(e => console.error("Tabora shield", e));
+    // смену значения подхватывает наблюдатель настройки (start); здесь — остальные случаи
+    if (!changed || !this._started) {
+      this._applyEnabled();
     }
     this.notify("settings");
+  },
+
+  /** Настройка «включено» изменилась — здесь или снаружи (приложение для Android меняет её само). */
+  _applyEnabled() {
+    this._pages.clear();
+    if (this.enabled && !this._engine) {
+      this._load().catch(e => console.error("Tabora shield", e));
+    }
   },
 
   _listIds() {
@@ -422,6 +431,7 @@ export const Shield = {
       this._allow = null;
       this._pages.clear();
     });
+    Services.prefs.addObserver(`${PREF}enabled`, () => this._applyEnabled());
     try {
       ChromeUtils.registerWindowActor("TaboraShield", {
         parent: { esModuleURI: "chrome://tabora/content/actors/TaboraShieldParent.sys.mjs" },

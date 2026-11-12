@@ -1,5 +1,5 @@
 diff --git a/mobile/android/fenix/app/src/main/res/xml/preferences.xml b/mobile/android/fenix/app/src/main/res/xml/preferences.xml
-index 78e2c51e3c..b196577b4f 100644
+index 78e2c51e3c..b7bc4cc4de 100644
 --- a/mobile/android/fenix/app/src/main/res/xml/preferences.xml
 +++ b/mobile/android/fenix/app/src/main/res/xml/preferences.xml
 @@ -11,7 +11,8 @@
@@ -12,7 +12,21 @@ index 78e2c51e3c..b196577b4f 100644
  
      <androidx.preference.PreferenceCategory
          android:key="@string/pref_key_account_category"
-@@ -168,7 +169,8 @@
+@@ -145,6 +146,13 @@
+             app:iconSpaceReserved="false"
+             android:title="@string/preference_enhanced_tracking_protection" />
+ 
++        <androidx.preference.SwitchPreferenceCompat
++            android:key="@string/pref_key_tabora_shield"
++            android:defaultValue="true"
++            app:iconSpaceReserved="false"
++            android:title="@string/preferences_tabora_shield"
++            android:summary="@string/preferences_tabora_shield_summary" />
++
+         <androidx.preference.Preference
+             android:key="@string/pref_key_site_permissions"
+             app:iconSpaceReserved="false"
+@@ -168,7 +176,8 @@
          <androidx.preference.Preference
              android:key="@string/pref_key_data_choices"
              app:iconSpaceReserved="false"
@@ -22,7 +36,7 @@ index 78e2c51e3c..b196577b4f 100644
  
      </androidx.preference.PreferenceCategory>
  
-@@ -210,7 +212,8 @@
+@@ -210,7 +219,8 @@
          <androidx.preference.Preference
              android:key="@string/pref_key_firefox_labs"
              app:iconSpaceReserved="false"
@@ -32,7 +46,7 @@ index 78e2c51e3c..b196577b4f 100644
  
          <androidx.preference.SwitchPreferenceCompat
              android:key="@string/pref_key_leakcanary"
-@@ -221,7 +224,8 @@
+@@ -221,7 +231,8 @@
          <androidx.preference.Preference
              android:key="@string/pref_key_remote_improvements"
              android:title="@string/preferences_remote_improvements"
@@ -42,7 +56,7 @@ index 78e2c51e3c..b196577b4f 100644
  
          <androidx.preference.SwitchPreferenceCompat
              android:key="@string/pref_key_remote_debugging"
-@@ -248,7 +252,8 @@
+@@ -248,7 +259,8 @@
          <androidx.preference.Preference
              android:key="@string/pref_key_rate"
              app:iconSpaceReserved="false"
