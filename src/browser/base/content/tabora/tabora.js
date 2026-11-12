@@ -743,6 +743,40 @@ var Tabora = {
     setTimeout(() => node.remove(), 3200);
   },
 
+  /* ---- Send a tab to another device of the account (sync/SyncSources.sys.mjs, "sent") ---- */
+
+  /** Other devices of the account a page can be sent to: [{ id, name }]. Empty without sync. */
+  sendDevices() {
+    try {
+      return ChromeUtils.importESModule("chrome://tabora/content/sync/Sync.sys.mjs").Sync.devices();
+    } catch (e) {
+      return [];
+    }
+  },
+
+  async sendTabTo(device, tab = gBrowser.selectedTab) {
+    const { Sync } = ChromeUtils.importESModule("chrome://tabora/content/sync/Sync.sys.mjs");
+    const failed = await Sync.sendTab(device.id, { url: tab.linkedBrowser?.currentURI?.spec || "", title: tab.label || "" });
+    this.notice(
+      !failed
+        ? tt`Вкладка отправлена на устройство «${device.name}»`
+        : failed === "locked"
+          ? tt`Вкладка не отправлена: сейф заблокирован. Разблокируйте его и отправьте ещё раз`
+          : tt`Вкладка не отправлена: нет связи. Проверьте интернет и отправьте ещё раз`
+    );
+  },
+
+  /** A page another device of the account sent here. Called by the sync source; sites only. */
+  openSentTab({ url, from = "" }) {
+    if (!/^https?:\/\//i.test(url || "")) {
+      return false;
+    }
+    const userContextId = this.activeSpace()?.userContextId || 0;
+    gBrowser.selectedTab = gBrowser.addTab(url, { userContextId, triggeringPrincipal: Services.scriptSecurityManager.createNullPrincipal({ userContextId }) });
+    this.notice(from ? tt`Открыта вкладка с устройства «${from}»` : tt`Открыта вкладка с другого устройства`);
+    return true;
+  },
+
   /* ---- Контекстные меню Tabora: своё меню вместо системного ---------------- */
 
   buildContextMenu() {
@@ -1011,6 +1045,7 @@ var Tabora = {
       closeBelow: ["M4 6h16M4 12h16", "m9 17 3 3 3-3"],
       restore: ["M4 12a8 8 0 1 0 2.3-5.7", "M4 4v5h5"],
       newTab: ["M12 5v14M5 12h14"],
+      send: ["M3 6h11v8H3z", "M1 18h15", "M17 10h5M19.5 7.5 22 10l-2.5 2.5"],
     };
     const url = tab.linkedBrowser?.currentURI?.spec || "";
     const pending = tab.hasAttribute("pending");
@@ -1020,6 +1055,7 @@ var Tabora = {
     const below = gBrowser.visibleTabs.slice(gBrowser.visibleTabs.indexOf(tab) + 1).filter(t => !t.pinned);
     const realUrl = /^https?:/.test(url);
     const spaces = this.spaces.filter(s => s.userContextId !== this.contextOf(tab));
+    const devices = this.sendDevices();
     const items = [
       tab.pinned
         ? { label: tt`Открепить`, icon: I.unpin, run: () => gBrowser.unpinTab(tab) }
@@ -1040,6 +1076,9 @@ var Tabora = {
         : null,
       { label: tt`Копировать адрес`, icon: I.copy, disabled: !realUrl, run: () => this.copyText(url, tt`Адрес скопирован`) },
       { label: tt`В закладки`, icon: I.star, hint: "⌘D", disabled: !realUrl, run: () => { gBrowser.selectedTab = tab; PlacesCommandHook.bookmarkPage(); } },
+      devices.length && realUrl
+        ? { label: tt`Отправить на устройство`, icon: I.send, children: devices.map(d => ({ label: d.name, run: () => this.sendTabTo(d, tab) })) }
+        : null,
       { separator: true },
       { label: tt`Закрыть`, icon: I.close, hint: "⌘W", danger: true, run: () => gBrowser.removeTab(tab, { animate: true }) },
       { label: tt`Закрыть остальные${others.length ? ` (${others.length})` : ""}`, icon: I.closeOthers, disabled: !others.length, danger: true, run: () => gBrowser.removeAllTabsBut(tab) },
@@ -3584,6 +3623,9 @@ var Tabora = {
       { glyph: "◳", title: tt`Картинка в картинке`, note: tt`Видео со страницы в отдельном окошке поверх остальных окон`, key: "", tags: tt`pip picture видео окошко картинка`, run: () => document.getElementById("View:PictureInPicture")?.doCommand() },
       { glyph: "⌗", title: tt`Снимок страницы`, note: tt`Сохранить страницу или её часть картинкой`, key: "", tags: tt`screenshot снимок скриншот картинка`, run: () => document.getElementById("Browser:Screenshot")?.doCommand() },
       { glyph: "⎙", title: tt`Печать`, note: tt`Напечатать страницу или сохранить её в PDF`, key: "⌘P", tags: tt`print печать pdf распечатать`, run: () => PrintUtils.startPrintWindow(gBrowser.selectedBrowser.browsingContext) },
+      ...(/^https?:/.test(gBrowser.selectedBrowser?.currentURI?.spec || "")
+        ? this.sendDevices().map(d => ({ glyph: "⇥", title: tt`Отправить вкладку на устройство «${d.name}»`, note: tt`Страница откроется там при следующей синхронизации`, key: "", tags: tt`send отправить вкладку устройство телефон компьютер`, run: () => this.sendTabTo(d) }))
+        : []),
       { glyph: "⟨", title: document.documentElement.getAttribute("tabora-sidebar") === "compact" ? tt`Развернуть боковую панель` : tt`Свернуть боковую панель`, note: tt`Только значки вкладок, названия по наведению`, key: "⌘B", tags: tt`sidebar панель свернуть compact`, run: () => this.toggleSidebar() },
       { glyph: "▭", title: this.horizontalTabs ? tt`Вкладки сбоку` : tt`Вкладки сверху`, note: this.horizontalTabs ? tt`Вернуть боковую панель с вкладками` : tt`Вкладки и адрес двумя строками сверху, страница на всю ширину`, tags: tt`layout раскладка вкладки сверху сбоку горизонтальные вертикальные tabs`, run: () => Services.prefs.setBoolPref(this.TABS_LAYOUT_PREF, this.horizontalTabs) },
     ];

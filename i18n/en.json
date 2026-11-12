@@ -3136,5 +3136,14 @@
  "раз|раза|раз": "time|times",
  "Этот пароль встречался в утечках {0} {1}.": "This password has appeared in breaches {0} {1}.",
  "Пароли из утечек": "Passwords from breaches",
- "Сохранённые пароли": "Saved passwords"
+ "Сохранённые пароли": "Saved passwords",
+ "Вкладка отправлена на устройство «{0}»": "Tab sent to “{0}”",
+ "Вкладка не отправлена: сейф заблокирован. Разблокируйте его и отправьте ещё раз": "The tab was not sent: the vault is locked. Unlock it and send again",
+ "Вкладка не отправлена: нет связи. Проверьте интернет и отправьте ещё раз": "The tab was not sent: no connection. Check your internet and send again",
+ "Открыта вкладка с устройства «{0}»": "Opened a tab from “{0}”",
+ "Открыта вкладка с другого устройства": "Opened a tab from another device",
+ "Отправить на устройство": "Send to device",
+ "Отправить вкладку на устройство «{0}»": "Send tab to “{0}”",
+ "Страница откроется там при следующей синхронизации": "The page will open there on the next sync",
+ "send отправить вкладку устройство телефон компьютер": "send tab device phone computer share"
 }

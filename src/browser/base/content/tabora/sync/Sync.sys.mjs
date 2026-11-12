@@ -57,7 +57,7 @@ export const GROUPS = {
   passwords: ["logins"],
   codes: ["otp"],
   bookmarks: ["marks"],
-  tabs: ["spaces", "start", "tabs"],
+  tabs: ["spaces", "start", "tabs", "sent"],
 };
 
 const te = new TextEncoder();
@@ -505,6 +505,8 @@ export const Sync = {
     const a = lazy.Account;
     const shadow = (state.items[c] ||= {});
     const owns = id => !src.owns || src.owns(id);
+    // nothing of this collection has been read here yet: what arrives now was there before
+    const first = !state.cur[c];
     if (src.restore && !src._restored) {
       src._restored = true;
       const saved = state.cache[c] ? await this._open(keys, "cache", c, state.cache[c]) : null;
@@ -515,6 +517,11 @@ export const Sync = {
 
     // --- применить чужое ---
     let local = await src.list();
+    if (src.unsaved && src.dump) {
+      // the source changed what it keeps in its copy by itself (sent tabs: the outbox, what was opened)
+      src.unsaved = false;
+      state.cache[c] = await this._seal(keys, "cache", c, src.dump());
+    }
     let hashes = await this._hashes(keys, c, src, local);
     const apply = [];
     const applied = new Map(); // id → { rev, hash } пришедшей записи
@@ -552,7 +559,7 @@ export const Sync = {
     }
     if (apply.length) {
       const fresh = new Set(Object.keys(shadow).filter(id => shadow[id][1]));
-      const out = (await src.apply(apply, { synced: id => fresh.has(id) })) || {};
+      const out = (await src.apply(apply, { synced: id => fresh.has(id), first })) || {};
       const dirty = new Set(out.dirty || []);
       local = await src.list();
       hashes = await this._hashes(keys, c, src, local);
@@ -764,6 +771,42 @@ export const Sync = {
   /** Вкладки других компьютеров аккаунта: [{ id, name, at, tabs: [{ t, u, p }] }]. */
   devicesTabs() {
     return this.groupOn("tabs") && this.enabled ? lazy.SOURCES.tabs.others() : [];
+  },
+
+  /** Other devices of the account that a page can be sent to: [{ id, name, at }]. */
+  devices() {
+    return this.groupOn("tabs") && this.enabled ? lazy.SOURCES.tabs.devices() : [];
+  },
+
+  /** Send a page to another device of the account: it opens there on that device's next sync.
+   * Resolves to "" once the page is on the server, otherwise to the reason it is not: a sync
+   * state ("locked", "offline", "error", …) or "off". A page that did not get there is not kept. */
+  async sendTab(to, { url, title = "" } = {}) {
+    const src = lazy.SOURCES.sent;
+    const id = this.groupOn("tabs") && this.enabled ? src.send(to, url, title) : "";
+    if (!id) {
+      return "off";
+    }
+    const me = lazy.Account.deviceId();
+    const pushed = async () => {
+      const keys = await this._key();
+      const data = (await src.list()).get(me);
+      const shadow = (await this._load()).items.sent?.[me];
+      return !!(keys && data && shadow && shadow[1] === (await this._hash(keys, "sent", src, data)));
+    };
+    try {
+      // a pass that was already running may have gone past this collection: one more then
+      for (let i = 0; i < 2; i++) {
+        await this.syncNow();
+        if (await pushed()) {
+          return "";
+        }
+      }
+    } catch (e) {
+      console.error("Tabora sync: send tab", e);
+    }
+    src.unsend(id);
+    return this._note?.state && this._note.state !== "ok" ? this._note.state : "error";
   },
 
   /* ---- расписание ---------------------------------------------------------------------------- */

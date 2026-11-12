@@ -29,6 +29,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   PlacesUtils: "resource://gre/modules/PlacesUtils.sys.mjs",
   ContextualIdentityService: "moz-src:///toolkit/components/contextualidentity/ContextualIdentityService.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
+  BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
 });
 
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
@@ -649,6 +650,12 @@ const tabs = {
     }
   },
 
+  /** Other devices of the account, with or without open tabs: [{ id, name, at }], recent first. */
+  devices() {
+    const fresh = Date.now() - TABS_STALE_MS;
+    return [...this._remote].filter(([, d]) => d.at >= fresh).map(([id, d]) => ({ id, name: d.name, at: d.at })).sort((a, b) => b.at - a.at);
+  },
+
   /** Вкладки других компьютеров: давно не обновлявшиеся списки не показываются. */
   others() {
     const fresh = Date.now() - TABS_STALE_MS;
@@ -656,4 +663,143 @@ const tabs = {
   },
 };
 
-export const SOURCES = { logins, otp, marks, spaces, start, tabs };
+/* ---- tabs sent to another device ------------------------------------------------------------
+ * "Send to device": every device keeps its own record with the pages it sent lately (its outbox),
+ * keyed by its device ID, just like the list of open tabs. A device reads the outboxes of the
+ * others, opens the pages addressed to it once and remembers which ones it has opened. Nothing is
+ * deleted on the server by the receiver: an item simply expires from the sender's outbox.
+ *
+ * A page is opened by the shell of a regular (not private) window. While there is no such window
+ * the page waits: it is not marked as opened and is tried again on the next pass. */
+
+const SENT_KEEP_MS = 7 * 24 * 3600 * 1000;
+const SENT_MAX = 50;
+const SENT_SEEN_MAX = 400;
+
+const sentItem = it =>
+  it && ID_RE.test(it.id || "") && ID_RE.test(it.to || "") && typeof it.u === "string" && /^https?:\/\//.test(it.u) && it.u.length <= 2048 && Number(it.at) > 0
+    ? { id: it.id, to: it.to, u: it.u, t: str(it.t, 200), at: Number(it.at) }
+    : null;
+
+const sent = {
+  name: "sent",
+  _remote: new Map(), // sender's device ID → { name, items }
+  _out: [], // what this device sent
+  _seen: [], // IDs of items already opened here
+  unsaved: false, // the outbox or the list of opened pages changed: Sync saves the copy
+
+  owns(id) {
+    return id === lazy.Account.deviceId();
+  },
+
+  _own() {
+    const fresh = Date.now() - SENT_KEEP_MS;
+    this._out = this._out.filter(it => it.at >= fresh).slice(-SENT_MAX);
+    return { name: str(lazy.Account.deviceName(), 80), items: this._out };
+  },
+
+  async list() {
+    this._deliver();
+    const out = new Map(this._remote);
+    const own = this._own();
+    if (own.items.length) {
+      out.set(lazy.Account.deviceId(), own);
+    }
+    return out;
+  },
+
+  hashable: d => ({ items: d.items }),
+
+  /** Pages addressed to this device and not opened here yet. */
+  _waiting() {
+    const me = lazy.Account.deviceId();
+    const fresh = Date.now() - SENT_KEEP_MS;
+    const out = [];
+    for (const [, box] of this._remote) {
+      for (const it of box.items) {
+        if (it.to === me && it.at >= fresh && !this._seen.includes(it.id)) {
+          out.push({ ...it, from: box.name });
+        }
+      }
+    }
+    return out.sort((a, b) => a.at - b.at);
+  },
+
+  _deliver() {
+    const waiting = this._waiting();
+    if (!waiting.length) {
+      return;
+    }
+    const shell = lazy.BrowserWindowTracker.getTopWindow({ private: false })?.Tabora;
+    if (!shell?.openSentTab) {
+      return;
+    }
+    for (const it of waiting) {
+      try {
+        if (shell.openSentTab({ url: it.u, title: it.t, from: it.from }) === false) {
+          continue;
+        }
+      } catch (e) {
+        console.error("Tabora sync: sent tab", e);
+        continue;
+      }
+      this._seen.push(it.id);
+      this.unsaved = true;
+    }
+    this._seen = this._seen.slice(-SENT_SEEN_MAX);
+  },
+
+  async apply(changes, { first = false } = {}) {
+    for (const { id, data } of changes) {
+      if (this.owns(id)) {
+        continue;
+      }
+      if (data && Array.isArray(data.items)) {
+        this._remote.set(id, { name: str(data.name, 80), items: data.items.map(sentItem).filter(Boolean).slice(-SENT_MAX) });
+      } else {
+        this._remote.delete(id);
+      }
+    }
+    if (first) {
+      // sync has just been turned on here: pages sent before that are not opened in a heap
+      this._seen = [...this._seen, ...this._waiting().map(it => it.id)].slice(-SENT_SEEN_MAX);
+    } else {
+      this._deliver();
+    }
+    return {};
+  },
+
+  dump() {
+    return { remote: [...this._remote], out: this._out, seen: this._seen };
+  },
+
+  restore(saved) {
+    for (const [id, data] of Array.isArray(saved?.remote) ? saved.remote : []) {
+      if (ID_RE.test(id) && data && Array.isArray(data.items) && !this.owns(id)) {
+        this._remote.set(id, { name: str(data.name, 80), items: data.items.map(sentItem).filter(Boolean) });
+      }
+    }
+    this._out = (Array.isArray(saved?.out) ? saved.out : []).map(sentItem).filter(Boolean);
+    this._seen = (Array.isArray(saved?.seen) ? saved.seen : []).filter(id => ID_RE.test(id || "")).slice(-SENT_SEEN_MAX);
+  },
+
+  /** Put a page into this device's outbox for the device `to`. Returns the item's ID, or "" if
+   * the page cannot be sent (not a site, or the device is this one). */
+  send(to, url, title) {
+    const item = sentItem({ id: `s${Date.now().toString(36)}${Math.floor(Math.random() * 46656).toString(36)}`, to, u: url, t: title || "", at: Date.now() });
+    if (!item || to === lazy.Account.deviceId()) {
+      return "";
+    }
+    this._out.push(item);
+    this.unsaved = true;
+    return item.id;
+  },
+
+  /** Take back a page that did not reach the server. */
+  unsend(id) {
+    this._out = this._out.filter(it => it.id !== id);
+    this.unsaved = true;
+  },
+};
+
+export const SOURCES = { logins, otp, marks, spaces, start, tabs, sent };

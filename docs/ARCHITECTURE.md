@@ -31,7 +31,9 @@
    to ad and tracker hosts and hides page elements; the same engine is loaded into the Android app.
 9. **Sync** (`sync/`): passwords, codes, bookmarks, spaces, start page shortcuts and open tabs are
    stored on the account server as records encrypted with a key derived from the account's data
-   key. Merge rules are written so that a merge mistake cannot cost data.
+   key. Merge rules are written so that a merge mistake cannot cost data. "Send to device" lives in
+   the same storage: each device keeps a record with the pages it sent lately, the addressee
+   opens a page once and remembers it.
 10. **Web app and Android account module** (`web/`): the same account, sync and mail code
     (`web/src/core`) runs in the web app and, as a built-in extension, inside the Android app.
 

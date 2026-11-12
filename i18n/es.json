@@ -3136,5 +3136,14 @@
  "раз|раза|раз": "vez|veces",
  "Этот пароль встречался в утечках {0} {1}.": "Esta contraseña ha aparecido en filtraciones {0} {1}.",
  "Пароли из утечек": "Contraseñas filtradas",
- "Сохранённые пароли": "Contraseñas guardadas"
+ "Сохранённые пароли": "Contraseñas guardadas",
+ "Вкладка отправлена на устройство «{0}»": "Pestaña enviada a «{0}»",
+ "Вкладка не отправлена: сейф заблокирован. Разблокируйте его и отправьте ещё раз": "La pestaña no se envió: la caja fuerte está bloqueada. Desbloquéala y envíala de nuevo",
+ "Вкладка не отправлена: нет связи. Проверьте интернет и отправьте ещё раз": "La pestaña no se envió: no hay conexión. Comprueba internet y envíala de nuevo",
+ "Открыта вкладка с устройства «{0}»": "Se abrió una pestaña de «{0}»",
+ "Открыта вкладка с другого устройства": "Se abrió una pestaña de otro dispositivo",
+ "Отправить на устройство": "Enviar a un dispositivo",
+ "Отправить вкладку на устройство «{0}»": "Enviar la pestaña a «{0}»",
+ "Страница откроется там при следующей синхронизации": "La página se abrirá allí en la próxima sincronización",
+ "send отправить вкладку устройство телефон компьютер": "send enviar pestaña dispositivo teléfono ordenador"
 }
