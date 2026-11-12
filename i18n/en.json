@@ -3189,5 +3189,10 @@
  "Текущая вкладка становится первой в группе": "The current tab becomes the first one in the group",
  "group группа вкладок сгруппировать папка": "group tab group folder organize",
  "Вторая страница в этом же окне, рядом с текущей": "A second page in this window, next to the current one",
- "split разделить экран рядом два сайта сравнить": "split screen side by side two sites compare"
+ "split разделить экран рядом два сайта сравнить": "split screen side by side two sites compare",
+ "Адреса": "Addresses",
+ "Адреса, телефоны и почта, которые браузер подставляет в формы.": "Addresses, phone numbers and e-mail that the browser fills into forms.",
+ "Банковские карты": "Bank cards",
+ "Номер, срок действия и имя владельца. Код безопасности карты браузер не хранит и никуда не передаёт.": "Number, expiry date and cardholder’s name. The browser does not store the card’s security code and sends it nowhere.",
+ "карта|карты|карт": "card|cards"
 }

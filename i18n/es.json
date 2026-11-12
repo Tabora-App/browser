@@ -3189,5 +3189,10 @@
  "Текущая вкладка становится первой в группе": "La pestaña actual pasa a ser la primera del grupo",
  "group группа вкладок сгруппировать папка": "group grupo de pestañas agrupar carpeta",
  "Вторая страница в этом же окне, рядом с текущей": "Una segunda página en esta misma ventana, junto a la actual",
- "split разделить экран рядом два сайта сравнить": "split dividir pantalla lado a lado dos sitios comparar"
+ "split разделить экран рядом два сайта сравнить": "split dividir pantalla lado a lado dos sitios comparar",
+ "Адреса": "Direcciones",
+ "Адреса, телефоны и почта, которые браузер подставляет в формы.": "Direcciones, teléfonos y correo que el navegador rellena en los formularios.",
+ "Банковские карты": "Tarjetas bancarias",
+ "Номер, срок действия и имя владельца. Код безопасности карты браузер не хранит и никуда не передаёт.": "Número, fecha de caducidad y nombre del titular. El navegador no guarda el código de seguridad de la tarjeta ni lo envía a ningún sitio.",
+ "карта|карты|карт": "tarjeta|tarjetas"
 }

@@ -61,6 +61,8 @@ export const GROUPS = {
   bookmarks: ["marks"],
   tabs: ["spaces", "start", "tabs", "sent"],
   history: ["history"],
+  addresses: ["addresses"],
+  cards: ["cards"],
 };
 
 const te = new TextEncoder();

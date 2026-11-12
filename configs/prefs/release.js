@@ -231,6 +231,12 @@ pref("tabora.sync.codes", true);
 pref("tabora.sync.bookmarks", true);
 pref("tabora.sync.tabs", true);
 pref("tabora.sync.history", true);
+pref("tabora.sync.addresses", true);
+// bank cards are synced only after the person turns it on
+pref("tabora.sync.cards", false);
+// Address autofill is offered to everyone: the engine enables it by the detected country, and
+// country detection is turned off here.
+pref("extensions.formautofill.addresses.supported", "on");
 
 // Обновления: подписанный манифест цели и update.xml лежат в репозитории GitHub, пакеты —
 // в GitHub Releases. Адреса читаются только из настроек по умолчанию (значение пользователя

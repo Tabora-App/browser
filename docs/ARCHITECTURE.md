@@ -37,7 +37,9 @@
    publishes only its own visits of the last two months (a record per day), reads the records of
    the others and shows them in "History" under the device's name without writing them into its
    own history database. Deleting a page from history removes it from the device's records;
-   turning history sync off removes them all.
+   turning history sync off removes them all. Autofill addresses and bank cards are synced from
+   the engine's autofill storage while the vault is open; cards only after the person turns
+   that on, and the card's security code is never stored or sent.
 10. **Web app and Android account module** (`web/`): the same account, sync and mail code
     (`web/src/core`) runs in the web app and, as a built-in extension, inside the Android app.
 

@@ -30,6 +30,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   ContextualIdentityService: "moz-src:///toolkit/components/contextualidentity/ContextualIdentityService.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
+  formAutofillStorage: "resource://autofill/FormAutofillStorage.sys.mjs",
 });
 
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
@@ -987,4 +988,135 @@ const history = {
   },
 };
 
-export const SOURCES = { logins, otp, marks, spaces, start, tabs, sent, history };
+/* ---- addresses and bank cards (form autofill) --------------------------------------------------
+ * The records of the engine's autofill storage: an address (name, organization, street, city,
+ * region, postal code, country, phone, e-mail) and a bank card (number, expiry, cardholder's
+ * name). The card's security code is not stored by the browser and so never gets here. A record
+ * is { f: fields, c: created, m: changed }; the record ID is the storage's own ID.
+ *
+ * Both are synced only while the vault is open, like passwords. The engine keeps card numbers
+ * encrypted with a key from the system keychain; they are decrypted for a sync pass and go to
+ * the server inside the record, encrypted like everything else. */
+
+const AUTOFILL_MAX = 400; // records of a kind
+const ADDRESS_FIELDS = ["name", "organization", "street-address", "address-level3", "address-level2", "address-level1", "postal-code", "country", "tel", "email"];
+const CARD_FIELDS = ["cc-name", "cc-number", "cc-exp-month", "cc-exp-year", "cc-type"];
+
+/** Fields of an address as they may be stored: known names, short strings. Null if nothing is left. */
+function addressFields(f) {
+  const out = {};
+  for (const name of ADDRESS_FIELDS) {
+    const v = typeof f?.[name] === "string" ? f[name].trim().slice(0, name === "street-address" ? 500 : 200) : "";
+    if (v) {
+      out[name] = v;
+    }
+  }
+  if (out.country && !/^[A-Za-z]{2}$/.test(out.country)) {
+    delete out.country;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/** Fields of a card: a number of 12–19 digits is required; month, year and name are optional. */
+function cardFields(f) {
+  const number = String(f?.["cc-number"] ?? "").replace(/[\s-]/g, "");
+  if (!/^\d{12,19}$/.test(number)) {
+    return null;
+  }
+  const out = { "cc-number": number };
+  const name = typeof f["cc-name"] === "string" ? f["cc-name"].trim().slice(0, 200) : "";
+  if (name) {
+    out["cc-name"] = name;
+  }
+  const month = Number(f["cc-exp-month"]);
+  if (Number.isInteger(month) && month >= 1 && month <= 12) {
+    out["cc-exp-month"] = month;
+  }
+  const year = Number(f["cc-exp-year"]);
+  if (Number.isInteger(year) && year >= 2000 && year <= 2100) {
+    out["cc-exp-year"] = year;
+  }
+  if (typeof f["cc-type"] === "string" && /^[a-z]{1,20}$/.test(f["cc-type"])) {
+    out["cc-type"] = f["cc-type"];
+  }
+  return out;
+}
+
+function autofillSource(name, collection, clean, sameThing) {
+  return {
+    name,
+
+    async available() {
+      return lazy.Vault.unlocked;
+    },
+
+    async _coll() {
+      await lazy.formAutofillStorage.initialize();
+      return lazy.formAutofillStorage[collection];
+    },
+
+    async list() {
+      const out = new Map();
+      for (const rec of await (await this._coll()).getAll({ rawData: true })) {
+        const f = ID_RE.test(rec.guid || "") ? clean(rec) : null;
+        if (f && out.size < AUTOFILL_MAX) {
+          out.set(rec.guid, { f, c: rec.timeCreated || 0, m: rec.timeLastModified || 0 });
+        }
+      }
+      return out;
+    },
+
+    hashable: d => d.f,
+    newer: (a, b) => (a.m || 0) > (b.m || 0),
+
+    async apply(changes) {
+      const coll = await this._coll();
+      const local = new Map((await coll.getAll({ rawData: true })).map(rec => [rec.guid, rec]));
+      for (const { id, data } of changes) {
+        try {
+          if (!data) {
+            if (local.has(id)) {
+              coll.remove(id);
+              local.delete(id);
+            }
+            continue;
+          }
+          const f = clean(data.f);
+          if (!f) {
+            continue;
+          }
+          if (local.has(id)) {
+            await coll.update(id, f, false);
+            continue;
+          }
+          // the same address or card saved on two devices before sync: one record stays, under the server's ID
+          const twin = [...local.values()].find(rec => sameThing(clean(rec), f));
+          if (twin) {
+            coll.changeGUID(twin.guid, id);
+            local.delete(twin.guid);
+            await coll.update(id, f, false);
+          } else {
+            coll.changeGUID(await coll.add(f), id);
+          }
+          local.set(id, { guid: id, ...f });
+        } catch (e) {
+          warn(`${name} ${id}`, e);
+        }
+      }
+      return {};
+    },
+
+    watch(notify) {
+      Services.obs.addObserver(
+        { observe: (subject, topic, what) => what !== "notifyUsed" && subject?.wrappedJSObject?.collectionName === collection && notify() },
+        "formautofill-storage-changed"
+      );
+    },
+  };
+}
+
+const sameFields = (a, b) => !!a && !!b && JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
+const addresses = autofillSource("addresses", "addresses", addressFields, sameFields);
+const cards = autofillSource("cards", "creditCards", cardFields, (a, b) => !!a && !!b && a["cc-number"] === b["cc-number"]);
+
+export const SOURCES = { logins, otp, marks, spaces, start, tabs, sent, history, addresses, cards };
