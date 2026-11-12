@@ -808,7 +808,11 @@ window.TaboraAccountPane = (function () {
 
     data() {
       return [
-        group(tt`Принести в Tabora`, tt`Закладки, историю и пароли из другого браузера переносит «Импорт данных браузера» ниже.`, [
+        group(tt`Принести в Tabora`, "", [
+          // the engine's import wizard: it finds the browsers installed on this computer itself
+          item(tt`Из другого браузера`, tt`Закладки, история и пароли из Chrome, Safari, Edge и других браузеров на этом компьютере.`, [
+            button(tt`Перенести`, shell(s => s.importFromBrowser()), { type: "primary" }),
+          ]),
           item(tt`Пароли из файла CSV`, tt`Подходят файлы из Chrome, Firefox, Safari, Bitwarden и 1Password.`, [button(tt`Выбрать файл`, shell(s => s.accountImportPasswords()))]),
           item(tt`Коды входа`, tt`Экспорт Google Authenticator, Aegis, 2FAS или список ссылок otpauth://.`, [button(tt`Выбрать файл`, shell(s => s.otpImportFile()))]),
         ]),
@@ -990,8 +994,7 @@ window.TaboraAccountPane = (function () {
       return;
     }
     const signedIn = Account.signedIn;
-    // состояние читает preferences.css: без входа — только приглашение; на вкладке «Данные»
-    // под нашими группами показывается штатный «Импорт данных браузера»
+    // состояние читает preferences.css: без входа — только приглашение
     state.pane?.setAttribute("data-acc-tab", signedIn ? state.tab : "out");
     if (!signedIn) {
       root.replaceChildren(who(), el("p", { class: "tabora-acc-contact" }, tt`Не получается войти? Напишите нам на hello@tabora.app.`));

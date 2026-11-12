@@ -3161,5 +3161,12 @@
  "Страницы, открытые на этом телефоне за последние два месяца, видны на других ваших устройствах, а их история — здесь. Приватные вкладки в историю не попадают.": "Las páginas abiertas en este teléfono durante los últimos dos meses se ven en tus otros dispositivos, y su historial se ve aquí. Las pestañas privadas no entran en el historial.",
  "История не сверена: приложение не ответило": "El historial no se ha sincronizado: la aplicación no respondió",
  "Страницы с компьютера и других устройств": "Páginas de tu ordenador y otros dispositivos",
- "Открыть историю": "Abrir el historial"
+ "Открыть историю": "Abrir el historial",
+ "Из другого браузера": "Desde otro navegador",
+ "Закладки, история и пароли из Chrome, Safari, Edge и других браузеров на этом компьютере.": "Marcadores, historial y contraseñas de Chrome, Safari, Edge y otros navegadores de este ordenador.",
+ "Перенести": "Importar",
+ "Перенести данные из другого браузера": "Importar datos de otro navegador",
+ "Закладки, история и пароли из Chrome, Safari, Edge и других": "Marcadores, historial y contraseñas de Chrome, Safari, Edge y otros",
+ "import импорт перенести chrome safari edge закладки пароли история миграция": "import importar migrar chrome safari edge marcadores contraseñas historial",
+ "Сейф заблокирован: разблокируйте его и запустите перенос ещё раз": "La caja fuerte está bloqueada: desbloquéala e inicia la importación de nuevo"
 }

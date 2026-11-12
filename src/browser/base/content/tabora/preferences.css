@@ -508,11 +508,6 @@ button.tabora-sup-chip.link:hover {
   color: var(--tabora-text-3);
 }
 
-/* на вкладке «Данные» под нашими группами остаётся штатный перенос из другого браузера */
-setting-pane[data-category="paneSync"][data-acc-tab="data"] setting-group[groupid="importBrowserData"] {
-  display: flex !important;
-}
-
 #tabora-account,
 .tabora-acc-panel {
   display: flex;

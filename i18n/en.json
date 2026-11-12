@@ -3161,5 +3161,12 @@
  "Страницы, открытые на этом телефоне за последние два месяца, видны на других ваших устройствах, а их история — здесь. Приватные вкладки в историю не попадают.": "Pages opened on this phone during the last two months are visible on your other devices, and their history is visible here. Private tabs are not included in history.",
  "История не сверена: приложение не ответило": "History is not synced: the app did not answer",
  "Страницы с компьютера и других устройств": "Pages from your computer and other devices",
- "Открыть историю": "Open history"
+ "Открыть историю": "Open history",
+ "Из другого браузера": "From another browser",
+ "Закладки, история и пароли из Chrome, Safari, Edge и других браузеров на этом компьютере.": "Bookmarks, history and passwords from Chrome, Safari, Edge and other browsers on this computer.",
+ "Перенести": "Import",
+ "Перенести данные из другого браузера": "Import data from another browser",
+ "Закладки, история и пароли из Chrome, Safari, Edge и других": "Bookmarks, history and passwords from Chrome, Safari, Edge and others",
+ "import импорт перенести chrome safari edge закладки пароли история миграция": "import migrate transfer chrome safari edge bookmarks passwords history",
+ "Сейф заблокирован: разблокируйте его и запустите перенос ещё раз": "The vault is locked: unlock it and start the import again"
 }

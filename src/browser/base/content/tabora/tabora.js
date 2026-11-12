@@ -743,6 +743,22 @@ var Tabora = {
     setTimeout(() => node.remove(), 3200);
   },
 
+  /** Open the engine's wizard that imports bookmarks, history and passwords from another browser.
+   * It lives on the settings page, so the page is opened first. Passwords are among the things
+   * it brings and they go into the vault: with a locked vault the wizard would wait forever. */
+  async importFromBrowser() {
+    if (!(await this.vaultUnlockByUser())) {
+      this.notice(tt`Сейф заблокирован: разблокируйте его и запустите перенос ещё раз`);
+      return;
+    }
+    const win = await openPreferences("paneSync");
+    const page = win || gBrowser.selectedBrowser.contentWindow;
+    for (let i = 0; i < 50 && !page?.gMainPane?.showMigrationWizardDialog; i++) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    page?.gMainPane?.showMigrationWizardDialog();
+  },
+
   /* ---- Send a tab to another device of the account (sync/SyncSources.sys.mjs, "sent") ---- */
 
   /** Other devices of the account a page can be sent to: [{ id, name }]. Empty without sync. */
@@ -3626,6 +3642,7 @@ var Tabora = {
       ...(/^https?:/.test(gBrowser.selectedBrowser?.currentURI?.spec || "")
         ? this.sendDevices().map(d => ({ glyph: "⇥", title: tt`Отправить вкладку на устройство «${d.name}»`, note: tt`Страница откроется там при следующей синхронизации`, key: "", tags: tt`send отправить вкладку устройство телефон компьютер`, run: () => this.sendTabTo(d) }))
         : []),
+      { glyph: "⇲", title: tt`Перенести данные из другого браузера`, note: tt`Закладки, история и пароли из Chrome, Safari, Edge и других`, key: "", tags: tt`import импорт перенести chrome safari edge закладки пароли история миграция`, run: () => this.importFromBrowser() },
       { glyph: "⟨", title: document.documentElement.getAttribute("tabora-sidebar") === "compact" ? tt`Развернуть боковую панель` : tt`Свернуть боковую панель`, note: tt`Только значки вкладок, названия по наведению`, key: "⌘B", tags: tt`sidebar панель свернуть compact`, run: () => this.toggleSidebar() },
       { glyph: "▭", title: this.horizontalTabs ? tt`Вкладки сбоку` : tt`Вкладки сверху`, note: this.horizontalTabs ? tt`Вернуть боковую панель с вкладками` : tt`Вкладки и адрес двумя строками сверху, страница на всю ширину`, tags: tt`layout раскладка вкладки сверху сбоку горизонтальные вертикальные tabs`, run: () => Services.prefs.setBoolPref(this.TABS_LAYOUT_PREF, this.horizontalTabs) },
     ];
