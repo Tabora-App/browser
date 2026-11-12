@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+<!-- Знак Tabora на месте картинки Firefox. Файл создан tools/android/assets.py -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="112dp"
+    android:viewportWidth="108"
+    android:viewportHeight="112">
+  <path
+      android:fillColor="#C8F25A"
+      android:pathData="M35.1,21.44h37.8a15.66,15.66 0 0 1 15.66,15.66v37.8a15.66,15.66 0 0 1 -15.66,15.66h-37.8a15.66,15.66 0 0 1 -15.66,-15.66v-37.8a15.66,15.66 0 0 1 15.66,-15.66z"/>
+  <path
+      android:fillColor="#0B0C0E"
+      android:pathData="M39.69,39.26h28.62a5.13,5.13 0 0 1 5.13,5.13a5.13,5.13 0 0 1 -5.13,5.13h-28.62a5.13,5.13 0 0 1 -5.13,-5.13a5.13,5.13 0 0 1 5.13,-5.13z"/>
+  <path
+      android:fillColor="#0B0C0E"
+      android:pathData="M54,39.26a5.13,5.13 0 0 1 5.13,5.13v25.92a5.13,5.13 0 0 1 -5.13,5.13a5.13,5.13 0 0 1 -5.13,-5.13v-25.92a5.13,5.13 0 0 1 5.13,-5.13z"/>
+  <path
+      android:fillColor="#C8F25A"
+      android:pathData="M65.34,44.39a2.97,2.97 0 1 0 5.94,0a2.97,2.97 0 1 0 -5.94,0z"/>
+</vector>

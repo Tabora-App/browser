@@ -22,10 +22,40 @@ from PIL import Image
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-APP = ROOT / "src" / "mobile" / "android" / "fenix" / "app" / "src"
+ANDROID = ROOT / "src" / "mobile" / "android"
+APP = ANDROID / "fenix" / "app" / "src"
+AC = "android-components/components/"
+FENIX_RES = "fenix/app/src/main/res/"
+
+# Картинки Firefox в интерфейсе (лиса и логотип): каждая заменяется знаком Tabora того же размера,
+# чтобы раскладка экранов не менялась. Путь относительно mobile/android, размер в dp.
+MASCOTS = [
+    (AC + "lib/llm-mlpa/src/main/res/drawable/firefox_icon.xml", 16, 16),
+    (AC + "ui/icons/src/main/res/drawable/mozac_ic_logo_firefox_24.xml", 24, 24),
+    (FENIX_RES + "drawable-nodpi/firefox_as_default_banner_illustration.xml", 78, 53),
+    (FENIX_RES + "drawable/expressive_firefox.xml", 35, 31),
+    (FENIX_RES + "drawable/fox_ai_on_state.xml", 62, 63),
+    (FENIX_RES + "drawable/fox_exclamation_alert.xml", 200, 200),
+    (FENIX_RES + "drawable/ic_firefox.xml", 108, 112),
+    (FENIX_RES + "drawable/ic_kit_bookmarks_empty_state.xml", 200, 178),
+    (FENIX_RES + "drawable/ic_kit_heart.xml", 141, 150),
+    (FENIX_RES + "drawable/ic_kit_plug_error.xml", 200, 150),
+    (FENIX_RES + "drawable/ic_kit_shield_off_state.xml", 58, 60),
+    (FENIX_RES + "drawable/ic_kit_shield_on_state.xml", 58, 60),
+    (FENIX_RES + "drawable/illustration_fox_box_inside_light.xml", 176, 160),
+    (FENIX_RES + "drawable/kit_devices_sync_error.xml", 242, 90),
+    (FENIX_RES + "drawable/kit_devices_sync.xml", 210, 90),
+    (FENIX_RES + "drawable/kit_expressive_full.xml", 66, 62),
+    (FENIX_RES + "drawable/kit_head_protection_blocker_banner.xml", 78, 78),
+    (FENIX_RES + "drawable/kit_plug_error.xml", 137, 103),
+    (FENIX_RES + "drawable/kit_search_error.xml", 120, 139),
+    (FENIX_RES + "drawable/mozac_ic_kit_tab_groups_list_view.xml", 78, 68),
+    (FENIX_RES + "drawable/mozac_ic_kit_tab_groups.xml", 144, 80),
+]
 FONT = ROOT / "src" / "browser" / "base" / "content" / "tabora" / "fonts" / "Manrope-latin.woff2"
 
 LIME = "#c8f25a"
+SLEEPING_SIZE = (180, 103)  # размер исходной картинки kit_sleeping_under_laptop.webp
 INK = "#0b0c0e"
 DENSITIES = {"mdpi": 1, "hdpi": 1.5, "xhdpi": 2, "xxhdpi": 3, "xxxhdpi": 4}
 
@@ -124,11 +154,38 @@ def path(data: str, color: str, even_odd: bool = False) -> str:
     return f'  <path\n      android:fillColor="{color}"{rule}\n      android:pathData="{data}"/>\n'
 
 
-def write(rel: str, text: str) -> None:
-    out = APP / rel
+def write(rel: str, text: str, base: Path = APP) -> None:
+    out = base / rel
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text, encoding="utf-8")
     print(f"  {rel}")
+
+
+def mark_vector(w: float, h: float) -> str:
+    """Знак Tabora в поле w×h dp: в значках до 24 dp занимает всё поле, в картинках — 64 %."""
+    side = min(w, h) * (1.0 if min(w, h) <= 24 else 0.64)
+    left, top = (w - side) / 2, (h - side) / 2
+    bar, stem, dot = t_paths(left + side / 2, top + side * 133 / 256, side * 144 / 256)
+    ink, lime = INK.upper(), LIME.upper()
+    body = path(pill(left, top, side, side, side * 58 / 256), lime) + path(bar, ink) + path(stem, ink) + path(dot, lime)
+    return f"""<?xml version="1.0" encoding="utf-8"?>
+{LICENSE}
+<!-- Знак Tabora на месте картинки Firefox. Файл создан tools/android/assets.py -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="{n(w)}dp"
+    android:height="{n(h)}dp"
+    android:viewportWidth="{n(w)}"
+    android:viewportHeight="{n(h)}">
+{body}</vector>
+"""
+
+
+def mascots() -> None:
+    for rel, w, h in MASCOTS:
+        write(rel, mark_vector(w, h), ANDROID)
+    # Анимация с лисой (подсказка о группах вкладок): пустая композиция того же размера
+    write(FENIX_RES + "raw/mozac_ic_kit_tab_groups_animation.json",
+          '{"v":"5.7.4","fr":30,"ip":0,"op":30,"w":144,"h":80,"nm":"tabora","ddd":0,"assets":[],"layers":[]}\n', ANDROID)
 
 
 def vectors() -> None:
@@ -160,6 +217,7 @@ def main() -> None:
     if not FONT.is_file():
         sys.exit(f"нет шрифта {FONT}")
     vectors()
+    mascots()
     with sync_playwright() as p:
         browser = p.chromium.launch()
 
@@ -191,6 +249,13 @@ def main() -> None:
 <svg style="margin-left:auto" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#15141a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
 </div></div>"""
         save(render(browser, widget, 1.5), "release/res/drawable-hdpi/fenix_search_widget.webp")
+
+        # Растровая картинка с лисой (пустой экран): знак Tabora на прозрачном поле того же размера
+        sleeping = Image.new("RGBA", SLEEPING_SIZE, (0, 0, 0, 0))
+        side = round(min(SLEEPING_SIZE) * 0.64)
+        logo = render(browser, mark_svg(side))
+        sleeping.paste(logo, ((SLEEPING_SIZE[0] - side) // 2, (SLEEPING_SIZE[1] - side) // 2), logo)
+        save(sleeping, "main/res/drawable-nodpi/kit_sleeping_under_laptop.webp")
         browser.close()
 
 

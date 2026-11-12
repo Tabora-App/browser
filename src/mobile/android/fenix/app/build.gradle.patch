@@ -1,5 +1,5 @@
 diff --git a/mobile/android/fenix/app/build.gradle b/mobile/android/fenix/app/build.gradle
-index e8032b0120..3adb1840df 100644
+index e8032b0120..49af39c355 100644
 --- a/mobile/android/fenix/app/build.gradle
 +++ b/mobile/android/fenix/app/build.gradle
 @@ -46,7 +46,8 @@ android {
@@ -34,7 +34,24 @@ index e8032b0120..3adb1840df 100644
                      "deepLinkScheme": deepLinkSchemeValue,
              ])
          }
-@@ -343,8 +337,9 @@ androidComponents {
+@@ -300,9 +294,13 @@ androidComponents {
+             // The Google Play Store does not allow multiple APKs for the same app that all have the
+             // same version code. Therefore we need to have different version codes for our ARM and x86
+             // builds.
+-            def versionName = buildType == 'nightly' ?
+-                    "${Config.nightlyVersionName(project)}" :
+-                    "${Config.releaseVersionName(project)}"
++            // Tabora: версия приложения задаётся своим параметром — versionName в общей сборке
++            // занят версией движка (build.gradle в корне исходников)
++            def versionName = project.hasProperty("taboraVersionName") ?
++                    project.property("taboraVersionName").toString() :
++                    (buildType == 'nightly' ?
++                            "${Config.nightlyVersionName(project)}" :
++                            "${Config.releaseVersionName(project)}")
+             project.logger.debug("versionName override: $versionName")
+ 
+             variant.outputs.each { output ->
+@@ -343,8 +341,9 @@ androidComponents {
  // -------------------------------------------------------------------------------------------------
  
  android.defaultConfig.with {

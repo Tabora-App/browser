@@ -1,5 +1,5 @@
 diff --git a/mobile/android/fenix/app/src/main/res/values-night/colors.xml b/mobile/android/fenix/app/src/main/res/values-night/colors.xml
-index 95480ff5ef..9470e4d8ff 100644
+index 95480ff5ef..22235e564b 100644
 --- a/mobile/android/fenix/app/src/main/res/values-night/colors.xml
 +++ b/mobile/android/fenix/app/src/main/res/values-night/colors.xml
 @@ -57,7 +57,7 @@
@@ -10,4 +10,19 @@ index 95480ff5ef..9470e4d8ff 100644
 +    <color name="fx_mobile_splashscreen_background">#0F1013</color>
  
      <!-- Design system color variables -->
+ 
+@@ -113,10 +113,10 @@
+     <color name="protections_dashboard_gradient_end">@color/novaOrange70</color>
+ 
+     <!-- Colors for Edge to Edge background  -->
+-    <color name="homepage_edge_to_edge_gradient_start">#FF0A1A3B</color>
+-    <color name="homepage_edge_to_edge_gradient_end">#FF293564</color>
+-    <color name="homepage_tab_edge_to_edge_tab_strip_item_background_active">#213B6F</color>
+-    <color name="homepage_tab_edge_to_edge_tab_strip_item_background_inactive">#0E1A40</color>
++    <color name="homepage_edge_to_edge_gradient_start">#FF15171B</color>
++    <color name="homepage_edge_to_edge_gradient_end">#FF0F1013</color>
++    <color name="homepage_tab_edge_to_edge_tab_strip_item_background_active">#23262C</color>
++    <color name="homepage_tab_edge_to_edge_tab_strip_item_background_inactive">#17191D</color>
+     <color name="homepage_tab_edge_to_edge_toolbar_background">#00000000</color>
+     <color name="homepage_tab_edge_to_edge_toolbar_outline">#00000000</color>
  

@@ -1,0 +1,13 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/HomeActivity.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/HomeActivity.kt
+index cc25d9e578..2b0de9d883 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/HomeActivity.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/HomeActivity.kt
+@@ -291,6 +291,8 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
+             settings = components.settings,
+             resources = resources,
+             crashReporter = components.analytics.crashReporter,
++            // Tabora: страна пользователя не определяется, ждать её незачем — ярлыки общие для всех
++            isReleased = false,
+         )
+     }
+ 

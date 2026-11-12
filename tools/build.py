@@ -1089,7 +1089,7 @@ def build_android(config: dict, brand: str) -> None:
     mach(["build"], config, brand)
     android_multilocale(config, brand)
     log(f"сборка приложения Tabora {version} для Android")
-    mach(["gradle", f"fenix:assemble{ANDROID_BUILD_TYPE.capitalize()}", f"-PversionName={version}",
+    mach(["gradle", f"fenix:assemble{ANDROID_BUILD_TYPE.capitalize()}", f"-PtaboraVersionName={version}",
           "-PdisableDebugSigning"], config, brand)
     apks = android_apks()
     if not apks:
