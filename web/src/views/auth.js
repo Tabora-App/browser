@@ -65,13 +65,9 @@ export function mountAuth(root, { account }) {
   function login() {
     const user = nameField(name);
     const pass = field("Пароль", { type: "password", name: "password", autocomplete: "current-password" });
-    const remember = h("input", { type: "checkbox" });
     const error = formError();
     const submit = h("button", { class: "btn primary large block", type: "submit" }, "Войти");
-    const form = h("form", { class: "auth-form", novalidate: true },
-      user.el, pass.el,
-      h("label", { class: "check" }, remember, h("span", {}, "Не выходить на этом устройстве", h("small", {}, "Не отмечайте на чужом компьютере"))),
-      error.el, submit);
+    const form = h("form", { class: "auth-form", novalidate: true }, user.el, pass.el, error.el, submit);
     form.addEventListener("submit", async e => {
       e.preventDefault();
       error.set("");
@@ -84,11 +80,11 @@ export function mountAuth(root, { account }) {
       try {
         await busy(submit, async step => {
           account.onStep = step;
-          await account.signIn(name, pass.value, { remember: remember.checked });
+          await account.signIn(name, pass.value);
         }, "Входим");
       } catch (err) {
         if (err.code === "2fa-required") {
-          twoFactor({ remember: remember.checked });
+          twoFactor();
           return;
         }
         error.set(err.code === "bad-credentials" ? "Неверный адрес или пароль" : errorText(err));
@@ -108,7 +104,7 @@ export function mountAuth(root, { account }) {
 
   /* ---- код второго фактора ---- */
 
-  function twoFactor({ remember, after = null }) {
+  function twoFactor({ after = null } = {}) {
     const code = field("Код из приложения", { name: "totp", autocomplete: "one-time-code", inputmode: "numeric", placeholder: "000 000", mono: true, autofocus: true, hint: "Шесть цифр из приложения для кодов. Нет доступа к приложению — введите резервный код." });
     const error = formError();
     const submit = h("button", { class: "btn primary large block", type: "submit" }, "Подтвердить");
@@ -126,7 +122,7 @@ export function mountAuth(root, { account }) {
           if (after) {
             await after(code.value.trim());
           } else {
-            await account.signIn(name, "", { totp: code.value.trim(), remember });
+            await account.signIn(name, "", { totp: code.value.trim() });
           }
         }, "Проверяем");
       } catch (err) {
@@ -152,7 +148,6 @@ export function mountAuth(root, { account }) {
     user.el.append(status);
     const pass = field("Пароль", { type: "password", name: "new-password", autocomplete: "new-password", hint: "" });
     pass.el.append(strengthMeter(pass.input));
-    const remember = h("input", { type: "checkbox" });
     const error = formError();
     const submit = h("button", { class: "btn primary large block", type: "submit" }, "Создать аккаунт");
     let checked = "";
@@ -185,7 +180,6 @@ export function mountAuth(root, { account }) {
     }, 350);
     user.input.addEventListener("input", check);
     const form = h("form", { class: "auth-form", novalidate: true }, user.el, pass.el,
-      h("label", { class: "check" }, remember, h("span", {}, "Не выходить на этом устройстве", h("small", {}, "Не отмечайте на чужом компьютере"))),
       error.el, submit,
       h("p", { class: "auth-fine" }, "Пароль знаете только вы: на сервер он не уходит и восстановить его нельзя. После регистрации мы покажем ключ восстановления — сохраните его."));
     form.addEventListener("submit", async e => {
@@ -195,7 +189,7 @@ export function mountAuth(root, { account }) {
       try {
         const r = await busy(submit, async step => {
           account.onStep = step;
-          return account.register(name, pass.value, { remember: remember.checked, hold: true });
+          return account.register(name, pass.value, { hold: true });
         }, "Создаём аккаунт");
         recoveryKey(r.recoveryKey, r.email);
       } catch (err) {
@@ -323,7 +317,7 @@ export function mountAuth(root, { account }) {
       } catch (err) {
         if (err.code === "2fa-required") {
           name = email;
-          twoFactor({ remember: false, after: run });
+          twoFactor({ after: run });
           return;
         }
         error.set(err.code === "bad-code" || err.code === "no-code" ? "Код не подошёл или устарел. Запросите новый" : errorText(err));

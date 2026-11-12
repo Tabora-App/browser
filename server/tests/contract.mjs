@@ -119,7 +119,7 @@ check("версия хеша для неизвестного адреса — т
 // регистрация
 const A = { email: mail("a"), pw1: hash("a-pass-1"), pw2: hash("a-pass-2"), pw3: hash("a-pass-3") };
 let r = await call("POST", "/v1/account/register", { body: { email: A.email, loginHash: A.pw1, kdf: 2, deviceId: device(1), deviceName: "Мак Анны" } });
-check("регистрация", r.status === 200 && /^u[0-9a-f]{20}$/.test(r.json.userId) && /^tbs_/.test(r.json.session.token) && /^\d{4}-\d\d-\d\dT/.test(r.json.session.expiresAt), r.text);
+check("регистрация", r.status === 200 && /^u[0-9a-f]{20}$/.test(r.json.userId) && /^tbs_/.test(r.json.session.token) && r.json.session.expiresAt === null, r.text);
 A.userId = r.json?.userId;
 A.s1 = r.json?.session?.token;
 check("без почтового сервера ящик не выдаётся", r.json.mail === null);

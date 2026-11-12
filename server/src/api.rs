@@ -30,7 +30,6 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-const SESSION_TTL_MS: i64 = 180 * 86_400_000;
 /// Неудачных входов с одного адреса (в любые аккаунты) за час, после которых вход с него закрыт.
 const LOGIN_FAILS_PER_IP: u32 = 20;
 
@@ -275,13 +274,14 @@ impl App {
 
     pub(crate) async fn new_session(&self, c: &impl deadpool_postgres::GenericClient, user_id: i64, device_id: &str, now: i64) -> Result<Value, ApiError> {
         let token = format!("tbs_{}", base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(random::<32>()));
-        let expires = now + SESSION_TTL_MS;
-        db::create_session(c, &sha256(token.as_bytes()), user_id, device_id, now, expires).await?;
-        Ok(json!({ "token": token, "expiresAt": iso(expires) }))
+        // срока у сессии нет: войдя один раз, человек остаётся в аккаунте, пока сам не выйдет
+        db::create_session(c, &sha256(token.as_bytes()), user_id, device_id, now).await?;
+        Ok(json!({ "token": token, "expiresAt": null }))
     }
 
     pub(crate) async fn auth(&self, headers: &HeaderMap) -> Result<(User, String, [u8; 32]), ApiError> {
-        let expired = || err(StatusCode::UNAUTHORIZED, "session-expired", "Сессия истекла: войдите в аккаунт заново");
+        // код session-expired — прежнее имя: сессия не истекает, а завершается (выход, отзыв, смена пароля)
+        let expired = || err(StatusCode::UNAUTHORIZED, "session-expired", "Сессия завершена: войдите в аккаунт заново");
         let token = headers.get(AUTHORIZATION).and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer ")).map(str::trim).filter(|t| !t.is_empty() && t.len() <= 128).ok_or_else(expired)?;
         let hash = sha256(token.as_bytes());
         let c = self.pool.get().await?;

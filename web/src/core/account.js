@@ -45,13 +45,13 @@ export function deviceLabel(ua = typeof navigator === "object" ? navigator.userA
 
 export class Account {
   /**
-   * @param {{ api: import("./api.js").Api, store: { load(): Promise<object|null>, save(data: object, remember: boolean): Promise<void>, clear(): Promise<void>, deviceId(): string }, domain?: string }} deps
+   * @param {{ api: import("./api.js").Api, store: { load(): Promise<object|null>, save(data: object): Promise<void>, clear(): Promise<void>, deviceId(): string }, domain?: string }} deps
    */
   constructor({ api, store, domain = "tabora.app" }) {
     this.api = api;
     this.store = store;
     this.domain = domain;
-    this.session = null; // { email, userId, token, expiresAt, kdf, remember, mail }
+    this.session = null; // { email, userId, token, expiresAt, kdf, mail }
     this.keys = { state: "none" }; // { state, fingerprint, publicKey, privateKey, dataKey, canPassword, canRecovery, reason }
     this._pending = null; // ключи из пароля, пока вход ждёт кода второго фактора
     this._listeners = new Set();
@@ -126,7 +126,7 @@ export class Account {
     if (!saved?.token || !saved.email) {
       return false;
     }
-    this.session = { email: saved.email, userId: saved.userId, token: saved.token, expiresAt: saved.expiresAt, kdf: saved.kdf, remember: !!saved.remember, mail: saved.mail || null };
+    this.session = { email: saved.email, userId: saved.userId, token: saved.token, expiresAt: saved.expiresAt, kdf: saved.kdf, mail: saved.mail || null };
     const dataKey = tryB64(saved.dataKey);
     this.keys = { state: dataKey ? "offline" : "locked", dataKey };
     this._emit("signed-in");
@@ -141,7 +141,7 @@ export class Account {
     }
     const s = this.session;
     try {
-      await this.store.save({ email: s.email, userId: s.userId, token: s.token, expiresAt: s.expiresAt, kdf: s.kdf, remember: s.remember, mail: s.mail, dataKey: this.keys.dataKey ? b64(this.keys.dataKey) : null }, s.remember);
+      await this.store.save({ email: s.email, userId: s.userId, token: s.token, expiresAt: s.expiresAt, kdf: s.kdf, mail: s.mail, dataKey: this.keys.dataKey ? b64(this.keys.dataKey) : null });
     } catch (e) {
       console.error("Tabora: сессия не сохранена", e);
     }
@@ -171,7 +171,7 @@ export class Account {
    * "2fa-required": интерфейс спрашивает код и вызывает signIn ещё раз с тем же адресом и totp —
    * пароль повторно не нужен (ключи из него ждут в памяти три минуты).
    */
-  async signIn(nameOrEmail, password, { totp = "", remember = false, hold = false } = {}) {
+  async signIn(nameOrEmail, password, { totp = "", hold = false } = {}) {
     const email = this.normalizeEmail(nameOrEmail);
     let p = this._pending;
     if (!p || p.email !== email || Date.now() - p.at > PENDING_TTL || password) {
@@ -193,7 +193,7 @@ export class Account {
       }
       throw e;
     }
-    await this._enter(email, r, remember, p, hold);
+    await this._enter(email, r, p, hold);
     return { email };
   }
 
@@ -221,11 +221,11 @@ export class Account {
     }
   }
 
-  async _enter(email, r, remember, p, hold = false) {
+  async _enter(email, r, p, hold = false) {
     if (!r?.session?.token) {
       throw fail("Сервер Tabora ответил непонятно. Повторите позже", "bad-response");
     }
-    this.session = { email, userId: r.userId, token: r.session.token, expiresAt: r.session.expiresAt, kdf: r.kdf || p.kdf, remember: !!remember, mail: r.mail || null };
+    this.session = { email, userId: r.userId, token: r.session.token, expiresAt: r.session.expiresAt, kdf: r.kdf || p.kdf, mail: r.mail || null };
     this.keys = { state: "offline" };
     this._step("Открываем ключи");
     try {
@@ -458,7 +458,7 @@ export class Account {
 
   /* ---- регистрация ---- */
 
-  async register(name, password, { remember = false, hold = false } = {}) {
+  async register(name, password, { hold = false } = {}) {
     const email = this.normalizeEmail(name);
     checkNewPassword(password);
     if (!(await this.api.available(email))) {
@@ -468,7 +468,7 @@ export class Account {
     try {
       this._step("Создаём аккаунт");
       const r = await this.api.register({ email, loginHash: k.loginHash, kdf: KDF_CURRENT, deviceId: this.store.deviceId(), deviceName: deviceLabel(), mailAccess: "session" });
-      this.session = { email, userId: r.userId, token: r.session.token, expiresAt: r.session.expiresAt, kdf: KDF_CURRENT, remember: !!remember, mail: r.mail || null };
+      this.session = { email, userId: r.userId, token: r.session.token, expiresAt: r.session.expiresAt, kdf: KDF_CURRENT, mail: r.mail || null };
       this.keys = { state: "offline" };
       // ключ восстановления: единственный способ вернуть данные, если пароль забыт
       const recoveryKey = rkNew();
@@ -574,7 +574,7 @@ export class Account {
   }
 
   /** Сброс по письму на резервный адрес, шаг 2: код из письма и новый пароль. Сразу входит. */
-  async resetWithEmailCode(nameOrEmail, code, newPassword, { totp = "", remember = false } = {}) {
+  async resetWithEmailCode(nameOrEmail, code, newPassword, { totp = "" } = {}) {
     const email = this.normalizeEmail(nameOrEmail);
     checkNewPassword(newPassword);
     let p = this._pending;
@@ -596,7 +596,7 @@ export class Account {
     // пароль новый: копия ключа данных привязана к прежнему и откроется ключом восстановления
     const pending = { ...p };
     this._pending = null;
-    this.session = { email, userId: r.userId, token: r.session.token, expiresAt: r.session.expiresAt, kdf: KDF_CURRENT, remember: !!remember, mail: r.mail || null };
+    this.session = { email, userId: r.userId, token: r.session.token, expiresAt: r.session.expiresAt, kdf: KDF_CURRENT, mail: r.mail || null };
     this.keys = { state: "offline" };
     try {
       await this._openKeys({ wrapKey: pending.wrapKey, loginHash: pending.loginHash, create: true });

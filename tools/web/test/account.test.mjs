@@ -57,8 +57,8 @@ check("сохранённая сессия поднимается без пар�
 const d2 = device();
 const b = new Account(d2);
 check("неверный пароль", await rejects(() => b.signIn(email, "Wrong-pass-000!")), "bad-credentials");
-await b.signIn(name, P1, { remember: true });
-check("вход с другого устройства открывает тот же ключ данных", [b.signedIn, b.keys.state, hex(b.keys.dataKey) === dataKey, b.keys.fingerprint === fp, (await d2.store.load()).remember], [true, "ok", true, true, true]);
+await b.signIn(name, P1);
+check("вход с другого устройства открывает тот же ключ данных", [b.signedIn, b.keys.state, hex(b.keys.dataKey) === dataKey, b.keys.fingerprint === fp, !!(await d2.store.load())?.token], [true, "ok", true, true, true]);
 const devices = await b.api.devices(b.token);
 check("в списке устройств два устройства, текущее отмечено", [devices.length, devices.filter(d => d.current).length, devices.every(d => /^Веб-версия/.test(d.name))], [2, 1, true]);
 

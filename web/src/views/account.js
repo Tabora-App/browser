@@ -286,7 +286,7 @@ export function mountAccount(el, ctx) {
       loadError ? h("div", { class: "note bad" }, icon("warning", 17), h("div", {}, h("span", {}, loadError), h("button", { class: "link-btn", onclick: load }, "Повторить"))) : null,
       card("Профиль",
         row("Адрес", account.email, [h("button", { class: "icon-btn", "aria-label": "Скопировать адрес", onclick: () => copyText(account.email, "Адрес скопирован") }, icon("copy", 18))]),
-        row("Вход на этом устройстве", account.session.remember ? "Сохранён до выхода" : "До закрытия вкладки", [h("button", { class: "btn small", onclick: () => account.signOut() }, "Выйти")])),
+        row("Вход на этом устройстве", "Сохранён, пока вы сами не выйдете", [h("button", { class: "btn small", onclick: () => account.signOut() }, "Выйти")])),
       card("Защита входа",
         row("Пароль", "Знаете только вы; на сервере его нет", [h("button", { class: "btn small", onclick: changePassword }, "Сменить")], { wrap: true }),
         row("Двухфакторная защита", !security ? "…" : two.enabled ? `Включена${two.since ? ` с ${shortDate(two.since)}` : ""}, резервных кодов: ${two.backupCodes}` : "Выключена: для входа достаточно пароля", !security ? [] : two.enabled ? [

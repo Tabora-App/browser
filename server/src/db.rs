@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS devices (
   mail_cred   TEXT,
   PRIMARY KEY (user_id, device_id)
 );
+-- Сессия не истекает по времени: человек остаётся в аккаунте, пока сам не выйдет. Завершают её
+-- только выход, отзыв устройства из списка, смена и сброс пароля (удаление строки). Столбец
+-- expires_at остался от прежней схемы (сессии на 180 дней) и нигде не читается.
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash  BYTEA PRIMARY KEY,
   user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -375,9 +378,9 @@ pub struct Device {
 pub async fn devices<C: GenericClient>(c: &C, user_id: i64) -> Result<Vec<Device>, DbError> {
     let rows = c
         .query(
-            "SELECT d.device_id, d.name, d.last_seen, EXISTS(SELECT 1 FROM sessions s WHERE s.user_id = d.user_id AND s.device_id = d.device_id AND s.expires_at > $2)
+            "SELECT d.device_id, d.name, d.last_seen, EXISTS(SELECT 1 FROM sessions s WHERE s.user_id = d.user_id AND s.device_id = d.device_id)
              FROM devices d WHERE d.user_id = $1 ORDER BY d.last_seen DESC",
-            &[&user_id, &crate::util::now_ms()],
+            &[&user_id],
         )
         .await?;
     Ok(rows.iter().map(|r| Device { id: r.get(0), name: r.get(1), at: r.get(2), active: r.get(3) }).collect())
@@ -399,22 +402,25 @@ pub async fn forget_device<C: GenericClient>(c: &C, user_id: i64, device_id: &st
         .await?)
 }
 
-pub async fn create_session<C: GenericClient>(c: &C, token_hash: &[u8], user_id: i64, device_id: &str, now: i64, expires: i64) -> Result<(), DbError> {
+pub async fn create_session<C: GenericClient>(c: &C, token_hash: &[u8], user_id: i64, device_id: &str, now: i64) -> Result<(), DbError> {
+    // expires_at не читается (сессия бессрочна); столбец обязателен в прежней схеме — пишем 0
     c.execute(
-        "INSERT INTO sessions (token_hash, user_id, device_id, created_at, expires_at, last_seen) VALUES ($1, $2, $3, $4, $5, $4)",
-        &[&token_hash, &user_id, &device_id, &now, &expires],
+        "INSERT INTO sessions (token_hash, user_id, device_id, created_at, expires_at, last_seen) VALUES ($1, $2, $3, $4, 0, $4)",
+        &[&token_hash, &user_id, &device_id, &now],
     )
     .await?;
     Ok(())
 }
 
-/// Действующая сессия: пользователь и устройство. Отметка «был в сети» обновляется не чаще раза в час.
+/// Действующая сессия: пользователь и устройство. Срока у сессии нет: она действует, пока строка
+/// не удалена (выход, отзыв устройства, смена или сброс пароля). Отметка «был в сети» обновляется
+/// не чаще раза в час.
 pub async fn session<C: GenericClient>(c: &C, token_hash: &[u8], now: i64) -> Result<Option<(User, String)>, DbError> {
     let row = c
         .query_opt(
             "SELECT u.id, u.public_id, u.email, u.salt, u.verifier, u.kdf, u.recovery, u.mail_id, s.device_id, s.last_seen
-             FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = $1 AND s.expires_at > $2",
-            &[&token_hash, &now],
+             FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = $1",
+            &[&token_hash],
         )
         .await?;
     let Some(row) = row else { return Ok(None) };
@@ -454,9 +460,10 @@ pub async fn has_session<C: GenericClient>(c: &C, user_id: i64, device_id: &str)
     Ok(c.query_one("SELECT EXISTS(SELECT 1 FROM sessions WHERE user_id = $1 AND device_id = $2)", &[&user_id, &device_id]).await?.get(0))
 }
 
+/// Уборка просроченного: одноразовые коды и незавершённая настройка. Сессии сюда не входят —
+/// по времени они не истекают.
 pub async fn purge_expired<C: GenericClient>(c: &C, now: i64) -> Result<u64, DbError> {
-    let n = c.execute("DELETE FROM sessions WHERE expires_at <= $1", &[&now]).await?;
-    c.execute("DELETE FROM reset_nonces WHERE expires_at <= $1", &[&now]).await?;
+    let n = c.execute("DELETE FROM reset_nonces WHERE expires_at <= $1", &[&now]).await?;
     c.execute("DELETE FROM mail_codes WHERE expires_at <= $1", &[&now]).await?;
     c.execute("UPDATE users SET totp_pending = NULL, totp_pending_at = NULL WHERE totp_pending_at IS NOT NULL AND totp_pending_at <= $1", &[&(now - 3_600_000)]).await?;
     Ok(n)

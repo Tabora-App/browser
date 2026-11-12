@@ -7,8 +7,9 @@
  * браузер хранит в IndexedDB без права вывоза (extractable: false) — прочитать его значение не
  * может даже скрипт страницы.
  *
- *   по умолчанию       запись в sessionStorage: живёт, пока открыта вкладка;
- *   «не выходить»      запись в localStorage: переживает закрытие браузера.
+ * Запись лежит в localStorage и переживает закрытие вкладки и браузера: войдя один раз, человек
+ * остаётся в аккаунте, пока сам не нажмёт «Выйти». Сама страница сессию не стирает ни по времени,
+ * ни при сбое хранилища — только когда запись уже нельзя открыть (ключ утрачен безвозвратно).
  *
  * Если IndexedDB недоступна (некоторые приватные окна), сессия живёт только в памяти страницы. */
 
@@ -82,13 +83,37 @@ export class BrowserStore {
     }
     let raw = "";
     try {
-      raw = sessionStorage.getItem(ITEM) || localStorage.getItem(ITEM) || "";
+      raw = localStorage.getItem(ITEM) || "";
+      if (!raw) {
+        // прежние версии держали вход без «не выходить» в sessionStorage: переносим его в постоянное место
+        raw = sessionStorage.getItem(ITEM) || "";
+        if (raw) {
+          localStorage.setItem(ITEM, raw);
+        }
+      }
+      sessionStorage.removeItem(ITEM);
     } catch (e) {}
     if (!raw) {
       return null;
     }
+    // Ключ читается из IndexedDB. Сбой чтения (хранилище занято, браузер только запускается) —
+    // не повод стирать вход: пробуем ещё, а если не вышло, запись остаётся до следующего раза.
+    let key = null;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        key = await this._key(false);
+        break;
+      } catch (e) {
+        if (attempt >= 3) {
+          return null;
+        }
+        await new Promise(r => setTimeout(r, 150 * (attempt + 1)));
+      }
+    }
     try {
-      const key = await this._key(false);
+      if (!key) {
+        throw new Error("ключ сессии утрачен");
+      }
       const bytes = fromB64(raw);
       const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: bytes.subarray(0, 12), additionalData: utf8("tabora-web/session/v1") }, key, bytes.subarray(12));
       return JSON.parse(text(new Uint8Array(plain)));
@@ -98,7 +123,7 @@ export class BrowserStore {
     }
   }
 
-  async save(data, remember) {
+  async save(data) {
     this._memory = data;
     try {
       const key = await this._key(true);
@@ -107,17 +132,24 @@ export class BrowserStore {
       const out = new Uint8Array(12 + ct.length);
       out.set(iv);
       out.set(ct, 12);
-      const value = b64(out);
-      if (remember) {
-        localStorage.setItem(ITEM, value);
-        sessionStorage.removeItem(ITEM);
-      } else {
-        sessionStorage.setItem(ITEM, value);
-        localStorage.removeItem(ITEM);
-      }
+      localStorage.setItem(ITEM, b64(out));
+      sessionStorage.removeItem(ITEM);
+      this._keepStorage();
     } catch (e) {
       // хранилище недоступно: сессия остаётся в памяти до перезагрузки страницы
     }
+  }
+
+  /** Просим браузер не вычищать данные сайта при нехватке места: вместе с ними пропал бы вход.
+   * Chrome и Safari решают это сами, без вопросов; Firefox показал бы запрос — там не просим
+   * (он вычищает данные только при почти полном диске). */
+  _keepStorage() {
+    try {
+      if (!navigator.storage?.persist || /Gecko\/\d/.test(navigator.userAgent)) {
+        return;
+      }
+      navigator.storage.persisted().then(kept => kept || navigator.storage.persist()).catch(() => {});
+    } catch (e) {}
   }
 
   async clear() {

@@ -32,7 +32,7 @@ function render() {
 
 account.subscribe(what => {
   if (what === "expired") {
-    toast("Сессия завершена: войдите заново", { ms: 5000 });
+    toast("Вход на этом устройстве завершён: из аккаунта вышли с другого устройства или сменили пароль. Войдите заново", { ms: 7000 });
   }
   if (what === "signed-in" || what === "signed-out" || what === "expired") {
     render();
@@ -41,7 +41,7 @@ account.subscribe(what => {
 
 // другая вкладка вышла из аккаунта или вошла: эта вкладка не должна жить со старой сессией
 window.addEventListener("storage", e => {
-  if (e.key === "tabora.session" && e.storageArea === localStorage && !e.newValue && account.signedIn && account.session.remember) {
+  if (e.key === "tabora.session" && e.storageArea === localStorage && !e.newValue && account.signedIn) {
     account._drop("signed-out");
   }
 });
