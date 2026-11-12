@@ -116,7 +116,7 @@ class FakeApp {
 
 const memory = (on = true) => ({ get: () => on, set: v => (on = v) });
 // пароли в начале выключены: первые проверки — про вкладки и коды
-const switches = { tabs: memory(), codes: memory(), logins: memory(false) };
+const switches = { tabs: memory(), codes: memory(), logins: memory(false), history: memory(false) };
 const phone = (app, api = API) => new Service({ bridge: app, store: new NativeStore(app), api: new Api(api), settings: switches });
 
 /* ---- аккаунт и «компьютер» ---- */

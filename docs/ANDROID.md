@@ -71,6 +71,13 @@ What lives where:
   `sync/SyncSources.sys.mjs`). On Android 14 and newer it is an action of the system share
   sheet; on older versions it is a block of the in-app share screen, shown when the account
   has other devices.
+- **History:** the phone publishes its own visits of the last two months, a record per day, in
+  the form the desktop browser reads (`web/src/phone/history.js`; the app gives the visits from
+  its history storage, the same ones its history screen shows). Pages opened on other devices
+  are shown on the "History from other devices" screen of the module, reached from the app's
+  history screen (`TaboraHistoryRow`) and from the account screen; they are not written into
+  the phone's own history. Deleting a page from history on the phone removes it from the
+  phone's records; turning history sync off or signing out removes them all.
 - A sync runs: after sign-in and at startup, a few seconds after a change in tabs, when the
   tab list is opened and every ten minutes. On desktop, sync is on from the moment of account
   sign-in; it is turned off there too: "Settings → Account → Sync".
@@ -129,8 +136,11 @@ What lives where:
   only relays messages and issues the session (`src/pair.rs` in the server repository, Tabora-App/server). The app does
   not parse the scanned text: a `tabora://pair` link from another app or from a page does not start a sign-in —
   only the scanner opened by the person on the sign-in screen does.
-- **A copy of the data** (codes and tabs of other devices) is kept by the app in the same protected
-  storage as the sign-in: after startup they are visible immediately and without a network. Signing out erases it.
+- **A copy of the data** (codes, tabs and history of other devices) is kept by the app: after
+  startup they are visible immediately and without a network. Signing out erases it. The copy
+  lives in files inside the app's private storage, excluded from backups and encrypted with a
+  random key that is itself kept encrypted by a key of the Android Keystore (the copy can take
+  megabytes, too much for preferences; the sign-in stays in the protected preferences).
 
 **Sign-in codes** (the second step on websites) — the same records as in the vault of the desktop browser (the
 `otp` sync collection); the code calculation is the same code (`web/src/core/otp.js`, checked against

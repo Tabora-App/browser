@@ -3148,5 +3148,18 @@
  "send отправить вкладку устройство телефон компьютер": "send tab device phone computer share",
  "Страницы, открытые за последние два месяца: адрес, заголовок и время. История других устройств видна в разделе «История»; приватные окна в неё не попадают.": "Pages opened during the last two months: address, title and time. History from your other devices appears in the “History” section; private windows are not included.",
  "Открыто на другом устройстве": "Opened on another device",
- "{0}, открыто на устройстве «{1}»": "{0}, opened on “{1}”"
+ "{0}, открыто на устройстве «{1}»": "{0}, opened on “{1}”",
+ "История других устройств": "History from other devices",
+ "Поиск по названию или адресу": "Search by title or address",
+ "После входа здесь появятся страницы, которые вы открывали на других устройствах.": "After you sign in, pages you opened on your other devices will appear here.",
+ "Открыть аккаунт": "Open account",
+ "История на этом телефоне выключена": "History is turned off on this phone",
+ "Включить её можно в аккаунте Tabora.": "You can turn it on in your Tabora account.",
+ "Попробуйте другое слово из названия или адреса страницы.": "Try another word from the page’s title or address.",
+ "Пока пусто": "Nothing here yet",
+ "Здесь появятся страницы, открытые в Tabora на компьютере и на других ваших устройствах, где включена история.": "Pages opened in Tabora on your computer and on your other devices with history turned on will appear here.",
+ "Страницы, открытые на этом телефоне за последние два месяца, видны на других ваших устройствах, а их история — здесь. Приватные вкладки в историю не попадают.": "Pages opened on this phone during the last two months are visible on your other devices, and their history is visible here. Private tabs are not included in history.",
+ "История не сверена: приложение не ответило": "History is not synced: the app did not answer",
+ "Страницы с компьютера и других устройств": "Pages from your computer and other devices",
+ "Открыть историю": "Open history"
 }

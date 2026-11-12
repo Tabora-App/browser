@@ -1,0 +1,20 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/library/history/HistoryView.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/library/history/HistoryView.kt
+index 6d2fe7b231..37105f82c7 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/library/history/HistoryView.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/library/history/HistoryView.kt
+@@ -22,6 +22,7 @@ import mozilla.components.service.fxa.sync.SyncReason
+ import org.mozilla.fenix.R
+ import org.mozilla.fenix.databinding.ComponentHistoryBinding
+ import org.mozilla.fenix.ext.components
++import org.mozilla.fenix.tabora.TaboraHistoryRow
+ import org.mozilla.fenix.library.LibraryPageView
+ import org.mozilla.fenix.theme.ThemeManager
+ 
+@@ -160,5 +161,7 @@ class HistoryView(
+                 )
+             recentlyClosedNav.isVisible = !userHasHistory
+         }
++        // Tabora: the "History from other devices" row is on the empty screen as well
++        TaboraHistoryRow.bind(binding.taboraHistoryDevices.root, !userHasHistory)
+     }
+ }

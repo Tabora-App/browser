@@ -1,0 +1,21 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/library/history/viewholders/HistoryListItemViewHolder.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/library/history/viewholders/HistoryListItemViewHolder.kt
+index 96ecc22521..03f7e0464d 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/library/history/viewholders/HistoryListItemViewHolder.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/library/history/viewholders/HistoryListItemViewHolder.kt
+@@ -17,6 +17,7 @@ import org.mozilla.fenix.databinding.HistoryListItemBinding
+ import org.mozilla.fenix.ext.components
+ import org.mozilla.fenix.ext.hideAndDisable
+ import org.mozilla.fenix.ext.showAndEnable
++import org.mozilla.fenix.tabora.TaboraHistoryRow
+ import org.mozilla.fenix.library.history.History
+ import org.mozilla.fenix.library.history.HistoryFragmentAction
+ import org.mozilla.fenix.library.history.HistoryFragmentState
+@@ -144,6 +145,8 @@ class HistoryListItemViewHolder(
+     ) {
+         binding.recentlyClosedNavEmpty.recentlyClosedNav.isVisible = showTopContent
+         binding.topSpacer.isVisible = showTopContent
++        // Tabora: the "History from other devices" row stands under "Recently closed tabs"
++        TaboraHistoryRow.bind(binding.taboraHistoryDevices.root, showTopContent, isNormalMode)
+ 
+         if (showTopContent) {
+             val numRecentTabs = itemView.context.components.core.store.state.closedTabs.size

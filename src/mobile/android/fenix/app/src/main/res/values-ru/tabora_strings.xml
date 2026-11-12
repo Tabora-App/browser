@@ -55,4 +55,7 @@
     <!-- "Send to device": a page another device of the account sent to this phone has been opened. %1$s is the device's name -->
     <string name="tabora_sent_tab_opened">Открыта вкладка с устройства «%1$s»</string>
     <string name="tabora_sent_tab_opened_unnamed">Открыта вкладка с другого устройства</string>
+    <!-- History sync: the row on the history screen that opens pages visited on other devices of the account, and the title of that screen -->
+    <string name="tabora_history_devices">История других устройств</string>
+    <string name="tabora_history_devices_text">Страницы, открытые на компьютере и других устройствах</string>
 </resources>

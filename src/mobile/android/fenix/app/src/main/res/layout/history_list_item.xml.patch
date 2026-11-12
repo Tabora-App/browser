@@ -1,0 +1,16 @@
+diff --git a/mobile/android/fenix/app/src/main/res/layout/history_list_item.xml b/mobile/android/fenix/app/src/main/res/layout/history_list_item.xml
+index d91b8ddc6e..fa25d16c67 100644
+--- a/mobile/android/fenix/app/src/main/res/layout/history_list_item.xml
++++ b/mobile/android/fenix/app/src/main/res/layout/history_list_item.xml
+@@ -19,6 +19,11 @@
+         android:id="@+id/recently_closed_nav_empty"
+         layout="@layout/recently_closed_nav_item" />
+ 
++    <!-- Tabora: pages opened on other devices of the account -->
++    <include
++        android:id="@+id/tabora_history_devices"
++        layout="@layout/tabora_history_devices_nav_item" />
++
+     <View
+         android:id="@+id/bottom_spacer"
+         android:layout_width="match_parent"

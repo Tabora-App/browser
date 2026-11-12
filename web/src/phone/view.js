@@ -97,6 +97,14 @@ export function mountPhoneAccount(root, { service }) {
         h("div", { class: "kv-text" }, h("small", { class: "wrap" }, s.marksError ? t`Закладки не сверены: ${s.marksError}` : s.loaded ? (s.marks ? plural(s.marks, t`закладка|закладки|закладок`) : t`Закладок пока нет`) : t`Идёт сверка…`))),
       h("div", { class: "kv tall" },
         h("div", { class: "kv-text" },
+          h("span", {}, t`История`),
+          h("small", { class: "wrap" }, t`Страницы, открытые на этом телефоне за последние два месяца, видны на других ваших устройствах, а их история — здесь. Приватные вкладки в историю не попадают.`)),
+        h("div", { class: "kv-actions" }, toggle(s.historyOn, on => service.setHistory(on).catch(e => toast(errorText(e), { tone: "bad" })), t`История`))),
+      s.historyOn && h("div", { class: "kv" },
+        h("div", { class: "kv-text" }, h("small", { class: "wrap" }, s.historyError ? t`История не сверена: приложение не ответило` : t`Страницы с компьютера и других устройств`)),
+        h("div", { class: "kv-actions buttons" }, h("button", { class: "btn small", onclick: () => service.open("history") }, t`Открыть историю`))),
+      h("div", { class: "kv tall" },
+        h("div", { class: "kv-text" },
           h("span", {}, t`Пространства`),
           h("small", { class: "wrap" }, t`Список пространств общий с компьютером: названия, цвета и порядок. Вкладки и входы на сайтах внутри пространства остаются на этом телефоне.`)),
         h("div", { class: "kv-actions" }, toggle(s.spacesOn, on => service.setSpaces(on), t`Пространства`))),
@@ -104,7 +112,7 @@ export function mountPhoneAccount(root, { service }) {
         h("div", { class: "kv-text" }, h("small", { class: "wrap" }, s.spacesError ? t`Пространства не сверены: ${s.spacesError}` : s.loaded ? (s.spaces ? plural(s.spaces, t`пространство|пространства|пространств`) : t`Пока только «Личное»`) : t`Идёт сверка…`))),
       h("div", { class: `kv tall sync-status${st.tone ? ` ${st.tone}` : ""}` },
         h("div", { class: "kv-text" }, h("small", { class: "wrap" }, st.text)),
-        h("div", { class: "kv-actions buttons" }, st.action || ((s.tabsOn || s.codesOn || s.loginsOn || s.marksOn || s.spacesOn) && now))),
+        h("div", { class: "kv-actions buttons" }, st.action || ((s.tabsOn || s.codesOn || s.loginsOn || s.marksOn || s.spacesOn || s.historyOn) && now))),
       h("p", { class: "card-note" }, t`Данные шифруются на телефоне ключом вашего аккаунта. Сервер хранит их зашифрованными и прочитать не может.`));
   }
 

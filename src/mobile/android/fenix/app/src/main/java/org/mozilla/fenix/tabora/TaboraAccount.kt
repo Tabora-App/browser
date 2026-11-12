@@ -13,6 +13,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.SystemClock
 import android.provider.Settings
+import android.util.Base64
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -22,10 +23,17 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.navigation.findNavController
+import java.io.File
 import java.lang.ref.WeakReference
 import java.security.SecureRandom
+import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
+import javax.crypto.Cipher
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.SecretKeySpec
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,12 +57,15 @@ import mozilla.components.concept.storage.BookmarkInfo
 import mozilla.components.concept.storage.BookmarkNode
 import mozilla.components.concept.storage.BookmarkNodeType
 import mozilla.components.concept.storage.BookmarksStorage
+import mozilla.components.concept.storage.HistoryStorage
 import mozilla.components.concept.storage.LoginEntry
 import mozilla.components.concept.storage.LoginsStorage
+import mozilla.components.concept.storage.VisitType
 import mozilla.components.concept.sync.Device as SyncDevice
 import mozilla.components.concept.sync.DeviceCapability
 import mozilla.components.concept.sync.DeviceType
 import mozilla.components.feature.qr.QrScanActivity
+import mozilla.components.lib.dataprotect.Keystore
 import mozilla.components.lib.dataprotect.SecureAbove22Preferences
 import mozilla.components.lib.state.ext.flow
 import mozilla.components.support.base.log.logger.Logger
@@ -88,6 +99,7 @@ class TaboraAccount(
     private val logins: () -> LoginsStorage,
     private val bookmarks: () -> BookmarksStorage,
     private val spaces: () -> TaboraSpaces,
+    private val history: () -> HistoryStorage,
 ) {
     /** Вкладка другого устройства. */
     data class Tab(val title: String, val url: String)
@@ -108,6 +120,7 @@ class TaboraAccount(
         val status: String = "idle",
         val devices: List<Device> = emptyList(),
         val targets: List<Target> = emptyList(),
+        val historyOn: Boolean = false,
     )
 
     private val logger = Logger("TaboraAccount")
@@ -135,6 +148,7 @@ class TaboraAccount(
         baseUrl?.let { base ->
             when (page) {
                 PAGE_CODES -> "${base}codes.html"
+                PAGE_HISTORY -> "${base}history.html"
                 PAGE_MAIL -> "${base}mail.html"
                 else -> "${base}index.html"
             }
@@ -295,11 +309,21 @@ class TaboraAccount(
                         authenticate { ok -> port.postMessage(JSONObject().put("type", "reply").put("rid", rid).put("ok", ok)) }
                     }
                     "open" -> openPage(json.optString("page"))
+                    "open-url" -> openUrl(json.optString("url"))
                     "sent-open" -> {
                         val ok = openSent(json.optString("url"), json.optString("from").trim().take(MAX_DEVICE_NAME))
                         port.postMessage(JSONObject().put("type", "reply").put("rid", json.optInt("rid")).put("ok", ok))
                     }
                     "sent-result" -> sends[json.optInt("rid")]?.complete(json.optBoolean("ok"))
+                    "history-list" -> {
+                        val rid = json.optInt("rid")
+                        scope.launch(Dispatchers.Main) {
+                            val reply =
+                                runCatching { withContext(Dispatchers.IO) { historyRequest(json) } }
+                                    .getOrElse { JSONObject().put("error", it.message ?: it.javaClass.simpleName) }
+                            port.postMessage(reply.put("type", "reply").put("rid", rid))
+                        }
+                    }
                     "qr-scan" -> {
                         val rid = json.optInt("rid")
                         scanQr { text, denied ->
@@ -359,14 +383,14 @@ class TaboraAccount(
                             secure.remove(KEY_SESSION)
                             JSONObject().put("ok", true)
                         }
-                        "data-load" -> JSONObject().put("value", dataKey(json)?.let { secure.getString(it) } ?: JSONObject.NULL)
+                        "data-load" -> JSONObject().put("value", dataName(json)?.let { dataLoad(it) } ?: JSONObject.NULL)
                         "data-save" -> {
-                            val key = dataKey(json)
-                            key?.let { secure.putString(it, json.optString("value")) }
-                            JSONObject().put("ok", key != null)
+                            val name = dataName(json)
+                            name?.let { dataSave(it, json.optString("value")) }
+                            JSONObject().put("ok", name != null)
                         }
                         "data-clear" -> {
-                            dataKey(json)?.let { secure.remove(it) }
+                            dataName(json)?.let { dataClear(it) }
                             JSONObject().put("ok", true)
                         }
                         else -> JSONObject()
@@ -422,8 +446,101 @@ class TaboraAccount(
     }
 
     /** Имя записи с копией данных в защищённом хранилище; чужие имена не принимаются. */
-    private fun dataKey(json: JSONObject): String? =
-        json.optString("name").takeIf { DATA_NAME.matches(it) }?.let { "data_$it" }
+    private fun dataName(json: JSONObject): String? = json.optString("name").takeIf { DATA_NAME.matches(it) }
+
+    /*
+     * The module's data kept by the app (the copy of sync data, the states of merges): a file per
+     * name, encrypted. The copy of sync data takes megabytes once it holds the history of other
+     * devices; preferences are one file rewritten whole on every change, so it does not belong
+     * there. The files are encrypted with a random key that itself is kept encrypted by a key of
+     * the Android Keystore: the Keystore is slow on large data, so it only guards the key. The
+     * files are not included in backups; on another phone the data comes from the server again.
+     * Writes go one after another on their own thread, and a read waits for the writes before it.
+     */
+    private val dataDir by lazy { File(context.noBackupFilesDir, DATA_DIR).apply { mkdirs() } }
+    private val dataThread = Executors.newSingleThreadExecutor()
+    private val dataCipherKey: SecretKey by lazy {
+        val keystore = Keystore(DATA_KEY_LABEL)
+        val kept =
+            meta.getString(KEY_DATA_KEY, null)?.let { wrapped ->
+                runCatching { keystore.decryptBytes(Base64.decode(wrapped, Base64.NO_WRAP)) }.getOrNull()
+            }
+        val raw =
+            kept?.takeIf { it.size == DATA_KEY_BYTES }
+                ?: ByteArray(DATA_KEY_BYTES).also {
+                    SecureRandom().nextBytes(it)
+                    val wrapped = Base64.encodeToString(keystore.encryptBytes(it), Base64.NO_WRAP)
+                    meta.edit().putString(KEY_DATA_KEY, wrapped).commit()
+                }
+        SecretKeySpec(raw, "AES")
+    }
+
+    private fun dataFile(name: String) = File(dataDir, "$name.bin")
+
+    private fun dataLoad(name: String): String? =
+        runCatching {
+            dataThread.submit(
+                Callable {
+                    val file = dataFile(name)
+                    if (file.exists()) {
+                        val sealed = file.readBytes()
+                        val cipher = Cipher.getInstance(DATA_CIPHER)
+                        cipher.init(Cipher.DECRYPT_MODE, dataCipherKey, GCMParameterSpec(DATA_TAG_BITS, sealed, 0, DATA_IV_BYTES))
+                        String(cipher.doFinal(sealed, DATA_IV_BYTES, sealed.size - DATA_IV_BYTES), Charsets.UTF_8)
+                    } else {
+                        // earlier versions kept the data in preferences
+                        secure.getString("data_$name")
+                    }
+                }
+            ).get()
+        }.onFailure { logger.error("module data is not read: $name", it) }.getOrNull()
+
+    private fun dataSave(name: String, value: String) {
+        dataThread.execute {
+            runCatching {
+                val iv = ByteArray(DATA_IV_BYTES).also { SecureRandom().nextBytes(it) }
+                val cipher = Cipher.getInstance(DATA_CIPHER)
+                cipher.init(Cipher.ENCRYPT_MODE, dataCipherKey, GCMParameterSpec(DATA_TAG_BITS, iv))
+                val tmp = File(dataDir, "$name.tmp")
+                tmp.outputStream().use {
+                    it.write(iv)
+                    it.write(cipher.doFinal(value.toByteArray(Charsets.UTF_8)))
+                }
+                val file = dataFile(name)
+                if (!tmp.renameTo(file)) {
+                    file.delete()
+                    tmp.renameTo(file)
+                }
+                secure.remove("data_$name")
+            }.onFailure { logger.error("module data is not saved: $name", it) }
+        }
+    }
+
+    private fun dataClear(name: String) {
+        dataThread.execute {
+            runCatching {
+                dataFile(name).delete()
+                secure.remove("data_$name")
+            }
+        }
+    }
+
+    /**
+     * The module asks for the phone's own visits since a moment: the pages a person opened, the
+     * same ones the history screen shows. The latest [MAX_VISITS] are given.
+     */
+    private suspend fun historyRequest(json: JSONObject): JSONObject {
+        val since = json.optLong("since", 0L).coerceAtLeast(0L)
+        val visits =
+            history().getDetailedVisits(since, excludeTypes = HISTORY_SKIP)
+                .asSequence()
+                .filter { !it.isRemote && it.url.isWebUrl() }
+                .sortedByDescending { it.visitTime }
+                .take(MAX_VISITS)
+        val list = JSONArray()
+        visits.forEach { list.put(JSONObject().put("u", it.url).put("t", it.title.orEmpty().take(MAX_TITLE)).put("at", it.visitTime)) }
+        return JSONObject().put("visits", list)
+    }
 
     /**
      * Просьба модуля к хранилищу закладок приложения: дерево четырёх корней, добавление, правка,
@@ -622,12 +739,28 @@ class TaboraAccount(
     /** Открыть экран модуля: «Аккаунт Tabora», «Коды входа» или «Почта». */
     fun openPage(page: String) {
         val activity = host?.get() ?: return
-        if (page != PAGE_ACCOUNT && page != PAGE_CODES && page != PAGE_MAIL) {
+        if (page != PAGE_ACCOUNT && page != PAGE_CODES && page != PAGE_MAIL && page != PAGE_HISTORY) {
             return
         }
         runCatching {
             activity.findNavController(R.id.container).navigate(NavGraphDirections.actionGlobalTaboraAccountFragment(page))
         }.onFailure { logger.error("экран модуля не открыт", it) }
+    }
+
+    /**
+     * Open a site from a screen of the module (a page from the history of other devices) in an
+     * ordinary tab and show the browser. The tab is private if a private tab is open now.
+     */
+    private fun openUrl(url: String) {
+        val activity = host?.get() ?: return
+        if (!url.isWebUrl()) {
+            return
+        }
+        val private = browserStore?.state?.selectedTab?.content?.private == true
+        runCatching {
+            context.components.useCases.tabsUseCases.addTab(url = url, selectTab = true, private = private)
+            activity.findNavController(R.id.container).navigate(NavGraphDirections.actionGlobalBrowser())
+        }.onFailure { logger.error("a page from history is not opened", it) }
     }
 
     /** Номер телефона для сервера: случайный, постоянный, без сведений об устройстве. */
@@ -686,6 +819,7 @@ class TaboraAccount(
             status = optString("status", "idle"),
             devices = devices,
             targets = targets,
+            historyOn = optBoolean("historyOn", false),
         )
     }
 
@@ -702,11 +836,33 @@ class TaboraAccount(
         /** Экран «Почта». */
         const val PAGE_MAIL = "mail"
 
+        /** The "History from other devices" screen. */
+        const val PAGE_HISTORY = "history"
+
         /** Адрес ярлыка почты на домашнем экране: вместо веб-почты он открывает почту в приложении. */
         const val MAIL_SHORTCUT_URL = "https://app.tabora.app"
         private val DATA_NAME = Regex("^[a-z]{1,16}$")
         private val DEVICE_ID = Regex("^[A-Za-z0-9_-]{1,64}$")
         private const val SEND_TIMEOUT_MS = 30_000L
+        private const val MAX_VISITS = 20_000
+
+        /** Visits that are not pages a person opened; the history screen leaves them out too. */
+        private val HISTORY_SKIP =
+            listOf(
+                VisitType.DOWNLOAD,
+                VisitType.REDIRECT_PERMANENT,
+                VisitType.REDIRECT_TEMPORARY,
+                VisitType.RELOAD,
+                VisitType.EMBED,
+                VisitType.FRAMED_LINK,
+            )
+        private const val DATA_DIR = "tabora"
+        private const val DATA_KEY_LABEL = "tabora_account_data"
+        private const val KEY_DATA_KEY = "data_key"
+        private const val DATA_KEY_BYTES = 32
+        private const val DATA_IV_BYTES = 12
+        private const val DATA_TAG_BITS = 128
+        private const val DATA_CIPHER = "AES/GCM/NoPadding"
         private const val MARK_ITEM = 1
         private const val MARK_FOLDER = 2
         private const val MARK_SEPARATOR = 3

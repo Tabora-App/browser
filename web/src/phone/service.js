@@ -22,6 +22,7 @@ import { Account } from "../core/account.js";
 import { SyncClient } from "../core/sync.js";
 import { t } from "../core/i18n.js";
 import { Codes } from "./codes.js";
+import { History } from "./history.js";
 import { Logins } from "./logins.js";
 import { Marks } from "./marks.js";
 import { SentTabs } from "./sent.js";
@@ -54,6 +55,7 @@ export class Service {
     this.logins = new Logins({ account: this.account, sync: this.sync, bridge, store, ...(settings.logins ? { settings: settings.logins } : {}) });
     this.marks = new Marks({ account: this.account, sync: this.sync, bridge, store, ...(settings.marks ? { settings: settings.marks } : {}) });
     this.spaces = new Spaces({ account: this.account, sync: this.sync, bridge, store, ...(settings.spaces ? { settings: settings.spaces } : {}) });
+    this.history = new History({ account: this.account, sync: this.sync, bridge, store, ...(settings.history ? { settings: settings.history } : {}) });
     // "Send to device" is a part of tab sync: it is on and off together with it
     this.sent = new SentTabs({ account: this.account, sync: this.sync, bridge, store, enabled: () => this.tabs.enabled });
     /** Данные синхронизации стёрли с сервера с другого устройства: синхронизация здесь выключена. */
@@ -110,7 +112,7 @@ export class Service {
 
   /** Наборы синхронизации, которые нужны при нынешних настройках. */
   _wanted() {
-    return [this.tabs.enabled && "tabs", this.tabs.enabled && "sent", this.codes.enabled && "otp", this.logins.enabled && "logins", this.marks.enabled && "marks", this.spaces.enabled && "spaces"].filter(Boolean);
+    return [this.tabs.enabled && "tabs", this.tabs.enabled && "sent", this.codes.enabled && "otp", this.logins.enabled && "logins", this.marks.enabled && "marks", this.spaces.enabled && "spaces", this.history.enabled && "history"].filter(Boolean);
   }
 
   /* ---- события ---- */
@@ -163,6 +165,7 @@ export class Service {
       this.marks.forget();
       this.spaces.forget();
       this.sent.forget();
+      this.history.error = "";
       this.erased = false;
       this._dirty = false;
       this._fails = 0;
@@ -249,6 +252,11 @@ export class Service {
           throw e; // приложение не ответило о пространствах — остальное сверено, ошибка видна на экране аккаунта
         }
       });
+      await this.history.push({ full }).catch(e => {
+        if (e.code !== "history-storage") {
+          throw e; // the app did not answer about history: the rest is in sync, the error is on the account screen
+        }
+      });
       this._fails = 0;
     } catch (e) {
       if (e.code === "sync-erased") {
@@ -275,6 +283,7 @@ export class Service {
     await this.marks.forget();
     this.spaces.enabled = false;
     await this.spaces.forget();
+    this.history.enabled = false;
     this.sync.reset();
     this.sync.setOnly([]);
     this.erased = true;
@@ -323,6 +332,16 @@ export class Service {
     if (!on) {
       await this.marks.forget();
     }
+    this._applyWanted(on);
+  }
+
+  /** Turn history sync on or off. Turning it off removes the phone's history from the server;
+   * the history of other devices is no longer kept on the phone. */
+  async setHistory(on) {
+    if (!on) {
+      await this.history.drop();
+    }
+    this.history.enabled = !!on;
     this._applyWanted(on);
   }
 
@@ -413,9 +432,16 @@ export class Service {
     return {};
   }
 
-  /** Открыть экран модуля в приложении: "account" или "codes". */
+  /** Открыть экран модуля в приложении: "account", "codes" или "history". */
   open(page) {
     this.bridge.post({ type: "open", page });
+  }
+
+  /** Open a site in an ordinary tab of the app (a page from the history of other devices). */
+  openUrl(url) {
+    if (/^https?:\/\//i.test(url || "")) {
+      this.bridge.post({ type: "open-url", url });
+    }
   }
 
   /** Открыть сканер QR-кодов приложения. Текст кода или пустая строка, если сканер закрыли. */
@@ -445,6 +471,13 @@ export class Service {
         await this.sent.drop();
       } catch (e) {
         // нет связи: список останется у других устройств, пока не устареет
+      }
+    }
+    if (this.history.enabled) {
+      try {
+        await this.history.drop();
+      } catch (e) {
+        // no connection: the phone's history stays with the other devices until it grows old
       }
     }
     await this.account.signOut();
@@ -480,6 +513,8 @@ export class Service {
       loaded: this.sync.loaded,
       devices: signedIn && this.tabs.enabled ? this.tabs.others() : [],
       targets: signedIn && this.tabs.enabled ? this.sent.targets() : [],
+      historyOn: this.history.enabled,
+      historyError: this.history.error,
     };
   }
 
@@ -504,6 +539,8 @@ export class Service {
       devices: s.devices.map(d => ({ id: d.id, name: d.name || t`Другое устройство`, at: d.at, tabs: d.tabs.map(x => ({ t: x.t, u: x.u })) })),
       // devices a page can be sent to ("Share" → "Send to device")
       targets: s.targets.map(d => ({ id: d.id, name: d.name || t`Другое устройство` })),
+      // the app shows the "History of other devices" row on its history screen
+      historyOn: s.historyOn,
     };
     const mark = JSON.stringify(message);
     if (mark !== this._sent) {

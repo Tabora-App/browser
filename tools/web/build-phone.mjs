@@ -11,6 +11,7 @@
 //   background.html              фоновая страница: вход и синхронизация (web/src/phone/background.js)
 //   index.html                   экран «Аккаунт Tabora» (web/src/phone/main.js)
 //   codes.html                   экран «Коды входа» (web/src/phone/codes-main.js)
+//   history.html                 the "History of other devices" screen (web/src/phone/history-main.js)
 //   mail.html                    экран «Почта» (web/src/phone/mail-main.js): почта веб-версии с общим входом
 //   frame/*.html                 пустые документы для рамок письма (своя политика содержимого, без скриптов)
 //   assets/fill.js               скрипт автоввода кода на страницах сайтов (web/src/phone/fill.js)
@@ -74,7 +75,7 @@ for (const name of ["kdf", "pgp"]) {
 
 // 2. фоновая страница, экран аккаунта и стили
 const entries = {
-  background: join(src, "src/phone/background.js"), app: join(src, "src/phone/main.js"), codes: join(src, "src/phone/codes-main.js"), mail: join(src, "src/phone/mail-main.js"),
+  background: join(src, "src/phone/background.js"), app: join(src, "src/phone/main.js"), codes: join(src, "src/phone/codes-main.js"), history: join(src, "src/phone/history-main.js"), mail: join(src, "src/phone/mail-main.js"),
   style: join(src, "src/styles/phone.css"), mailstyle: join(src, "src/styles/phone-mail.css"),
 };
 const version = JSON.parse(readFileSync(join(root, "browser.json"), "utf8")).brands?.release?.displayVersion || "";
@@ -123,6 +124,7 @@ const pageCsp = `default-src 'none'; ${scripts}; style-src 'self'; img-src 'self
 const frameCsp = remote => `default-src 'none'; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'; img-src data: blob:${remote ? " https:" : ""}`;
 fill("index.html", { __APP_JS__: outName(app, entries.app), __APP_CSS__: outName(app, entries.style), __PAGE_CSP__: pageCsp });
 fill("codes.html", { __CODES_JS__: outName(app, entries.codes), __APP_CSS__: outName(app, entries.style), __PAGE_CSP__: pageCsp });
+fill("history.html", { __HISTORY_JS__: outName(app, entries.history), __APP_CSS__: outName(app, entries.style), __PAGE_CSP__: pageCsp });
 fill("mail.html", { __MAIL_JS__: outName(app, entries.mail), __MAIL_CSS__: outName(app, entries.mailstyle), __PAGE_CSP__: pageCsp });
 // рамки письма — те же пустые документы, что у веб-версии; там политику задаёт сервер заголовком, здесь — сам документ
 mkdirSync(join(out, "frame"), { recursive: true });

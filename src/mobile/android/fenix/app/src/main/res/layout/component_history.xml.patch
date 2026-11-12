@@ -1,0 +1,36 @@
+diff --git a/mobile/android/fenix/app/src/main/res/layout/component_history.xml b/mobile/android/fenix/app/src/main/res/layout/component_history.xml
+index 776cbd4a2e..93ca53c240 100644
+--- a/mobile/android/fenix/app/src/main/res/layout/component_history.xml
++++ b/mobile/android/fenix/app/src/main/res/layout/component_history.xml
+@@ -34,6 +34,14 @@
+         android:layout_height="wrap_content"
+         app:layout_constraintTop_toBottomOf="@+id/top_spacer" />
+ 
++    <!-- Tabora: pages opened on other devices of the account -->
++    <include
++        android:id="@+id/tabora_history_devices"
++        layout="@layout/tabora_history_devices_nav_item"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        app:layout_constraintTop_toBottomOf="@+id/recently_closed_nav_empty" />
++
+     <TextView
+         android:id="@+id/history_empty_view"
+         android:layout_width="0dp"
+@@ -48,14 +56,14 @@
+         app:layout_constraintBottom_toBottomOf="parent"
+         app:layout_constraintEnd_toEndOf="parent"
+         app:layout_constraintStart_toStartOf="parent"
+-        app:layout_constraintTop_toBottomOf="@id/recently_closed_nav_empty" />
++        app:layout_constraintTop_toBottomOf="@id/tabora_history_devices" />
+ 
+     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+         android:id="@+id/swipe_refresh"
+         android:layout_width="match_parent"
+         android:layout_height="0dp"
+         app:layout_constraintBottom_toBottomOf="parent"
+-        app:layout_constraintTop_toBottomOf="@id/recently_closed_nav_empty">
++        app:layout_constraintTop_toBottomOf="@id/tabora_history_devices">
+ 
+         <androidx.recyclerview.widget.RecyclerView
+             android:id="@+id/history_list"

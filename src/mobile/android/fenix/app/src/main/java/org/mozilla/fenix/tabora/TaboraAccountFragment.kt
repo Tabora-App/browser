@@ -63,6 +63,7 @@ class TaboraAccountFragment : AddonPopupBaseFragment(), SystemInsetsPaddedFragme
                 when (args.page) {
                     TaboraAccount.PAGE_CODES -> R.string.tabora_codes_title
                     TaboraAccount.PAGE_MAIL -> R.string.tabora_mail_title
+                    TaboraAccount.PAGE_HISTORY -> R.string.tabora_history_devices
                     else -> R.string.tabora_account_title
                 }
             )

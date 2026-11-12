@@ -110,7 +110,7 @@ class FakeApp {
 }
 
 const memory = (on = true) => ({ get: () => on, set: v => (on = v) });
-const phone = app => new Service({ bridge: app, store: new NativeStore(app), api: new Api(API), settings: { tabs: memory(false), codes: memory(false), logins: memory(false), marks: memory(false), spaces: memory() } });
+const phone = app => new Service({ bridge: app, store: new NativeStore(app), api: new Api(API), settings: { history: memory(false), tabs: memory(false), codes: memory(false), logins: memory(false), marks: memory(false), spaces: memory() } });
 
 /* ---- «компьютер»: два пространства в аккаунте ---- */
 

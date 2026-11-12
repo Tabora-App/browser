@@ -3148,5 +3148,18 @@
  "send отправить вкладку устройство телефон компьютер": "send enviar pestaña dispositivo teléfono ordenador",
  "Страницы, открытые за последние два месяца: адрес, заголовок и время. История других устройств видна в разделе «История»; приватные окна в неё не попадают.": "Páginas abiertas durante los últimos dos meses: dirección, título y hora. El historial de tus otros dispositivos aparece en la sección «Historial»; las ventanas privadas no se incluyen.",
  "Открыто на другом устройстве": "Abierto en otro dispositivo",
- "{0}, открыто на устройстве «{1}»": "{0}, abierto en «{1}»"
+ "{0}, открыто на устройстве «{1}»": "{0}, abierto en «{1}»",
+ "История других устройств": "Historial de otros dispositivos",
+ "Поиск по названию или адресу": "Buscar por título o dirección",
+ "После входа здесь появятся страницы, которые вы открывали на других устройствах.": "Cuando inicies sesión, aquí aparecerán las páginas que abriste en tus otros dispositivos.",
+ "Открыть аккаунт": "Abrir la cuenta",
+ "История на этом телефоне выключена": "El historial está desactivado en este teléfono",
+ "Включить её можно в аккаунте Tabora.": "Puedes activarlo en tu cuenta de Tabora.",
+ "Попробуйте другое слово из названия или адреса страницы.": "Prueba con otra palabra del título o de la dirección de la página.",
+ "Пока пусто": "Aún no hay nada",
+ "Здесь появятся страницы, открытые в Tabora на компьютере и на других ваших устройствах, где включена история.": "Aquí aparecerán las páginas abiertas en Tabora en tu ordenador y en tus otros dispositivos que tengan el historial activado.",
+ "Страницы, открытые на этом телефоне за последние два месяца, видны на других ваших устройствах, а их история — здесь. Приватные вкладки в историю не попадают.": "Las páginas abiertas en este teléfono durante los últimos dos meses se ven en tus otros dispositivos, y su historial se ve aquí. Las pestañas privadas no entran en el historial.",
+ "История не сверена: приложение не ответило": "El historial no se ha sincronizado: la aplicación no respondió",
+ "Страницы с компьютера и других устройств": "Páginas de tu ordenador y otros dispositivos",
+ "Открыть историю": "Abrir el historial"
 }
