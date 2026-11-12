@@ -49,10 +49,13 @@ function safeHref(value) {
  * атрибут style чужого письма давал бы в консоли сообщение о нарушении — безвредное, но за таким
  * шумом не разглядеть настоящего. */
 function parseInert(html, context) {
-  const Parser = context?.defaultView?.DOMParser;
-  if (Parser) {
+  if (context?.implementation) {
     try {
-      return new Parser().parseFromString(html, "text/html");
+      // новый документ создаётся методом документа рамки, а не конструктором из её окна: вызов
+      // чужого конструктора Safari считает исполнением скрипта в рамке без скриптов и блокирует
+      const doc = context.implementation.createHTMLDocument("");
+      doc.documentElement.innerHTML = html;
+      return doc;
     } catch (e) {}
   }
   return new DOMParser().parseFromString(html, "text/html");

@@ -283,10 +283,12 @@ export function renderThread(el, { ctx, messages, folderId, back, act, compose }
         frame.style.height = `${Math.ceil(Math.max(doc.documentElement.scrollHeight, b.scrollHeight))}px`;
       };
       fit();
-      doc.addEventListener("load", fit, true); // картинки догружаются и меняют высоту
+      // картинки догружаются и меняют высоту: за этим следит наблюдатель страницы. Обработчик
+      // события внутри рамки не годится — рамке запрещены скрипты, и Safari его не вызывает.
       if (typeof ResizeObserver === "function") {
         const ro = new ResizeObserver(fit);
         ro.observe(frame);
+        ro.observe(doc.body);
       }
       setTimeout(fit, 250);
       setTimeout(fit, 1200);
