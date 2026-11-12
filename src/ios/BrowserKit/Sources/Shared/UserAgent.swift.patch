@@ -1,0 +1,25 @@
+diff --git a/BrowserKit/Sources/Shared/UserAgent.swift b/BrowserKit/Sources/Shared/UserAgent.swift
+index dae0a27..8562cad 100644
+--- a/BrowserKit/Sources/Shared/UserAgent.swift
++++ b/BrowserKit/Sources/Shared/UserAgent.swift
+@@ -9,7 +9,10 @@ import UIKit
+ open class UserAgent {
+     public static let uaBitSafari = "Safari/604.1"
+     public static let uaBitMobile = "Mobile/15E148"
+-    public static let uaBitFx = "FxiOS/\(AppInfo.appVersion)"
++    // Tabora: сайтам называется версия Firefox для iOS, на которой основано приложение, а не номер
++    // выпуска Tabora — по токену FxiOS сайты выбирают вёрстку и обходят известные ошибки
++    public static let firefoxVersion = "160.0"
++    public static let uaBitFx = "FxiOS/\(firefoxVersion)"
+     public static let product = "Mozilla/5.0"
+     public static let platform = "AppleWebKit/605.1.15"
+     public static let platformDetails = "(KHTML, like Gecko)"
+@@ -198,7 +201,7 @@ public struct UserAgentBuilder {
+             systemInfo: "(\(device); \(system) OS 18_7 like Mac OS X)",
+             platform: UserAgent.platform,
+             platformDetails: UserAgent.platformDetails,
+-            extensions: "FxiOS/\(AppInfo.appVersion) \(UserAgent.uaBitMobile) \(UserAgent.uaBitSafari)")
++            extensions: "FxiOS/\(UserAgent.firefoxVersion) \(UserAgent.uaBitMobile) \(UserAgent.uaBitSafari)")
+     }
+ 
+     public static func defaultDesktopUserAgent() -> UserAgentBuilder {

@@ -1,0 +1,9 @@
+diff --git a/firefox-ios/Client/Configuration/version.xcconfig b/firefox-ios/Client/Configuration/version.xcconfig
+index ecd2eed..51518b9 100644
+--- a/firefox-ios/Client/Configuration/version.xcconfig
++++ b/firefox-ios/Client/Configuration/version.xcconfig
+@@ -1 +1 @@
+-APP_VERSION = 160.0
+\ No newline at end of file
++APP_VERSION = 0.2.0
+\ No newline at end of file

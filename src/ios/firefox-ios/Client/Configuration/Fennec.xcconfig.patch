@@ -1,0 +1,24 @@
+diff --git a/firefox-ios/Client/Configuration/Fennec.xcconfig b/firefox-ios/Client/Configuration/Fennec.xcconfig
+index 1d55b9c..cc8fc94 100644
+--- a/firefox-ios/Client/Configuration/Fennec.xcconfig
++++ b/firefox-ios/Client/Configuration/Fennec.xcconfig
+@@ -7,15 +7,15 @@
+ #include "version.xcconfig"
+ 
+ INFOPLIST_FILE = Client/Info.plist
+-MOZ_BUNDLE_DISPLAY_NAME = Fennec ($(USER))
+-MOZ_BUNDLE_ID = org.mozilla.ios.Fennec
++MOZ_BUNDLE_DISPLAY_NAME = Tabora
++MOZ_BUNDLE_ID = app.tabora.browser
+ // Flag to indicate if we want to include the debug settings bundle or not
+ INCLUDE_SETTINGS_BUNDLE = YES
+-MOZ_TODAY_WIDGET_SEARCH_DISPLAY_NAME = Firefox - Search
++MOZ_TODAY_WIDGET_SEARCH_DISPLAY_NAME = Tabora - Search
+ CODE_SIGN_ENTITLEMENTS = Client/Entitlements/FennecApplication.entitlements
+ CHANNEL = developer
+ OTHER_SWIFT_FLAGS = $(OTHER_SWIFT_FLAGS_common) -DMOZ_CHANNEL_$(CHANNEL)
+-MOZ_INTERNAL_URL_SCHEME = fennec
++MOZ_INTERNAL_URL_SCHEME = tabora-internal
+ OTHER_LDFLAGS = -ObjC -fprofile-instr-generate -Xlinker -no_application_extension
+ SWIFT_OPTIMIZATION_LEVEL = -Onone
+ ENABLE_NS_ASSERTIONS = YES

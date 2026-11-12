@@ -1,0 +1,30 @@
+{
+  "fill": {
+    "solid": "srgb:0.78431,0.94902,0.35294,1.00000"
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "hidden": false,
+          "image-name": "t.svg",
+          "name": "t"
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.35
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    }
+  ],
+  "supported-platforms": {
+    "circles": [
+      "watchOS"
+    ],
+    "squares": "shared"
+  }
+}
