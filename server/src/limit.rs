@@ -66,6 +66,26 @@ impl Limiter {
         pause
     }
 
+    /// Неудача со своим расписанием пауз; счёт обнуляется, если quiet_ms было тихо.
+    pub fn fail_with(&self, key: &str, now: i64, quiet_ms: i64, pause: fn(i32) -> i64) -> i64 {
+        let mut map = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let e = map.entry(key.to_string()).or_default();
+        if now - e.touched >= quiet_ms {
+            e.fails = 0;
+        }
+        e.fails = e.fails.saturating_add(1);
+        e.touched = now;
+        let wait = pause(e.fails.min(i32::MAX as u32) as i32);
+        e.locked_until = now + wait;
+        wait
+    }
+
+    /// Сколько событий уже учтено в текущем окне (без учёта нового).
+    pub fn count(&self, key: &str, window_ms: i64, now: i64) -> u32 {
+        let map = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        map.get(key).filter(|e| now - e.window_start < window_ms).map(|e| e.count).unwrap_or(0)
+    }
+
     pub fn clear(&self, key: &str) {
         self.inner.lock().unwrap_or_else(|e| e.into_inner()).remove(key);
     }
@@ -105,5 +125,24 @@ mod tests {
         assert_eq!(l.fail("k", 0), 3_600_000);
         l.clear("k");
         assert_eq!(l.locked("k", 0), 0);
+    }
+
+    #[test]
+    fn own_schedule_and_count() {
+        fn pause(fails: i32) -> i64 {
+            if fails < 3 { 0 } else { 1000 * i64::from(fails) }
+        }
+        let l = Limiter::default();
+        assert_eq!(l.fail_with("g", 0, 10_000, pause), 0);
+        assert_eq!(l.fail_with("g", 1, 10_000, pause), 0);
+        assert_eq!(l.fail_with("g", 2, 10_000, pause), 3000);
+        assert_eq!(l.locked("g", 1002), 2000);
+        // после тишины счёт начинается заново
+        assert_eq!(l.fail_with("g", 20_000, 10_000, pause), 0);
+        assert_eq!(l.count("w", 1000, 0), 0);
+        assert!(l.hit("w", 5, 1000, 0).is_ok());
+        assert!(l.hit("w", 5, 1000, 10).is_ok());
+        assert_eq!(l.count("w", 1000, 20), 2);
+        assert_eq!(l.count("w", 1000, 1500), 0);
     }
 }

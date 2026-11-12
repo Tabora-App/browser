@@ -39,6 +39,32 @@ export function createEditor({ html = "", placeholder = "Текст письма
     changed();
   };
 
+  /** Вставить очищенную разметку на место выделения. Не через execCommand("insertHTML"): браузер
+   * при такой вставке сам дописывает элементам встроенные стили, а политика страницы их запрещает. */
+  const insert = html => {
+    area.focus();
+    const sel = window.getSelection();
+    if (!sel.rangeCount || !area.contains(sel.anchorNode)) {
+      const end = document.createRange();
+      end.selectNodeContents(area);
+      end.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(end);
+    }
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    const frag = range.createContextualFragment(html);
+    const last = frag.lastChild;
+    range.insertNode(frag);
+    if (last) {
+      range.setStartAfter(last);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+    changed();
+  };
+
   const state = () => {
     // состояние кнопок считается только по выделению внутри редактора: иначе «полужирный» загорался
     // от жирной надписи на кнопке, с которой пришёл фокус
@@ -99,7 +125,7 @@ export function createEditor({ html = "", placeholder = "Текст письма
         exec("createLink", href);
       } else {
         const label = (text.value.trim() || href).replace(/&/g, "&amp;").replace(/</g, "&lt;");
-        exec("insertHTML", `<a href="${href.replace(/&/g, "&amp;").replace(/"/g, "&quot;")}">${label}</a>&nbsp;`);
+        insert(`<a href="${href.replace(/&/g, "&amp;").replace(/"/g, "&quot;")}">${label}</a>&nbsp;`);
       }
     });
   }
@@ -134,7 +160,7 @@ export function createEditor({ html = "", placeholder = "Текст письма
     const data = e.clipboardData;
     const rich = data?.getData("text/html");
     if (rich) {
-      exec("insertHTML", cleanRich(rich));
+      insert(cleanRich(rich));
     } else {
       exec("insertText", data?.getData("text/plain") || "");
     }

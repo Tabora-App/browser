@@ -1,7 +1,7 @@
 {
-  "name": "Tabora",
-  "short_name": "Tabora",
-  "description": "Почта, пароли и коды входа Tabora в любом браузере",
+  "name": "Почта Tabora",
+  "short_name": "Почта",
+  "description": "Почта Tabora в любом браузере",
   "lang": "ru",
   "start_url": "/",
   "scope": "/",

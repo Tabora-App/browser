@@ -93,8 +93,6 @@
   --r-md: 12px;
   --r-sm: 10px;
   --r-xs: 8px;
-  --rail: 76px;
-  --bar: 60px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   color-scheme: dark;

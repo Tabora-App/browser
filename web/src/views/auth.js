@@ -98,7 +98,7 @@ export function mountAuth(root, { account }) {
       }
     });
     show(shell([
-      head("Вход в Tabora", "Почта, пароли и коды входа — в любом браузере."),
+      head("Почта Tabora", "Войдите, чтобы открыть свой ящик."),
       form,
       h("div", { class: "auth-links" },
         h("button", { class: "link-btn", type: "button", onclick: () => { name = user.value.trim(); forgot(); } }, "Забыли пароль?"),
@@ -214,7 +214,7 @@ export function mountAuth(root, { account }) {
 
   function recoveryKey(key, email) {
     const saved = h("input", { type: "checkbox" });
-    const go = h("button", { class: "btn primary large block", disabled: true, onclick: () => account.release() }, "Открыть Tabora");
+    const go = h("button", { class: "btn primary large block", disabled: true, onclick: () => account.release() }, "Открыть почту");
     saved.addEventListener("change", () => (go.disabled = !saved.checked));
     const file = () => {
       const blob = new Blob([`Ключ восстановления Tabora\nАккаунт: ${email}\n\n${key}\n\nКлюч нужен, если вы забудете пароль. Храните его отдельно от пароля и никому не показывайте.\n`], { type: "text/plain;charset=utf-8" });
@@ -226,7 +226,7 @@ export function mountAuth(root, { account }) {
       setTimeout(() => URL.revokeObjectURL(url), 2000);
     };
     show(shell([
-      head("Сохраните ключ восстановления", "Если вы забудете пароль, только этот ключ вернёт доступ к аккаунту, паролям и письмам. Мы его не храним и показываем один раз."),
+      head("Сохраните ключ восстановления", "Если вы забудете пароль, только этот ключ вернёт доступ к аккаунту и зашифрованным письмам. Мы его не храним и показываем один раз."),
       h("div", { class: "recovery-key", "aria-label": "Ключ восстановления" }, key.split("-").map(g => h("span", {}, g))),
       h("div", { class: "auth-row" },
         h("button", { class: "btn", onclick: () => copyText(key, "Ключ скопирован") }, icon("copy", 16), "Скопировать"),

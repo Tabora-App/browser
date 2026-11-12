@@ -31,6 +31,18 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 const SESSION_TTL_MS: i64 = 180 * 86_400_000;
+/// Неудачных входов с одного адреса (в любые аккаунты) за час, после которых вход с него закрыт.
+const LOGIN_FAILS_PER_IP: u32 = 20;
+
+/// Пауза для входа с незнакомых устройств после очередного неверного пароля: четыре ошибки
+/// бесплатно (опечатки владельца), дальше 1, 2, 4… минут и до суток. Счёт общий на аккаунт со
+/// всех адресов: подбор пароля с тысячи адресов упирается в тот же предел, что и с одного.
+pub(crate) fn guard_pause(fails: i32) -> i64 {
+    if fails < 5 {
+        return 0;
+    }
+    (60_000i64 << (fails - 5).min(11)).min(86_400_000)
+}
 const NONCE_TTL_MS: i64 = 5 * 60_000;
 
 pub struct App {
@@ -289,9 +301,10 @@ fn second_pause(fails: i32) -> i64 {
 
 impl App {
     /// Повторная проверка пароля перед чувствительной настройкой: хеш входа должен подойти.
-    pub(crate) fn reauth(&self, user: &User, login_hash: &str, ip: &str) -> Result<(), ApiError> {
+    pub(crate) fn reauth(&self, user: &User, login_hash: &str, _ip: &str) -> Result<(), ApiError> {
         let now = now_ms();
-        let key = format!("pw:{}:{}", user.id, ip);
+        // счёт на аккаунт, а не на адрес: с украденной сессией пароль не перебрать, меняя адреса
+        let key = format!("pw:{}", user.id);
         let locked = self.limiter.locked(&key, now);
         if locked > 0 {
             return Err(too_many(format!("Слишком много неудачных попыток. Повторите через {}", wait_text(locked))));
@@ -367,6 +380,21 @@ impl App {
             }
         }
         self.mail.send_system(to, subject, text).await.map_err(mail_err)
+    }
+
+    /// Письмо о событии входа (подбор пароля, новое устройство): в ящик аккаунта и на резервный
+    /// адрес. Не чаще шести таких писем в сутки на аккаунт и не больше половины суточного предела
+    /// писем сервера на всех: такими письмами нельзя выбрать запас, из которого уходят коды сброса.
+    pub(crate) async fn security_notice(self: &Arc<Self>, c: &impl deadpool_postgres::GenericClient, user: &User, subject: &'static str, what: &str) {
+        let now = now_ms();
+        if self.limiter.hit(&format!("notice:{}", user.id), 6, 86_400_000, now).is_err() || self.limiter.hit("notice-all", (self.mail_daily_cap / 2).max(1), 86_400_000, now).is_err() {
+            return;
+        }
+        let text = format!("{what}\n\nАккаунт: {}\n\nПисьмо отправлено автоматически, отвечать на него не нужно.", user.email);
+        self.notify(Some(user.email.clone()), subject, text.clone());
+        if let Ok(sec) = db::security(c, user.id).await {
+            self.notify(sec.backup_email, subject, text);
+        }
     }
 
     /// Уведомление на резервный адрес, не задерживая ответ. Нет адреса — нет письма.
@@ -536,6 +564,16 @@ async fn login(State(app): State<Arc<App>>, headers: HeaderMap, body: Bytes) -> 
         return Err(wrong());
     }
     let now = now_ms();
+    // Защита от подбора пароля — три предела сразу:
+    //  1) адрес клиента: много неудач в любые аккаунты — вход с него закрыт на час;
+    //  2) пара «аккаунт + адрес»: пять неудач — растущая пауза (как раньше);
+    //  3) аккаунт целиком, для устройств, которые в него ещё не входили: счёт общий со всех
+    //     адресов и хранится в базе. Устройства владельца под него не подпадают — чужими
+    //     попытками владельца не отрезать.
+    let ip_key = format!("loginfail-ip:{ip}");
+    if app.limiter.count(&ip_key, 3_600_000, now) >= LOGIN_FAILS_PER_IP {
+        return Err(too_many("С вашего адреса слишком много неудачных попыток входа. Повторите через час"));
+    }
     let key = format!("login:{email}:{ip}");
     let locked = app.limiter.locked(&key, now);
     if locked > 0 {
@@ -543,23 +581,75 @@ async fn login(State(app): State<Arc<App>>, headers: HeaderMap, body: Bytes) -> 
     }
     let c = app.pool.get().await?;
     let user = db::user_by_email(&c, &email).await?;
+    let known = match &user {
+        Some(u) => db::device_known(&c, u.id, &b.device_id).await?,
+        None => false,
+    };
     // для неизвестного адреса считается тот же HMAC: по времени ответа аккаунт не угадать
     let (salt, stored) = match &user {
         Some(u) => (u.salt.clone(), u.verifier.clone()),
         None => (vec![0u8; 16], vec![0u8; 32]),
     };
     let ok = same(&app.verifier(&salt, &b.login_hash), &stored) && user.is_some();
-    let Some(user) = user.filter(|_| ok) else {
-        app.limiter.fail(&key, now);
-        return Err(wrong());
+    // несуществующий аккаунт ведёт себя так же: по закрытию входа не узнать, есть ли он
+    let ghost = format!("guard:{email}");
+    let guard = if known {
+        0
+    } else {
+        match &user {
+            Some(u) => db::guard_locked(&c, u.id, now).await?,
+            None => app.limiter.locked(&ghost, now),
+        }
     };
+    if guard > 0 {
+        // Вход с новых устройств закрыт, и пароль не проверяется вовсе: ответ не говорит, угадан ли
+        // он. Исключение — владелец с двухфакторной защитой: верный пароль вместе с верным кодом
+        // пропускается; без кода приложения этим путём пароль не проверить.
+        let shut = || too_many(format!("К этому аккаунту слишком много раз подбирали пароль. Вход с новых устройств откроется через {}. Устройства, где вы уже вошли, работают как обычно", wait_text(guard)));
+        let Some(u) = user.as_ref().filter(|_| ok) else { return Err(shut()) };
+        let sec = db::security(&c, u.id).await?;
+        if !sec.two_factor() || b.totp.as_deref().map(str::trim).unwrap_or("").is_empty() {
+            return Err(shut());
+        }
+        // неверный код здесь считается, как при обычном входе: знающий пароль не переберёт коды
+        if app.second_factor(&c, u, &sec, b.totp.as_deref()).await.is_err() {
+            return Err(shut());
+        }
+    } else {
+        if !ok {
+            app.limiter.fail(&key, now);
+            let _ = app.limiter.hit(&ip_key, u32::MAX, 3_600_000, now);
+            if !known {
+                match &user {
+                    Some(u) => {
+                        let (_, notice) = db::guard_fail(&c, u.id, now, guard_pause).await?;
+                        if notice {
+                            app.security_notice(&c, u, "Tabora: к аккаунту подбирают пароль", "В аккаунт несколько раз подряд пытались войти с неверным паролем. Вход с новых устройств временно закрыт: это защита от подбора пароля. Устройства, где вы уже вошли, работают как обычно.\n\nЕсли это были не вы, делать ничего не нужно. Если пароль простой или вы вводили его на чужих сайтах, смените его в настройках аккаунта и включите двухфакторную защиту.").await;
+                        }
+                    }
+                    None => {
+                        app.limiter.fail_with(&ghost, now, 86_400_000, guard_pause);
+                    }
+                }
+            }
+            return Err(wrong());
+        }
+        // пароль верен; при включённой защите сессия выдаётся только со вторым фактором
+        let u = user.as_ref().ok_or_else(wrong)?;
+        let sec = db::security(&c, u.id).await?;
+        app.second_factor(&c, u, &sec, b.totp.as_deref()).await?;
+    }
+    let user = user.ok_or_else(wrong)?;
     app.limiter.clear(&key);
-    // пароль верен; при включённой защите сессия выдаётся только со вторым фактором
-    let sec = db::security(&c, user.id).await?;
-    app.second_factor(&c, &user, &sec, b.totp.as_deref()).await?;
+    if !known {
+        db::guard_clear(&c, user.id).await?;
+    }
     let device_name = clean_name(&b.device_name, "Устройство");
     let old_cred = db::upsert_device(&c, user.id, &b.device_id, &device_name, now).await?;
     let session = app.new_session(&c, user.id, &b.device_id, now).await?;
+    if !known {
+        app.security_notice(&c, &user, "Tabora: вход с нового устройства", &format!("В аккаунт вошли с устройства, которого раньше не было: «{device_name}».\n\nЕсли это были вы, делать ничего не нужно. Если нет — смените пароль в настройках аккаунта и завершите сеанс этого устройства в списке устройств.")).await;
+    }
     drop(c);
     let mail = app.device_mail(&user, &b.device_id, &device_name, old_cred, b.mail_access.as_deref()).await;
     Ok(Json(json!({ "userId": user.public_id, "session": session, "kdf": user.kdf, "mail": mail })))
@@ -582,7 +672,7 @@ async fn replace_login_hash(app: &App, headers: &HeaderMap, body: &Bytes, wrong_
         return Err(bad("bad-request", "Некорректный запрос: новый хеш входа"));
     }
     let now = now_ms();
-    let key = format!("pw:{}:{}", user.id, client_ip(headers));
+    let key = format!("pw:{}", user.id);
     let locked = app.limiter.locked(&key, now);
     if locked > 0 {
         return Err(too_many(format!("Слишком много неудачных попыток. Повторите через {}", wait_text(locked))));

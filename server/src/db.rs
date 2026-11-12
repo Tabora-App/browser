@@ -99,6 +99,15 @@ CREATE TABLE IF NOT EXISTS mail_codes (
   created_at  BIGINT NOT NULL,
   PRIMARY KEY (user_id, purpose)
 );
+-- Защита от подбора пароля: неудачные входы в аккаунт с незнакомых устройств со всех адресов
+-- сразу. Счёт в базе, а не в памяти: перезапуск сервера не даёт новых попыток.
+CREATE TABLE IF NOT EXISTS login_guard (
+  user_id      BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  fails        INT NOT NULL DEFAULT 0,
+  last_fail    BIGINT NOT NULL DEFAULT 0,
+  locked_until BIGINT NOT NULL DEFAULT 0,
+  noticed_at   BIGINT NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS settings (
   key    TEXT PRIMARY KEY,
   value  TEXT NOT NULL
@@ -314,6 +323,45 @@ pub async fn clear_device_creds<C: GenericClient>(c: &C, user_id: i64) -> Result
 
 pub async fn device_cred<C: GenericClient>(c: &C, user_id: i64, device_id: &str) -> Result<Option<String>, DbError> {
     Ok(c.query_opt("SELECT mail_cred FROM devices WHERE user_id = $1 AND device_id = $2", &[&user_id, &device_id]).await?.and_then(|r| r.get(0)))
+}
+
+/// Входило ли это устройство в аккаунт раньше (и не было ли с тех пор завершено).
+pub async fn device_known<C: GenericClient>(c: &C, user_id: i64, device_id: &str) -> Result<bool, DbError> {
+    Ok(c.query_one("SELECT EXISTS(SELECT 1 FROM devices WHERE user_id = $1 AND device_id = $2)", &[&user_id, &device_id]).await?.get(0))
+}
+
+/// Сколько ещё закрыт вход в аккаунт с незнакомых устройств (0 — открыт).
+pub async fn guard_locked<C: GenericClient>(c: &C, user_id: i64, now: i64) -> Result<i64, DbError> {
+    let until: Option<i64> = c.query_opt("SELECT locked_until FROM login_guard WHERE user_id = $1", &[&user_id]).await?.map(|r| r.get(0));
+    Ok((until.unwrap_or(0) - now).max(0))
+}
+
+/// Неверный пароль с незнакомого устройства. Счёт обнуляется, если сутки было тихо. Возвращает
+/// назначенную паузу и признак «пора написать владельцу» (не чаще раза в сутки).
+pub async fn guard_fail<C: GenericClient>(c: &C, user_id: i64, now: i64, pause: fn(i32) -> i64) -> Result<(i64, bool), DbError> {
+    let r = c
+        .query_one(
+            "INSERT INTO login_guard (user_id, fails, last_fail) VALUES ($1, 1, $2)
+             ON CONFLICT (user_id) DO UPDATE SET fails = CASE WHEN login_guard.last_fail < $2 - 86400000 THEN 1 ELSE login_guard.fails + 1 END, last_fail = $2
+             RETURNING fails, noticed_at",
+            &[&user_id, &now],
+        )
+        .await?;
+    let fails: i32 = r.get(0);
+    let noticed: i64 = r.get(1);
+    let wait = pause(fails);
+    let notice = wait > 0 && noticed < now - 86_400_000;
+    c.execute(
+        "UPDATE login_guard SET locked_until = $2, noticed_at = CASE WHEN $3 THEN $4 ELSE noticed_at END WHERE user_id = $1",
+        &[&user_id, &(now + wait), &notice, &now],
+    )
+    .await?;
+    Ok((wait, notice))
+}
+
+pub async fn guard_clear<C: GenericClient>(c: &C, user_id: i64) -> Result<(), DbError> {
+    c.execute("DELETE FROM login_guard WHERE user_id = $1", &[&user_id]).await?;
+    Ok(())
 }
 
 pub struct Device {

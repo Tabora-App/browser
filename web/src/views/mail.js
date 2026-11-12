@@ -10,6 +10,7 @@ import { avatar, busy, debounce, emptyState, errorText, menu, shortDate, toast }
 import { openAliases } from "./mail-aliases.js";
 import { openCompose } from "./mail-compose.js";
 import { renderThread } from "./mail-reader.js";
+import { promo } from "./promo.js";
 
 const ROLE_ICON = { inbox: "inbox", drafts: "drafts", sent: "sent", archive: "archive", junk: "spam", trash: "trash" };
 const VIEWS = [["all", "Все"], ["unread", "Непрочитанные"], ["starred", "Со звездой"], ["files", "С вложениями"]];
@@ -41,16 +42,27 @@ export function mountMail(el, ctx, rest) {
   const folderButton = h("button", { class: "icon-btn mail-folder-switch", "aria-label": "Папки" }, icon("list", 20));
   const refreshButton = h("button", { class: "icon-btn", "aria-label": "Обновить" }, icon("reload", 18));
   const composeFab = h("button", { class: "fab", onclick: () => compose() }, icon("edit", 20), "Написать");
+  const banner = h("div", { class: "promo-slot only-phone" }, promo("banner"));
   const listPane = h("section", { class: "mail-list" },
     h("header", { class: "pane-head" }, folderButton, title, refreshButton),
     h("div", { class: "pane-tools" }, h("label", { class: "search" }, icon("search", 17), search), chips),
-    listBody, composeFab);
+    banner, listBody, composeFab);
   const root = h("div", { class: "mail" }, folders, listPane, reader);
   clear(el, root);
 
   const folderName = () => (folderId === "starred" ? "Со звездой" : mail.boxById(folderId)?.name || "Почта");
   const currentRole = () => mail.boxById(folderId)?.role || "";
   const compose = (opts = {}) => openCompose(ctx, { ...opts, onSent: () => { reload({ quiet: true }); refreshFolders(); }, onDraft: () => { if (currentRole() === "drafts") { reload({ quiet: true }); } refreshFolders(); } });
+
+  /* ---- аккаунт: адрес, настройки, выход ---- */
+
+  const accountItems = () => [
+    { label: "Настройки аккаунта", icon: "settings", run: () => ctx.navigate("account") },
+    { label: "Выйти", icon: "logout", danger: true, run: () => account.signOut() },
+  ];
+  const accountButton = h("button", { class: "mail-account", "aria-label": `Аккаунт ${account.email}` },
+    h("span", { class: "nav-avatar" }, (account.email[0] || "?").toUpperCase()), h("span", { class: "mail-account-text" }, h("b", {}, account.email), h("small", {}, "аккаунт Tabora")), icon("down", 15));
+  accountButton.addEventListener("click", () => menu(accountButton, accountItems()));
 
   /* ---- папки ---- */
 
@@ -72,10 +84,11 @@ export function mountMail(el, ctx, rest) {
       h("div", { class: "mail-folder-list" }, folderItems().map(f => h("a", { class: `mail-folder${f.id === folderId ? " active" : ""}`, href: `#/mail/${encodeURIComponent(f.id)}`, "aria-current": f.id === folderId ? "page" : null },
         icon(f.icon, 17), h("span", {}, f.name), f.count ? h("span", { class: `badge${f.quiet ? " quiet" : ""}` }, f.count > 999 ? "999+" : String(f.count)) : null))),
       h("div", { class: "mail-folders-foot" },
+        promo("card"),
         h("button", { class: "mail-folder", onclick: () => openAliases(ctx) }, icon("mask", 17), h("span", {}, "Алиасы")),
-        h("div", { class: "mail-me" }, h("span", {}, account.email))));
+        accountButton));
     title.textContent = query ? "Поиск" : folderName();
-    ctx.setBadge("mail", mail.box("inbox")?.unread || 0);
+    ctx.setUnread(mail.box("inbox")?.unread || 0);
   }
 
   async function refreshFolders() {
@@ -91,6 +104,7 @@ export function mountMail(el, ctx, rest) {
     ...folderItems().map(f => ({ label: f.count ? `${f.name} · ${f.count}` : f.name, icon: f.icon, run: () => ctx.navigate(`mail/${encodeURIComponent(f.id)}`) })),
     null,
     { label: "Алиасы", icon: "mask", run: () => openAliases(ctx) },
+    ...accountItems(),
   ]));
 
   /* ---- список ---- */
@@ -260,7 +274,7 @@ export function mountMail(el, ctx, rest) {
   function drawReader() {
     if (!threadId) {
       delete root.dataset.open;
-      clear(reader, emptyState({ iconName: "mail", title: "Выберите письмо", text: "Оно откроется здесь." }));
+      clear(reader, h("div", { class: "reader-empty" }, emptyState({ iconName: "mail", title: "Выберите письмо", text: "Оно откроется здесь." }), promo("inline")));
       return;
     }
     root.dataset.open = "thread";

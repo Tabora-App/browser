@@ -19,7 +19,10 @@ const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; ch
 
 function proxy(req, res, target) {
   const lib = target.protocol === "https:" ? httpsRequest : httpRequest;
-  const headers = { ...req.headers, host: target.host, "x-forwarded-for": req.socket.remoteAddress || "127.0.0.1" };
+  // адрес клиента для сервера аккаунтов — адрес соединения; в проверках (TABORA_DEV_TRUST_XFF=1)
+  // его можно задать заголовком, чтобы изобразить посетителей с разных адресов
+  const client = (process.env.TABORA_DEV_TRUST_XFF && req.headers["x-forwarded-for"]) || req.socket.remoteAddress || "127.0.0.1";
+  const headers = { ...req.headers, host: target.host, "x-forwarded-for": client };
   delete headers.origin;
   delete headers.referer;
   const up = lib({ protocol: target.protocol, hostname: target.hostname, port: target.port || (target.protocol === "https:" ? 443 : 80), method: req.method, path: req.url, headers, family: 4 }, r => {

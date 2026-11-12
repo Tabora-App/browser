@@ -2,14 +2,14 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* Настройки аккаунта: пароль, двухфакторная защита, резервный адрес, ключ восстановления,
- * устройства. Перемены в защите требуют пароль заново (на сервер уходит только хеш входа). */
+/* Настройки аккаунта: пароль, двухфакторная защита, резервный адрес, ключ восстановления, ключ
+ * шифрования почты, устройства. Перемены в защите требуют пароль заново (на сервер уходит только
+ * хеш входа). */
 
 import { passwordStrength } from "../core/password.js";
 import { formatFingerprint } from "../core/pgp.js";
 import { clear, h, icon } from "../lib/dom.js";
-import { busy, confirmDialog, copyText, errorText, field, formError, longDate, modal, shortDate, toast } from "../lib/ui.js";
-import { split, unlockKeysDialog } from "./common.js";
+import { busy, confirmDialog, copyText, errorText, field, formError, modal, shortDate, toast } from "../lib/ui.js";
 
 function strength(input) {
   const label = h("span", {}, "");
@@ -45,17 +45,63 @@ async function qrCanvas(text, size = 208) {
   return canvas;
 }
 
+/** Окно: вернуть доступ к ключам аккаунта ключом восстановления или прежним паролем. */
+function unlockKeysDialog(ctx) {
+  const { account } = ctx;
+  const canRecovery = account.keys.canRecovery;
+  const canOld = account.keys.reason === "wrong-wrap";
+  let mode = canRecovery ? "recovery" : "old";
+  const recovery = field("Ключ восстановления", { mono: true, placeholder: "XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX", autofocus: true });
+  const old = field("Прежний пароль", { type: "password", autocomplete: "off", hint: "Тот, что был до сброса по письму." });
+  const pass = field("Нынешний пароль", { type: "password", autocomplete: "current-password", hint: "Чтобы в следующий раз всё открылось одним паролем." });
+  const error = formError();
+  const tabs = h("div", { class: "chips" });
+  const body = h("div", { class: "modal-form" });
+  const draw = () => {
+    clear(tabs, canRecovery && canOld ? [
+      h("button", { class: "chip", "aria-pressed": String(mode === "recovery"), onclick: () => { mode = "recovery"; draw(); } }, "Ключ восстановления"),
+      h("button", { class: "chip", "aria-pressed": String(mode === "old"), onclick: () => { mode = "old"; draw(); } }, "Прежний пароль"),
+    ] : []);
+    clear(body, mode === "recovery" ? recovery.el : old.el, pass.el, error.el);
+  };
+  draw();
+  const submit = h("button", { class: "btn primary" }, "Открыть");
+  const m = modal({ title: "Открыть ключ шифрования", content: [h("p", { class: "modal-text" }, "Зашифрованные письма открываются ключом аккаунта. Его копия на сервере привязана к прежнему паролю."), tabs, body], actions: [h("button", { class: "btn", onclick: () => m.close() }, "Отмена"), submit] });
+  submit.addEventListener("click", async () => {
+    error.set("");
+    if (!pass.value) {
+      error.set("Введите нынешний пароль");
+      return;
+    }
+    try {
+      await busy(submit, async step => {
+        account.onStep = step;
+        if (mode === "recovery") {
+          await account.unlockWithRecovery(recovery.value, pass.value);
+        } else {
+          await account.unlockWithOldPassword(old.value, pass.value);
+        }
+      }, "Открываем");
+      m.close();
+      toast("Ключ шифрования открыт");
+    } catch (e) {
+      error.set(e.code === "wrong-wrap" ? (mode === "recovery" ? "Этот ключ восстановления не подходит" : "Прежний пароль не подходит") : e.code === "bad-credentials" ? "Нынешний пароль введён неверно" : errorText(e));
+    } finally {
+      account.onStep = null;
+    }
+  });
+}
+
 function codesBlock(codes) {
   return h("div", { class: "backup-codes" }, codes.map(c => h("span", { class: "mono" }, c)));
 }
 
 export function mountAccount(el, ctx) {
-  const { account, api, sync } = ctx;
-  const s = split({ single: true });
+  const { account, api } = ctx;
   const body = h("div", { class: "settings" });
-  clear(s.list, h("header", { class: "pane-head" }, h("h1", {}, "Аккаунт")), h("div", { class: "list settings-list" }, body));
-  s.list.classList.add("narrow-pane");
-  clear(el, s.el);
+  clear(el, h("div", { class: "account-page" },
+    h("header", { class: "pane-head" }, h("a", { class: "icon-btn", href: "#/mail", "aria-label": "К почте", title: "К почте" }, icon("back", 20)), h("h1", {}, "Аккаунт")),
+    h("div", { class: "list settings-list" }, body)));
   let security = null;
   let devices = null;
   let loadError = "";
@@ -217,7 +263,7 @@ export function mountAccount(el, ctx) {
       const done = h("button", { class: "btn primary", disabled: true, onclick: () => m.close() }, "Готово");
       saved.addEventListener("change", () => (done.disabled = !saved.checked));
       const m = modal({ title: "Ключ восстановления", dismiss: false, content: [
-        h("p", { class: "modal-text" }, "Если вы забудете пароль, только этот ключ вернёт аккаунт, пароли и письма. Мы его не храним и показываем один раз."),
+        h("p", { class: "modal-text" }, "Если вы забудете пароль, только этот ключ вернёт аккаунт и зашифрованные письма. Мы его не храним и показываем один раз."),
         h("div", { class: "recovery-key" }, key.split("-").map(g => h("span", {}, g))),
         h("label", { class: "check" }, saved, h("span", {}, "Я сохранил ключ в надёжном месте")),
       ], actions: [h("button", { class: "btn", onclick: () => copyText(key, "Ключ скопирован") }, icon("copy", 16), "Скопировать"), done] });
@@ -235,7 +281,7 @@ export function mountAccount(el, ctx) {
   function draw() {
     const k = account.keys;
     const two = security?.twoFactor;
-    const keyNote = k.state === "ok" ? "Открыт на этом устройстве" : k.state === "offline" ? "Нет связи с сервером" : "Закрыт: копия привязана к прежнему паролю";
+    const keyNote = k.state === "ok" ? "Открыт: зашифрованные письма читаются и отправляются" : k.state === "offline" ? "Нет связи с сервером" : k.reason === "wrong-wrap" || k.canRecovery ? "Закрыт: копия привязана к прежнему паролю. Зашифрованные письма не откроются" : "Ещё не готов: ключ есть только в браузере Tabora на вашем компьютере (там: «Почта» → «Шифрование» → «Сохранить копию»)";
     clear(body,
       loadError ? h("div", { class: "note bad" }, icon("warning", 17), h("div", {}, h("span", {}, loadError), h("button", { class: "link-btn", onclick: load }, "Повторить"))) : null,
       card("Профиль",
@@ -252,14 +298,13 @@ export function mountAccount(el, ctx) {
           h("button", { class: "btn small", onclick: setBackupEmail }, security.backupEmail ? "Сменить" : "Указать"),
           security.backupEmail ? h("button", { class: "btn small", onclick: () => reauth({ title: "Убрать резервный адрес", text: "Сбросить забытый пароль по письму будет нельзя.", confirm: "Убрать", danger: true, run: ({ loginHash, code }) => api.backupEmailRemove(account.token, { loginHash, code }), done: () => toast("Резервный адрес убран") }) }, "Убрать") : null,
         ], { wrap: true }),
-        row("Ключ восстановления", !security ? "…" : security.recoveryKey ? "Создан. Возвращает аккаунт и данные, если пароль забыт" : "Не создан: без него забытый пароль не вернуть", [h("button", { class: "btn small", disabled: k.state !== "ok", onclick: newRecoveryKey }, security?.recoveryKey ? "Новый" : "Создать")], { wrap: true })),
-      card("Ключ аккаунта",
-        row("Состояние", keyNote, k.state === "locked" && (k.canRecovery || k.reason === "wrong-wrap") ? [h("button", { class: "btn small primary", onclick: () => unlockKeysDialog(ctx) }, "Открыть")] : [], { wrap: true }),
-        k.fingerprint ? row("Отпечаток ключа почты", h("span", { class: "mono wrap small-text" }, formatFingerprint(k.fingerprint)), [h("button", { class: "icon-btn", "aria-label": "Скопировать отпечаток", onclick: () => copyText(formatFingerprint(k.fingerprint), "Отпечаток скопирован") }, icon("copy", 18))], { tall: true }) : null,
-        row("Данные с других устройств", sync.loaded ? `Пароли: ${sync.list("logins").length}, коды: ${sync.list("otp").length}, закладки: ${sync.list("marks").filter(m => m.data.k === 1).length}` : k.state === "ok" ? "Загружаются…" : "Недоступны, пока ключ закрыт", [], { wrap: true })),
+        row("Ключ восстановления", !security ? "…" : security.recoveryKey ? "Создан. Возвращает аккаунт и зашифрованные письма, если пароль забыт" : "Не создан: без него забытый пароль не вернуть", [h("button", { class: "btn small", disabled: k.state !== "ok", onclick: newRecoveryKey }, security?.recoveryKey ? "Новый" : "Создать")], { wrap: true })),
+      card("Шифрование почты",
+        row("Ключ", keyNote, k.state === "locked" && (k.canRecovery || k.reason === "wrong-wrap") ? [h("button", { class: "btn small primary", onclick: () => unlockKeysDialog(ctx) }, "Открыть")] : [], { wrap: true }),
+        k.fingerprint ? row("Отпечаток ключа почты", h("span", { class: "mono wrap small-text" }, formatFingerprint(k.fingerprint)), [h("button", { class: "icon-btn", "aria-label": "Скопировать отпечаток", onclick: () => copyText(formatFingerprint(k.fingerprint), "Отпечаток скопирован") }, icon("copy", 18))], { tall: true }) : null),
       card("Устройства",
         devices ? devices.filter(d => d.current || d.active !== false).sort((a, b) => Number(b.current) - Number(a.current) || (b.at || 0) - (a.at || 0)).map(d => row(d.current ? "Это устройство" : `Был в сети ${shortDate(d.at)}`, d.name || "Устройство", d.current ? [] : [h("button", { class: "btn small", onclick: () => revoke(d) }, "Завершить")], { wrap: true })) : row("", "…")),
-      h("p", { class: "settings-foot" }, `Веб-версия Tabora${typeof __APP_VERSION__ === "string" && __APP_VERSION__ ? ` ${__APP_VERSION__}` : ""} · `, h("a", { href: "https://tabora.app/", target: "_blank", rel: "noopener" }, "tabora.app"), " · ", h("a", { href: "https://github.com/Tabora-App/browser", target: "_blank", rel: "noopener noreferrer" }, "исходный код")));
+      h("p", { class: "settings-foot" }, "Почта Tabora · ", h("a", { href: "https://tabora.app/", target: "_blank", rel: "noopener" }, "tabora.app"), " · ", h("a", { href: "https://github.com/Tabora-App/browser", target: "_blank", rel: "noopener noreferrer" }, "исходный код")));
   }
 
   function revoke(d) {
@@ -275,7 +320,6 @@ export function mountAccount(el, ctx) {
   }
 
   const off1 = account.subscribe(what => what === "keys" && draw());
-  const off2 = sync.subscribe(() => draw());
   draw();
   load();
   return {
@@ -283,7 +327,6 @@ export function mountAccount(el, ctx) {
     destroy() {
       alive = false;
       off1();
-      off2();
     },
   };
 }

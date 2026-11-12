@@ -252,7 +252,7 @@ export function renderThread(el, { ctx, messages, folderId, back, act, compose }
           }
         } catch (e) {}
       }));
-      const clean = sanitizeMail(m.html, { inline, remote: allow });
+      const clean = sanitizeMail(m.html, { inline, remote: allow, context: doc });
       const style = doc.createElement("style");
       style.textContent = `${FRAME_CSS}\n${clean.css}`;
       doc.head.append(style);

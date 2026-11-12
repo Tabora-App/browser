@@ -44,14 +44,35 @@ function safeHref(value) {
   return "";
 }
 
+/** Разобрать разметку в неактивный документ. context — документ рамки письма: разбор идёт под его
+ * политикой содержимого (она разрешает встроенные стили). Под политикой самой страницы каждый
+ * атрибут style чужого письма давал бы в консоли сообщение о нарушении — безвредное, но за таким
+ * шумом не разглядеть настоящего. */
+function parseInert(html, context) {
+  const Parser = context?.defaultView?.DOMParser;
+  if (Parser) {
+    try {
+      return new Parser().parseFromString(html, "text/html");
+    } catch (e) {}
+  }
+  return new DOMParser().parseFromString(html, "text/html");
+}
+
+/** Убрать атрибуты и блоки стилей до разбора: для простой вёрстки (текст, который пишет человек)
+ * стили не нужны вовсе, а разбор идёт под политикой страницы. */
+function dropStyles(html) {
+  return String(html || "").replace(/<style\b[\s\S]*?<\/style\s*>/gi, "").replace(/\sstyle\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+}
+
 /**
  * @param {string} html разметка письма
- * @param {{ inline?: Record<string, string>, remote?: boolean }} opts inline — картинки из самого
- *   письма по Content-ID (адрес blob: или data:); remote — человек разрешил картинки с чужих серверов
+ * @param {{ inline?: Record<string, string>, remote?: boolean, context?: Document }} opts inline —
+ *   картинки из самого письма по Content-ID (адрес blob: или data:); remote — человек разрешил
+ *   картинки с чужих серверов; context — документ рамки, в которую письмо будет вложено
  * @returns {{ doc: Document, css: string, blocked: number, body: { style: string, bgcolor: string, text: string } }}
  */
-export function sanitizeMail(html, { inline = {}, remote = false } = {}) {
-  const doc = new DOMParser().parseFromString(String(html || "").slice(0, 2_000_000), "text/html");
+export function sanitizeMail(html, { inline = {}, remote = false, context = null } = {}) {
+  const doc = parseInert(String(html || "").slice(0, 2_000_000), context);
   let blocked = 0;
   let count = 0;
   const css = [];
@@ -168,7 +189,7 @@ const RICH = new Set(["b", "strong", "i", "em", "u", "s", "strike", "a", "ul", "
  * mail — разметка пойдёт в письмо: цитате добавляется встроенный стиль, по которому её узнают
  * почтовые программы (в саму страницу такая разметка не вставляется: там встроенные стили запрещены). */
 export function cleanRich(html, { mail = false } = {}) {
-  const doc = new DOMParser().parseFromString(`<body>${String(html || "").slice(0, 500_000)}</body>`, "text/html");
+  const doc = new DOMParser().parseFromString(`<body>${dropStyles(String(html || "").slice(0, 500_000))}</body>`, "text/html");
   const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const out = node => {
     let s = "";
@@ -202,7 +223,7 @@ export function cleanRich(html, { mail = false } = {}) {
 
 /** Текст письма без оформления из простой вёрстки: для текстовой части письма. */
 export function richToText(html) {
-  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
+  const doc = new DOMParser().parseFromString(`<body>${dropStyles(html)}</body>`, "text/html");
   const block = /^(p|div|li|blockquote|pre|h1|h2|h3|ul|ol)$/;
   const lines = [];
   let line = "";

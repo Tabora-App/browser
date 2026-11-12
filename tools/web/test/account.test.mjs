@@ -6,9 +6,8 @@ import "./setup.mjs";
 import { Account } from "../../../web/src/core/account.js";
 import { Api } from "../../../web/src/core/api.js";
 import { hex } from "../../../web/src/core/bytes.js";
-import { base32Decode, totp } from "../../../web/src/core/otp.js";
 import { MemoryStore } from "../../../web/src/core/store.js";
-import { check, rejects, summary } from "./lib.mjs";
+import { check, rejects, summary, totp } from "./lib.mjs";
 
 const API = process.env.TABORA_API || "http://127.0.0.1:7711";
 const OUTBOX = process.env.TABORA_OUTBOX || "";
@@ -65,7 +64,7 @@ check("в списке устройств два устройства, теку�
 
 // второй фактор
 const setup = await a.api.twoFactorSetup(a.token, await a.loginHashFor(P1));
-const code = shift => totp(base32Decode(setup.secret), { now: Date.now() + shift * 30000 });
+const code = shift => totp(setup.secret, shift);
 const enabled = await a.api.twoFactorEnable(a.token, await code(0));
 check("второй фактор включён, выдано десять резервных кодов", [enabled.backupCodes.length, (await a.api.security(a.token)).twoFactor.enabled], [10, true]);
 const d3 = device();

@@ -1,52 +1,25 @@
-/* Закладки, вкладки, поддержка, настройки аккаунта. */
+/* Настройки аккаунта, вложения, предложение установить браузер. */
 
-.narrow-pane { max-width: 760px; width: 100%; margin: 0 auto; }
 .spacer { flex: 1; }
+.modal-form { display: flex; flex-direction: column; gap: 14px; }
+.modal-form .link-btn { align-self: flex-start; font-size: 13px; }
+.detail-meta { color: var(--text-4); font-size: 12.5px; }
+.bad-text { color: var(--tone-bad); }
+.modal-actions .spacer { flex: 1; }
 
-/* ---- закладки и вкладки ---- */
+/* ---- вложения ---- */
 
-.crumbs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; color: var(--text-3); min-height: 20px; }
-.crumbs:empty { display: none; }
-.crumbs a { color: var(--text-3); text-decoration: none; font-weight: 650; }
-.crumbs a:hover { color: var(--text); text-decoration: underline; }
-.crumbs span[aria-current] { color: var(--text); font-weight: 700; }
-.crumbs .icon { color: var(--text-5); }
-.avatar.folder { background: var(--accent-dim); color: var(--accent-ink); }
-.mark-sep { height: 1px; margin: 6px 12px; background: var(--line-2); }
-.row .icon-btn { flex: none; }
-.device-title { display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--text-2); padding-top: 18px; }
-.device-title small { margin-left: auto; font-weight: 600; color: var(--text-4); }
-
-/* ---- поддержка ---- */
-
-.status { flex: none; height: 22px; padding: 0 9px; border-radius: 11px; font-size: 11.5px; font-weight: 700; line-height: 22px; white-space: nowrap; background: var(--raised); color: var(--text-3); }
-.status.ok { background: var(--tone-ok-bg); color: var(--tone-ok); }
-.status.warn { background: var(--tone-warn-bg); color: var(--tone-warn); }
-.ticket.unread b { font-weight: 800; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-ink); }
-.support-body { max-width: 760px; gap: 16px; }
-.thread { display: flex; flex-direction: column; gap: 10px; }
-.bubble { max-width: 86%; padding: 11px 14px; border-radius: 16px; background: var(--raised); display: flex; flex-direction: column; gap: 6px; }
-.bubble.mine { align-self: flex-end; background: var(--accent-dim); border-bottom-right-radius: 6px; }
-.bubble.theirs { align-self: flex-start; border-bottom-left-radius: 6px; }
-.bubble-head { display: flex; align-items: baseline; gap: 10px; font-size: 12px; color: var(--text-3); }
-.bubble-head b { color: var(--text-2); font-weight: 700; }
-.bubble-text { font-size: 14.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
 .attach-list { display: flex; flex-wrap: wrap; gap: 6px; }
 .attach-list:empty { display: none; }
 .attach { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; height: 30px; padding: 0 6px 0 10px; border: 1px solid var(--line-2); border-radius: 15px; background: var(--card); color: var(--text-2); font-size: 12.5px; font-weight: 600; }
 .attach span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attach small { color: var(--text-4); flex: none; }
-.attach.link { padding-right: 10px; }
-.attach.link:hover { border-color: var(--stroke); color: var(--text); }
 .icon-btn.tiny { width: 22px; height: 22px; border-radius: 50%; }
-.reply-box { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--card-2); }
-.reply-box .input { border-color: transparent; background: transparent; padding: 4px 4px; min-height: 72px; box-shadow: none; resize: none; }
-.reply-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.modal-actions .spacer { flex: 1; }
 
-/* ---- настройки ---- */
+/* ---- настройки аккаунта ---- */
 
+.account-page { flex: 1; min-height: 0; display: flex; flex-direction: column; max-width: 760px; width: 100%; margin: 0 auto; }
+.account-page .pane-head { padding-left: 10px; }
 .settings-list { padding: 4px 14px calc(28px + var(--safe-bottom)); }
 .settings { display: flex; flex-direction: column; gap: 14px; }
 .kv-actions.buttons { gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: 46%; padding-right: 6px; }
@@ -59,8 +32,32 @@
 .backup-codes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 14px; border-radius: var(--r); background: var(--card); border: 1px solid var(--line-2); user-select: text; -webkit-user-select: text; }
 .backup-codes span { padding: 8px 0; border-radius: var(--r-xs); background: var(--raised); text-align: center; font-size: 14px; font-weight: 650; }
 
+/* ---- предложение установить браузер ---- */
+
+.promo { position: relative; display: flex; gap: 10px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--card-2); }
+.promo .mark { border-radius: 9px; }
+.promo-text { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.promo-text b { font-size: 13.5px; font-weight: 750; }
+.promo-text span { font-size: 12px; line-height: 1.4; color: var(--text-3); text-wrap: pretty; }
+.promo-action { text-decoration: none; }
+.promo-close { position: absolute; top: 6px; right: 6px; }
+.promo-card { flex-direction: column; padding: 12px; margin-bottom: 4px; }
+.promo-card .promo-action { align-self: flex-start; }
+.promo-banner { align-items: center; margin: 0 14px 8px; padding: 9px 34px 9px 10px; }
+.promo-banner .promo-text { flex: 1; }
+.promo-banner .promo-text span { display: none; }
+.promo-banner .promo-action { flex: none; }
+.promo-slot:empty { display: none; }
+.promo-inline { align-items: center; max-width: 420px; margin: 0 auto; padding: 12px 14px; }
+.promo-inline .promo-text { flex: 1; }
+.reader-empty { margin: auto; display: flex; flex-direction: column; gap: 6px; padding: 24px; }
+/* одно предложение на экран: пока карточка под папками видна, под пустым окном письма его нет */
+@media (min-width: 1181px) {
+  .mail:has(.mail-folders .promo-card) .promo-inline { display: none; }
+}
+.reader-empty .empty { margin: 0 auto; }
+
 @media (max-width: 820px) {
-  .bubble { max-width: 94%; }
   .kv-actions.buttons { max-width: 52%; }
   .settings-list { padding: 4px 12px calc(28px + var(--safe-bottom)); }
 }
