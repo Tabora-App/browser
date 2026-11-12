@@ -1,5 +1,5 @@
 diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/utils/Settings.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/utils/Settings.kt
-index 8d94dc962b..54a6768d1f 100644
+index 8d94dc962b..685a64e0b4 100644
 --- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/utils/Settings.kt
 +++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/utils/Settings.kt
 @@ -725,7 +725,7 @@ class Settings(
@@ -11,7 +11,19 @@ index 8d94dc962b..54a6768d1f 100644
          )
  
      var isMarketingTelemetryEnabled by
-@@ -2374,7 +2374,7 @@ class Settings(
+@@ -2339,7 +2339,10 @@ class Settings(
+             }
+ 
+         val featureGate = RegionAddressFeatureGate(locale, debugRepository)
+-        return featureGate.isAddressFeatureEnabled()
++        // Tabora: address autofill is for everyone. The engine offers it only in the regions of
++        // its list; its gate is still asked, but it no longer decides.
++        featureGate.isAddressFeatureEnabled()
++        return true
+     }
+ 
+     var signedInFxaAccount by
+@@ -2374,7 +2377,7 @@ class Settings(
      var showContileFeature by
          booleanPreference(
              key = appContext.getPreferenceKey(R.string.pref_key_enable_contile),

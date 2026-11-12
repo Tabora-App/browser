@@ -95,6 +95,8 @@ export function mountPhoneAccount(root, { service }) {
           h("button", { class: "btn small", onclick: forgetMarks }, t`Удалить везде`))),
       s.marksOn && !s.marksHold && h("div", { class: "kv" },
         h("div", { class: "kv-text" }, h("small", { class: "wrap" }, s.marksError ? t`Закладки не сверены: ${s.marksError}` : s.loaded ? (s.marks ? plural(s.marks, t`закладка|закладки|закладок`) : t`Закладок пока нет`) : t`Идёт сверка…`))),
+      ...autofillRows(s, "addresses", t`Адреса`, t`Адреса, телефоны и почта, которые телефон подставляет в формы, — те же, что в Tabora на компьютере.`, t`адрес|адреса|адресов`, t`Адресов пока нет`),
+      ...autofillRows(s, "cards", t`Банковские карты`, t`Номер, срок действия и имя владельца — те же, что в Tabora на компьютере. Код безопасности карты не хранится и никуда не передаётся.`, t`карта|карты|карт`, t`Карт пока нет`),
       h("div", { class: "kv tall" },
         h("div", { class: "kv-text" },
           h("span", {}, t`История`),
@@ -112,8 +114,36 @@ export function mountPhoneAccount(root, { service }) {
         h("div", { class: "kv-text" }, h("small", { class: "wrap" }, s.spacesError ? t`Пространства не сверены: ${s.spacesError}` : s.loaded ? (s.spaces ? plural(s.spaces, t`пространство|пространства|пространств`) : t`Пока только «Личное»`) : t`Идёт сверка…`))),
       h("div", { class: `kv tall sync-status${st.tone ? ` ${st.tone}` : ""}` },
         h("div", { class: "kv-text" }, h("small", { class: "wrap" }, st.text)),
-        h("div", { class: "kv-actions buttons" }, st.action || ((s.tabsOn || s.codesOn || s.loginsOn || s.marksOn || s.spacesOn || s.historyOn) && now))),
+        h("div", { class: "kv-actions buttons" }, st.action || ((s.tabsOn || s.codesOn || s.loginsOn || s.marksOn || s.spacesOn || s.historyOn || s.addressesOn || s.cardsOn) && now))),
       h("p", { class: "card-note" }, t`Данные шифруются на телефоне ключом вашего аккаунта. Сервер хранит их зашифрованными и прочитать не может.`));
+  }
+
+  /** Rows of a group of autofill records ("addresses" or "cards"): the switch, then either the
+   * question about records that disappeared at once or the number of records. */
+  function autofillRows(s, name, label, text, words, none) {
+    const on = s[`${name}On`];
+    const hold = s[`${name}Hold`];
+    const error = s[`${name}Error`];
+    const count = s[name];
+    const fail = e => toast(errorText(e), { tone: "bad" });
+    const forget = () => confirmDialog({
+      title: t`Удалить записи везде?`,
+      text: t`Записи, пропавшие с этого телефона, будут удалены из аккаунта и с остальных ваших устройств.`,
+      confirm: t`Удалить везде`,
+      danger: true,
+    }).then(yes => yes && service.resolveAutofillHold(name, "delete").catch(fail));
+    return [
+      h("div", { class: "kv tall" },
+        h("div", { class: "kv-text" }, h("span", {}, label), h("small", { class: "wrap" }, text)),
+        h("div", { class: "kv-actions" }, toggle(on, value => service.setAutofill(name, value).catch(fail), label))),
+      on && hold && h("div", { class: "kv tall sync-status warn" },
+        h("div", { class: "kv-text" }, h("small", { class: "wrap" }, t`С телефона разом пропало много записей: ${hold.missing} из ${hold.of}. На других устройствах они пока не удалены.`)),
+        h("div", { class: "kv-actions buttons" },
+          h("button", { class: "btn small", onclick: () => service.resolveAutofillHold(name, "restore").catch(fail) }, t`Вернуть на телефон`),
+          h("button", { class: "btn small", onclick: forget }, t`Удалить везде`))),
+      on && !hold && h("div", { class: "kv" },
+        h("div", { class: "kv-text" }, h("small", { class: "wrap" }, error ? t`Не сверено: приложение не ответило` : s.loaded ? (count ? plural(count, words) : none) : t`Идёт сверка…`))),
+    ];
   }
 
   function forgetLogins() {

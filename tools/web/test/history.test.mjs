@@ -97,7 +97,7 @@ class FakeApp {
 }
 
 const memory = (on = true) => ({ get: () => on, set: v => (on = v) });
-const phone = app => new Service({ bridge: app, store: new NativeStore(app), api: new Api(API), settings: { tabs: memory(false), codes: memory(false), logins: memory(false), marks: memory(false), spaces: memory(false), history: memory() } });
+const phone = app => new Service({ bridge: app, store: new NativeStore(app), api: new Api(API), settings: { tabs: memory(false), codes: memory(false), logins: memory(false), marks: memory(false), spaces: memory(false), history: memory(), addresses: memory(false), cards: memory(false) } });
 
 /* ---- grouping of visits ---- */
 

@@ -22,14 +22,16 @@ function clean(list) {
     .map(x => ({ t: str(x.t, 200), u: x.u, ...(x.p ? { p: 1 } : {}) }));
 }
 
-/** Переключатель в хранилище страницы: включён, пока человек не выключит. */
-export function pageSetting(key) {
+/** Переключатель в хранилище страницы: включён, пока человек не выключит. С on = false —
+ * наоборот: выключен, пока человек не включит. */
+export function pageSetting(key, on = true) {
   return {
     get() {
       try {
-        return localStorage.getItem(key) !== "0";
+        const saved = localStorage.getItem(key);
+        return saved === null ? on : saved !== "0";
       } catch (e) {
-        return true;
+        return on;
       }
     },
     set(on) {

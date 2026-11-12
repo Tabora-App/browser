@@ -1042,7 +1042,7 @@ function cardFields(f) {
   return out;
 }
 
-function autofillSource(name, collection, clean, sameThing) {
+function autofillSource(name, collection, clean, sameThing, content = f => f) {
   return {
     name,
 
@@ -1066,7 +1066,7 @@ function autofillSource(name, collection, clean, sameThing) {
       return out;
     },
 
-    hashable: d => d.f,
+    hashable: d => content(d.f),
     newer: (a, b) => (a.m || 0) > (b.m || 0),
 
     async apply(changes) {
@@ -1117,6 +1117,7 @@ function autofillSource(name, collection, clean, sameThing) {
 
 const sameFields = (a, b) => !!a && !!b && JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
 const addresses = autofillSource("addresses", "addresses", addressFields, sameFields);
-const cards = autofillSource("cards", "creditCards", cardFields, (a, b) => !!a && !!b && a["cc-number"] === b["cc-number"]);
+// the card's network is worked out from the number by every storage itself and is not a part of the content
+const cards = autofillSource("cards", "creditCards", cardFields, (a, b) => !!a && !!b && a["cc-number"] === b["cc-number"], ({ "cc-type": _type, ...rest }) => rest);
 
 export const SOURCES = { logins, otp, marks, spaces, start, tabs, sent, history, addresses, cards };

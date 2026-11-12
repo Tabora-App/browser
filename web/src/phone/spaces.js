@@ -95,8 +95,12 @@ export class Spaces {
   _source() {
     const list = async () => {
       const r = await this._native("spaces-list");
+      if (!Array.isArray(r.spaces)) {
+        // no answer is not an empty list: taking it for one would delete the account's spaces
+        throw Object.assign(new Error("приложение не ответило о пространствах"), { code: "spaces-storage" });
+      }
       const out = new Map();
-      for (const s of Array.isArray(r.spaces) ? r.spaces : []) {
+      for (const s of r.spaces) {
         const d = s && spaceData(s.id, s);
         if (d) {
           out.set(s.id, d);

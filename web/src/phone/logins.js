@@ -92,7 +92,11 @@ export class Logins {
 
   async _all() {
     const r = await this._native("logins-list");
-    return Array.isArray(r.logins) ? r.logins.filter(l => l && typeof l.guid === "string" && typeof l.origin === "string" && typeof l.password === "string" && l.password) : [];
+    if (!Array.isArray(r.logins)) {
+      // no answer is not an empty storage: taking it for one would delete the account's passwords
+      throw Object.assign(new Error("хранилище паролей не ответило"), { code: "logins-storage" });
+    }
+    return r.logins.filter(l => l && typeof l.guid === "string" && typeof l.origin === "string" && typeof l.password === "string" && l.password);
   }
 
   _source(state) {

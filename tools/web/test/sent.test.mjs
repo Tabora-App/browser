@@ -96,7 +96,7 @@ class FakeApp {
 }
 
 const memory = (on = true) => ({ get: () => on, set: v => (on = v) });
-const phone = app => new Service({ bridge: app, store: new NativeStore(app), api: new Api(API), settings: { history: memory(false), tabs: memory(), codes: memory(false), logins: memory(false), marks: memory(false), spaces: memory(false) } });
+const phone = app => new Service({ bridge: app, store: new NativeStore(app), api: new Api(API), settings: { history: memory(false), addresses: memory(false), cards: memory(false), tabs: memory(), codes: memory(false), logins: memory(false), marks: memory(false), spaces: memory(false) } });
 const until = async (test, ms = 8000) => {
   for (const end = Date.now() + ms; Date.now() < end; ) {
     if (test()) {

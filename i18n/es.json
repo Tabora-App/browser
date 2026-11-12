@@ -3194,5 +3194,13 @@
  "Адреса, телефоны и почта, которые браузер подставляет в формы.": "Direcciones, teléfonos y correo que el navegador rellena en los formularios.",
  "Банковские карты": "Tarjetas bancarias",
  "Номер, срок действия и имя владельца. Код безопасности карты браузер не хранит и никуда не передаёт.": "Número, fecha de caducidad y nombre del titular. El navegador no guarda el código de seguridad de la tarjeta ni lo envía a ningún sitio.",
- "карта|карты|карт": "tarjeta|tarjetas"
+ "карта|карты|карт": "tarjeta|tarjetas",
+ "Адреса, телефоны и почта, которые телефон подставляет в формы, — те же, что в Tabora на компьютере.": "Direcciones, teléfonos y correo que el teléfono rellena en los formularios: los mismos que en Tabora en tu ordenador.",
+ "Адресов пока нет": "Aún no hay direcciones",
+ "Номер, срок действия и имя владельца — те же, что в Tabora на компьютере. Код безопасности карты не хранится и никуда не передаётся.": "Número, fecha de caducidad y nombre del titular: los mismos que en Tabora en tu ordenador. El código de seguridad de la tarjeta no se guarda ni se envía a ningún sitio.",
+ "Карт пока нет": "Aún no hay tarjetas",
+ "Удалить записи везде?": "¿Eliminar los registros en todas partes?",
+ "Записи, пропавшие с этого телефона, будут удалены из аккаунта и с остальных ваших устройств.": "Los registros que desaparecieron de este teléfono se eliminarán de la cuenta y de tus otros dispositivos.",
+ "С телефона разом пропало много записей: {0} из {1}. На других устройствах они пока не удалены.": "Desaparecieron muchos registros del teléfono a la vez: {0} de {1}. Aún no se han eliminado en tus otros dispositivos.",
+ "Не сверено: приложение не ответило": "No sincronizado: la aplicación no respondió"
 }

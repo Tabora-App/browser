@@ -57,9 +57,14 @@ import mozilla.components.concept.storage.BookmarkInfo
 import mozilla.components.concept.storage.BookmarkNode
 import mozilla.components.concept.storage.BookmarkNodeType
 import mozilla.components.concept.storage.BookmarksStorage
+import mozilla.components.concept.storage.CreditCardNumber
+import mozilla.components.concept.storage.CreditCardsAddressesStorage
 import mozilla.components.concept.storage.HistoryStorage
 import mozilla.components.concept.storage.LoginEntry
 import mozilla.components.concept.storage.LoginsStorage
+import mozilla.components.concept.storage.NewCreditCardFields
+import mozilla.components.concept.storage.UpdatableAddressFields
+import mozilla.components.concept.storage.UpdatableCreditCardFields
 import mozilla.components.concept.storage.VisitType
 import mozilla.components.concept.sync.Device as SyncDevice
 import mozilla.components.concept.sync.DeviceCapability
@@ -69,6 +74,7 @@ import mozilla.components.lib.dataprotect.Keystore
 import mozilla.components.lib.dataprotect.SecureAbove22Preferences
 import mozilla.components.lib.state.ext.flow
 import mozilla.components.support.base.log.logger.Logger
+import mozilla.components.support.utils.creditCardIIN
 import mozilla.components.support.webextensions.BuiltInWebExtensionController
 import org.json.JSONArray
 import org.json.JSONObject
@@ -100,6 +106,7 @@ class TaboraAccount(
     private val bookmarks: () -> BookmarksStorage,
     private val spaces: () -> TaboraSpaces,
     private val history: () -> HistoryStorage,
+    private val autofill: () -> CreditCardsAddressesStorage,
 ) {
     /** Вкладка другого устройства. */
     data class Tab(val title: String, val url: String)
@@ -315,6 +322,17 @@ class TaboraAccount(
                         port.postMessage(JSONObject().put("type", "reply").put("rid", json.optInt("rid")).put("ok", ok))
                     }
                     "sent-result" -> sends[json.optInt("rid")]?.complete(json.optBoolean("ok"))
+                    "addresses-list", "addresses-add", "addresses-update", "addresses-delete",
+                    "cards-list", "cards-add", "cards-update", "cards-delete",
+                    -> {
+                        val rid = json.optInt("rid")
+                        scope.launch(Dispatchers.Main) {
+                            val reply =
+                                runCatching { withContext(Dispatchers.IO) { autofillRequest(json) } }
+                                    .getOrElse { JSONObject().put("error", it.message ?: it.javaClass.simpleName) }
+                            port.postMessage(reply.put("type", "reply").put("rid", rid))
+                        }
+                    }
                     "history-list" -> {
                         val rid = json.optInt("rid")
                         scope.launch(Dispatchers.Main) {
@@ -523,6 +541,116 @@ class TaboraAccount(
                 secure.remove("data_$name")
             }
         }
+    }
+
+    /**
+     * The module's request to the app's autofill storage: addresses and bank cards, each with a
+     * list, an addition, an edit and a deletion. The fields go under the names of the HTML
+     * autocomplete attribute, the way the desktop browser keeps them. A card's number is
+     * decrypted with the storage's key for the list (the module needs it to merge the card with
+     * the account) and comes in plain for an addition; the security code is not stored at all.
+     */
+    private suspend fun autofillRequest(json: JSONObject): JSONObject {
+        val storage = autofill()
+        val guid = json.optString("guid")
+        val f = json.optJSONObject("f") ?: JSONObject()
+        return when (json.optString("type")) {
+            "addresses-list" -> {
+                val items = JSONArray()
+                storage.getAllAddresses().forEach { a ->
+                    val fields = JSONObject()
+                    listOf(
+                        "name" to a.name, "organization" to a.organization, "street-address" to a.streetAddress,
+                        "address-level3" to a.addressLevel3, "address-level2" to a.addressLevel2,
+                        "address-level1" to a.addressLevel1, "postal-code" to a.postalCode, "country" to a.country,
+                        "tel" to a.tel, "email" to a.email,
+                    ).forEach { (name, value) -> if (value.isNotEmpty()) fields.put(name, value) }
+                    items.put(JSONObject().put("guid", a.guid).put("f", fields).put("c", a.timeCreated).put("m", a.timeLastModified))
+                }
+                JSONObject().put("items", items)
+            }
+            "addresses-add" -> JSONObject().put("guid", storage.addAddress(f.toAddressFields()).guid)
+            "addresses-update" -> {
+                storage.updateAddress(guid, f.toAddressFields())
+                JSONObject().put("ok", true)
+            }
+            "addresses-delete" -> {
+                storage.deleteAddress(guid)
+                JSONObject().put("ok", true)
+            }
+            "cards-list" -> {
+                val crypto = storage.getCreditCardCrypto()
+                val key = crypto.getOrGenerateKey()
+                val items = JSONArray()
+                storage.getAllCreditCards().forEach { card ->
+                    // a card whose number cannot be decrypted is left out: it cannot be merged
+                    val number = crypto.decrypt(key, card.encryptedCardNumber)?.number ?: return@forEach
+                    val fields = JSONObject().put("cc-number", number)
+                    if (card.billingName.isNotEmpty()) fields.put("cc-name", card.billingName)
+                    if (card.expiryMonth in 1..MONTHS) fields.put("cc-exp-month", card.expiryMonth)
+                    if (card.expiryYear > 0) fields.put("cc-exp-year", card.expiryYear)
+                    if (card.cardType.isNotEmpty()) fields.put("cc-type", card.cardType)
+                    items.put(JSONObject().put("guid", card.guid).put("f", fields).put("c", card.timeCreated).put("m", card.timeLastModified))
+                }
+                JSONObject().put("items", items)
+            }
+            "cards-add" -> {
+                val number = f.cardNumber()
+                val added =
+                    storage.addCreditCard(
+                        NewCreditCardFields(
+                            billingName = f.optString("cc-name").take(MAX_FIELD),
+                            plaintextCardNumber = CreditCardNumber.Plaintext(number),
+                            cardNumberLast4 = number.takeLast(LAST_DIGITS),
+                            expiryMonth = f.optLong("cc-exp-month", 0L),
+                            expiryYear = f.optLong("cc-exp-year", 0L),
+                            cardType = number.creditCardIIN()?.creditCardIssuerNetwork?.name ?: "",
+                        )
+                    )
+                JSONObject().put("guid", added.guid)
+            }
+            "cards-update" -> {
+                val number = f.cardNumber()
+                storage.updateCreditCard(
+                    guid,
+                    UpdatableCreditCardFields(
+                        billingName = f.optString("cc-name").take(MAX_FIELD),
+                        cardNumber = CreditCardNumber.Plaintext(number),
+                        cardNumberLast4 = number.takeLast(LAST_DIGITS),
+                        expiryMonth = f.optLong("cc-exp-month", 0L),
+                        expiryYear = f.optLong("cc-exp-year", 0L),
+                        cardType = number.creditCardIIN()?.creditCardIssuerNetwork?.name ?: "",
+                    ),
+                )
+                JSONObject().put("ok", true)
+            }
+            "cards-delete" -> {
+                storage.deleteCreditCard(guid)
+                JSONObject().put("ok", true)
+            }
+            else -> JSONObject().put("error", "unknown request")
+        }
+    }
+
+    private fun JSONObject.toAddressFields() =
+        UpdatableAddressFields(
+            name = optString("name").take(MAX_FIELD),
+            organization = optString("organization").take(MAX_FIELD),
+            streetAddress = optString("street-address").take(MAX_STREET),
+            addressLevel3 = optString("address-level3").take(MAX_FIELD),
+            addressLevel2 = optString("address-level2").take(MAX_FIELD),
+            addressLevel1 = optString("address-level1").take(MAX_FIELD),
+            postalCode = optString("postal-code").take(MAX_FIELD),
+            country = optString("country").take(2),
+            tel = optString("tel").take(MAX_FIELD),
+            email = optString("email").take(MAX_FIELD),
+        )
+
+    /** A card number as the module sends it: digits only, 12 to 19 of them. */
+    private fun JSONObject.cardNumber(): String {
+        val number = optString("cc-number")
+        require(CARD_NUMBER.matches(number)) { "not a card number" }
+        return number
     }
 
     /**
@@ -844,6 +972,11 @@ class TaboraAccount(
         private val DATA_NAME = Regex("^[a-z]{1,16}$")
         private val DEVICE_ID = Regex("^[A-Za-z0-9_-]{1,64}$")
         private const val SEND_TIMEOUT_MS = 30_000L
+        private val CARD_NUMBER = Regex("^[0-9]{12,19}$")
+        private const val MAX_FIELD = 200
+        private const val MAX_STREET = 500
+        private const val LAST_DIGITS = 4
+        private const val MONTHS = 12
         private const val MAX_VISITS = 20_000
 
         /** Visits that are not pages a person opened; the history screen leaves them out too. */

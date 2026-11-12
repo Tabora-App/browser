@@ -78,6 +78,15 @@ What lives where:
   history screen (`TaboraHistoryRow`) and from the account screen; they are not written into
   the phone's own history. Deleting a page from history on the phone removes it from the
   phone's records; turning history sync off or signing out removes them all.
+- **Addresses and bank cards:** the records of the app's autofill storage are merged with the
+  account's `addresses` and `cards` collections (`web/src/phone/autofill.js`), in the form the
+  desktop browser keeps them. Addresses are on by default; cards only after the switch on the
+  account screen is turned on. A card is its number, expiry and cardholder's name; the
+  security code is stored nowhere. Address autofill itself is offered to everyone (the engine
+  offers it only in the regions of its list).
+- When the app does not answer the module about one of its storages (passwords, bookmarks,
+  spaces, addresses, cards), the pass for that storage stops with an error: silence is never
+  taken for an empty storage, which would delete the account's records.
 - A sync runs: after sign-in and at startup, a few seconds after a change in tabs, when the
   tab list is opened and every ten minutes. On desktop, sync is on from the moment of account
   sign-in; it is turned off there too: "Settings → Account → Sync".

@@ -21,6 +21,7 @@
 import { Account } from "../core/account.js";
 import { SyncClient } from "../core/sync.js";
 import { t } from "../core/i18n.js";
+import { ADDRESSES, Autofill, CARDS } from "./autofill.js";
 import { Codes } from "./codes.js";
 import { History } from "./history.js";
 import { Logins } from "./logins.js";
@@ -55,6 +56,8 @@ export class Service {
     this.logins = new Logins({ account: this.account, sync: this.sync, bridge, store, ...(settings.logins ? { settings: settings.logins } : {}) });
     this.marks = new Marks({ account: this.account, sync: this.sync, bridge, store, ...(settings.marks ? { settings: settings.marks } : {}) });
     this.spaces = new Spaces({ account: this.account, sync: this.sync, bridge, store, ...(settings.spaces ? { settings: settings.spaces } : {}) });
+    this.addresses = new Autofill({ account: this.account, sync: this.sync, bridge, store, kind: ADDRESSES, ...(settings.addresses ? { settings: settings.addresses } : {}) });
+    this.cards = new Autofill({ account: this.account, sync: this.sync, bridge, store, kind: CARDS, ...(settings.cards ? { settings: settings.cards } : {}) });
     this.history = new History({ account: this.account, sync: this.sync, bridge, store, ...(settings.history ? { settings: settings.history } : {}) });
     // "Send to device" is a part of tab sync: it is on and off together with it
     this.sent = new SentTabs({ account: this.account, sync: this.sync, bridge, store, enabled: () => this.tabs.enabled });
@@ -112,7 +115,7 @@ export class Service {
 
   /** Наборы синхронизации, которые нужны при нынешних настройках. */
   _wanted() {
-    return [this.tabs.enabled && "tabs", this.tabs.enabled && "sent", this.codes.enabled && "otp", this.logins.enabled && "logins", this.marks.enabled && "marks", this.spaces.enabled && "spaces", this.history.enabled && "history"].filter(Boolean);
+    return [this.tabs.enabled && "tabs", this.tabs.enabled && "sent", this.codes.enabled && "otp", this.logins.enabled && "logins", this.marks.enabled && "marks", this.spaces.enabled && "spaces", this.history.enabled && "history", this.addresses.enabled && "addresses", this.cards.enabled && "cards"].filter(Boolean);
   }
 
   /* ---- события ---- */
@@ -165,6 +168,8 @@ export class Service {
       this.marks.forget();
       this.spaces.forget();
       this.sent.forget();
+      this.addresses.forget();
+      this.cards.forget();
       this.history.error = "";
       this.erased = false;
       this._dirty = false;
@@ -252,6 +257,13 @@ export class Service {
           throw e; // приложение не ответило о пространствах — остальное сверено, ошибка видна на экране аккаунта
         }
       });
+      for (const autofill of [this.addresses, this.cards]) {
+        await autofill.merge().catch(e => {
+          if (e.code !== "autofill-storage") {
+            throw e; // the app did not answer about addresses or cards: the rest is in sync, the error is on the account screen
+          }
+        });
+      }
       await this.history.push({ full }).catch(e => {
         if (e.code !== "history-storage") {
           throw e; // the app did not answer about history: the rest is in sync, the error is on the account screen
@@ -284,6 +296,10 @@ export class Service {
     this.spaces.enabled = false;
     await this.spaces.forget();
     this.history.enabled = false;
+    for (const autofill of [this.addresses, this.cards]) {
+      autofill.enabled = false;
+      await autofill.forget();
+    }
     this.sync.reset();
     this.sync.setOnly([]);
     this.erased = true;
@@ -333,6 +349,23 @@ export class Service {
       await this.marks.forget();
     }
     this._applyWanted(on);
+  }
+
+  /** Turn the sync of autofill addresses ("addresses") or bank cards ("cards") on or off. The
+   * records stay on the phone and in the account either way. */
+  async setAutofill(name, on) {
+    const autofill = name === "cards" ? this.cards : this.addresses;
+    autofill.enabled = !!on;
+    if (!on) {
+      await autofill.forget();
+    }
+    this._applyWanted(on);
+  }
+
+  async resolveAutofillHold(name, what) {
+    await (name === "cards" ? this.cards : this.addresses).resolveHold(what);
+    this._changed();
+    this.soon(0);
   }
 
   /** Turn history sync on or off. Turning it off removes the phone's history from the server;
@@ -515,6 +548,14 @@ export class Service {
       targets: signedIn && this.tabs.enabled ? this.sent.targets() : [],
       historyOn: this.history.enabled,
       historyError: this.history.error,
+      addressesOn: this.addresses.enabled,
+      addresses: signedIn && this.addresses.enabled ? this.addresses.count : 0,
+      addressesHold: signedIn ? this.addresses.hold : null,
+      addressesError: this.addresses.error,
+      cardsOn: this.cards.enabled,
+      cards: signedIn && this.cards.enabled ? this.cards.count : 0,
+      cardsHold: signedIn ? this.cards.hold : null,
+      cardsError: this.cards.error,
     };
   }
 

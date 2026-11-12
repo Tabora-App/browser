@@ -118,7 +118,11 @@ export class Marks {
     /** Дерево хранилища записями набора: номера хранилища заменены номерами записей. */
     const list = async () => {
       const r = await this._native("marks-tree");
-      const nodes = (Array.isArray(r.nodes) ? r.nodes : []).filter(n => n && [1, 2, 3].includes(n.k) && ID_RE.test(n.g || ""));
+      if (!Array.isArray(r.nodes)) {
+        // no answer is not an empty storage: taking it for one would delete the account's bookmarks
+        throw Object.assign(new Error("хранилище закладок не ответило"), { code: "marks-storage" });
+      }
+      const nodes = r.nodes.filter(n => n && [1, 2, 3].includes(n.k) && ID_RE.test(n.g || ""));
       const present = new Set(nodes.map(n => n.g));
       for (const id of Object.keys(state.map)) {
         if (!present.has(state.map[id])) {

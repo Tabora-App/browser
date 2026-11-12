@@ -53,6 +53,9 @@ class FakeApp {
     }
   }
   async call(message) {
+    if (this.silent) {
+      return {}; // the app did not answer in time: this is what the channel gives then
+    }
     if (message.type === "logins-list") {
       return { logins: [...this.logins.values()].map(l => ({ ...l })) };
     }
@@ -116,7 +119,7 @@ class FakeApp {
 
 const memory = (on = true) => ({ get: () => on, set: v => (on = v) });
 // пароли в начале выключены: первые проверки — про вкладки и коды
-const switches = { tabs: memory(), codes: memory(), logins: memory(false), history: memory(false) };
+const switches = { tabs: memory(), codes: memory(), logins: memory(false), history: memory(false), addresses: memory(false), cards: memory(false) };
 const phone = (app, api = API) => new Service({ bridge: app, store: new NativeStore(app), api: new Api(api), settings: switches });
 
 /* ---- аккаунт и «компьютер» ---- */
@@ -400,6 +403,15 @@ await svc.setLogins(true);
 await svc.run();
 await desk.refresh();
 check("включили снова: одинаковые пароли узнаются, дублей нет ни там ни здесь", [app.logins.size, desk.list("logins").length], [total - 24, total - 24]);
+
+// the app does not answer about passwords: silence must not be taken for an empty storage
+app.silent = true;
+await svc.run();
+app.silent = false;
+await desk.refresh();
+check("приложение не ответило о паролях: молчание не принимается за пустое хранилище, на сервере ничего не удалено", [desk.list("logins").length, !!svc.state().loginsError, svc.state().loginsHold], [total - 24, true, null]);
+await svc.run();
+check("ответило — сверка снова чистая", [svc.state().loginsError, app.logins.size], ["", total - 24]);
 
 /* ---- данные стёрли с сервера с другого устройства ---- */
 
