@@ -196,7 +196,7 @@ check("записи компьютера на сервере не тронуты
 const calls = app.calls.length;
 await svc.run();
 await desk.refresh();
-check("повторная сверка без перемен ничего не пишет ни в хранилище, ни на сервер", [app.calls.slice(calls).filter(c => c !== "marks-tree" && c !== "logins-list"), desk.list("marks").length], [[], 10]);
+check("повторная сверка без перемен ничего не пишет ни в хранилище, ни на сервер", [app.calls.slice(calls).filter(c => c !== "marks-tree" && c !== "logins-list" && c !== "spaces-list"), desk.list("marks").length], [[], 10]);
 
 /* ---- перемены на компьютере ---- */
 

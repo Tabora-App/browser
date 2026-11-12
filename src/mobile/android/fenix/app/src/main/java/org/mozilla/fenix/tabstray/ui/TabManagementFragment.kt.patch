@@ -1,5 +1,5 @@
 diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/ui/TabManagementFragment.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/ui/TabManagementFragment.kt
-index 4797acfed6..7e365080a8 100644
+index 4797acfed6..72b96ad15f 100644
 --- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/ui/TabManagementFragment.kt
 +++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/ui/TabManagementFragment.kt
 @@ -102,6 +102,7 @@ import org.mozilla.fenix.tabgroups.EditTabGroup
@@ -10,7 +10,15 @@ index 4797acfed6..7e365080a8 100644
  import org.mozilla.fenix.tabstray.InactiveTabsBinding
  import org.mozilla.fenix.tabstray.PbmLockStatusBinding
  import org.mozilla.fenix.tabstray.TabManagerCfrController
-@@ -128,7 +129,6 @@ import org.mozilla.fenix.tabstray.redux.state.TabGroupFormState
+@@ -112,7 +113,6 @@ import org.mozilla.fenix.tabstray.controller.DefaultTabManagerInteractor
+ import org.mozilla.fenix.tabstray.controller.ItemInteractionHandler
+ import org.mozilla.fenix.tabstray.controller.TabManagerController
+ import org.mozilla.fenix.tabstray.controller.TabManagerInteractor
+-import org.mozilla.fenix.tabstray.data.TabData
+ import org.mozilla.fenix.tabstray.data.TabGroupTheme
+ import org.mozilla.fenix.tabstray.data.TabsTrayItem
+ import org.mozilla.fenix.tabstray.navigation.TabManagerNavDestination
+@@ -128,7 +128,6 @@ import org.mozilla.fenix.tabstray.redux.state.TabGroupFormState
  import org.mozilla.fenix.tabstray.redux.state.TabsTrayState
  import org.mozilla.fenix.tabstray.redux.store.TabsTrayStore
  import org.mozilla.fenix.tabstray.repository.uistate.DefaultTabManagerUiStateRepository
@@ -18,7 +26,7 @@ index 4797acfed6..7e365080a8 100644
  import org.mozilla.fenix.tabstray.ui.animation.defaultPredictivePopTransitionSpec
  import org.mozilla.fenix.tabstray.ui.animation.defaultTransitionSpec
  import org.mozilla.fenix.tabstray.ui.animation.popTransitionSpec
-@@ -159,7 +159,7 @@ class TabManagementFragment : Fragment() {
+@@ -159,7 +158,7 @@ class TabManagementFragment : Fragment() {
      private val inactiveTabsBinding = ViewBoundFeatureWrapper<InactiveTabsBinding>()
      private val pbmLockStatusBinding = ViewBoundFeatureWrapper<PbmLockStatusBinding>()
      private val secureTabManagerBinding = ViewBoundFeatureWrapper<SecureTabManagerBinding>()
@@ -27,7 +35,16 @@ index 4797acfed6..7e365080a8 100644
      private val trackersBlockedFeature = ViewBoundFeatureWrapper<TrackersBlockedFeature>()
      private lateinit var snackbarHostState: SnackbarHostState
  
-@@ -786,7 +786,7 @@ class TabManagementFragment : Fragment() {
+@@ -728,7 +727,7 @@ class TabManagementFragment : Fragment() {
+                         TabStorageMiddleware(
+                             inactiveTabsEnabled = requireComponents.settings.inactiveTabsAreEnabled,
+                             tabGroupsEnabled = requireComponents.settings.tabGroupsEnabled,
+-                            tabDataFlow = requireComponents.core.store.stateFlow.map { TabData(it) },
++                            tabDataFlow = requireComponents.core.taboraSpaces.tabData(requireComponents.core.store.stateFlow),
+                             tabGroupRepository = requireComponents.core.tabGroupRepository,
+                             removeTabsUseCase = requireComponents.useCases.tabsUseCases.removeTabs,
+                             moveTabsUseCase = requireComponents.useCases.tabsUseCases.moveTabs,
+@@ -786,7 +785,7 @@ class TabManagementFragment : Fragment() {
                      showCollectionsMigrationCard =
                          requireComponents.collectionsMigrationRepository.shouldShowCollectionsMigrationCard()
                  ),
@@ -36,7 +53,7 @@ index 4797acfed6..7e365080a8 100644
              config =
                  TabsTrayState.TabsTrayConfig(
                      tabGroupsEnabled = settings.tabGroupsEnabled,
-@@ -931,14 +931,12 @@ class TabManagementFragment : Fragment() {
+@@ -931,14 +930,12 @@ class TabManagementFragment : Fragment() {
  
          syncedTabsIntegration.set(
              feature =

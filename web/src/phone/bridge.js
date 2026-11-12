@@ -29,7 +29,10 @@
  *   { type: "marks-add", rid, parent, kind, title, url }      → reply { ok, guid }
  *   { type: "marks-update", rid, guid, parent?, title?, url? } → reply { ok }
  *   { type: "marks-order", rid, parent, order: [guid] }       порядок детей папки → reply { ok }
- *   { type: "marks-delete", rid, guid }                       → reply { ok } */
+ *   { type: "marks-delete", rid, guid }                       → reply { ok }
+ *   { type: "spaces-list", rid }         пространства приложения, кроме «Личного» → reply { spaces: [{ id, n, i, col, o }] }
+ *   { type: "spaces-apply", rid, changes: [{ id, data: { n, i, col, o } | null, from? }] }
+ *                                        перемены из аккаунта разом → reply { ok, spaces } */
 
 const APP = "tabora";
 

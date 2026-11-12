@@ -23,7 +23,7 @@ export function mountPhoneAccount(root, { service }) {
   const off = service.subscribe(() => alive && draw());
 
   function status(s) {
-    if (!s.tabsOn && !s.codesOn && !s.loginsOn && !s.marksOn) {
+    if (!s.tabsOn && !s.codesOn && !s.loginsOn && !s.marksOn && !s.spacesOn) {
       return s.erased
         ? { tone: "warn", text: t`Выключена: данные синхронизации стёрли с сервера с другого устройства. Данные на самом телефоне на месте.` }
         : { text: t`Выключена: на этом телефоне ничего не синхронизируется.` };
@@ -95,9 +95,16 @@ export function mountPhoneAccount(root, { service }) {
           h("button", { class: "btn small", onclick: forgetMarks }, t`Удалить везде`))),
       s.marksOn && !s.marksHold && h("div", { class: "kv" },
         h("div", { class: "kv-text" }, h("small", { class: "wrap" }, s.marksError ? t`Закладки не сверены: ${s.marksError}` : s.loaded ? (s.marks ? plural(s.marks, t`закладка|закладки|закладок`) : t`Закладок пока нет`) : t`Идёт сверка…`))),
+      h("div", { class: "kv tall" },
+        h("div", { class: "kv-text" },
+          h("span", {}, t`Пространства`),
+          h("small", { class: "wrap" }, t`Список пространств общий с компьютером: названия, цвета и порядок. Вкладки и входы на сайтах внутри пространства остаются на этом телефоне.`)),
+        h("div", { class: "kv-actions" }, toggle(s.spacesOn, on => service.setSpaces(on), t`Пространства`))),
+      s.spacesOn && h("div", { class: "kv" },
+        h("div", { class: "kv-text" }, h("small", { class: "wrap" }, s.spacesError ? t`Пространства не сверены: ${s.spacesError}` : s.loaded ? (s.spaces ? plural(s.spaces, t`пространство|пространства|пространств`) : t`Пока только «Личное»`) : t`Идёт сверка…`))),
       h("div", { class: `kv tall sync-status${st.tone ? ` ${st.tone}` : ""}` },
         h("div", { class: "kv-text" }, h("small", { class: "wrap" }, st.text)),
-        h("div", { class: "kv-actions buttons" }, st.action || ((s.tabsOn || s.codesOn || s.loginsOn || s.marksOn) && now))),
+        h("div", { class: "kv-actions buttons" }, st.action || ((s.tabsOn || s.codesOn || s.loginsOn || s.marksOn || s.spacesOn) && now))),
       h("p", { class: "card-note" }, t`Данные шифруются на телефоне ключом вашего аккаунта. Сервер хранит их зашифрованными и прочитать не может.`));
   }
 

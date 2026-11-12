@@ -1,0 +1,25 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/browser/tabstrip/TabStripState.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/browser/tabstrip/TabStripState.kt
+index b57f3a1f22..efcb179646 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/browser/tabstrip/TabStripState.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/browser/tabstrip/TabStripState.kt
+@@ -5,10 +5,10 @@
+ package org.mozilla.fenix.browser.tabstrip
+ 
+ import android.graphics.Bitmap
+-import mozilla.components.browser.state.selector.getNormalOrPrivateTabs
+ import mozilla.components.browser.state.selector.selectedTab
+ import mozilla.components.browser.state.state.BrowserState
+ import mozilla.components.browser.state.state.TabSessionState
++import org.mozilla.fenix.tabora.TaboraSpaces
+ 
+ private const val MAX_TABS_WITH_CLOSE_BUTTON_VISIBLE = 7
+ 
+@@ -82,7 +82,7 @@ internal fun BrowserState.toTabStripState(
+             selectedTab?.content?.private == true
+         }
+ 
+-    val tabs = getNormalOrPrivateTabs(private = isPrivateMode)
++    val tabs = TaboraSpaces.visibleTabs(this, private = isPrivateMode)
+ 
+     return TabStripState(
+         tabs =

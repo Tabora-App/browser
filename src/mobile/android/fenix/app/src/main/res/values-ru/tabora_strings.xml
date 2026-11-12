@@ -29,4 +29,6 @@
     <string name="tabora_mail_title">Почта Tabora</string>
     <!-- Вход по QR-коду с другого устройства: подсказка в сканере -->
     <string name="tabora_pair_scan_hint">Наведите камеру на QR-код на экране компьютера</string>
+    <!-- Пространства: то, что есть на каждом устройстве -->
+    <string name="tabora_space_personal">Личное</string>
 </resources>

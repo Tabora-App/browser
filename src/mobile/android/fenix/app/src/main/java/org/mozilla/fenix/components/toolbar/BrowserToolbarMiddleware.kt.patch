@@ -1,0 +1,47 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/toolbar/BrowserToolbarMiddleware.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/toolbar/BrowserToolbarMiddleware.kt
+index 7500c18a76..8b10ac782e 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/toolbar/BrowserToolbarMiddleware.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/toolbar/BrowserToolbarMiddleware.kt
+@@ -21,7 +21,6 @@ import kotlinx.coroutines.withContext
+ import mozilla.components.browser.state.action.ContentAction
+ import mozilla.components.browser.state.action.EngineAction
+ import mozilla.components.browser.state.search.SearchEngine
+-import mozilla.components.browser.state.selector.getNormalOrPrivateTabs
+ import mozilla.components.browser.state.selector.selectedTab
+ import mozilla.components.browser.state.state.SecurityInfo
+ import mozilla.components.browser.state.state.selectedOrDefaultSearchEngine
+@@ -152,6 +151,7 @@ import org.mozilla.fenix.nimbus.FxNimbus
+ import org.mozilla.fenix.settings.ShortcutType
+ import org.mozilla.fenix.summarization.SummarizationNavigator
+ import org.mozilla.fenix.summarization.onboarding.SummarizationFeatureDiscoveryConfiguration
++import org.mozilla.fenix.tabora.TaboraSpaces
+ import org.mozilla.fenix.tabstray.ext.isActiveDownload
+ import org.mozilla.fenix.tabstray.redux.state.Page
+ import org.mozilla.fenix.translations.TranslationsEnabledSettings
+@@ -386,7 +386,7 @@ class BrowserToolbarMiddleware(
+             }
+             is CloseCurrentTab -> {
+                 browserStore.state.selectedTab?.let { selectedTab ->
+-                    val isLastTab = browserStore.state.getNormalOrPrivateTabs(selectedTab.content.private).size == 1
++                    val isLastTab = TaboraSpaces.visibleTabs(browserStore.state, selectedTab.content.private).size == 1
+ 
+                     if (!isLastTab) {
+                         useCases.tabsUseCases.removeTab(selectedTab.id, selectParentIfExists = true)
+@@ -974,7 +974,7 @@ class BrowserToolbarMiddleware(
+ 
+     private fun observeTabsCountUpdates(store: Store<BrowserToolbarState, BrowserToolbarAction>) {
+         browserStore.observeWhileActive {
+-            distinctUntilChangedBy { it.tabs.size }
++            distinctUntilChangedBy { state -> state.tabs.count { TaboraSpaces.shows(it) } }
+                 .collect {
+                     updateEndBrowserActions(store)
+                     updateNavigationActions(store)
+@@ -1340,7 +1340,7 @@ class BrowserToolbarMiddleware(
+ 
+             ToolbarAction.TabCounter -> {
+                 val isInPrivateMode = browsingModeManager.mode.isPrivate
+-                val tabsCount = browserStore.state.getNormalOrPrivateTabs(isInPrivateMode).size
++                val tabsCount = TaboraSpaces.visibleTabs(browserStore.state, isInPrivateMode).size
+ 
+                 val tabCounterDescription =
+                     if (isInPrivateMode) {

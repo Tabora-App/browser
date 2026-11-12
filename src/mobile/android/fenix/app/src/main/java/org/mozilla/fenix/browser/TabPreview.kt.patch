@@ -1,0 +1,29 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/browser/TabPreview.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/browser/TabPreview.kt
+index a997516427..6f8cf87cab 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/browser/TabPreview.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/browser/TabPreview.kt
+@@ -20,7 +20,6 @@ import kotlin.math.min
+ import kotlinx.coroutines.flow.first
+ import kotlinx.coroutines.launch
+ import mozilla.components.browser.state.search.SearchEngine
+-import mozilla.components.browser.state.selector.getNormalOrPrivateTabs
+ import mozilla.components.browser.state.selector.selectedTab
+ import mozilla.components.browser.state.state.TabSessionState
+ import mozilla.components.browser.state.state.selectedOrDefaultSearchEngine
+@@ -59,6 +58,7 @@ import org.mozilla.fenix.home.toolbar.BrowserSimpleToolbar
+ import org.mozilla.fenix.nimbus.FxNimbus
+ import org.mozilla.fenix.search.BrowserToolbarSearchMiddleware
+ import org.mozilla.fenix.settings.ShortcutType
++import org.mozilla.fenix.tabora.TaboraSpaces
+ import org.mozilla.fenix.theme.FirefoxTheme
+ import org.mozilla.fenix.translations.TranslationsEnabledSettings
+ 
+@@ -387,7 +387,7 @@ constructor(
+         get() {
+             val store = context.components.core.store
+             return store.state.selectedTab?.let {
+-                store.state.getNormalOrPrivateTabs(it.content.private).size
++                TaboraSpaces.visibleTabs(store.state, it.content.private).size
+             } ?: store.state.tabs.size
+         }
+ 

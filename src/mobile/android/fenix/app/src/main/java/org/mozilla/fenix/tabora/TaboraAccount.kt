@@ -68,7 +68,7 @@ import org.mozilla.fenix.R
  *    показом и вставкой кодов входа), открывает экраны модуля и сканер QR-кодов (вход по коду с
  *    другого устройства);
  *  - модуль читает и меняет хранилища паролей и закладок приложения, чтобы слить их с данными
- *    аккаунта.
+ *    аккаунта, и приносит из аккаунта список пространств ([TaboraSpaces]).
  *
  * Сообщения описаны в web/src/phone/bridge.js.
  */
@@ -77,6 +77,7 @@ class TaboraAccount(
     private val scope: CoroutineScope,
     private val logins: () -> LoginsStorage,
     private val bookmarks: () -> BookmarksStorage,
+    private val spaces: () -> TaboraSpaces,
 ) {
     /** Вкладка другого устройства. */
     data class Tab(val title: String, val url: String)
@@ -104,6 +105,7 @@ class TaboraAccount(
     private val mutableState =
         MutableStateFlow(State(signedIn = meta.getBoolean(KEY_SIGNED_IN, false), email = meta.getString(KEY_EMAIL, "").orEmpty()))
     private var localTabs: List<Tab> = emptyList()
+    private var browserStore: BrowserStore? = null
     private var host: WeakReference<FragmentActivity>? = null
     private var lastAuthAt = 0L
 
@@ -124,6 +126,7 @@ class TaboraAccount(
 
     /** Установить модуль в движок и начать передавать ему вкладки. Вызывается один раз при запуске. */
     fun install(runtime: WebExtensionRuntime, store: BrowserStore) {
+        browserStore = store
         controller.registerBackgroundMessageHandler(handler)
         controller.install(
             runtime,
@@ -218,6 +221,18 @@ class TaboraAccount(
                                     .getOrElse { JSONObject().put("error", it.message ?: it.javaClass.simpleName) }
                             port.postMessage(reply.put("type", "reply").put("rid", rid))
                         }
+                    }
+                    "spaces-list" ->
+                        port.postMessage(
+                            JSONObject().put("type", "reply").put("rid", json.optInt("rid")).put("spaces", spaces().list())
+                        )
+                    "spaces-apply" -> {
+                        // пространство с открытыми вкладками не удаляется: вкладки остались бы без него
+                        val open = browserStore?.state?.tabs?.mapNotNull { it.contextId }?.toSet().orEmpty()
+                        spaces().apply(json.optJSONArray("changes") ?: JSONArray()) { it in open }
+                        port.postMessage(
+                            JSONObject().put("type", "reply").put("rid", json.optInt("rid")).put("ok", true).put("spaces", spaces().list())
+                        )
                     }
                     "marks-tree", "marks-add", "marks-update", "marks-order", "marks-delete" -> {
                         val rid = json.optInt("rid")
@@ -500,6 +515,13 @@ class TaboraAccount(
             }
         asking = ask
         ask.launch(Manifest.permission.CAMERA)
+    }
+
+    /** Показать домашний экран: в пространстве закрыли последнюю вкладку или перешли в пустое. */
+    fun showHome() {
+        val activity = host?.get() ?: return
+        runCatching { activity.findNavController(R.id.container).navigate(NavGraphDirections.actionGlobalHome()) }
+            .onFailure { logger.error("домашний экран не открыт", it) }
     }
 
     /** Открыть экран модуля: «Аккаунт Tabora», «Коды входа» или «Почта». */

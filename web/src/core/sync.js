@@ -47,6 +47,8 @@ export class SyncClient {
   }
 
   reset() {
+    // идущее чтение с сервера видит по этому счётчику, что данные начаты заново, и начинает с начала
+    this._epoch = (this._epoch || 0) + 1;
     this.rev = 0;
     this.gen = null;
     this.keyId = "";
@@ -191,8 +193,23 @@ export class SyncClient {
     try {
       const token = this.account.token;
       let changed = false;
+      let epoch = this._epoch;
+      let restarts = 0;
       for (let page = 0; page < 200; page++) {
+        // Пока шёл запрос или расшифровка, данные могли сбросить (включили ещё один набор): ответ
+        // на прежний вопрос не годится — он без записей нового набора, а номер версии уже свежий.
+        if (this._epoch !== epoch) {
+          if (++restarts > 8) {
+            throw fail(t`Сервер Tabora не отвечает. Проверьте соединение и повторите`, "offline");
+          }
+          epoch = this._epoch;
+          page = 0;
+          changed = true;
+        }
         const res = await this.account.api.syncPull(token, this.rev, PULL_LIMIT);
+        if (this._epoch !== epoch) {
+          continue;
+        }
         if (!res || !Number.isInteger(res.rev) || !Number.isInteger(res.gen) || !Array.isArray(res.items)) {
           throw fail(t`Сервер Tabora ответил непонятно. Повторите позже`, "bad-response");
         }
@@ -208,6 +225,7 @@ export class SyncClient {
           // данные на сервере начаты заново (сброс или стирание): читаем с начала
           const keep = { status: this.status };
           this.reset();
+          epoch = this._epoch;
           this.status = keep.status;
           this.gen = res.gen;
           changed = true;
@@ -216,6 +234,7 @@ export class SyncClient {
         this.gen = res.gen;
         this.keyId = res.keyId || "";
         let last = this.rev;
+        let stale = false;
         for (const it of res.items) {
           if (!COLL_RE.test(it.c || "") || !ID_RE.test(it.id || "") || !Number.isInteger(it.rev)) {
             continue;
@@ -232,12 +251,19 @@ export class SyncClient {
           }
           this._gone(it.c).delete(it.id);
           const data = await this._open(keys, it.c, it.id, it.blob);
+          if (this._epoch !== epoch) {
+            stale = true;
+            break;
+          }
           if (data) {
             bucket.set(it.id, { rev: it.rev, data });
             changed = true;
           } else {
             this.unreadable++;
           }
+        }
+        if (stale) {
+          continue;
         }
         if (!res.more || !res.items.length) {
           this.rev = Math.max(last, res.rev);

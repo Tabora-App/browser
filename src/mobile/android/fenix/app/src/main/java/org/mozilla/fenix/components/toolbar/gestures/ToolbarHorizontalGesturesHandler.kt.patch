@@ -1,0 +1,29 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/toolbar/gestures/ToolbarHorizontalGesturesHandler.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/toolbar/gestures/ToolbarHorizontalGesturesHandler.kt
+index ee3f5a7c19..f5641de008 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/toolbar/gestures/ToolbarHorizontalGesturesHandler.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/toolbar/gestures/ToolbarHorizontalGesturesHandler.kt
+@@ -20,7 +20,6 @@ import androidx.interpolator.view.animation.LinearOutSlowInInterpolator
+ import kotlin.math.abs
+ import kotlin.math.max
+ import kotlin.math.min
+-import mozilla.components.browser.state.selector.getNormalOrPrivateTabs
+ import mozilla.components.browser.state.selector.selectedTab
+ import mozilla.components.browser.state.state.TabSessionState
+ import mozilla.components.browser.state.state.isActive
+@@ -40,6 +39,7 @@ import org.mozilla.fenix.browser.TabPreview
+ import org.mozilla.fenix.components.toolbar.gestures.ToolbarHorizontalGesturesHandler.Companion.GESTURE_FINISH_PERCENT
+ import org.mozilla.fenix.ext.components
+ import org.mozilla.fenix.ext.maxActiveTime
++import org.mozilla.fenix.tabora.TaboraSpaces
+ 
+ /** Handles intercepting touch events on the toolbar for swipe gestures and executes the necessary animations. */
+ @Suppress("LargeClass", "TooManyFunctions")
+@@ -178,7 +178,7 @@ class ToolbarHorizontalGesturesHandler(
+         val isLtr = activity.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_LTR
+         val currentTab = store.state.selectedTab ?: return Destination.None
+         val tabs =
+-            store.state.getNormalOrPrivateTabs(currentTab.content.private).filter {
++            TaboraSpaces.visibleTabs(store.state, currentTab.content.private).filter {
+                 it.isActive(maxActiveTime)
+             }
+ 

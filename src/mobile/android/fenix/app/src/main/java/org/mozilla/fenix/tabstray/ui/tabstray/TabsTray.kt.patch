@@ -1,0 +1,22 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/ui/tabstray/TabsTray.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/ui/tabstray/TabsTray.kt
+index caf030a205..3294d54da7 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/ui/tabstray/TabsTray.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/ui/tabstray/TabsTray.kt
+@@ -36,6 +36,7 @@ import mozilla.components.compose.base.annotation.FlexibleWindowPreview
+ import mozilla.components.compose.base.snackbar.Snackbar
+ import mozilla.components.compose.base.snackbar.SnackbarVisuals
+ import mozilla.components.compose.base.snackbar.displaySnackbar
++import org.mozilla.fenix.tabora.TaboraSpacesColumn
+ import org.mozilla.fenix.tabstray.TabsTrayTestTag
+ import org.mozilla.fenix.tabstray.controller.ItemInteractionHandler
+ import org.mozilla.fenix.tabstray.controller.NoOpItemInteractionHandler
+@@ -233,7 +234,8 @@ fun TabsTray(
+                 userScrollEnabled = false,
+             ) { position ->
+                 when (Page.positionToPage(position, shouldShowTabGroupsPage)) {
+-                    Page.NormalTabs -> {
++                    // Tabora: над обычными вкладками — переключатель пространств
++                    Page.NormalTabs -> TaboraSpacesColumn {
+                         NormalTabsPage(
+                             normalTabsState = state.normalTabsState,
+                             inactiveTabsState = state.inactiveTabs,

@@ -1,28 +1,50 @@
 diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/Core.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/Core.kt
-index 37f1465be7..e3d140e528 100644
+index 37f1465be7..46452d7821 100644
 --- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/Core.kt
 +++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/Core.kt
-@@ -150,6 +150,7 @@ import org.mozilla.fenix.summarization.onboarding.SummarizationFeatureDiscoveryC
+@@ -148,8 +148,11 @@ import org.mozilla.fenix.summarization.eligibility.SummarizationEligibilityCheck
+ import org.mozilla.fenix.summarization.onboarding.FenixSummarizationFeatureConfiguration
+ import org.mozilla.fenix.summarization.onboarding.SummarizationFeatureDiscoveryConfiguration
  import org.mozilla.fenix.tabgroups.middleware.TabGroupMiddleware
++import org.mozilla.fenix.tabora.TaboraSpaces
++import org.mozilla.fenix.tabora.TaboraSpacesMiddleware
  import org.mozilla.fenix.telemetry.TelemetryMiddleware
  import org.mozilla.fenix.translations.TranslationsEnabledSettings
 +import org.mozilla.fenix.tabora.TaboraAccount
  import org.mozilla.fenix.utils.Settings.DeleteDownloadBehavior
  import org.mozilla.fenix.utils.getUndoDelay
  import org.mozilla.geckoview.GeckoRuntime
-@@ -320,6 +321,11 @@ class Core(
+@@ -320,6 +323,20 @@ class Core(
      }
  
      /** The [BrowserStore] holds the global [BrowserState]. */
 +    /** Tabora: аккаунт и синхронизация (встроенный модуль assets/extensions/tabora). */
 +    val taboraAccount by lazyMonitored {
-+        TaboraAccount(context, applicationScope, logins = { passwordsStorage }, bookmarks = { bookmarksStorage })
++        TaboraAccount(
++            context,
++            applicationScope,
++            logins = { passwordsStorage },
++            bookmarks = { bookmarksStorage },
++            spaces = { taboraSpaces },
++        )
 +    }
++
++    /** Tabora: пространства — свои вкладки и свои данные сайтов у каждого. */
++    val taboraSpaces by lazyMonitored { TaboraSpaces(context) }
 +
      val store by lazyMonitored {
          val searchExtraParamsNimbus = FxNimbus.features.searchExtraParams.value()
          val searchExtraParams =
-@@ -419,6 +425,9 @@ class Core(
+@@ -339,6 +356,8 @@ class Core(
+             listOf(
+                 ProfileMarkerMiddleware(markerName = "BrowserStore", profiler = engine.profiler),
+                 LogMiddleware(tag = "BrowserStore", shouldIncludeDetailedData = { Config.channel.isDebug }),
++                // Tabora: новая вкладка открывается в текущем пространстве, закрытие вкладок его не меняет
++                TaboraSpacesMiddleware(spaces = { taboraSpaces }, showHome = { taboraAccount.showHome() }),
+                 LastAccessMiddleware(),
+                 RecentlyClosedMiddleware(recentlyClosedTabsStorage, RECENTLY_CLOSED_MAX),
+                 DownloadMiddleware(
+@@ -419,6 +438,9 @@ class Core(
                  // Install the "icons" WebExtension to automatically load icons for every visited website.
                  icons.install(engine, this)
  

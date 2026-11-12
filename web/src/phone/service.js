@@ -6,9 +6,10 @@
  * встроенного модуля всё время, пока запущено приложение; экраны модуля (аккаунт, коды) берут
  * этот же объект и ничего своего не хранят.
  *
- * Синхронизируются вкладки, коды входа, пароли сайтов и закладки — каждое включается отдельно.
- * Записи остальных наборов аккаунта модуль не расшифровывает и в памяти не держит. Пароли и
- * закладки лежат в хранилищах приложения; модуль сливает их с сервером (logins.js, marks.js).
+ * Синхронизируются вкладки, коды входа, пароли сайтов, закладки и список пространств — каждое
+ * включается отдельно. Записи остальных наборов аккаунта модуль не расшифровывает и в памяти не
+ * держит. Пароли, закладки и пространства лежат у приложения; модуль сливает их с сервером
+ * (logins.js, marks.js, spaces.js).
  *
  * Сверка с сервером: сразу после входа и запуска, через несколько секунд после перемены во
  * вкладках телефона, по просьбе приложения (открыли список вкладок) и раз в десять минут.
@@ -23,6 +24,7 @@ import { t } from "../core/i18n.js";
 import { Codes } from "./codes.js";
 import { Logins } from "./logins.js";
 import { Marks } from "./marks.js";
+import { Spaces } from "./spaces.js";
 import { TabSync } from "./tabs.js";
 
 const QUIET_MS = 5000; // пауза после перемены во вкладках перед сверкой
@@ -50,6 +52,7 @@ export class Service {
     this.codes = new Codes({ account: this.account, sync: this.sync, ...(settings.codes ? { settings: settings.codes } : {}) });
     this.logins = new Logins({ account: this.account, sync: this.sync, bridge, store, ...(settings.logins ? { settings: settings.logins } : {}) });
     this.marks = new Marks({ account: this.account, sync: this.sync, bridge, store, ...(settings.marks ? { settings: settings.marks } : {}) });
+    this.spaces = new Spaces({ account: this.account, sync: this.sync, bridge, store, ...(settings.spaces ? { settings: settings.spaces } : {}) });
     /** Данные синхронизации стёрли с сервера с другого устройства: синхронизация здесь выключена. */
     this.erased = false;
     this._listeners = new Set();
@@ -57,7 +60,7 @@ export class Service {
     this._period = null;
     this._saveTimer = null;
     this._running = null;
-    this._again = false;
+    this._queued = null;
     this._full = true; // следующая сверка полная; попутная (после перемены во вкладках) закладки читает реже
     this._fails = 0;
     this._sent = "";
@@ -104,7 +107,7 @@ export class Service {
 
   /** Наборы синхронизации, которые нужны при нынешних настройках. */
   _wanted() {
-    return [this.tabs.enabled && "tabs", this.codes.enabled && "otp", this.logins.enabled && "logins", this.marks.enabled && "marks"].filter(Boolean);
+    return [this.tabs.enabled && "tabs", this.codes.enabled && "otp", this.logins.enabled && "logins", this.marks.enabled && "marks", this.spaces.enabled && "spaces"].filter(Boolean);
   }
 
   /* ---- события ---- */
@@ -132,6 +135,7 @@ export class Service {
       this.codes.forget();
       this.logins.forget();
       this.marks.forget();
+      this.spaces.forget();
       this.erased = false;
       this._dirty = false;
       this._fails = 0;
@@ -184,17 +188,18 @@ export class Service {
       this._full = true;
     }
     if (this._running) {
-      this._again = true;
-      return this._running;
+      // сверка уже идёт и могла начаться до перемены, ради которой просят эту: сразу после неё
+      // пройдёт ещё одна — общая для всех, кто попросил за это время
+      this._queued ||= this._running.then(() => {
+        this._queued = null;
+        return this.run({ full: false });
+      });
+      return this._queued;
     }
     const all = this._full;
     this._full = false;
     this._running = this._run(all).finally(() => {
       this._running = null;
-      if (this._again) {
-        this._again = false;
-        this.soon(QUIET_MS, { full: false });
-      }
     });
     return this._running;
   }
@@ -211,6 +216,11 @@ export class Service {
       await this.tabs.push();
       await this.logins.merge();
       await this.marks.merge({ full });
+      await this.spaces.merge().catch(e => {
+        if (e.code !== "spaces-storage") {
+          throw e; // приложение не ответило о пространствах — остальное сверено, ошибка видна на экране аккаунта
+        }
+      });
       this._fails = 0;
     } catch (e) {
       if (e.code === "sync-erased") {
@@ -235,6 +245,8 @@ export class Service {
     await this.logins.forget();
     this.marks.enabled = false;
     await this.marks.forget();
+    this.spaces.enabled = false;
+    await this.spaces.forget();
     this.sync.reset();
     this.sync.setOnly([]);
     this.erased = true;
@@ -281,6 +293,14 @@ export class Service {
     this.marks.enabled = !!on;
     if (!on) {
       await this.marks.forget();
+    }
+    this._applyWanted(on);
+  }
+
+  async setSpaces(on) {
+    this.spaces.enabled = !!on;
+    if (!on) {
+      await this.spaces.forget();
     }
     this._applyWanted(on);
   }
@@ -420,6 +440,9 @@ export class Service {
       marks: signedIn && this.marks.enabled ? this.marks.count : 0,
       marksHold: signedIn ? this.marks.hold : null,
       marksError: this.marks.error,
+      spacesOn: this.spaces.enabled,
+      spaces: signedIn && this.spaces.enabled ? this.spaces.count : 0,
+      spacesError: this.spaces.error,
       erased: this.erased,
       status: this.sync.status,
       error: this.sync.error,
