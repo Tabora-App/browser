@@ -12,3 +12,4 @@ tools/vault-vendor/node_modules
 tools/site/node_modules
 tools/mail-vendor/node_modules
 tools/web/node_modules
+tools/i18n/node_modules

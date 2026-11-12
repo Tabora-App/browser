@@ -1,8 +1,8 @@
 {
-  "name": "Почта Tabora",
-  "short_name": "Почта",
-  "description": "Почта Tabora в любом браузере",
-  "lang": "ru",
+  "name": "Tabora Mail",
+  "short_name": "Mail",
+  "description": "Tabora Mail in any browser",
+  "lang": "en",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

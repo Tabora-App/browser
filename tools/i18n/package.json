@@ -1,0 +1,11 @@
+{
+  "name": "tabora-i18n",
+  "private": true,
+  "description": "Инструменты перевода интерфейса Tabora: пометка надписей в коде, сбор словаря, проверка. Версии закреплены в package-lock.json",
+  "license": "MPL-2.0",
+  "type": "module",
+  "devDependencies": {
+    "acorn": "8.14.1",
+    "acorn-walk": "8.3.4"
+  }
+}

@@ -1,3 +1,4 @@
+import { language, t } from "./i18n.js";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -22,7 +23,7 @@ export class Api {
     try {
       const res = await fetch(this.base + path, {
         method,
-        headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: { "Accept-Language": language(), ...(body ? { "Content-Type": "application/json" } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: body ? JSON.stringify(body) : undefined,
         credentials: "omit",
         redirect: "error",
@@ -37,10 +38,10 @@ export class Api {
       try {
         json = text ? JSON.parse(text) : {};
       } catch (e) {
-        throw fail("Сервер Tabora ответил непонятно. Повторите позже", "bad-response", { status: res.status });
+        throw fail(t`Сервер Tabora ответил непонятно. Повторите позже`, "bad-response", { status: res.status });
       }
       if (!res.ok) {
-        const error = fail(json.message || `Сервер: HTTP ${res.status}`, json.code || (res.status === 401 ? "bad-credentials" : `http-${res.status}`), { status: res.status, details: json });
+        const error = fail(json.message || t`Сервер: HTTP ${res.status}`, json.code || (res.status === 401 ? "bad-credentials" : `http-${res.status}`), { status: res.status, details: json });
         if (error.code === "session-expired" && token) {
           try {
             this.onExpired?.(token);
@@ -51,7 +52,7 @@ export class Api {
       return json;
     } catch (e) {
       if (e.name === "AbortError" || e.name === "TypeError") {
-        throw fail("Сервер Tabora не отвечает. Проверьте соединение и повторите", "offline");
+        throw fail(t`Сервер Tabora не отвечает. Проверьте соединение и повторите`, "offline");
       }
       throw e;
     } finally {
@@ -193,12 +194,12 @@ export class Api {
         return null;
       }
       if (!res.ok) {
-        throw fail("Каталог ключей не отвечает", "offline");
+        throw fail(t`Каталог ключей не отвечает`, "offline");
       }
       return new Uint8Array(await res.arrayBuffer());
     } catch (e) {
       if (e.name === "AbortError" || e.name === "TypeError") {
-        throw fail("Каталог ключей не отвечает", "offline");
+        throw fail(t`Каталог ключей не отвечает`, "offline");
       }
       throw e;
     } finally {

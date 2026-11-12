@@ -14,6 +14,7 @@
  * Если IndexedDB недоступна (некоторые приватные окна), сессия живёт только в памяти страницы. */
 
 import { b64, fromB64, random, randomId, text, utf8 } from "./bytes.js";
+import { t } from "./i18n.js";
 
 const DB = "tabora-web";
 const STORE = "keys";
@@ -27,16 +28,16 @@ function idb() {
     req.onupgradeneeded = () => req.result.createObjectStore(STORE);
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
-    req.onblocked = () => reject(new Error("хранилище занято"));
+    req.onblocked = () => reject(new Error(t`хранилище занято`));
   });
 }
 
 function tx(db, mode, fn) {
   return new Promise((resolve, reject) => {
-    const t = db.transaction(STORE, mode);
-    const req = fn(t.objectStore(STORE));
-    t.oncomplete = () => resolve(req?.result);
-    t.onerror = t.onabort = () => reject(t.error || new Error("хранилище недоступно"));
+    const txn = db.transaction(STORE, mode);
+    const req = fn(txn.objectStore(STORE));
+    txn.oncomplete = () => resolve(req?.result);
+    txn.onerror = txn.onabort = () => reject(txn.error || new Error(t`хранилище недоступно`));
   });
 }
 
@@ -112,7 +113,7 @@ export class BrowserStore {
     }
     try {
       if (!key) {
-        throw new Error("ключ сессии утрачен");
+        throw new Error(t`ключ сессии утрачен`);
       }
       const bytes = fromB64(raw);
       const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: bytes.subarray(0, 12), additionalData: utf8("tabora-web/session/v1") }, key, bytes.subarray(12));

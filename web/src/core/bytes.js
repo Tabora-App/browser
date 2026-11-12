@@ -1,3 +1,4 @@
+import { t } from "./i18n.js";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -21,7 +22,7 @@ export function hex(bytes) {
 
 export function fromHex(s) {
   if (typeof s !== "string" || s.length % 2 || /[^0-9a-f]/i.test(s)) {
-    throw new Error("Неверная шестнадцатеричная строка");
+    throw new Error(t`Неверная шестнадцатеричная строка`);
   }
   const out = new Uint8Array(s.length / 2);
   for (let i = 0; i < out.length; i++) {

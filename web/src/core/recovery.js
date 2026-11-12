@@ -12,6 +12,7 @@ import { ed25519 } from "@noble/curves/ed25519";
 import { hmac } from "@noble/hashes/hmac";
 import { sha256 } from "@noble/hashes/sha2";
 import { hex, random, utf8, wipe } from "./bytes.js";
+import { t } from "./i18n.js";
 
 const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 const SIGN_INFO = "tabora-account-recovery-ed25519-v1";
@@ -36,7 +37,7 @@ export function rkFormat(bytes) {
 export function rkParse(input) {
   const clean = String(input || "").toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/0/g, "O").replace(/1/g, "L").replace(/8/g, "B");
   if (clean.length !== 32 || /[^A-Z2-7]/.test(clean)) {
-    throw new Error("Ключ восстановления: 32 символа в 8 группах по 4");
+    throw new Error(t`Ключ восстановления: 32 символа в 8 группах по 4`);
   }
   const out = [];
   let bits = 0;

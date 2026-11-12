@@ -10,23 +10,24 @@
 import { cleanRich, richToText } from "../core/sanitize.js";
 import { h, icon } from "./dom.js";
 import { field, formError, modal } from "./ui.js";
+import { t } from "../core/i18n.js";
 
 const TOOLS = [
-  ["bold", "bold", "Полужирный"],
-  ["italic", "italic", "Курсив"],
-  ["underline", "underline", "Подчёркнутый"],
+  ["bold", "bold", t`Полужирный`],
+  ["italic", "italic", t`Курсив`],
+  ["underline", "underline", t`Подчёркнутый`],
   null,
-  ["insertUnorderedList", "list", "Список"],
-  ["insertOrderedList", "numbered", "Нумерованный список"],
-  ["quote", "quote", "Цитата"],
-  ["link", "link", "Ссылка"],
+  ["insertUnorderedList", "list", t`Список`],
+  ["insertOrderedList", "numbered", t`Нумерованный список`],
+  ["quote", "quote", t`Цитата`],
+  ["link", "link", t`Ссылка`],
   null,
-  ["removeFormat", "clearFormat", "Убрать оформление"],
+  ["removeFormat", "clearFormat", t`Убрать оформление`],
 ];
 
-export function createEditor({ html = "", placeholder = "Текст письма", onchange = null } = {}) {
+export function createEditor({ html = "", placeholder = t`Текст письма`, onchange = null } = {}) {
   const area = h("div", { class: "editor-area", contenteditable: "true", role: "textbox", "aria-multiline": "true", "aria-label": placeholder, "data-placeholder": placeholder, spellcheck: "true" });
-  const bar = h("div", { class: "editor-bar", role: "toolbar", "aria-label": "Оформление" });
+  const bar = h("div", { class: "editor-bar", role: "toolbar", "aria-label": t`Оформление` });
   const buttons = new Map();
   let savedRange = null;
 
@@ -100,18 +101,18 @@ export function createEditor({ html = "", placeholder = "Текст письма
     const sel = window.getSelection();
     savedRange = sel.rangeCount && area.contains(sel.anchorNode) ? sel.getRangeAt(0).cloneRange() : null;
     const selected = savedRange ? savedRange.toString() : "";
-    const url = field("Адрес", { placeholder: "https://", inputmode: "url", autofocus: true });
-    const text = field("Текст ссылки", { value: selected });
+    const url = field(t`Адрес`, { placeholder: "https://", inputmode: "url", autofocus: true });
+    const text = field(t`Текст ссылки`, { value: selected });
     const error = formError();
-    const submit = h("button", { class: "btn primary" }, "Вставить");
-    const m = modal({ title: "Ссылка", content: [h("form", { class: "modal-form", novalidate: true, onsubmit: e => { e.preventDefault(); submit.click(); } }, url.el, selected ? null : text.el, error.el)], actions: [h("button", { class: "btn", onclick: () => m.close() }, "Отмена"), submit] });
+    const submit = h("button", { class: "btn primary" }, t`Вставить`);
+    const m = modal({ title: t`Ссылка`, content: [h("form", { class: "modal-form", novalidate: true, onsubmit: e => { e.preventDefault(); submit.click(); } }, url.el, selected ? null : text.el, error.el)], actions: [h("button", { class: "btn", onclick: () => m.close() }, t`Отмена`), submit] });
     submit.addEventListener("click", () => {
       let href = url.value.trim();
       if (href && !/^[a-z][a-z0-9+.-]*:/i.test(href)) {
         href = `https://${href}`;
       }
       if (!/^(https?:|mailto:)/i.test(href)) {
-        error.set("Нужен адрес сайта или почты");
+        error.set(t`Нужен адрес сайта или почты`);
         return;
       }
       m.close();
@@ -130,12 +131,12 @@ export function createEditor({ html = "", placeholder = "Текст письма
     });
   }
 
-  for (const t of TOOLS) {
-    if (!t) {
+  for (const tool of TOOLS) {
+    if (!tool) {
       bar.append(h("span", { class: "editor-sep" }));
       continue;
     }
-    const [cmd, ic, label] = t;
+    const [cmd, ic, label] = tool;
     const btn = h("button", { class: "icon-btn editor-btn", type: "button", "aria-label": label, title: label, "aria-pressed": "false" }, icon(ic, 17));
     // mousedown, а не click: выделение в тексте не должно сброситься до применения команды
     btn.addEventListener("mousedown", e => e.preventDefault());

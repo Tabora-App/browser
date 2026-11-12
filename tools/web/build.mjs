@@ -18,6 +18,7 @@ import { createHash } from "node:crypto";
 import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { catalogPlugin, webSet } from "../i18n/catalog.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../..");
@@ -32,7 +33,9 @@ mkdirSync(join(out, "assets"), { recursive: true });
 const common = {
   bundle: true,
   platform: "browser",
-  target: ["es2020", "chrome90", "firefox90", "safari15"],
+  // без «es2020»: приложению нужен await на верхнем уровне модуля (словарь языка); он есть во всех
+  // перечисленных браузерах, а старше них приложение всё равно не запускается (static/compat.js)
+  target: ["chrome90", "firefox90", "safari15"],
   minify: !dev,
   sourcemap: dev ? "inline" : false,
   legalComments: "eof",
@@ -71,6 +74,8 @@ const app = await build({
   entryNames: "[name]-[hash]",
   absWorkingDir: root,
   external: ["/assets/fonts/*"],
+  // переводы: в сборку попадают только надписи, которые встречаются в коде веб-версии (i18n/*.json)
+  plugins: [catalogPlugin(webSet)],
   define: { __KDF_WORKER__: JSON.stringify(workers.kdf), __PGP_WORKER__: JSON.stringify(workers.pgp), __APP_VERSION__: JSON.stringify(version), __DEV__: JSON.stringify(dev) },
 });
 const js = outName(app, mainEntry);

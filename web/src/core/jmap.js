@@ -13,6 +13,7 @@
  * тогда запросы идут прямо на почтовый сервер (/jmap…) с этим паролем — как раньше. */
 
 import { b64, utf8 } from "./bytes.js";
+import { t } from "./i18n.js";
 
 const USING = ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail", "urn:ietf:params:jmap:submission"];
 
@@ -70,7 +71,7 @@ export class Jmap {
         if (e.code) {
           throw e;
         }
-        throw fail("Почтовый сервер не отвечает. Проверьте соединение и повторите", "offline");
+        throw fail(t`Почтовый сервер не отвечает. Проверьте соединение и повторите`, "offline");
       } finally {
         clearTimeout(timer);
       }
@@ -79,23 +80,23 @@ export class Jmap {
         try {
           this.account.api.onExpired?.(token);
         } catch (e) {}
-        throw fail("Сессия истекла: войдите в аккаунт заново", "session-expired");
+        throw fail(t`Сессия истекла: войдите в аккаунт заново`, "session-expired");
       }
       if (res.status === 401 && attempt === 0) {
         continue;
       }
       if (res.status === 401) {
-        throw fail("Почтовый сервер не принял вход. Выйдите из аккаунта и войдите снова", "mail-auth");
+        throw fail(t`Почтовый сервер не принял вход. Выйдите из аккаунта и войдите снова`, "mail-auth");
       }
       if (res.status === 429) {
-        throw fail("Слишком много запросов к почте. Повторите через минуту", "rate-limited");
+        throw fail(t`Слишком много запросов к почте. Повторите через минуту`, "rate-limited");
       }
       if (res.status === 503 || res.status === 502) {
-        throw fail("Почтовый сервер сейчас недоступен. Повторите позже", "mail-unavailable", { status: res.status });
+        throw fail(t`Почтовый сервер сейчас недоступен. Повторите позже`, "mail-unavailable", { status: res.status });
       }
       return res;
     }
-    throw fail("Почтовый сервер не отвечает", "offline");
+    throw fail(t`Почтовый сервер не отвечает`, "offline");
   }
 
   async session() {
@@ -104,12 +105,12 @@ export class Jmap {
     }
     const res = await this._fetch(this._url("session"));
     if (!res.ok) {
-      throw fail("Почтовый сервер сейчас недоступен. Повторите позже", "mail-unavailable", { status: res.status });
+      throw fail(t`Почтовый сервер сейчас недоступен. Повторите позже`, "mail-unavailable", { status: res.status });
     }
     const s = await res.json();
     const id = s.primaryAccounts?.["urn:ietf:params:jmap:mail"];
     if (!id) {
-      throw fail("Почтовый сервер не назвал ящик", "mail-unavailable");
+      throw fail(t`Почтовый сервер не назвал ящик`, "mail-unavailable");
     }
     this.accountId = id;
     this.limits = { maxAttachments: s.accounts?.[id]?.accountCapabilities?.["urn:ietf:params:jmap:mail"]?.maxSizeAttachmentsPerEmail || 25_000_000, maxUpload: s.capabilities?.["urn:ietf:params:jmap:core"]?.maxSizeUpload || 50_000_000 };
@@ -129,16 +130,16 @@ export class Jmap {
     try {
       json = await res.json();
     } catch (e) {
-      throw fail("Почтовый сервер ответил непонятно. Повторите позже", "bad-response", { status: res.status });
+      throw fail(t`Почтовый сервер ответил непонятно. Повторите позже`, "bad-response", { status: res.status });
     }
     if (!res.ok || !Array.isArray(json.methodResponses)) {
-      throw fail(json.detail || "Почтовый сервер отклонил запрос", json.type || "mail-error", { status: res.status });
+      throw fail(json.detail || t`Почтовый сервер отклонил запрос`, json.type || "mail-error", { status: res.status });
     }
     const out = new Array(calls.length).fill(null);
     for (const [name, args, tag] of json.methodResponses) {
       const i = Number(String(tag).slice(1));
       if (name === "error") {
-        throw fail(args.description || `Почтовый сервер: ${args.type}`, args.type || "mail-error", { method: calls[i]?.[0] });
+        throw fail(args.description || t`Почтовый сервер: ${args.type}`, args.type || "mail-error", { method: calls[i]?.[0] });
       }
       // метод может ответить дважды (EmailSubmission/set + неявный Email/set): берём первый ответ
       if (out[i] === null) {
@@ -153,7 +154,7 @@ export class Jmap {
     await this.session();
     const res = await this._fetch(`${this._url("download", this.accountId, blobId, name)}?accept=${encodeURIComponent(type)}`, {}, { timeout });
     if (!res.ok) {
-      throw fail(res.status === 404 ? "Файл не найден на сервере" : "Не удалось скачать файл", "download", { status: res.status });
+      throw fail(res.status === 404 ? t`Файл не найден на сервере` : t`Не удалось скачать файл`, "download", { status: res.status });
     }
     return new Uint8Array(await res.arrayBuffer());
   }
@@ -163,7 +164,7 @@ export class Jmap {
     await this.session();
     const res = await this._fetch(this._url("upload", this.accountId), { method: "POST", headers: { "Content-Type": type }, body: bytes }, { timeout });
     if (!res.ok) {
-      throw fail(res.status === 413 ? "Файл слишком большой" : "Не удалось загрузить файл на сервер", "upload", { status: res.status });
+      throw fail(res.status === 413 ? t`Файл слишком большой` : t`Не удалось загрузить файл на сервер`, "upload", { status: res.status });
     }
     return res.json();
   }

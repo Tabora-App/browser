@@ -11,9 +11,10 @@ import { openAliases } from "./mail-aliases.js";
 import { openCompose } from "./mail-compose.js";
 import { renderThread } from "./mail-reader.js";
 import { promo } from "./promo.js";
+import { t } from "../core/i18n.js";
 
 const ROLE_ICON = { inbox: "inbox", drafts: "drafts", sent: "sent", archive: "archive", junk: "spam", trash: "trash" };
-const VIEWS = [["all", "Все"], ["unread", "Непрочитанные"], ["starred", "Со звездой"], ["files", "С вложениями"]];
+const VIEWS = [["all", t`Все`], ["unread", t`Непрочитанные`], ["starred", t`Со звездой`], ["files", t`С вложениями`]];
 const PAGE = 40;
 
 export function mountMail(el, ctx, rest) {
@@ -33,15 +34,15 @@ export function mountMail(el, ctx, rest) {
   let threadError = "";
   let alive = true;
 
-  const folders = h("nav", { class: "mail-folders", "aria-label": "Папки" });
+  const folders = h("nav", { class: "mail-folders", "aria-label": t`Папки` });
   const title = h("h1", {});
-  const listBody = h("div", { class: "list mail-items", role: "listbox", "aria-label": "Письма" });
+  const listBody = h("div", { class: "list mail-items", role: "listbox", "aria-label": t`Письма` });
   const reader = h("section", { class: "mail-reader" });
-  const search = h("input", { type: "search", placeholder: "Поиск по письмам", "aria-label": "Поиск по письмам", autocomplete: "off", spellcheck: "false" });
+  const search = h("input", { type: "search", placeholder: t`Поиск по письмам`, "aria-label": t`Поиск по письмам`, autocomplete: "off", spellcheck: "false" });
   const chips = h("div", { class: "chips" });
-  const folderButton = h("button", { class: "icon-btn mail-folder-switch", "aria-label": "Папки" }, icon("list", 20));
-  const refreshButton = h("button", { class: "icon-btn", "aria-label": "Обновить" }, icon("reload", 18));
-  const composeFab = h("button", { class: "fab", onclick: () => compose() }, icon("edit", 20), "Написать");
+  const folderButton = h("button", { class: "icon-btn mail-folder-switch", "aria-label": t`Папки` }, icon("list", 20));
+  const refreshButton = h("button", { class: "icon-btn", "aria-label": t`Обновить` }, icon("reload", 18));
+  const composeFab = h("button", { class: "fab", onclick: () => compose() }, icon("edit", 20), t`Написать`);
   const banner = h("div", { class: "promo-slot only-phone" }, promo("banner"));
   const listPane = h("section", { class: "mail-list" },
     h("header", { class: "pane-head" }, folderButton, title, refreshButton),
@@ -50,18 +51,18 @@ export function mountMail(el, ctx, rest) {
   const root = h("div", { class: "mail" }, folders, listPane, reader);
   clear(el, root);
 
-  const folderName = () => (folderId === "starred" ? "Со звездой" : mail.boxById(folderId)?.name || "Почта");
+  const folderName = () => (folderId === "starred" ? t`Со звездой` : mail.boxById(folderId)?.name || t`Почта`);
   const currentRole = () => mail.boxById(folderId)?.role || "";
   const compose = (opts = {}) => openCompose(ctx, { ...opts, onSent: () => { reload({ quiet: true }); refreshFolders(); }, onDraft: () => { if (currentRole() === "drafts") { reload({ quiet: true }); } refreshFolders(); } });
 
   /* ---- аккаунт: адрес, настройки, выход ---- */
 
   const accountItems = () => [
-    { label: "Настройки аккаунта", icon: "settings", run: () => ctx.navigate("account") },
-    { label: "Выйти", icon: "logout", danger: true, run: () => account.signOut() },
+    { label: t`Настройки аккаунта`, icon: "settings", run: () => ctx.navigate("account") },
+    { label: t`Выйти`, icon: "logout", danger: true, run: () => account.signOut() },
   ];
-  const accountButton = h("button", { class: "mail-account", "aria-label": `Аккаунт ${account.email}` },
-    h("span", { class: "nav-avatar" }, (account.email[0] || "?").toUpperCase()), h("span", { class: "mail-account-text" }, h("b", {}, account.email), h("small", {}, "аккаунт Tabora")), icon("down", 15));
+  const accountButton = h("button", { class: "mail-account", "aria-label": t`Аккаунт ${account.email}` },
+    h("span", { class: "nav-avatar" }, (account.email[0] || "?").toUpperCase()), h("span", { class: "mail-account-text" }, h("b", {}, account.email), h("small", {}, t`аккаунт Tabora`)), icon("down", 15));
   accountButton.addEventListener("click", () => menu(accountButton, accountItems()));
 
   /* ---- папки ---- */
@@ -72,7 +73,7 @@ export function mountMail(el, ctx, rest) {
     for (const b of boxes) {
       out.push({ id: b.id, name: b.name, icon: ROLE_ICON[b.role] || "folder", count: b.role === "drafts" ? b.total : b.unread, quiet: b.role !== "inbox" });
       if (b.role === "inbox") {
-        out.push({ id: "starred", name: "Со звездой", icon: "star", count: 0 });
+        out.push({ id: "starred", name: t`Со звездой`, icon: "star", count: 0 });
       }
     }
     return out;
@@ -80,14 +81,14 @@ export function mountMail(el, ctx, rest) {
 
   function drawFolders() {
     clear(folders,
-      h("button", { class: "btn primary block mail-compose", onclick: () => compose() }, icon("edit", 17), "Написать"),
+      h("button", { class: "btn primary block mail-compose", onclick: () => compose() }, icon("edit", 17), t`Написать`),
       h("div", { class: "mail-folder-list" }, folderItems().map(f => h("a", { class: `mail-folder${f.id === folderId ? " active" : ""}`, href: `#/mail/${encodeURIComponent(f.id)}`, "aria-current": f.id === folderId ? "page" : null },
         icon(f.icon, 17), h("span", {}, f.name), f.count ? h("span", { class: `badge${f.quiet ? " quiet" : ""}` }, f.count > 999 ? "999+" : String(f.count)) : null))),
       h("div", { class: "mail-folders-foot" },
         promo("card"),
-        h("button", { class: "mail-folder", onclick: () => openAliases(ctx) }, icon("mask", 17), h("span", {}, "Алиасы")),
+        h("button", { class: "mail-folder", onclick: () => openAliases(ctx) }, icon("mask", 17), h("span", {}, t`Алиасы`)),
         accountButton));
-    title.textContent = query ? "Поиск" : folderName();
+    title.textContent = query ? t`Поиск` : folderName();
     ctx.setUnread(mail.box("inbox")?.unread || 0);
   }
 
@@ -103,7 +104,7 @@ export function mountMail(el, ctx, rest) {
   folderButton.addEventListener("click", () => menu(folderButton, [
     ...folderItems().map(f => ({ label: f.count ? `${f.name} · ${f.count}` : f.name, icon: f.icon, run: () => ctx.navigate(`mail/${encodeURIComponent(f.id)}`) })),
     null,
-    { label: "Алиасы", icon: "mask", run: () => openAliases(ctx) },
+    { label: t`Алиасы`, icon: "mask", run: () => openAliases(ctx) },
     ...accountItems(),
   ]));
 
@@ -116,8 +117,8 @@ export function mountMail(el, ctx, rest) {
   function row(it) {
     const role = currentRole();
     const mine = role === "sent" || role === "drafts";
-    const who = mine ? (it.to.length ? `Кому: ${it.to.map(t => t.name || t.email).join(", ")}` : "Без получателя") : it.from.name || it.from.email || "Неизвестный отправитель";
-    const star = h("button", { class: `icon-btn msg-star${it.starred ? " on" : ""}`, "aria-label": it.starred ? "Снять звезду" : "Отметить звездой", "aria-pressed": String(it.starred) }, icon("star", 16));
+    const who = mine ? (it.to.length ? t`Кому: ${it.to.map(a => a.name || a.email).join(", ")}` : t`Без получателя`) : it.from.name || it.from.email || t`Неизвестный отправитель`;
+    const star = h("button", { class: `icon-btn msg-star${it.starred ? " on" : ""}`, "aria-label": it.starred ? t`Снять звезду` : t`Отметить звездой`, "aria-pressed": String(it.starred) }, icon("star", 16));
     star.addEventListener("click", async e => {
       e.preventDefault();
       e.stopPropagation();
@@ -136,35 +137,35 @@ export function mountMail(el, ctx, rest) {
       avatar(mine ? it.to[0]?.name || it.to[0]?.email || "?" : it.from.name || it.from.email || "?"),
       h("span", { class: "msg-main" },
         h("span", { class: "msg-top" }, h("b", { class: "msg-from" }, who), it.count > 1 ? h("span", { class: "msg-count" }, String(it.count)) : null, h("time", {}, shortDate(it.date))),
-        h("span", { class: "msg-subject" }, it.draft && role !== "drafts" ? h("i", { class: "msg-draft" }, "Черновик · ") : null, it.subject),
+        h("span", { class: "msg-subject" }, it.draft && role !== "drafts" ? h("i", { class: "msg-draft" }, t`Черновик · `) : null, it.subject),
         h("span", { class: "msg-preview" }, it.preview || " ")),
       h("span", { class: "msg-side" }, it.hasAttachment ? icon("clip", 15) : null, star));
   }
 
   function drawList() {
-    title.textContent = query ? "Поиск" : folderName();
+    title.textContent = query ? t`Поиск` : folderName();
     if (loading && !items.length) {
-      clear(listBody, h("div", { class: "skeleton", "aria-label": "Загрузка" }, h("i"), h("i"), h("i"), h("i"), h("i"), h("i")));
+      clear(listBody, h("div", { class: "skeleton", "aria-label": t`Загрузка` }, h("i"), h("i"), h("i"), h("i"), h("i"), h("i")));
       return;
     }
     if (listError && !items.length) {
-      const retry = h("button", { class: "btn" }, "Повторить");
-      retry.addEventListener("click", () => busy(retry, () => reload(), "Загружаем"));
-      clear(listBody, h("div", { class: "empty" }, h("div", { class: "empty-icon" }, icon("sync", 26, 1.6)), h("h3", {}, "Почта не загрузилась"), h("p", {}, listError), retry));
+      const retry = h("button", { class: "btn" }, t`Повторить`);
+      retry.addEventListener("click", () => busy(retry, () => reload(), t`Загружаем`));
+      clear(listBody, h("div", { class: "empty" }, h("div", { class: "empty-icon" }, icon("sync", 26, 1.6)), h("h3", {}, t`Почта не загрузилась`), h("p", {}, listError), retry));
       return;
     }
     if (!items.length) {
       const role = currentRole();
       clear(listBody, query
-        ? emptyState({ iconName: "search", title: "Ничего не найдено", text: "Попробуйте другое слово: имя отправителя, часть темы или текста." })
+        ? emptyState({ iconName: "search", title: t`Ничего не найдено`, text: t`Попробуйте другое слово: имя отправителя, часть темы или текста.` })
         : view !== "all"
-          ? emptyState({ iconName: "mail", title: "Таких писем нет", text: "Снимите отбор, чтобы увидеть все письма папки." })
-          : emptyState({ iconName: ROLE_ICON[role] || "mail", title: role === "inbox" ? "Входящих пока нет" : "Здесь пусто", text: role === "inbox" ? `Письма на ${account.email} появятся здесь.` : "" }));
+          ? emptyState({ iconName: "mail", title: t`Таких писем нет`, text: t`Снимите отбор, чтобы увидеть все письма папки.` })
+          : emptyState({ iconName: ROLE_ICON[role] || "mail", title: role === "inbox" ? t`Входящих пока нет` : t`Здесь пусто`, text: role === "inbox" ? t`Письма на ${account.email} появятся здесь.` : "" }));
       return;
     }
     const nodes = items.map(row);
     if (more) {
-      const next = h("button", { class: "btn ghost block mail-more" }, loading ? "Загружаем…" : `Показать ещё (осталось ${total - items.length})`);
+      const next = h("button", { class: "btn ghost block mail-more" }, loading ? t`Загружаем…` : t`Показать ещё (осталось ${total - items.length})`);
       next.addEventListener("click", () => loadMore());
       nodes.push(next);
     }
@@ -274,12 +275,12 @@ export function mountMail(el, ctx, rest) {
   function drawReader() {
     if (!threadId) {
       delete root.dataset.open;
-      clear(reader, h("div", { class: "reader-empty" }, emptyState({ iconName: "mail", title: "Выберите письмо", text: "Оно откроется здесь." }), promo("inline")));
+      clear(reader, h("div", { class: "reader-empty" }, emptyState({ iconName: "mail", title: t`Выберите письмо`, text: t`Оно откроется здесь.` }), promo("inline")));
       return;
     }
     root.dataset.open = "thread";
     if (threadError) {
-      clear(reader, h("header", { class: "detail-head" }, h("button", { class: "icon-btn back", "aria-label": "Назад", onclick: () => ctx.navigate(`mail/${encodeURIComponent(folderId)}`) }, icon("back", 20))), emptyState({ iconName: "warning", title: "Письмо не открылось", text: threadError }));
+      clear(reader, h("header", { class: "detail-head" }, h("button", { class: "icon-btn back", "aria-label": t`Назад`, onclick: () => ctx.navigate(`mail/${encodeURIComponent(folderId)}`) }, icon("back", 20))), emptyState({ iconName: "warning", title: t`Письмо не открылось`, text: threadError }));
       return;
     }
     if (!messages) {
@@ -310,7 +311,7 @@ export function mountMail(el, ctx, rest) {
       // удалённые письма переписки видны только из корзины
       const shown = folderId === trash ? list : list.filter(m => !m.mailboxIds.includes(trash));
       if (!shown.length) {
-        throw Object.assign(new Error("Письмо удалено или перенесено на другом устройстве"), { code: "not-found" });
+        throw Object.assign(new Error(t`Письмо удалено или перенесено на другом устройстве`), { code: "not-found" });
       }
       messages = shown;
       threadError = "";
@@ -356,20 +357,20 @@ export function mountMail(el, ctx, rest) {
     try {
       if (kind === "archive") {
         await mail.move(ids, "archive");
-        toast("Перенесено в архив");
+        toast(t`Перенесено в архив`);
         gone();
       } else if (kind === "trash") {
         const forever = role === "trash" || role === "drafts";
         await mail.remove(ids, { forever });
-        toast(forever ? "Удалено" : "Перенесено в корзину");
+        toast(forever ? t`Удалено` : t`Перенесено в корзину`);
         gone();
       } else if (kind === "junk") {
         await mail.move(ids, role === "junk" ? "inbox" : "junk");
-        toast(role === "junk" ? "Перенесено во входящие" : "Перенесено в спам");
+        toast(role === "junk" ? t`Перенесено во входящие` : t`Перенесено в спам`);
         gone();
       } else if (kind === "move") {
         await mail.move(ids, arg);
-        toast(`Перенесено: ${mail.boxById(arg)?.name || "папка"}`);
+        toast(t`Перенесено: ${mail.boxById(arg)?.name || t`папка`}`);
         gone();
       } else if (kind === "unread") {
         await mail.setSeen([messages[messages.length - 1].id], false);
@@ -444,10 +445,10 @@ export function mountMail(el, ctx, rest) {
   return {
     route(next) {
       const f = next[0] || "";
-      const t = next[1] || "";
+      const thread = next[1] || "";
       if (f !== folderId) {
         folderId = f;
-        threadId = t;
+        threadId = thread;
         view = "all";
         query = "";
         search.value = "";
@@ -458,8 +459,8 @@ export function mountMail(el, ctx, rest) {
         drawReader();
         return;
       }
-      if (t !== threadId) {
-        threadId = t;
+      if (thread !== threadId) {
+        threadId = thread;
         for (const a of listBody.querySelectorAll(".msg")) {
           a.setAttribute("aria-selected", String(a.dataset.thread === threadId));
         }

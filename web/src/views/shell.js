@@ -13,6 +13,7 @@ import { MailPgp } from "../core/mailpgp.js";
 import { clear, h } from "../lib/dom.js";
 import { mountAccount } from "./account.js";
 import { mountMail } from "./mail.js";
+import { t } from "../core/i18n.js";
 
 const SCREENS = { mail: mountMail, account: mountAccount };
 
@@ -62,7 +63,7 @@ export function mountShell(root, deps) {
     },
     /** Число непрочитанных в заголовке вкладки браузера. */
     setUnread(n) {
-      document.title = n ? `(${n > 99 ? "99+" : n}) Почта Tabora` : "Почта Tabora";
+      document.title = n ? t`(${n > 99 ? "99+" : n}) Почта Tabora` : t`Почта Tabora`;
     },
   };
 
@@ -112,7 +113,7 @@ export function mountShell(root, deps) {
       document.removeEventListener("visibilitychange", pollMail);
       timers.forEach(clearInterval);
       active?.api.destroy?.();
-      document.title = "Почта Tabora";
+      document.title = t`Почта Tabora`;
       clear(root);
     },
   };

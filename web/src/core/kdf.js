@@ -13,6 +13,7 @@ import { hmac } from "@noble/hashes/hmac";
 import { sha256 } from "@noble/hashes/sha2";
 import { hex, utf8, wipe } from "./bytes.js";
 import { argon2id } from "./kdf-core.js";
+import { t } from "./i18n.js";
 
 export const AUTH_KDF = { 1: { t: 2, m: 16384, p: 1, dkLen: 32 }, 2: { t: 3, m: 65536, p: 1, dkLen: 32 } };
 const AUTH_SALT = { 1: "tabora-auth|", 2: "tabora-auth-v2|" };
@@ -37,12 +38,12 @@ function inWorker(password, salt, opts) {
       if (e.data?.ok) {
         resolve(new Uint8Array(e.data.out));
       } else {
-        reject(new Error(e.data?.error || "Не удалось вычислить ключ"));
+        reject(new Error(e.data?.error || t`Не удалось вычислить ключ`));
       }
     };
     worker.onerror = e => {
       done();
-      reject(new Error(e.message || "Не удалось вычислить ключ"));
+      reject(new Error(e.message || t`Не удалось вычислить ключ`));
     };
     const pw = password.slice();
     const s = salt.slice();
@@ -70,7 +71,7 @@ async function derive(password, salt, opts) {
 export async function passwordKeys(email, password, kdf = KDF_CURRENT) {
   const opts = AUTH_KDF[kdf];
   if (!opts) {
-    throw new Error("Неизвестная версия защиты пароля. Обновите страницу");
+    throw new Error(t`Неизвестная версия защиты пароля. Обновите страницу`);
   }
   const salt = sha256(utf8(`${AUTH_SALT[kdf]}${email}`)).slice(0, 16);
   const pw = utf8(String(password).normalize("NFKC"));

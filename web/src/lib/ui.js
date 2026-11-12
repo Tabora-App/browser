@@ -5,6 +5,7 @@
 /* Общие части интерфейса: уведомления, окна, меню, поля, копирование, даты. */
 
 import { h, icon } from "./dom.js";
+import { LANGS, chooseLanguage, language, locale, t, tr } from "../core/i18n.js";
 
 /* ---- уведомления ---- */
 
@@ -33,9 +34,22 @@ export function toast(message, { tone = "", action = null, ms = 3200 } = {}) {
 /** Текст ошибки для человека: сообщения сервера уже на русском и показываются как есть. */
 export function errorText(e) {
   if (e?.code === "offline") {
-    return "Нет связи с сервером. Проверьте интернет и повторите";
+    return t`Нет связи с сервером. Проверьте интернет и повторите`;
   }
-  return e?.message || String(e);
+  // сообщение сервера или рабочего потока приходит готовым текстом: переводится по словарю
+  return tr(e?.message) || String(e);
+}
+
+/** Выбор языка интерфейса: выбор запоминается, страница перезагружается на новом языке. */
+export function languagePicker() {
+  const select = h("select", { class: "lang-select", "aria-label": t`Язык` }, ...LANGS.map(([code, name]) => h("option", { value: code }, name)));
+  select.value = language();
+  select.addEventListener("change", () => {
+    if (chooseLanguage(select.value)) {
+      location.reload();
+    }
+  });
+  return select;
 }
 
 /* ---- окна ---- */
@@ -71,8 +85,8 @@ export function modal({ title = "", content = [], actions = [], wide = false, di
   const closed = new Promise(r => (resolveClosed = r));
   const body = h("div", { class: "modal-body" }, content);
   const foot = actions.length ? h("div", { class: "modal-actions" }, actions) : null;
-  const box = h("div", { class: `modal${wide ? " wide" : ""}${className ? ` ${className}` : ""}`, role: "dialog", "aria-modal": "true", "aria-label": title || "Окно" },
-    h("div", { class: "modal-head" }, h("h2", {}, title), dismiss && h("button", { class: "icon-btn", "aria-label": "Закрыть", onclick: () => close() }, icon("close", 18))),
+  const box = h("div", { class: `modal${wide ? " wide" : ""}${className ? ` ${className}` : ""}`, role: "dialog", "aria-modal": "true", "aria-label": title || t`Окно` },
+    h("div", { class: "modal-head" }, h("h2", {}, title), dismiss && h("button", { class: "icon-btn", "aria-label": t`Закрыть`, onclick: () => close() }, icon("close", 18))),
     body, foot);
   const backdrop = h("div", { class: "modal-backdrop" }, box);
   let done = false;
@@ -121,7 +135,7 @@ export function modal({ title = "", content = [], actions = [], wide = false, di
 }
 
 /** Подтверждение действия. Возвращает true, если человек согласился. */
-export function confirmDialog({ title, text, confirm = "Продолжить", cancel = "Отмена", danger = false }) {
+export function confirmDialog({ title, text, confirm = t`Продолжить`, cancel = t`Отмена`, danger = false }) {
   return new Promise(resolve => {
     let answer = false;
     const m = modal({
@@ -148,9 +162,9 @@ export async function busy(button, fn, label = "") {
   button.disabled = true;
   const text = h("span", {}, label || button.textContent);
   button.replaceChildren(h("span", { class: "spinner", "aria-hidden": "true" }), text);
-  button._setBusyText = t => (text.textContent = t);
+  button._setBusyText = value => (text.textContent = value);
   try {
-    return await fn(t => (text.textContent = t));
+    return await fn(value => (text.textContent = value));
   } finally {
     delete button.dataset.busy;
     delete button._setBusyText;
@@ -170,12 +184,12 @@ export function field(label, opts = {}) {
   const error = h("div", { class: "field-error", role: "alert", hidden: true });
   const wrap = h("div", { class: "input-wrap" }, input);
   if (type === "password") {
-    const toggle = h("button", { class: "icon-btn input-eye", type: "button", "aria-label": "Показать пароль", "aria-pressed": "false" }, icon("eye", 17));
+    const toggle = h("button", { class: "icon-btn input-eye", type: "button", "aria-label": t`Показать пароль`, "aria-pressed": "false" }, icon("eye", 17));
     toggle.addEventListener("click", () => {
       const show = input.type === "password";
       input.type = show ? "text" : "password";
       toggle.setAttribute("aria-pressed", String(show));
-      toggle.setAttribute("aria-label", show ? "Скрыть пароль" : "Показать пароль");
+      toggle.setAttribute("aria-label", show ? t`Скрыть пароль` : t`Показать пароль`);
       toggle.replaceChildren(icon(show ? "eyeOff" : "eye", 17));
     });
     wrap.append(toggle);
@@ -285,7 +299,7 @@ export function menu(anchor, items) {
 
 /* ---- копирование ---- */
 
-export async function copyText(value, message = "Скопировано") {
+export async function copyText(value, message = t`Скопировано`) {
   try {
     await navigator.clipboard.writeText(value);
   } catch (e) {
@@ -300,7 +314,7 @@ export async function copyText(value, message = "Скопировано") {
     } catch (err) {}
     ta.remove();
     if (!ok) {
-      toast("Не удалось скопировать: выделите текст и скопируйте вручную", { tone: "bad" });
+      toast(t`Не удалось скопировать: выделите текст и скопируйте вручную`, { tone: "bad" });
       return false;
     }
   }
@@ -312,7 +326,7 @@ export async function copyText(value, message = "Скопировано") {
 
 /* ---- даты, размеры, прочее ---- */
 
-const MONTHS = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+const MONTHS = [t`янв`, t`фев`, t`мар`, t`апр`, t`мая`, t`июн`, t`июл`, t`авг`, t`сен`, t`окт`, t`ноя`, t`дек`];
 
 /** Коротко для списков: «14:05», «вчера», «3 ноя», «3 ноя 2025». */
 export function shortDate(value, now = new Date()) {
@@ -326,7 +340,7 @@ export function shortDate(value, now = new Date()) {
     return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   }
   if (diff === 1) {
-    return "вчера";
+    return t`вчера`;
   }
   return d.getFullYear() === now.getFullYear() ? `${d.getDate()} ${MONTHS[d.getMonth()]}` : `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
@@ -337,7 +351,7 @@ export function longDate(value) {
   if (Number.isNaN(d.getTime())) {
     return "";
   }
-  return new Intl.DateTimeFormat("ru", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(d);
+  return new Intl.DateTimeFormat(locale(), { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(d);
 }
 
 export function fileSize(n) {
@@ -345,26 +359,23 @@ export function fileSize(n) {
     return "";
   }
   if (n < 1024) {
-    return `${n} Б`;
+    return t`${n} Б`;
   }
+  // десятичный знак — по правилам языка: «1,5 МБ» и «1.5 MB»
+  const num = (x, digits) => new Intl.NumberFormat(locale(), { minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: false }).format(x);
   if (n < 1024 * 1024) {
-    return `${(n / 1024).toFixed(n < 10240 ? 1 : 0).replace(".", ",")} КБ`;
+    return t`${num(n / 1024, n < 10240 ? 1 : 0)} КБ`;
   }
-  return `${(n / 1024 / 1024).toFixed(1).replace(".", ",")} МБ`;
+  return t`${num(n / 1024 / 1024, 1)} МБ`;
 }
 
-/** «1 письмо», «2 письма», «5 писем». */
-export function plural(n, one, few, many) {
-  const a = Math.abs(n) % 100;
-  const b = a % 10;
-  return `${n} ${a > 10 && a < 20 ? many : b === 1 ? one : b >= 2 && b <= 4 ? few : many}`;
-}
+export { plural } from "../core/i18n.js";
 
 export function debounce(fn, ms) {
-  let t = null;
+  let timer = null;
   return (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), ms);
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), ms);
   };
 }
 

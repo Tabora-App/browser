@@ -7,6 +7,7 @@
  * не появляется. В самом браузере Tabora не показывается. */
 
 import { h, icon, mark } from "../lib/dom.js";
+import { t } from "../core/i18n.js";
 
 const KEY = "tabora.promo.closed";
 const QUIET_MS = 30 * 86400000;
@@ -34,9 +35,9 @@ function platform() {
 }
 
 const TEXT = {
-  mac: { title: "Установите браузер Tabora", text: "Почта, пароли и коды входа в одном окне, а страницы открываются без рекламы.", action: "Скачать для Mac" },
-  other: { title: "Браузер Tabora", text: "Почта, пароли и коды входа в одном окне, страницы без рекламы. Сейчас есть версия для Mac.", action: "Подробнее" },
-  phone: { title: "Браузер Tabora для компьютера", text: "Почта, пароли и коды входа в одном окне, страницы без рекламы.", action: "Подробнее" },
+  mac: { title: t`Установите браузер Tabora`, text: t`Почта, пароли и коды входа в одном окне, а страницы открываются без рекламы.`, action: t`Скачать для Mac` },
+  other: { title: t`Браузер Tabora`, text: t`Почта, пароли и коды входа в одном окне, страницы без рекламы. Сейчас есть версия для Mac.`, action: t`Подробнее` },
+  phone: { title: t`Браузер Tabora для компьютера`, text: t`Почта, пароли и коды входа в одном окне, страницы без рекламы.`, action: t`Подробнее` },
 };
 
 /**
@@ -48,12 +49,12 @@ export function promo(kind = "card") {
   if (inTabora() || (kind !== "inline" && closedRecently())) {
     return null;
   }
-  const t = TEXT[platform()];
-  const el = h("aside", { class: `promo promo-${kind}`, "aria-label": "Браузер Tabora" },
+  const copy = TEXT[platform()];
+  const el = h("aside", { class: `promo promo-${kind}`, "aria-label": t`Браузер Tabora` },
     mark(kind === "banner" ? 30 : 36),
-    h("div", { class: "promo-text" }, h("b", {}, t.title), h("span", {}, t.text)),
-    h("a", { class: `btn small${kind === "inline" ? " primary" : ""} promo-action`, href: SITE, target: "_blank", rel: "noopener" }, t.action),
-    kind === "inline" ? null : h("button", { class: "icon-btn tiny promo-close", "aria-label": "Скрыть предложение", onclick: () => {
+    h("div", { class: "promo-text" }, h("b", {}, copy.title), h("span", {}, copy.text)),
+    h("a", { class: `btn small${kind === "inline" ? " primary" : ""} promo-action`, href: SITE, target: "_blank", rel: "noopener" }, copy.action),
+    kind === "inline" ? null : h("button", { class: "icon-btn tiny promo-close", "aria-label": t`Скрыть предложение`, onclick: () => {
       try {
         localStorage.setItem(KEY, String(Date.now()));
       } catch (e) {}

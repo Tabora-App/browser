@@ -238,3 +238,8 @@ textarea.input { resize: vertical; line-height: 1.5; min-height: 96px; }
 .skeleton { display: flex; flex-direction: column; }
 .skeleton i { display: block; height: 62px; margin: 0 14px; border-bottom: 1px solid var(--line); background: linear-gradient(90deg, transparent, var(--hover), transparent) no-repeat; background-size: 60% 100%; animation: shimmer 1.2s ease-in-out infinite; }
 @keyframes shimmer { from { background-position: -80% 0; } to { background-position: 180% 0; } }
+
+/* Выбор языка: тихий, как ссылки рядом */
+.lang-select { appearance: none; -webkit-appearance: none; height: 32px; padding: 0 30px 0 12px; border: 1px solid var(--field-border); border-radius: var(--r-xs); background: var(--field) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%239a9ea8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center; color: var(--text-2); font-size: 13px; cursor: pointer; transition: border-color var(--ease); }
+.lang-select:hover { border-color: var(--stroke); }
+.auth-foot .lang-select { margin-right: auto; }

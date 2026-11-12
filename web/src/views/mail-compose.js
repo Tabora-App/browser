@@ -10,6 +10,7 @@ import { cleanRich, richToText } from "../core/sanitize.js";
 import { h, icon } from "../lib/dom.js";
 import { createEditor } from "../lib/editor.js";
 import { busy, confirmDialog, debounce, errorText, fileSize, longDate, toast } from "../lib/ui.js";
+import { t } from "../core/i18n.js";
 
 const EMAIL_RE = /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[^\s@<>(),;:"]{2,}$/;
 let current = null;
@@ -35,7 +36,7 @@ function parseList(value) {
 
 const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const textToHtml = s => esc(s).replace(/\r\n?/g, "\n").split("\n").join("<br>");
-const prefixed = (subject, prefix) => (new RegExp(`^\\s*(${prefix}|${prefix === "Re" ? "Ответ|На" : "Fw|Пересылка"})\\s*:`, "i").test(subject) ? subject : `${prefix}: ${subject}`);
+const prefixed = (subject, prefix) => (new RegExp(`^\\s*(${prefix}|${prefix === "Re" ? "Ответ|На|Відповідь|RE|Respuesta" : "Fw|Пересылка|Пересилання|Forward|Reenviado|RV"})\\s*:`, "i").test(subject) ? subject : `${prefix}: ${subject}`);
 
 /**
  * @param {object} ctx
@@ -71,7 +72,7 @@ export function openCompose(ctx, { mode = "new", original = null, draft = null, 
   if (draft) {
     initTo = draft.to.map(p => p.email).join(", ");
     initCc = draft.cc.map(p => p.email).join(", ");
-    subject = draft.subject === "(без темы)" ? "" : draft.subject;
+    subject = draft.subject === "(без темы)" || draft.subject === t`(без темы)` ? "" : draft.subject;
     bodyHtml = draft.html ? cleanRich(draft.html) : textToHtml(draft.text);
   } else if (original) {
     const mine = original.from.email === me;
@@ -79,7 +80,7 @@ export function openCompose(ctx, { mode = "new", original = null, draft = null, 
     const who = original.from.name ? `${original.from.name} <${original.from.email}>` : original.from.email;
     if (mode === "forward") {
       subject = prefixed(original.subject, "Fwd");
-      bodyHtml = `<br><br>---------- Пересылаемое письмо ----------<br>От: ${esc(who)}<br>Дата: ${esc(longDate(original.date))}<br>Тема: ${esc(original.subject)}<br>Кому: ${esc(original.to.map(p => p.email).join(", "))}<br><br>${textToHtml(quoteText)}`;
+      bodyHtml = t`<br><br>---------- Пересылаемое письмо ----------<br>От: ${esc(who)}<br>Дата: ${esc(longDate(original.date))}<br>Тема: ${esc(original.subject)}<br>Кому: ${esc(original.to.map(p => p.email).join(", "))}<br><br>${textToHtml(quoteText)}`;
     } else {
       subject = prefixed(original.subject, "Re");
       // ответ на своё письмо идёт тем же получателям; письмо самому себе — себе же
@@ -100,18 +101,18 @@ export function openCompose(ctx, { mode = "new", original = null, draft = null, 
 
   /* ---- поля ---- */
 
-  const fromSelect = h("select", { class: "compose-from", "aria-label": "От кого" }, h("option", { value: me }, me));
-  const fromRow = h("label", { class: "compose-row", hidden: true }, h("span", {}, "От"), fromSelect);
-  const toInput = h("input", { class: "compose-input", type: "text", inputmode: "email", autocomplete: "off", autocapitalize: "off", spellcheck: "false", "aria-label": "Кому", placeholder: "адрес получателя" });
-  const ccInput = h("input", { class: "compose-input", type: "text", inputmode: "email", autocomplete: "off", autocapitalize: "off", spellcheck: "false", "aria-label": "Копия" });
-  const bccInput = h("input", { class: "compose-input", type: "text", inputmode: "email", autocomplete: "off", autocapitalize: "off", spellcheck: "false", "aria-label": "Скрытая копия" });
-  const subjectInput = h("input", { class: "compose-input", type: "text", "aria-label": "Тема", placeholder: "Тема", maxlength: 300 });
+  const fromSelect = h("select", { class: "compose-from", "aria-label": t`От кого` }, h("option", { value: me }, me));
+  const fromRow = h("label", { class: "compose-row", hidden: true }, h("span", {}, t`От`), fromSelect);
+  const toInput = h("input", { class: "compose-input", type: "text", inputmode: "email", autocomplete: "off", autocapitalize: "off", spellcheck: "false", "aria-label": t`Кому`, placeholder: t`адрес получателя` });
+  const ccInput = h("input", { class: "compose-input", type: "text", inputmode: "email", autocomplete: "off", autocapitalize: "off", spellcheck: "false", "aria-label": t`Копия` });
+  const bccInput = h("input", { class: "compose-input", type: "text", inputmode: "email", autocomplete: "off", autocapitalize: "off", spellcheck: "false", "aria-label": t`Скрытая копия` });
+  const subjectInput = h("input", { class: "compose-input", type: "text", "aria-label": t`Тема`, placeholder: t`Тема`, maxlength: 300 });
   toInput.value = initTo;
   ccInput.value = initCc;
   subjectInput.value = subject;
-  const ccToggle = h("button", { class: "link-btn compose-cc", type: "button" }, "Копия");
-  const ccRow = h("label", { class: "compose-row", hidden: !initCc }, h("span", {}, "Копия"), ccInput);
-  const bccRow = h("label", { class: "compose-row", hidden: true }, h("span", {}, "Скрытая"), bccInput);
+  const ccToggle = h("button", { class: "link-btn compose-cc", type: "button" }, t`Копия`);
+  const ccRow = h("label", { class: "compose-row", hidden: !initCc }, h("span", {}, t`Копия`), ccInput);
+  const bccRow = h("label", { class: "compose-row", hidden: true }, h("span", {}, t`Скрытая`), bccInput);
   ccToggle.hidden = !!initCc;
   ccToggle.addEventListener("click", () => {
     ccRow.hidden = false;
@@ -125,20 +126,20 @@ export function openCompose(ctx, { mode = "new", original = null, draft = null, 
   const error = h("div", { class: "form-error", role: "alert", hidden: true });
   const lock = h("button", { class: "compose-lock", type: "button", hidden: true });
   const status = h("span", { class: "compose-status" });
-  const sendButton = h("button", { class: "btn primary" }, icon("send", 16), "Отправить");
-  const title = mode === "reply" || mode === "replyAll" ? "Ответ" : mode === "forward" ? "Пересылка" : draft ? "Черновик" : "Новое письмо";
+  const sendButton = h("button", { class: "btn primary" }, icon("send", 16), t`Отправить`);
+  const title = mode === "reply" || mode === "replyAll" ? t`Ответ` : mode === "forward" ? t`Пересылка` : draft ? t`Черновик` : t`Новое письмо`;
 
   const panel = h("div", { class: "compose", role: "dialog", "aria-label": title },
-    h("header", { class: "compose-head" }, h("h2", {}, title), status, h("button", { class: "icon-btn", "aria-label": "Удалить черновик", title: "Удалить черновик", onclick: () => discard() }, icon("trash", 18)), h("button", { class: "icon-btn", "aria-label": "Закрыть", title: "Закрыть и сохранить черновик", onclick: () => close() }, icon("close", 19))),
+    h("header", { class: "compose-head" }, h("h2", {}, title), status, h("button", { class: "icon-btn", "aria-label": t`Удалить черновик`, title: t`Удалить черновик`, onclick: () => discard() }, icon("trash", 18)), h("button", { class: "icon-btn", "aria-label": t`Закрыть`, title: t`Закрыть и сохранить черновик`, onclick: () => close() }, icon("close", 19))),
     h("div", { class: "compose-fields" },
       fromRow,
-      h("label", { class: "compose-row" }, h("span", {}, "Кому"), toInput, ccToggle),
+      h("label", { class: "compose-row" }, h("span", {}, t`Кому`), toInput, ccToggle),
       ccRow, bccRow,
-      h("label", { class: "compose-row" }, h("span", { class: "offscreen" }, "Тема"), subjectInput)),
+      h("label", { class: "compose-row" }, h("span", { class: "offscreen" }, t`Тема`), subjectInput)),
     editor.el, fileList, fileInput, error,
     h("footer", { class: "compose-foot" },
       sendButton,
-      h("button", { class: "icon-btn", type: "button", "aria-label": "Приложить файл", title: "Приложить файл", onclick: () => fileInput.click() }, icon("clip", 19)),
+      h("button", { class: "icon-btn", type: "button", "aria-label": t`Приложить файл`, title: t`Приложить файл`, onclick: () => fileInput.click() }, icon("clip", 19)),
       lock));
   const backdrop = h("div", { class: "compose-backdrop" }, panel);
   document.body.append(backdrop);
@@ -151,14 +152,14 @@ export function openCompose(ctx, { mode = "new", original = null, draft = null, 
   /* ---- вложения ---- */
 
   function drawFiles() {
-    fileList.replaceChildren(...files.map((f, i) => h("span", { class: "attach" }, icon(f.type.startsWith("image/") ? "image" : "clip", 14), h("span", {}, f.name), h("small", {}, fileSize(f.size)), h("button", { class: "icon-btn tiny", type: "button", "aria-label": `Убрать ${f.name}`, onclick: () => { files.splice(i, 1); drawFiles(); touch(); } }, icon("close", 13)))));
+    fileList.replaceChildren(...files.map((f, i) => h("span", { class: "attach" }, icon(f.type.startsWith("image/") ? "image" : "clip", 14), h("span", {}, f.name), h("small", {}, fileSize(f.size)), h("button", { class: "icon-btn tiny", type: "button", "aria-label": t`Убрать ${f.name}`, onclick: () => { files.splice(i, 1); drawFiles(); touch(); } }, icon("close", 13)))));
   }
 
   async function addFiles(list) {
     for (const f of list) {
       const total = files.reduce((n, x) => n + x.size, 0) + f.size;
       if (total > MAX_ATTACH_BYTES) {
-        toast("Вложения больше 20 МБ не отправятся", { tone: "bad" });
+        toast(t`Вложения больше 20 МБ не отправятся`, { tone: "bad" });
         break;
       }
       files.push({ name: f.name, type: f.type || "application/octet-stream", size: f.size, bytes: new Uint8Array(await f.arrayBuffer()) });
@@ -206,8 +207,8 @@ export function openCompose(ctx, { mode = "new", original = null, draft = null, 
     }
     const on = encrypt && plan.possible;
     lock.classList.toggle("on", on);
-    lock.replaceChildren(icon(on ? "lock" : "unlock", 16), h("span", {}, on ? "Зашифровано" : "Без шифрования"));
-    lock.title = on ? "Прочитать письмо смогут только получатели" : plan.possible ? "Письмо уйдёт открытым" : plan.missing.length ? `Нет ключа у ${plan.missing.join(", ")}: зашифровать можно письмо на адреса Tabora` : "Укажите получателя";
+    lock.replaceChildren(icon(on ? "lock" : "unlock", 16), h("span", {}, on ? t`Зашифровано` : t`Без шифрования`));
+    lock.title = on ? t`Прочитать письмо смогут только получатели` : plan.possible ? t`Письмо уйдёт открытым` : plan.missing.length ? t`Нет ключа у ${plan.missing.join(", ")}: зашифровать можно письмо на адреса Tabora` : t`Укажите получателя`;
     lock.disabled = !plan.possible;
   }
   lock.addEventListener("click", () => {
@@ -264,16 +265,16 @@ export function openCompose(ctx, { mode = "new", original = null, draft = null, 
       }
     }
     dirty = false;
-    status.textContent = "Сохраняем…";
+    status.textContent = t`Сохраняем…`;
     saving = (async () => {
       try {
         const { html, text } = editor.value();
         draftId = await mail.saveDraft({ from: fromSelect.value, to: parseList(toInput.value).list, cc: parseList(ccInput.value).list, subject: subjectInput.value.trim(), text, html, attachments: await attachments(), original: replyRef, replaces: draftId });
-        status.textContent = "Черновик сохранён";
+        status.textContent = t`Черновик сохранён`;
         onDraft?.();
       } catch (e) {
         dirty = true;
-        status.textContent = "Черновик не сохранён";
+        status.textContent = t`Черновик не сохранён`;
       } finally {
         saving = null;
       }
@@ -295,19 +296,19 @@ export function openCompose(ctx, { mode = "new", original = null, draft = null, 
     const bccList = parseList(bccInput.value);
     const bad = [...toList.bad, ...ccList.bad, ...bccList.bad];
     if (bad.length) {
-      setError(`Не похоже на адрес почты: ${bad.slice(0, 3).join(", ")}`);
+      setError(t`Не похоже на адрес почты: ${bad.slice(0, 3).join(", ")}`);
       return;
     }
     if (!toList.list.length && !ccList.list.length && !bccList.list.length) {
-      setError("Укажите, кому отправить письмо");
+      setError(t`Укажите, кому отправить письмо`);
       toInput.focus();
       return;
     }
     if (!subjectInput.value.trim() && editor.isEmpty() && !files.length) {
-      setError("Письмо пустое");
+      setError(t`Письмо пустое`);
       return;
     }
-    if (!subjectInput.value.trim() && !(await confirmDialog({ title: "Отправить без темы?", text: "У письма нет темы. Получателю будет труднее его найти.", confirm: "Отправить" }))) {
+    if (!subjectInput.value.trim() && !(await confirmDialog({ title: t`Отправить без темы?`, text: t`У письма нет темы. Получателю будет труднее его найти.`, confirm: t`Отправить` }))) {
       return;
     }
     try {
@@ -317,14 +318,14 @@ export function openCompose(ctx, { mode = "new", original = null, draft = null, 
         }
         const { html, text } = editor.value();
         if (files.some(f => !f.bytes)) {
-          step("Готовим вложения");
+          step(t`Готовим вложения`);
         }
         const list = await attachments();
-        step(encrypt && plan.possible ? "Шифруем и отправляем" : "Отправляем");
+        step(encrypt && plan.possible ? t`Шифруем и отправляем` : t`Отправляем`);
         const r = await mail.send({ from: fromSelect.value, to: toList.list, cc: ccList.list, bcc: bccList.list, subject: subjectInput.value.trim(), text, html, attachments: list, original: replyRef, encrypt: encrypt && plan.possible && !bccList.list.length, draftId });
         sent = true;
-        toast(r.encrypted ? "Письмо отправлено зашифрованным" : "Письмо отправлено");
-      }, "Отправляем");
+        toast(r.encrypted ? t`Письмо отправлено зашифрованным` : t`Письмо отправлено`);
+      }, t`Отправляем`);
       destroy();
       onSent?.();
     } catch (e) {
@@ -338,21 +339,21 @@ export function openCompose(ctx, { mode = "new", original = null, draft = null, 
       return;
     }
     if (!sent && dirty && hasContent()) {
-      status.textContent = "Сохраняем…";
+      status.textContent = t`Сохраняем…`;
       await saveDraft();
       if (dirty) {
-        if (!(await confirmDialog({ title: "Черновик не сохранён", text: "Нет связи с сервером. Закрыть окно и потерять текст письма?", confirm: "Закрыть", danger: true }))) {
+        if (!(await confirmDialog({ title: t`Черновик не сохранён`, text: t`Нет связи с сервером. Закрыть окно и потерять текст письма?`, confirm: t`Закрыть`, danger: true }))) {
           return;
         }
       } else {
-        toast("Черновик сохранён");
+        toast(t`Черновик сохранён`);
       }
     }
     destroy();
   }
 
   async function discard() {
-    if (hasContent() && !(await confirmDialog({ title: "Удалить черновик?", text: "Текст письма будет потерян.", confirm: "Удалить", danger: true }))) {
+    if (hasContent() && !(await confirmDialog({ title: t`Удалить черновик?`, text: t`Текст письма будет потерян.`, confirm: t`Удалить`, danger: true }))) {
       return;
     }
     sent = true; // больше не сохранять

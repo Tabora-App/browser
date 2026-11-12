@@ -1,3 +1,4 @@
+import { t } from "./i18n.js";
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -23,13 +24,13 @@ function start() {
     if (ok) {
       w.resolve(value);
     } else {
-      w.reject(Object.assign(new Error(error || "Ошибка шифрования"), { code: "pgp" }));
+      w.reject(Object.assign(new Error(error || t`Ошибка шифрования`), { code: "pgp" }));
     }
   };
   worker.onerror = e => {
     // поток упал: все ожидающие получают отказ, следующий вызов запустит новый
     for (const w of waiting.values()) {
-      w.reject(Object.assign(new Error(e.message || "Модуль шифрования не запустился"), { code: "pgp" }));
+      w.reject(Object.assign(new Error(e.message || t`Модуль шифрования не запустился`), { code: "pgp" }));
     }
     waiting.clear();
     worker = null;
@@ -51,7 +52,7 @@ export async function pgpCall(method, args = {}) {
     }
   }
   if (!WORKER_URL || typeof Worker !== "function") {
-    throw Object.assign(new Error("Этот браузер не умеет запускать модуль шифрования. Обновите браузер"), { code: "pgp" });
+    throw Object.assign(new Error(t`Этот браузер не умеет запускать модуль шифрования. Обновите браузер`), { code: "pgp" });
   }
   if (!worker) {
     start();

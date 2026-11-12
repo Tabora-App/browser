@@ -12,6 +12,7 @@ import { clear } from "./lib/dom.js";
 import { toast } from "./lib/ui.js";
 import { mountAuth } from "./views/auth.js";
 import { mountShell } from "./views/shell.js";
+import { language, t } from "./core/i18n.js";
 
 const root = document.getElementById("app");
 const api = new Api("");
@@ -30,9 +31,17 @@ function render() {
   current = want === "app" ? mountShell(root, { account, api }) : mountAuth(root, { account });
 }
 
+// Страница на языке интерфейса: атрибут lang, заголовок и описание для установки на экран
+document.documentElement.lang = language();
+document.title = t`Почта Tabora`;
+document.querySelector('meta[name="apple-mobile-web-app-title"]')?.setAttribute("content", t`Почта Tabora`);
+if (language() !== "en") {
+  document.querySelector('link[rel="manifest"]')?.setAttribute("href", `/manifest-${language()}.webmanifest`);
+}
+
 account.subscribe(what => {
   if (what === "expired") {
-    toast("Вход на этом устройстве завершён: из аккаунта вышли с другого устройства или сменили пароль. Войдите заново", { ms: 7000 });
+    toast(t`Вход на этом устройстве завершён: из аккаунта вышли с другого устройства или сменили пароль. Войдите заново`, { ms: 7000 });
   }
   if (what === "signed-in" || what === "signed-out" || what === "expired") {
     render();

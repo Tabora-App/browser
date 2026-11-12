@@ -22,6 +22,7 @@ import { KDF_CURRENT, passwordKeys } from "./kdf.js";
 import { checkNewPassword } from "./password.js";
 import { armorBody, pgpCall } from "./pgp.js";
 import { rkNew, rkSignReset, rkVerifier, rkWrapKey } from "./recovery.js";
+import { t } from "./i18n.js";
 
 const PENDING_TTL = 3 * 60 * 1000;
 const ARMOR_RE = /-----BEGIN PGP PUBLIC KEY BLOCK-----[\s\S]+-----END PGP PUBLIC KEY BLOCK-----/;
@@ -39,8 +40,8 @@ const labels = address => ({
 /** Название устройства для списка «Устройства»: что за браузер и на чём. */
 export function deviceLabel(ua = typeof navigator === "object" ? navigator.userAgent : "") {
   const os = /iPhone|iPod/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" : /Mac OS X/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : "";
-  const app = /Tabora\//.test(ua) ? "Tabora" : /Edg\//.test(ua) ? "Edge" : /OPR\/|Opera/.test(ua) ? "Opera" : /YaBrowser/.test(ua) ? "Яндекс Браузер" : /Firefox\/|FxiOS/.test(ua) ? "Firefox" : /Chrome\/|CriOS/.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "";
-  return ["Веб-версия", [app, os].filter(Boolean).join(", ")].filter(Boolean).join(": ").slice(0, 64);
+  const app = /Tabora\//.test(ua) ? "Tabora" : /Edg\//.test(ua) ? "Edge" : /OPR\/|Opera/.test(ua) ? "Opera" : /YaBrowser/.test(ua) ? t`Яндекс Браузер` : /Firefox\/|FxiOS/.test(ua) ? "Firefox" : /Chrome\/|CriOS/.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "";
+  return [t`Веб-версия`, [app, os].filter(Boolean).join(", ")].filter(Boolean).join(": ").slice(0, 64);
 }
 
 export class Account {
@@ -96,7 +97,7 @@ export class Account {
 
   get token() {
     if (!this.session?.token) {
-      throw fail("Войдите в аккаунт", "signed-out");
+      throw fail(t`Войдите в аккаунт`, "signed-out");
     }
     return this.session.token;
   }
@@ -106,12 +107,12 @@ export class Account {
     if (s.includes("@")) {
       const [name, dom] = s.split("@");
       if (dom !== this.domain) {
-        throw fail(`Адрес должен быть в домене ${this.domain}`, "bad-email");
+        throw fail(t`Адрес должен быть в домене ${this.domain}`, "bad-email");
       }
       s = name;
     }
     if (!/^[a-z0-9](?:[a-z0-9._-]{1,30}[a-z0-9])?$/.test(s) || /[._-]{2}/.test(s)) {
-      throw fail("Имя: 3–32 символа, латиница, цифры, точка, дефис или подчёркивание", "bad-email");
+      throw fail(t`Имя: 3–32 символа, латиница, цифры, точка, дефис или подчёркивание`, "bad-email");
     }
     return `${s}@${this.domain}`;
   }
@@ -162,7 +163,7 @@ export class Account {
   /* ---- вход ---- */
 
   async _derive(email, password, kdf) {
-    this._step("Проверяем пароль");
+    this._step(t`Проверяем пароль`);
     return passwordKeys(email, password, kdf);
   }
 
@@ -176,14 +177,14 @@ export class Account {
     let p = this._pending;
     if (!p || p.email !== email || Date.now() - p.at > PENDING_TTL || password) {
       if (!password) {
-        throw fail("Введите пароль", "bad-credentials");
+        throw fail(t`Введите пароль`, "bad-credentials");
       }
       this._forgetPending();
       const kdf = await this.api.prelogin(email);
       const k = await this._derive(email, password, kdf);
       p = this._pending = { email, kdf, loginHash: k.loginHash, wrapKey: k.wrapKey, at: Date.now() };
     }
-    this._step("Входим");
+    this._step(t`Входим`);
     let r;
     try {
       r = await this.api.login({ email, loginHash: p.loginHash, deviceId: this.store.deviceId(), deviceName: deviceLabel(), mailAccess: "session", ...(totp ? { totp: String(totp).replace(/\s+/g, "") } : {}) });
@@ -223,11 +224,11 @@ export class Account {
 
   async _enter(email, r, p, hold = false) {
     if (!r?.session?.token) {
-      throw fail("Сервер Tabora ответил непонятно. Повторите позже", "bad-response");
+      throw fail(t`Сервер Tabora ответил непонятно. Повторите позже`, "bad-response");
     }
     this.session = { email, userId: r.userId, token: r.session.token, expiresAt: r.session.expiresAt, kdf: r.kdf || p.kdf, mail: r.mail || null };
     this.keys = { state: "offline" };
-    this._step("Открываем ключи");
+    this._step(t`Открываем ключи`);
     try {
       await this._openKeys({ wrapKey: p.wrapKey, loginHash: p.loginHash, create: true });
     } catch (e) {
@@ -259,13 +260,13 @@ export class Account {
   _usable(info, address) {
     const ok = info && /^[0-9a-f]{40,64}$/.test(info.fingerprint || "") && Array.isArray(info.emails) && typeof info.armored === "string" && ARMOR_RE.test(info.armored);
     if (!ok) {
-      throw fail("Ключ не разобран", "pgp");
+      throw fail(t`Ключ не разобран`, "pgp");
     }
     if (info.revoked || info.expired || !info.canEncrypt) {
-      throw fail("Ключ аккаунта непригоден: отозван, просрочен или не для шифрования", "pgp");
+      throw fail(t`Ключ аккаунта непригоден: отозван, просрочен или не для шифрования`, "pgp");
     }
     if (address && info.emails.length && !info.emails.includes(address)) {
-      throw fail("Ключ выпущен для другого адреса", "pgp");
+      throw fail(t`Ключ выпущен для другого адреса`, "pgp");
     }
     return info;
   }
@@ -282,7 +283,7 @@ export class Account {
     for (let attempt = 0; attempt < 4; attempt++) {
       const remote = await this.api.mailKeys(token);
       if (!remote || !Number.isInteger(remote.rev)) {
-        throw fail("Сервер Tabora ответил непонятно. Повторите позже", "bad-response");
+        throw fail(t`Сервер Tabora ответил непонятно. Повторите позже`, "bad-response");
       }
       const wrapPw = tryB64(remote.wrapPassword);
       const wrapRk = tryB64(remote.wrapRecovery);
@@ -316,7 +317,7 @@ export class Account {
         const { keys } = await pgpCall("info", { armored: privateKey });
         const info = this._usable(keys?.[0], address);
         if (!info.private || info.fingerprint !== fp) {
-          throw fail("Копия ключа на сервере повреждена", "pgp");
+          throw fail(t`Копия ключа на сервере повреждена`, "pgp");
         }
         publicKey = info.armored;
         // обёртка паролем: ставится заново, если ключ вернули ключом восстановления или её не было
@@ -334,11 +335,11 @@ export class Account {
           return this.keys;
         }
         // у аккаунта ключа ещё нет: создаём здесь
-        this._step("Создаём ключ шифрования");
+        this._step(t`Создаём ключ шифрования`);
         const made = await pgpCall("generate", { email: address });
         const info = this._usable(made.info, address);
         if (typeof made.privateKey !== "string" || !made.privateKey.includes("PRIVATE KEY BLOCK")) {
-          throw fail("Ключ не создан", "pgp");
+          throw fail(t`Ключ не создан`, "pgp");
         }
         key = dataKey || random(32);
         privateKey = made.privateKey;
@@ -376,7 +377,7 @@ export class Account {
       this._emit("keys");
       return this.keys;
     }
-    throw fail("Ключи аккаунта сейчас меняются на другом устройстве. Повторите через минуту", "pgp-conflict");
+    throw fail(t`Ключи аккаунта сейчас меняются на другом устройстве. Повторите через минуту`, "pgp-conflict");
   }
 
   /** После перезагрузки страницы: ключ данных есть, закрытый ключ почты берём с сервера заново. */
@@ -411,7 +412,7 @@ export class Account {
       }
       const keys = await this._openKeys({ recoveryKey: rk, wrapKey: k?.wrapKey || null, loginHash: k?.loginHash || "" });
       if (keys.state !== "ok") {
-        throw fail("Этот ключ восстановления к аккаунту не подходит", "wrong-wrap");
+        throw fail(t`Этот ключ восстановления к аккаунту не подходит`, "wrong-wrap");
       }
       await this._persist();
       return keys;
@@ -430,12 +431,12 @@ export class Account {
       const L = labels(this.email);
       const dataKey = await open(old.wrapKey, L.pw, tryB64(remote.wrapPassword));
       if (!dataKey) {
-        throw fail("Прежний пароль не подходит к копии ключа", "wrong-wrap");
+        throw fail(t`Прежний пароль не подходит к копии ключа`, "wrong-wrap");
       }
       now = await this._derive(this.email, password, kdf);
       const keys = await this._openKeys({ dataKey, wrapKey: now.wrapKey, loginHash: now.loginHash });
       if (keys.state !== "ok") {
-        throw fail("Прежний пароль не подходит к копии ключа", "wrong-wrap");
+        throw fail(t`Прежний пароль не подходит к копии ключа`, "wrong-wrap");
       }
       // _openKeys сам ставит обёртку нынешним паролем: ключ открыт не ею
       wipe(dataKey);
@@ -449,7 +450,7 @@ export class Account {
   /** Повторная проверка пароля для чувствительных настроек: хеш входа (пароль не сохраняется). */
   async loginHashFor(password) {
     if (!password) {
-      throw fail("Введите пароль", "bad-credentials");
+      throw fail(t`Введите пароль`, "bad-credentials");
     }
     const k = await this._derive(this.email, password, this.session.kdf || KDF_CURRENT);
     wipe(k.wrapKey);
@@ -462,11 +463,11 @@ export class Account {
     const email = this.normalizeEmail(name);
     checkNewPassword(password);
     if (!(await this.api.available(email))) {
-      throw fail("Это имя уже занято", "taken");
+      throw fail(t`Это имя уже занято`, "taken");
     }
     const k = await this._derive(email, password, KDF_CURRENT);
     try {
-      this._step("Создаём аккаунт");
+      this._step(t`Создаём аккаунт`);
       const r = await this.api.register({ email, loginHash: k.loginHash, kdf: KDF_CURRENT, deviceId: this.store.deviceId(), deviceName: deviceLabel(), mailAccess: "session" });
       this.session = { email, userId: r.userId, token: r.session.token, expiresAt: r.session.expiresAt, kdf: KDF_CURRENT, mail: r.mail || null };
       this.keys = { state: "offline" };
@@ -475,7 +476,7 @@ export class Account {
       const rkKey = rkWrapKey(recoveryKey);
       try {
         await this._openKeys({ wrapKey: k.wrapKey, loginHash: k.loginHash, recoveryKey: rkKey, create: true });
-        this._step("Создаём ключ восстановления");
+        this._step(t`Создаём ключ восстановления`);
         await this.api.setRecovery(this.token, rkVerifier(recoveryKey));
       } finally {
         wipe(rkKey);
@@ -491,7 +492,7 @@ export class Account {
   /** Новый ключ восстановления взамен прежнего (прежний перестаёт действовать). */
   async newRecoveryKey() {
     if (this.keys.state !== "ok") {
-      throw fail("Сначала откройте ключи аккаунта", "locked");
+      throw fail(t`Сначала откройте ключи аккаунта`, "locked");
     }
     const recoveryKey = rkNew();
     const rkKey = rkWrapKey(recoveryKey);
@@ -526,7 +527,7 @@ export class Account {
     let now = null;
     try {
       now = await this._derive(this.email, newPassword, KDF_CURRENT);
-      this._step("Меняем пароль");
+      this._step(t`Меняем пароль`);
       await this.api.changePassword(this.token, { oldLoginHash: old.loginHash, newLoginHash: now.loginHash, kdf: KDF_CURRENT });
       this.session.kdf = KDF_CURRENT;
       // копия ключа данных привязывается к новому паролю; если ключ здесь закрыт, прежний пароль его откроет
@@ -564,7 +565,7 @@ export class Account {
     rkVerifier(recoveryText); // проверка формата до тяжёлых расчётов
     const k = await this._derive(email, newPassword, KDF_CURRENT);
     try {
-      this._step("Меняем пароль");
+      this._step(t`Меняем пароль`);
       const { nonce } = await this.api.resetChallenge(email);
       const r = await this.api.reset({ email, nonce, recoveryProof: rkSignReset(recoveryText, email, k.loginHash, nonce), newLoginHash: k.loginHash, kdf: KDF_CURRENT });
       return { email, twoFactorDisabled: !!r?.twoFactorDisabled };
@@ -583,7 +584,7 @@ export class Account {
       const k = await this._derive(email, newPassword, KDF_CURRENT);
       p = this._pending = { email, kdf: KDF_CURRENT, loginHash: k.loginHash, wrapKey: k.wrapKey, at: Date.now(), purpose: "reset" };
     }
-    this._step("Меняем пароль");
+    this._step(t`Меняем пароль`);
     let r;
     try {
       r = await this.api.resetEmailConfirm({ email, code: String(code).replace(/\s+/g, ""), newLoginHash: p.loginHash, kdf: KDF_CURRENT, deviceId: this.store.deviceId(), deviceName: deviceLabel(), mailAccess: "session", ...(totp ? { totp: String(totp).replace(/\s+/g, "") } : {}) });
@@ -625,7 +626,7 @@ export class Account {
     }
     const r = await this.api.mailPassword(this.token);
     if (!r?.mail?.password) {
-      throw fail("Почтовый сервер сейчас недоступен. Повторите позже", "mail-unavailable");
+      throw fail(t`Почтовый сервер сейчас недоступен. Повторите позже`, "mail-unavailable");
     }
     this.session.mail = r.mail;
     await this._persist();

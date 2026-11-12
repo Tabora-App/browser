@@ -17,6 +17,9 @@ case "$what" in
     # закреплены) и выкладка в /var/www/app.<домен>. Сначала в соседний каталог, потом одной
     # командой на место: посетитель не застанет страницу со ссылками на ещё не доехавшие файлы.
     # Имя должно быть включено в nginx (сертификат: deploy.sh tls) и в DNS (deploy.sh dns).
+    # словари переводов собирает tools/i18n (свой закреплённый разборщик кода); сборка не пройдёт,
+    # если в коде есть надпись без перевода
+    (cd "$ROOT/tools/i18n" && npm ci --ignore-scripts --no-audit --no-fund --silent && node extract.mjs web --strict)
     (cd "$ROOT/tools/web" && npm ci --ignore-scripts --no-audit --no-fund --silent && node build.mjs "$ROOT/.build/web")
     [ -f "$ROOT/.build/web/index.html" ] && [ -f "$ROOT/.build/web/build.json" ] || { echo "сборка веб-версии не получилась"; exit 1; }
     ssh "$HOST" 'set -euo pipefail; DOMAIN=${DOMAIN:-tabora.app}; install -d -m 755 -o root -g root "/var/www/app.$DOMAIN" "/var/www/app.$DOMAIN.next"'

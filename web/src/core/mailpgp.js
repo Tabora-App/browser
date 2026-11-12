@@ -12,6 +12,7 @@
 
 import { b64, fromB64 } from "./bytes.js";
 import { armorBody, pgpCall } from "./pgp.js";
+import { t } from "./i18n.js";
 
 const DIRECTORY_FRESH_MS = 10 * 60 * 1000;
 const clean = address => String(address || "").trim().toLowerCase();
@@ -125,7 +126,7 @@ export class MailPgp {
   async encrypt(bytes, addresses) {
     const mine = await this.own();
     if (!mine) {
-      throw fail("Ключ шифрования аккаунта на этом устройстве закрыт");
+      throw fail(t`Ключ шифрования аккаунта на этом устройстве закрыт`);
     }
     const keys = [mine.publicKey];
     await this.lookup(addresses);
@@ -135,13 +136,13 @@ export class MailPgp {
       }
       const k = this._peer(a);
       if (!k) {
-        throw fail(`Нет ключа получателя ${a}: письмо нельзя зашифровать`, "no-key");
+        throw fail(t`Нет ключа получателя ${a}: письмо нельзя зашифровать`, "no-key");
       }
       keys.push(k.publicKey);
     }
     const r = await pgpCall("encrypt", { data: b64(bytes), recipients: keys, signer: mine.privateKey });
     if (typeof r.armored !== "string" || !r.armored.startsWith("-----BEGIN PGP MESSAGE-----")) {
-      throw fail("Письмо не зашифровано");
+      throw fail(t`Письмо не зашифровано`);
     }
     return r.armored;
   }
@@ -198,17 +199,17 @@ export class MailPgp {
   async decrypt(armored, { from = "" } = {}) {
     const mine = await this.own();
     if (!mine) {
-      throw fail("Ключ шифрования аккаунта на этом устройстве закрыт", "locked");
+      throw fail(t`Ключ шифрования аккаунта на этом устройстве закрыт`, "locked");
     }
     let r;
     try {
       r = await pgpCall("decrypt", { armored: String(armored), keys: [mine.privateKey], verifiers: await this._verifiers(from, mine) });
     } catch (e) {
       const noKey = /no decryption key|session key decryption failed/i.test(e.message || "");
-      throw fail(noKey ? "Письмо зашифровано не для этого аккаунта" : "Письмо не расшифровано: оно повреждено или зашифровано неизвестным способом", noKey ? "no-key" : "pgp");
+      throw fail(noKey ? t`Письмо зашифровано не для этого аккаунта` : t`Письмо не расшифровано: оно повреждено или зашифровано неизвестным способом`, noKey ? "no-key" : "pgp");
     }
     if (typeof r.data !== "string") {
-      throw fail("Письмо не расшифровано");
+      throw fail(t`Письмо не расшифровано`);
     }
     return { bytes: fromB64(r.data), signature: this._verdict(r.signatures, from, mine) };
   }

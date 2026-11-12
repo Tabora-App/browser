@@ -14,9 +14,10 @@
 
 import { utf8 } from "./bytes.js";
 import { buildEntity, buildMessage, bytesOf, decodeAttachment, encryptedEntity, findCode, findSection, foldHeader, parseEntity, parseMessage } from "./mime.js";
+import { t } from "./i18n.js";
 
 const ROLE_ORDER = ["inbox", "drafts", "sent", "archive", "junk", "trash"];
-export const ROLE_NAMES = { inbox: "Входящие", drafts: "Черновики", sent: "Отправленные", archive: "Архив", junk: "Спам", trash: "Корзина" };
+export const ROLE_NAMES = { inbox: t`Входящие`, drafts: t`Черновики`, sent: t`Отправленные`, archive: t`Архив`, junk: t`Спам`, trash: t`Корзина` };
 const LIST_PROPS = ["id", "threadId", "mailboxIds", "keywords", "from", "to", "subject", "receivedAt", "preview", "hasAttachment", "size"];
 const THREAD_PROPS = ["threadId", "mailboxIds", "keywords", "from", "receivedAt"];
 const FULL_PROPS = ["id", "blobId", "threadId", "mailboxIds", "keywords", "from", "to", "cc", "bcc", "replyTo", "subject", "sentAt", "receivedAt", "messageId", "inReplyTo", "references", "hasAttachment", "preview", "size", "bodyStructure", "textBody", "htmlBody", "attachments", "bodyValues", "header:List-Unsubscribe:asURLs"];
@@ -132,7 +133,7 @@ export class Mail {
     await this.folders();
     const filter = this._filter({ folderId, view, query });
     const ref = (i, name, path) => ({ resultOf: `c${i}`, name, path });
-    const [q, g, t, all] = await this.jmap.call([
+    const [q, g, , all] = await this.jmap.call([
       ["Email/query", { filter, sort: [{ property: "receivedAt", isAscending: false }], collapseThreads: true, position, limit, calculateTotal: true }],
       ["Email/get", { "#ids": ref(0, "Email/query", "/ids"), properties: LIST_PROPS }],
       ["Thread/get", { "#ids": ref(1, "Email/get", "/list/*/threadId") }],
@@ -158,7 +159,7 @@ export class Mail {
     const items = q.ids.map(id => byId.get(id)).filter(Boolean).map(e => {
       const th = byThread.get(e.threadId) || { count: 1, unread: !e.keywords?.$seen, starred: !!e.keywords?.$flagged, ids: [e.id], senders: new Map() };
       return {
-        id: e.id, threadId: e.threadId, subject: (e.subject || "").trim() || "(без темы)", from: people(e.from)[0] || { name: "", email: "" }, to: people(e.to),
+        id: e.id, threadId: e.threadId, subject: (e.subject || "").trim() || t`(без темы)`, from: people(e.from)[0] || { name: "", email: "" }, to: people(e.to),
         date: e.receivedAt, preview: (e.preview || "").trim(), hasAttachment: !!e.hasAttachment, draft: !!e.keywords?.$draft, answered: !!e.keywords?.$answered,
         unread: th.unread, starred: th.starred, count: Math.max(1, th.count), ids: th.ids.length ? th.ids : [e.id], mailboxIds: Object.keys(e.mailboxIds || {}),
       };
@@ -185,7 +186,7 @@ export class Mail {
     const text = (e.textBody || []).filter(p => p.type === "text/plain").map(value).join("\n\n");
     const html = htmlPart ? value(htmlPart) : "";
     const truncated = Object.values(e.bodyValues || {}).some(v => v.isTruncated);
-    const files = (e.attachments || []).map(a => ({ name: a.name || "вложение", type: (a.type || "application/octet-stream").toLowerCase(), size: a.size || 0, blobId: a.blobId, cid: (a.cid || "").replace(/^<|>$/g, "").toLowerCase(), disposition: a.disposition || "" }));
+    const files = (e.attachments || []).map(a => ({ name: a.name || t`вложение`, type: (a.type || "application/octet-stream").toLowerCase(), size: a.size || 0, blobId: a.blobId, cid: (a.cid || "").replace(/^<|>$/g, "").toLowerCase(), disposition: a.disposition || "" }));
     // картинка, на которую ссылается вёрстка (cid:…), — часть письма, а не вложение
     const used = new Set();
     if (html) {
@@ -202,9 +203,9 @@ export class Mail {
         attachments.push(f);
       }
     }
-    const from = people(e.from)[0] || { name: "Неизвестный отправитель", email: "" };
+    const from = people(e.from)[0] || { name: t`Неизвестный отправитель`, email: "" };
     return {
-      id: e.id, blobId: e.blobId, threadId: e.threadId, mailboxIds: Object.keys(e.mailboxIds || {}), subject: (e.subject || "").trim() || "(без темы)",
+      id: e.id, blobId: e.blobId, threadId: e.threadId, mailboxIds: Object.keys(e.mailboxIds || {}), subject: (e.subject || "").trim() || t`(без темы)`,
       from, to: people(e.to), cc: people(e.cc), bcc: people(e.bcc), replyTo: people(e.replyTo)[0]?.email || "",
       date: e.receivedAt || e.sentAt, messageId: (e.messageId || [])[0] || "", inReplyTo: (e.inReplyTo || [])[0] || "", references: e.references || [],
       unread: !e.keywords?.$seen, starred: !!e.keywords?.$flagged, draft: !!e.keywords?.$draft, answered: !!e.keywords?.$answered,
@@ -237,7 +238,7 @@ export class Mail {
     const [g] = await this.jmap.call([["Email/get", { ids: [id], properties: FULL_PROPS, bodyProperties: BODY_PROPS, fetchHTMLBodyValues: true, fetchTextBodyValues: true, maxBodyValueBytes: 1_500_000 }]]);
     const e = g.list[0];
     if (!e) {
-      throw fail("Письмо не найдено: возможно, его удалили на другом устройстве", "not-found");
+      throw fail(t`Письмо не найдено: возможно, его удалили на другом устройстве`, "not-found");
     }
     const m = this._message(e);
     const kind = this._pgpKind(e) || (m.text.includes("-----BEGIN PGP MESSAGE-----") ? "inline" : "");
@@ -293,7 +294,7 @@ export class Mail {
       m.text = "";
       m.html = "";
       m.attachments = [];
-      m.preview = "Зашифрованное письмо";
+      m.preview = t`Зашифрованное письмо`;
     }
   }
 
@@ -306,7 +307,7 @@ export class Mail {
       const inner = this._inner.get(m.id);
       const part = inner && findSection(inner, a.section);
       if (!part) {
-        throw fail("Вложение не найдено: откройте письмо заново", "download");
+        throw fail(t`Вложение не найдено: откройте письмо заново`, "download");
       }
       return decodeAttachment(part.bin, part.encoding);
     }
@@ -322,7 +323,7 @@ export class Mail {
     const [r] = await this.jmap.call([["Email/set", { update: Object.fromEntries(ids.map(id => [id, patch])) }]]);
     const bad = Object.values(r.notUpdated || {})[0];
     if (bad && bad.type !== "notFound") {
-      throw fail(bad.description || "Почтовый сервер не принял изменение", bad.type || "mail-error");
+      throw fail(bad.description || t`Почтовый сервер не принял изменение`, bad.type || "mail-error");
     }
   }
 
@@ -338,7 +339,7 @@ export class Mail {
   async move(ids, target) {
     const box = this.boxById(target) || this.box(target);
     if (!box) {
-      throw fail("Такой папки нет", "not-found");
+      throw fail(t`Такой папки нет`, "not-found");
     }
     await this._update(ids, { mailboxIds: { [box.id]: true }, ...(box.role === "junk" ? { "keywords/$junk": true } : {}), ...(box.role === "inbox" ? { "keywords/$junk": null } : {}) });
   }
@@ -352,7 +353,7 @@ export class Mail {
       const [r] = await this.jmap.call([["Email/set", { destroy: ids }]]);
       const bad = Object.values(r.notDestroyed || {})[0];
       if (bad && bad.type !== "notFound") {
-        throw fail(bad.description || "Почтовый сервер не удалил письмо", bad.type || "mail-error");
+        throw fail(bad.description || t`Почтовый сервер не удалил письмо`, bad.type || "mail-error");
       }
       return;
     }
@@ -386,7 +387,7 @@ export class Mail {
     } catch (e) {}
     const main = list.find(i => i.email === this.account.email) || list[0];
     if (!main) {
-      throw fail("Почтовый сервер не дал отправить письмо с этого адреса", "mail-error");
+      throw fail(t`Почтовый сервер не дал отправить письмо с этого адреса`, "mail-error");
     }
     return main.id;
   }
@@ -395,11 +396,11 @@ export class Mail {
   async _build({ from, name = "", to, cc = [], subject, text, html = "", attachments = [], inReplyTo = "", references = [], encrypt = false, selfOnly = false }) {
     const total = attachments.reduce((n, a) => n + a.bytes.length, 0);
     if (total > MAX_ATTACH_BYTES) {
-      throw fail("Вложения больше 20 МБ не отправятся: уберите часть файлов", "too-large");
+      throw fail(t`Вложения больше 20 МБ не отправятся: уберите часть файлов`, "too-large");
     }
     const keyed = from === this.account.email;
     if (encrypt && !keyed) {
-      throw fail("Зашифровать можно только письмо с основного адреса аккаунта", "pgp");
+      throw fail(t`Зашифровать можно только письмо с основного адреса аккаунта`, "pgp");
     }
     let entity = buildEntity({ text, html, attachments });
     const extraHeaders = [];
@@ -412,7 +413,7 @@ export class Mail {
     if (encrypt) {
       entity = encryptedEntity(await this.pgp.encrypt(bytesOf(entity), selfOnly ? [from] : [...to, ...cc]));
     }
-    const built = buildMessage({ from: { name, email: from }, to, cc, subject: subject || "(без темы)", entity, extraHeaders, inReplyTo, references: references.filter(Boolean).slice(-10) });
+    const built = buildMessage({ from: { name, email: from }, to, cc, subject: subject || t`(без темы)`, entity, extraHeaders, inReplyTo, references: references.filter(Boolean).slice(-10) });
     return { raw: bytesOf(built.raw), messageId: built.messageId, encrypted: !!encrypt };
   }
 
@@ -423,7 +424,7 @@ export class Mail {
     const id = r.created?.m?.id;
     if (!id) {
       const why = r.notCreated?.m;
-      throw fail(why?.description || "Почтовый сервер не принял письмо", why?.type || "mail-error");
+      throw fail(why?.description || t`Почтовый сервер не принял письмо`, why?.type || "mail-error");
     }
     return id;
   }
@@ -437,10 +438,10 @@ export class Mail {
     await this.folders();
     const rcpt = [...new Set([...to, ...cc, ...bcc].map(a => a.trim().toLowerCase()).filter(Boolean))];
     if (!rcpt.length) {
-      throw fail("Укажите получателя", "no-recipients");
+      throw fail(t`Укажите получателя`, "no-recipients");
     }
     if (encrypt && bcc.length) {
-      throw fail("Зашифрованное письмо нельзя отправить со скрытой копией: уберите её или отправьте без шифрования", "pgp");
+      throw fail(t`Зашифрованное письмо нельзя отправить со скрытой копией: уберите её или отправьте без шифрования`, "pgp");
     }
     const built = await this._build({ from, name, to, cc, subject, text, html, attachments, encrypt, inReplyTo: original?.messageId || "", references: original ? [...(original.references || []), original.messageId] : [] });
     const emailId = await this._import(built.raw, { draft: true });
@@ -465,7 +466,7 @@ export class Mail {
     if (!r.created?.s) {
       const why = r.notCreated?.s;
       await this.remove([emailId], { forever: true }).catch(() => {});
-      const text2 = why?.type === "forbiddenFrom" || why?.type === "forbiddenMailFrom" ? "С этого адреса отправлять нельзя" : why?.type === "invalidRecipients" || why?.type === "noRecipients" ? "Сервер не принял адрес получателя: проверьте его" : why?.type === "tooLarge" ? "Письмо слишком большое" : why?.description || "Почтовый сервер не принял письмо к отправке";
+      const text2 = why?.type === "forbiddenFrom" || why?.type === "forbiddenMailFrom" ? t`С этого адреса отправлять нельзя` : why?.type === "invalidRecipients" || why?.type === "noRecipients" ? t`Сервер не принял адрес получателя: проверьте его` : why?.type === "tooLarge" ? t`Письмо слишком большое` : why?.description || t`Почтовый сервер не принял письмо к отправке`;
       throw fail(text2, why?.type || "mail-error");
     }
     const after = [];

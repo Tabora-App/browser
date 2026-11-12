@@ -8,6 +8,7 @@
 import { sanitizeMail } from "../core/sanitize.js";
 import { clear, h, icon } from "../lib/dom.js";
 import { avatar, copyText, errorText, fileSize, longDate, menu, modal, shortDate, toast } from "../lib/ui.js";
+import { t } from "../core/i18n.js";
 
 const FRAME_CSS = `
 html { color-scheme: light; }
@@ -30,27 +31,27 @@ function pgpNote(m, mine) {
   }
   if (p.error) {
     const why = {
-      "no-key": "Оно зашифровано ключом, которого у этого аккаунта нет.",
-      locked: "Ключ аккаунта на этом устройстве закрыт: откройте его в разделе «Аккаунт».",
-    }[p.error] || "Письмо повреждено или зашифровано способом, которого Tabora не знает.";
-    return ["warn", "lock", "Письмо не расшифровано", why];
+      "no-key": t`Оно зашифровано ключом, которого у этого аккаунта нет.`,
+      locked: t`Ключ аккаунта на этом устройстве закрыт: откройте его в разделе «Аккаунт».`,
+    }[p.error] || t`Письмо повреждено или зашифровано способом, которого Tabora не знает.`;
+    return ["warn", "lock", t`Письмо не расшифровано`, why];
   }
-  const other = `Подпись сделана ключом адреса ${p.signer}, а не отправителя.`;
-  const noKey = "Ключа, которым оно подписано, у веб-версии нет: проверить подпись можно в Tabora на компьютере.";
+  const other = t`Подпись сделана ключом адреса ${p.signer}, а не отправителя.`;
+  const noKey = t`Ключа, которым оно подписано, у веб-версии нет: проверить подпись можно в Tabora на компьютере.`;
   if (p.encrypted) {
     return {
-      valid: ["ok", "lock", "Зашифровано и подписано", mine ? "Прочитать письмо можете только вы и получатели." : "Прочитать письмо могли только вы и другие получатели. Подпись отправителя верна."],
-      none: ["warn", "lock", "Зашифровано, но не подписано", "Прочитать письмо могли только получатели, а вот кто его написал, проверить нельзя."],
-      unknown: ["warn", "lock", "Зашифровано, подпись не проверена", noKey],
-      other: ["warn", "lock", "Зашифровано, подписано другим адресом", other],
-      invalid: ["bad", "alert", "Зашифровано, но подпись неверна", "Письмо изменили после подписи или подписал его не отправитель."],
-    }[p.signature] || ["ok", "lock", "Зашифровано", "Прочитать письмо могли только получатели."];
+      valid: ["ok", "lock", t`Зашифровано и подписано`, mine ? t`Прочитать письмо можете только вы и получатели.` : t`Прочитать письмо могли только вы и другие получатели. Подпись отправителя верна.`],
+      none: ["warn", "lock", t`Зашифровано, но не подписано`, t`Прочитать письмо могли только получатели, а вот кто его написал, проверить нельзя.`],
+      unknown: ["warn", "lock", t`Зашифровано, подпись не проверена`, noKey],
+      other: ["warn", "lock", t`Зашифровано, подписано другим адресом`, other],
+      invalid: ["bad", "alert", t`Зашифровано, но подпись неверна`, t`Письмо изменили после подписи или подписал его не отправитель.`],
+    }[p.signature] || ["ok", "lock", t`Зашифровано`, t`Прочитать письмо могли только получатели.`];
   }
   return {
-    valid: ["ok", "seal", "Подпись верна", "Письмо написал владелец этого адреса, и в пути оно не менялось."],
-    unknown: ["info", "seal", "Подпись не проверена", noKey],
-    other: ["warn", "seal", "Подписано другим адресом", other],
-    invalid: ["bad", "alert", "Подпись неверна", "Письмо изменили в пути или подписал его не отправитель."],
+    valid: ["ok", "seal", t`Подпись верна`, t`Письмо написал владелец этого адреса, и в пути оно не менялось.`],
+    unknown: ["info", "seal", t`Подпись не проверена`, noKey],
+    other: ["warn", "seal", t`Подписано другим адресом`, other],
+    invalid: ["bad", "alert", t`Подпись неверна`, t`Письмо изменили в пути или подписал его не отправитель.`],
   }[p.signature] || null;
 }
 
@@ -109,19 +110,19 @@ export function renderThread(el, { ctx, messages, folderId, back, act, compose }
   const remote = (el._remote ||= new Set());
 
   const starred = messages.some(m => m.starred);
-  const moreButton = h("button", { class: "icon-btn", "aria-label": "Ещё" }, icon("more", 20, 2.4));
+  const moreButton = h("button", { class: "icon-btn", "aria-label": t`Ещё` }, icon("more", 20, 2.4));
   moreButton.addEventListener("click", () => menu(moreButton, [
-    { label: "Отметить непрочитанным", icon: "unread", run: () => act("unread") },
-    { label: role === "junk" ? "Не спам" : "В спам", icon: "spam", run: () => act("junk") },
+    { label: t`Отметить непрочитанным`, icon: "unread", run: () => act("unread") },
+    { label: role === "junk" ? t`Не спам` : t`В спам`, icon: "spam", run: () => act("junk") },
     null,
-    ...mail.boxes.filter(b => b.id !== folderId && b.role !== "drafts" && b.role !== "sent").map(b => ({ label: `Перенести: ${b.name}`, icon: "folder", run: () => act("move", b.id) })),
+    ...mail.boxes.filter(b => b.id !== folderId && b.role !== "drafts" && b.role !== "sent").map(b => ({ label: t`Перенести: ${b.name}`, icon: "folder", run: () => act("move", b.id) })),
   ]));
   const head = h("header", { class: "detail-head reader-head" },
-    h("button", { class: "icon-btn back", "aria-label": "Назад", onclick: back }, icon("back", 20)),
+    h("button", { class: "icon-btn back", "aria-label": t`Назад`, onclick: back }, icon("back", 20)),
     h("span", { class: "spacer" }),
-    role !== "archive" && role !== "drafts" && role !== "sent" && role !== "trash" ? h("button", { class: "icon-btn", "aria-label": "В архив", title: "В архив", onclick: () => act("archive") }, icon("archive", 18)) : null,
-    h("button", { class: "icon-btn", "aria-label": role === "trash" || role === "drafts" ? "Удалить насовсем" : "В корзину", title: role === "trash" || role === "drafts" ? "Удалить насовсем" : "В корзину", onclick: () => act("trash") }, icon("trash", 18)),
-    h("button", { class: `icon-btn msg-star${starred ? " on" : ""}`, "aria-label": starred ? "Снять звезду" : "Отметить звездой", "aria-pressed": String(starred), onclick: () => act("star") }, icon("star", 18)),
+    role !== "archive" && role !== "drafts" && role !== "sent" && role !== "trash" ? h("button", { class: "icon-btn", "aria-label": t`В архив`, title: t`В архив`, onclick: () => act("archive") }, icon("archive", 18)) : null,
+    h("button", { class: "icon-btn", "aria-label": role === "trash" || role === "drafts" ? t`Удалить насовсем` : t`В корзину`, title: role === "trash" || role === "drafts" ? t`Удалить насовсем` : t`В корзину`, onclick: () => act("trash") }, icon("trash", 18)),
+    h("button", { class: `icon-btn msg-star${starred ? " on" : ""}`, "aria-label": starred ? t`Снять звезду` : t`Отметить звездой`, "aria-pressed": String(starred), onclick: () => act("star") }, icon("star", 18)),
     moreButton);
 
   const body = h("div", { class: "reader-body" }, h("h2", { class: "reader-subject" }, last.subject));
@@ -135,13 +136,13 @@ export function renderThread(el, { ctx, messages, folderId, back, act, compose }
     const draw = () => {
       const open = expanded.has(m.id);
       card.classList.toggle("open", open);
-      const who = m.from.name || m.from.email || "Неизвестный отправитель";
-      const toLine = [...m.to, ...m.cc].map(p => (p.email === account.email ? "вам" : p.name || p.email)).join(", ");
+      const who = m.from.name || m.from.email || t`Неизвестный отправитель`;
+      const toLine = [...m.to, ...m.cc].map(p => (p.email === account.email ? t`вам` : p.name || p.email)).join(", ");
       const top = h("button", { class: "letter-head", "aria-expanded": String(open) },
         avatar(who),
         h("span", { class: "letter-who" },
-          h("span", { class: "letter-from" }, h("b", {}, isMine(m) && m.from.email === account.email ? "Вы" : who), open && m.from.email && m.from.name ? h("span", { class: "letter-email" }, m.from.email) : null),
-          h("span", { class: "letter-to" }, open ? (toLine ? `кому: ${toLine}` : "") : m.preview || " ")),
+          h("span", { class: "letter-from" }, h("b", {}, isMine(m) && m.from.email === account.email ? t`Вы` : who), open && m.from.email && m.from.name ? h("span", { class: "letter-email" }, m.from.email) : null),
+          h("span", { class: "letter-to" }, open ? (toLine ? t`кому: ${toLine}` : "") : m.preview || " ")),
         h("time", { title: longDate(m.date) }, shortDate(m.date)));
       top.addEventListener("click", () => {
         if (messages.length === 1) {
@@ -166,10 +167,10 @@ export function renderThread(el, { ctx, messages, folderId, back, act, compose }
         content.append(h("div", { class: `pgp-note ${note[0]}` }, icon(note[1], 16), h("span", {}, h("b", {}, note[2]), " ", note[3])));
       }
       if (m.code) {
-        content.append(h("button", { class: "code-pill", onclick: () => copyText(m.code.replace(/\s+/g, ""), "Код скопирован") }, h("span", {}, "Код из письма"), h("b", { class: "mono" }, m.code), icon("copy", 15)));
+        content.append(h("button", { class: "code-pill", onclick: () => copyText(m.code.replace(/\s+/g, ""), t`Код скопирован`) }, h("span", {}, t`Код из письма`), h("b", { class: "mono" }, m.code), icon("copy", 15)));
       }
       if (m.draft) {
-        content.append(h("div", { class: "note" }, icon("drafts", 17), h("div", {}, h("span", {}, "Это черновик: письмо ещё не отправлено."), h("button", { class: "btn small primary", onclick: () => compose({ draft: m }) }, "Продолжить"))));
+        content.append(h("div", { class: "note" }, icon("drafts", 17), h("div", {}, h("span", {}, t`Это черновик: письмо ещё не отправлено.`), h("button", { class: "btn small primary", onclick: () => compose({ draft: m }) }, t`Продолжить`))));
       }
       if (m.pgp?.error) {
         // зашифрованное письмо без содержимого: показывать нечего
@@ -179,7 +180,7 @@ export function renderThread(el, { ctx, messages, folderId, back, act, compose }
         content.append(textBody(m.text));
       }
       if (m.truncated) {
-        content.append(h("p", { class: "detail-meta" }, "Письмо очень большое и показано не целиком."));
+        content.append(h("p", { class: "detail-meta" }, t`Письмо очень большое и показано не целиком.`));
       }
       if (m.attachments.length) {
         content.append(h("div", { class: "letter-files" }, m.attachments.map(a => {
@@ -208,9 +209,9 @@ export function renderThread(el, { ctx, messages, folderId, back, act, compose }
       if (!m.draft) {
         const many = [...m.to, ...m.cc].filter(p => p.email !== account.email).length + (isMine(m) ? 0 : 1) > 1;
         content.append(h("div", { class: "letter-actions" },
-          h("button", { class: "btn small", onclick: () => compose({ mode: "reply", original: m }) }, icon("reply", 15), "Ответить"),
-          many ? h("button", { class: "btn small", onclick: () => compose({ mode: "replyAll", original: m }) }, icon("replyAll", 15), "Ответить всем") : null,
-          h("button", { class: "btn small", onclick: () => compose({ mode: "forward", original: m }) }, icon("forward", 15), "Переслать")));
+          h("button", { class: "btn small", onclick: () => compose({ mode: "reply", original: m }) }, icon("reply", 15), t`Ответить`),
+          many ? h("button", { class: "btn small", onclick: () => compose({ mode: "replyAll", original: m }) }, icon("replyAll", 15), t`Ответить всем`) : null,
+          h("button", { class: "btn small", onclick: () => compose({ mode: "forward", original: m }) }, icon("forward", 15), t`Переслать`)));
       }
     };
     draw();
@@ -219,7 +220,7 @@ export function renderThread(el, { ctx, messages, folderId, back, act, compose }
 
   function preview(a, bytes) {
     const url = URL.createObjectURL(new Blob([bytes], { type: a.type }));
-    const m = modal({ title: a.name, wide: true, className: "preview", content: [h("img", { class: "preview-img", src: url, alt: a.name })], actions: [h("button", { class: "btn", onclick: () => saveBytes(bytes, a.name, a.type) }, icon("download", 16), "Сохранить"), h("button", { class: "btn primary", onclick: () => m.close() }, "Закрыть")], onclose: () => URL.revokeObjectURL(url) });
+    const m = modal({ title: a.name, wide: true, className: "preview", content: [h("img", { class: "preview-img", src: url, alt: a.name })], actions: [h("button", { class: "btn", onclick: () => saveBytes(bytes, a.name, a.type) }, icon("download", 16), t`Сохранить`), h("button", { class: "btn primary", onclick: () => m.close() }, t`Закрыть`)], onclose: () => URL.revokeObjectURL(url) });
   }
 
   /** Вёрстка письма в рамке без скриптов. Картинки из самого письма подставляются, чужие — по кнопке. */
@@ -228,7 +229,7 @@ export function renderThread(el, { ctx, messages, folderId, back, act, compose }
     const banner = h("div", { class: "images-note", hidden: true });
     content.append(banner, holder);
     const allow = remote.has(m.id);
-    const frame = h("iframe", { class: "letter-frame", src: allow ? "/frame/mail-remote.html" : "/frame/mail.html", sandbox: "allow-same-origin allow-popups allow-popups-to-escape-sandbox", referrerpolicy: "no-referrer", title: "Текст письма", scrolling: "no" });
+    const frame = h("iframe", { class: "letter-frame", src: allow ? "/frame/mail-remote.html" : "/frame/mail.html", sandbox: "allow-same-origin allow-popups allow-popups-to-escape-sandbox", referrerpolicy: "no-referrer", title: t`Текст письма`, scrolling: "no" });
     let filled = false;
     const fill = async () => {
       if (filled) {
@@ -267,7 +268,7 @@ export function renderThread(el, { ctx, messages, folderId, back, act, compose }
       }
       if (clean.blocked && !allow) {
         banner.hidden = false;
-        clear(banner, icon("image", 16), h("span", {}, "Картинки с чужих серверов не загружены: так отправитель не узнает, что письмо открыто."), h("button", { class: "link-btn", onclick: () => { remote.add(m.id); redraw(); } }, "Показать"));
+        clear(banner, icon("image", 16), h("span", {}, t`Картинки с чужих серверов не загружены: так отправитель не узнает, что письмо открыто.`), h("button", { class: "link-btn", onclick: () => { remote.add(m.id); redraw(); } }, t`Показать`));
       }
       const fit = () => {
         const b = doc.body;
