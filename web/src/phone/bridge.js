@@ -6,15 +6,22 @@
  * движка; с частью на Kotlin (org.mozilla.fenix.tabora.TaboraAccount) он говорит сообщениями
  * расширения. Другого пути наружу у него нет: только эти сообщения и сервер аккаунтов.
  *
- * Запросы с ответом (request; ответ — строка JSON):
+ * Запросы с быстрым ответом (request; ответ — строка JSON):
  *   { type: "store-load" }            → { deviceId, deviceName, session }   сохранённый вход
  *   { type: "store-save", session }   → { ok }
  *   { type: "store-clear" }           → { ok }
+ *   { type: "data-load", name }       → { value }    копия данных синхронизации для работы без сети
+ *   { type: "data-save", name, value } → { ok }
+ *   { type: "data-clear", name }      → { ok }
  * Канал (connect), приложение → модуль:
  *   { type: "tabs", tabs: [{ t, u }] }   открытые вкладки телефона (без приватных)
  *   { type: "sync" }                     сверить сейчас (открыли список вкладок)
+ *   { type: "reply", rid, … }            ответ на вопрос модуля (см. call)
  * Канал, модуль → приложение:
- *   { type: "state", signedIn, email, tabsOn, status, at, devices: [{ id, name, at, tabs: [{ t, u }] }] } */
+ *   { type: "state", signedIn, email, tabsOn, codesOn, codes, status, at, devices: [{ id, name, at, tabs: [{ t, u }] }] }
+ *   { type: "auth", rid }                попросить человека подтвердить, что телефон в его руках
+ *                                        (отпечаток, лицо или код блокировки) → reply { ok }
+ *   { type: "open", page }               открыть экран модуля: "account" или "codes" */
 
 const APP = "tabora";
 
@@ -23,6 +30,8 @@ export class Bridge {
     this._runtime = runtime;
     this._port = null;
     this._listeners = new Set();
+    this._waiting = new Map(); // номер вопроса → функция ответа
+    this._rid = 0;
   }
 
   /** Открыть канал. Если приложение его закроет, следующий post откроет заново. */
@@ -33,6 +42,12 @@ export class Bridge {
     const port = this._runtime.connectNative(APP);
     port.onMessage.addListener(message => {
       if (!message || typeof message !== "object") {
+        return;
+      }
+      if (message.type === "reply") {
+        const answer = this._waiting.get(message.rid);
+        this._waiting.delete(message.rid);
+        answer?.(message);
         return;
       }
       for (const fn of [...this._listeners]) {
@@ -62,6 +77,24 @@ export class Bridge {
     } catch (e) {
       console.error("Tabora: приложение не приняло сообщение", e);
     }
+  }
+
+  /** Вопрос, на который приложение отвечает не сразу (ждёт действия человека): ответ приходит по
+   * каналу сообщением reply. Без ответа за отведённое время — пустой объект. */
+  call(message, timeoutMs = 120000) {
+    const rid = ++this._rid;
+    return new Promise(resolve => {
+      const timer = setTimeout(() => {
+        if (this._waiting.delete(rid)) {
+          resolve({});
+        }
+      }, timeoutMs);
+      this._waiting.set(rid, answer => {
+        clearTimeout(timer);
+        resolve(answer);
+      });
+      this.post({ ...message, rid });
+    });
   }
 
   /** Запрос с ответом. Приложение отвечает строкой JSON: движок передаёт в ответ только простые значения. */

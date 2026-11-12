@@ -1,13 +1,16 @@
-// Второе устройство аккаунта для сквозной проверки вкладок с приложением на телефоне: создаёт
-// аккаунт, показывает списки вкладок всех устройств и пишет свой — в том же виде, что браузер
-// на компьютере.
+// Второе устройство аккаунта для сквозной проверки с приложением на телефоне: создаёт аккаунт,
+// показывает списки вкладок всех устройств и коды входа, пишет свой список вкладок и код — в том
+// же виде, что браузер на компьютере.
 //   node <сборка> <сервер аккаунтов> <имя> <файл с паролем> register
 //   node <сборка> <сервер аккаунтов> <имя> <файл с паролем> show
 //   node <сборка> <сервер аккаунтов> <имя> <файл с паролем> put <имя устройства> <адрес>…
+//   node <сборка> <сервер аккаунтов> <имя> <файл с паролем> otp <сервис> <аккаунт> <секрет Base32> [сайт…]
 import { readFileSync } from "node:fs";
 import "./setup.mjs";
 import { Account } from "../../../web/src/core/account.js";
 import { Api } from "../../../web/src/core/api.js";
+import { newOtp } from "../../../web/src/core/codes.js";
+import { base32Decode, totp } from "../../../web/src/core/otp.js";
 import { MemoryStore } from "../../../web/src/core/store.js";
 import { SyncClient } from "../../../web/src/core/sync.js";
 
@@ -29,6 +32,12 @@ try {
     const [device, ...urls] = rest;
     await sync.put("tabs", DEVICE, { name: device, at: Date.now(), tabs: urls.map((u, i) => ({ t: `Страница ${i + 1}`, u })) });
   }
+  if (mode === "otp") {
+    const [issuer, name2, secret, ...sites] = rest;
+    const made = await newOtp({ issuer, account: name2, secret, sites: sites.length ? sites : null });
+    await sync.put("otp", made.id, made.data);
+  }
+  out.codes = await Promise.all(sync.list("otp").map(async o => `${o.data.i} (${o.data.a}): ${await totp(base32Decode(o.data.s), { algorithm: o.data.al, digits: o.data.d, period: o.data.p })} — ${(o.data.w || []).map(w => w.host).join(", ")}`));
   out.tabs = sync.list("tabs").map(r => ({ id: r.id === DEVICE ? "(это устройство)" : r.id.slice(0, 8), name: r.data.name, at: new Date(r.data.at).toISOString(), tabs: r.data.tabs.map(x => `${x.t} — ${x.u}`) }));
   out.devices = (await account.api.devices(account.token)).map(d => `${d.name}${d.current ? " (это)" : ""}${d.active === false ? " [вышло]" : ""}`);
 } finally {

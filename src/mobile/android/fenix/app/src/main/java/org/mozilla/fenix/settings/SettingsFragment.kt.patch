@@ -1,5 +1,5 @@
 diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SettingsFragment.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SettingsFragment.kt
-index 27584e3094..f9e037fffd 100644
+index 27584e3094..4a90868be7 100644
 --- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SettingsFragment.kt
 +++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SettingsFragment.kt
 @@ -32,6 +32,7 @@ import androidx.navigation.fragment.navArgs
@@ -28,7 +28,15 @@ index 27584e3094..f9e037fffd 100644
  import org.mozilla.fenix.R
  import org.mozilla.fenix.components.Components
  import org.mozilla.fenix.components.accounts.FenixFxAEntryPoint
-@@ -234,6 +238,17 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment
+@@ -90,6 +94,7 @@ import org.mozilla.fenix.perf.ProfilerViewModelFactory
+ import org.mozilla.fenix.settings.account.AccountUiView
+ import org.mozilla.fenix.snackbar.FenixSnackbarDelegate
+ import org.mozilla.fenix.snackbar.SnackbarBinding
++import org.mozilla.fenix.tabora.TaboraAccount
+ import org.mozilla.fenix.utils.Settings
+ 
+ /** Main settings screen. */
+@@ -234,6 +239,23 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment
              }
          }
  
@@ -39,6 +47,12 @@ index 27584e3094..f9e037fffd 100644
 +                    requirePreference<Preference>(R.string.pref_key_tabora_account).summary =
 +                        account.email.takeIf { account.signedIn && it.isNotEmpty() }
 +                            ?: getString(R.string.tabora_account_summary)
++                    requirePreference<Preference>(R.string.pref_key_tabora_codes).summary =
++                        if (account.signedIn && account.codesOn && account.codes > 0) {
++                            resources.getQuantityString(R.plurals.tabora_codes_count, account.codes, account.codes)
++                        } else {
++                            getString(R.string.tabora_codes_summary)
++                        }
 +                }
 +            }
 +        }
@@ -46,7 +60,7 @@ index 27584e3094..f9e037fffd 100644
          snackbarBinding.set(
              feature =
                  SnackbarBinding(
-@@ -367,6 +382,11 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment
+@@ -367,6 +389,15 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment
  
          val directions: NavDirections? =
              when (preference.key) {
@@ -55,10 +69,14 @@ index 27584e3094..f9e037fffd 100644
 +                    NavGraphDirections.actionGlobalTaboraAccountFragment()
 +                }
 +
++                resources.getString(R.string.pref_key_tabora_codes) -> {
++                    NavGraphDirections.actionGlobalTaboraAccountFragment(TaboraAccount.PAGE_CODES)
++                }
++
                  /* Top level account preferences.
                  Note: Only ONE of these preferences is visible at a time. */
                  resources.getString(R.string.pref_key_sign_in) -> {
-@@ -619,6 +639,13 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment
+@@ -619,6 +650,13 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment
          val preferenceMakeDefaultBrowser =
              requirePreference<DefaultBrowserPreference>(R.string.pref_key_make_default_browser)
  
@@ -72,7 +90,7 @@ index 27584e3094..f9e037fffd 100644
          if (!Config.channel.isReleased) {
              preferenceLeakCanary?.setOnPreferenceChangeListener { _, newValue ->
                  val isEnabled = newValue == true
-@@ -898,6 +925,17 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment
+@@ -898,6 +936,17 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment
          }
      }
  

@@ -18,4 +18,14 @@
     <string name="tabora_synced_tabs_signed_out_title">Tabs from your other devices</string>
     <string name="tabora_synced_tabs_signed_out_text">Sign in to your Tabora account to see tabs from your computer and other devices here.</string>
     <string name="tabora_synced_tabs_sign_in">Sign in</string>
+    <string name="pref_key_tabora_codes" translatable="false">pref_key_tabora_codes</string>
+    <!-- Коды входа (второй шаг на сайтах): экран, пункт меню и настроек, запрос отпечатка -->
+    <string name="tabora_codes_title">Sign-in codes</string>
+    <string name="tabora_codes_summary">Two-step codes for websites, shared with your other devices</string>
+    <string name="tabora_codes_auth_title">Unlock sign-in codes</string>
+    <string name="tabora_codes_auth_text">Confirm it’s you to see and fill codes</string>
+    <plurals name="tabora_codes_count">
+        <item quantity="one">%d code</item>
+        <item quantity="other">%d codes</item>
+    </plurals>
 </resources>

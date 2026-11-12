@@ -3,60 +3,100 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* Аккаунт Tabora в приложении для телефона: вход и синхронизация. Работает в фоновой странице
- * встроенного модуля всё время, пока запущено приложение; экран аккаунта (main.js) берёт этот же
- * объект и ничего своего не хранит.
+ * встроенного модуля всё время, пока запущено приложение; экраны модуля (аккаунт, коды) берут
+ * этот же объект и ничего своего не хранят.
+ *
+ * Синхронизируются вкладки и коды входа — каждое включается отдельно. Записи остальных наборов
+ * аккаунта (пароли сайтов, закладки) модуль не расшифровывает и в памяти не держит.
  *
  * Сверка с сервером: сразу после входа и запуска, через несколько секунд после перемены во
  * вкладках телефона, по просьбе приложения (открыли список вкладок) и раз в десять минут.
- * При сбое связи повторы идут реже и реже; вход при этом не теряется. */
+ * При сбое связи повторы идут реже и реже; вход при этом не теряется.
+ *
+ * Копия расшифрованных данных лежит у приложения (зашифрованной ключом из хранилища ключей
+ * Android): коды и вкладки других устройств видны сразу после запуска и без сети. */
 
 import { Account } from "../core/account.js";
 import { SyncClient } from "../core/sync.js";
 import { t } from "../core/i18n.js";
+import { Codes } from "./codes.js";
 import { TabSync } from "./tabs.js";
 
 const QUIET_MS = 5000; // пауза после перемены во вкладках перед сверкой
 const PERIOD_MS = 10 * 60 * 1000;
 const RETRY_MS = [30_000, 120_000, 600_000];
+const SAVE_MS = 1500; // пауза перед записью копии данных: перемены приходят пачкой
+const CACHE = "sync";
 
 export class Service {
   /**
    * @param {{ bridge: import("./bridge.js").Bridge, store: import("./store.js").NativeStore,
-   *   api: import("../core/api.js").Api, settings?: { get(): boolean, set(on: boolean): void } }} deps
+   *   api: import("../core/api.js").Api, settings?: { tabs?: { get(): boolean, set(on: boolean): void }, codes?: { get(): boolean, set(on: boolean): void } },
+   *   fillTestOrigin?: string }} deps
+   *   fillTestOrigin — адрес проверочной страницы, которой автоввод разрешён без https (только в
+   *   сборке для проверок; в выпуске пусто).
    */
-  constructor({ bridge, store, api, settings }) {
+  constructor({ bridge, store, api, settings = {}, fillTestOrigin = "" }) {
     this.bridge = bridge;
     this.store = store;
     this.api = api;
+    this.fillTestOrigin = fillTestOrigin;
     this.account = new Account({ api, store, deviceName: () => store.deviceName() });
-    this.sync = new SyncClient(this.account);
-    this.tabs = new TabSync({ account: this.account, sync: this.sync, store, ...(settings ? { settings } : {}) });
+    this.sync = new SyncClient(this.account, { only: [] });
+    this.tabs = new TabSync({ account: this.account, sync: this.sync, store, ...(settings.tabs ? { settings: settings.tabs } : {}) });
+    this.codes = new Codes({ account: this.account, sync: this.sync, ...(settings.codes ? { settings: settings.codes } : {}) });
     this._listeners = new Set();
     this._timer = null;
     this._period = null;
+    this._saveTimer = null;
     this._running = null;
     this._again = false;
     this._fails = 0;
     this._sent = "";
-    /** Готовность: сохранённый вход прочитан. Экран аккаунта ждёт её перед показом. */
+    this._dirty = false;
+    this._starting = true;
+    this._stopped = false;
+    /** Готовность: сохранённый вход и копия данных прочитаны. Экраны ждут её перед показом. */
     this.ready = this._start();
   }
 
   async _start() {
     this.bridge.onMessage(message => this._fromApp(message));
     this.account.subscribe(what => this._onAccount(what));
-    this.sync.subscribe(() => this._changed());
+    this.sync.subscribe(what => {
+      if (what === "data") {
+        this._dirty = true;
+        this._saveSoon();
+      }
+      this._changed();
+    });
     await this.store.init();
     this.bridge.connect();
+    this.sync.setOnly(this._wanted());
     await this.account.restore();
+    if (this.account.signedIn) {
+      const saved = await this.store.loadData(CACHE);
+      if (saved && this.sync.restore(saved)) {
+        this._dirty = false;
+      }
+    }
+    this._starting = false;
     this._period = setInterval(() => this.soon(0), PERIOD_MS);
     this._changed();
+    this.soon(0);
   }
 
-  /** Остановить таймеры (в проверках). */
+  /** Остановить службу (в проверках): таймеры сняты и больше не заводятся. */
   stop() {
+    this._stopped = true;
     clearTimeout(this._timer);
+    clearTimeout(this._saveTimer);
     clearInterval(this._period);
+  }
+
+  /** Наборы синхронизации, которые нужны при нынешних настройках. */
+  _wanted() {
+    return [this.tabs.enabled && "tabs", this.codes.enabled && "otp"].filter(Boolean);
   }
 
   /* ---- события ---- */
@@ -74,19 +114,49 @@ export class Service {
   _onAccount(what) {
     if (what === "signed-in") {
       this._fails = 0;
-      this.soon(0);
+      if (!this._starting) {
+        this.soon(0);
+      }
     } else if (what === "signed-out" || what === "expired") {
       clearTimeout(this._timer);
+      clearTimeout(this._saveTimer);
       this.sync.reset();
+      this.codes.forget();
+      this._dirty = false;
       this._fails = 0;
+      this.store.clearData(CACHE).catch(() => {});
     }
     this._changed();
+  }
+
+  /* ---- копия данных у приложения ---- */
+
+  _saveSoon() {
+    if (this._stopped) {
+      return;
+    }
+    clearTimeout(this._saveTimer);
+    this._saveTimer = setTimeout(() => this.saveNow().catch(() => {}), SAVE_MS);
+  }
+
+  /** Записать копию данных сейчас, если она менялась. */
+  async saveNow() {
+    clearTimeout(this._saveTimer);
+    if (!this._dirty || !this.account.signedIn || !this.sync.loaded) {
+      return;
+    }
+    this._dirty = false;
+    try {
+      await this.store.saveData(CACHE, this.sync.snapshot());
+    } catch (e) {
+      this._dirty = true; // приложение не приняло запись: попробуем при следующей перемене
+    }
   }
 
   /* ---- сверка ---- */
 
   soon(ms = 0) {
-    if (!this.account.signedIn) {
+    if (!this.account.signedIn || this._stopped) {
       return;
     }
     clearTimeout(this._timer);
@@ -110,7 +180,7 @@ export class Service {
   }
 
   async _run() {
-    if (!this.account.signedIn || !this.tabs.enabled) {
+    if (!this.account.signedIn || !this._wanted().length) {
       return;
     }
     try {
@@ -130,7 +200,7 @@ export class Service {
     }
   }
 
-  /* ---- действия экрана аккаунта ---- */
+  /* ---- действия экранов ---- */
 
   /** Включить или выключить синхронизацию вкладок. Выключение убирает список телефона с сервера. */
   async setTabs(on) {
@@ -138,13 +208,92 @@ export class Service {
       await this.tabs.drop();
     }
     this.tabs.enabled = !!on;
+    this._applyWanted(on);
+  }
+
+  /** Включить или выключить коды входа на этом телефоне. Выключение стирает их здесь; на сервере
+   * и других устройствах они остаются. */
+  async setCodes(on) {
+    this.codes.enabled = !!on;
+    this._applyWanted(on);
+  }
+
+  _applyWanted(on) {
+    const again = this.sync.setOnly(this._wanted());
+    this._dirty = true;
+    this._saveSoon();
     this._changed();
-    if (on) {
+    if (on || again) {
       this.soon(0);
     }
   }
 
-  /** Выход: список вкладок телефона убирается с сервера, сессия завершается, вход стирается. */
+  /** Попросить человека подтвердить, что телефон в его руках: отпечаток, лицо или код блокировки.
+   * Недавнее подтверждение приложение помнит и повторно не спрашивает. */
+  async unlock() {
+    const r = await this.bridge.call({ type: "auth" });
+    return !!r.ok;
+  }
+
+  /* ---- автоввод кода на странице сайта (скрипт fill.js) ---- */
+
+  /** Хост страницы, приславшей сообщение, или "": коды выдаются только документу https того же
+   * сайта, что и вкладка. Адрес берётся из сведений движка об отправителе, а не из сообщения. */
+  _pageHost(sender) {
+    try {
+      const url = new URL(sender?.url || "");
+      if (url.protocol !== "https:" && !(this.fillTestOrigin && url.origin === this.fillTestOrigin)) {
+        return "";
+      }
+      if (sender.frameId && sender.tab?.url && new URL(sender.tab.url).host !== url.host) {
+        return "";
+      }
+      return url.hostname.toLowerCase();
+    } catch (e) {
+      return "";
+    }
+  }
+
+  /**
+   * Сообщение от скрипта автоввода:
+   *   { type: "otp-field" }      → { entries: [{ id, label }], text } — какие коды привязаны к сайту
+   *                                 (без секретов и самих кодов);
+   *   { type: "otp-fill", id }   → { code } после подтверждения владельца телефона, иначе { error }.
+   */
+  async fromPage(message, sender) {
+    const host = this._pageHost(sender);
+    if (!host || !message || typeof message !== "object") {
+      return {};
+    }
+    await this.ready;
+    const text = { fill: t`Вставить код`, failed: t`Код не вставлен` };
+    if (message.type === "otp-field") {
+      const entries = this.codes.forHost(host).map(e => ({ id: e.id, label: [e.issuer, e.account].filter(Boolean).join(", ") }));
+      return { entries, text };
+    }
+    if (message.type === "otp-fill") {
+      const entry = this.codes.forHost(host).find(e => e.id === message.id);
+      if (!entry) {
+        return { error: text.failed };
+      }
+      if (!(await this.unlock())) {
+        return { error: t`Не подтверждено` };
+      }
+      try {
+        return { code: (await this.codes.code(entry.id)).code };
+      } catch (e) {
+        return { error: text.failed };
+      }
+    }
+    return {};
+  }
+
+  /** Открыть экран модуля в приложении: "account" или "codes". */
+  open(page) {
+    this.bridge.post({ type: "open", page });
+  }
+
+  /** Выход: список вкладок телефона убирается с сервера, сессия завершается, вход и копия данных стираются. */
   async signOut() {
     if (this.tabs.enabled) {
       try {
@@ -166,9 +315,12 @@ export class Service {
       email: signedIn ? a.email : "",
       keys: a.keys?.state || "none",
       tabsOn: this.tabs.enabled,
+      codesOn: this.codes.enabled,
+      codes: signedIn ? this.codes.list().length : 0,
       status: this.sync.status,
       error: this.sync.error,
       at: this.sync.at,
+      loaded: this.sync.loaded,
       devices: signedIn && this.tabs.enabled ? this.tabs.others() : [],
     };
   }
@@ -184,13 +336,13 @@ export class Service {
       try {
         fn(s);
       } catch (e) {
-        // экран аккаунта закрыли, не отписавшись: его функция больше не вызывается
+        // экран закрыли, не отписавшись: его функция больше не вызывается
         console.error(e);
         this._listeners.delete(fn);
       }
     }
     const message = {
-      type: "state", signedIn: s.signedIn, email: s.email, tabsOn: s.tabsOn, status: s.status, at: s.at,
+      type: "state", signedIn: s.signedIn, email: s.email, tabsOn: s.tabsOn, codesOn: s.codesOn, codes: s.codes, status: s.status, at: s.at,
       devices: s.devices.map(d => ({ id: d.id, name: d.name || t`Другое устройство`, at: d.at, tabs: d.tabs.map(x => ({ t: x.t, u: x.u })) })),
     };
     const mark = JSON.stringify(message);

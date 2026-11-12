@@ -11,5 +11,8 @@ import { Service } from "./service.js";
 import { NativeStore } from "./store.js";
 
 const bridge = new Bridge();
-globalThis.tabora = new Service({ bridge, store: new NativeStore(bridge), api: new Api(__API_BASE__) });
-globalThis.tabora.ready.catch(e => console.error("Tabora: аккаунт не запущен", e));
+const service = new Service({ bridge, store: new NativeStore(bridge), api: new Api(__API_BASE__), fillTestOrigin: __FILL_TEST_ORIGIN__ });
+globalThis.tabora = service;
+service.ready.catch(e => console.error("Tabora: аккаунт не запущен", e));
+// скрипт автоввода на страницах сайтов (fill.js) спрашивает, какие коды привязаны к сайту
+globalThis.browser.runtime.onMessage.addListener((message, sender) => service.fromPage(message, sender));

@@ -1,8 +1,24 @@
 diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/compose/MainMenu.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/compose/MainMenu.kt
-index aec18f553f..4e4df04e9c 100644
+index aec18f553f..96e8494b8e 100644
 --- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/compose/MainMenu.kt
 +++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/compose/MainMenu.kt
-@@ -317,11 +317,13 @@ fun MainMenu(
+@@ -111,6 +111,7 @@ import org.mozilla.fenix.theme.FirefoxTheme
+  * @param onDownloadsMenuClick Invoked when the user clicks on the downloads menu item.
+  * @param onPasswordsMenuClick Invoked when the user clicks on the passwords menu item.
+  * @param onQuitMenuClick Invoked when the user clicks on the quit menu item.
++ * @param onTaboraCodesClick Tabora: нажатие на «Коды входа».
+  * @param onBackButtonClick Invoked when the user clicks on the back button.
+  * @param onForwardButtonClick Invoked when the user clicks on the forward button.
+  * @param onRefreshButtonClick Invoked when the user clicks on the refresh button.
+@@ -167,6 +168,7 @@ fun MainMenu(
+     onDownloadsMenuClick: () -> Unit,
+     onPasswordsMenuClick: () -> Unit,
+     onQuitMenuClick: () -> Unit,
++    onTaboraCodesClick: () -> Unit = {},
+     onBackButtonClick: (longPress: Boolean) -> Unit,
+     onForwardButtonClick: (longPress: Boolean) -> Unit,
+     onRefreshButtonClick: (longPress: Boolean) -> Unit,
+@@ -317,10 +319,19 @@ fun MainMenu(
          )
  
          MenuGroup {
@@ -10,7 +26,6 @@ index aec18f553f..4e4df04e9c 100644
 -                account = account,
 -                accountState = accountState,
 -                onClick = onMozillaAccountButtonClick,
--            )
 +            if (accountState == AccountState.Authenticated || accountState == AuthenticationProblem) {
 +                MozillaAccountMenuItem(
 +                    account = account,
@@ -18,6 +33,12 @@ index aec18f553f..4e4df04e9c 100644
 +                    onClick = onMozillaAccountButtonClick,
 +                )
 +            }
++
++            // Tabora: коды входа (второй шаг на сайтах) из аккаунта
++            MenuItem(
++                label = stringResource(id = R.string.tabora_codes_title),
++                beforeIconPainter = painterResource(id = iconsR.drawable.mozac_ic_lock_24),
++                onClick = onTaboraCodesClick,
+             )
  
              if (accessPoint == MenuAccessPoint.Home) {
-                 MenuItem(

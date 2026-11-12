@@ -1,5 +1,5 @@
 diff --git a/mobile/android/fenix/app/src/main/res/navigation/nav_graph.xml b/mobile/android/fenix/app/src/main/res/navigation/nav_graph.xml
-index fdfce3d75d..7aa072a5a3 100644
+index fdfce3d75d..977e1654c5 100644
 --- a/mobile/android/fenix/app/src/main/res/navigation/nav_graph.xml
 +++ b/mobile/android/fenix/app/src/main/res/navigation/nav_graph.xml
 @@ -98,6 +98,9 @@
@@ -12,14 +12,19 @@ index fdfce3d75d..7aa072a5a3 100644
      <action
          android:id="@+id/action_global_settingsFragment"
          app:destination="@id/settingsFragment" />
-@@ -1427,6 +1430,10 @@
+@@ -1427,6 +1430,15 @@
              android:name="addon"
              app:argType="mozilla.components.feature.addons.Addon" />
      </fragment>
 +    <fragment
 +        android:id="@+id/taboraAccountFragment"
 +        android:name="org.mozilla.fenix.tabora.TaboraAccountFragment"
-+        tools:layout="@layout/fragment_add_on_internal_settings" />
++        tools:layout="@layout/fragment_add_on_internal_settings">
++        <argument
++            android:name="page"
++            android:defaultValue="account"
++            app:argType="string" />
++    </fragment>
      <fragment
          android:id="@+id/addonInternalSettingsFragment"
          android:name="org.mozilla.fenix.addons.AddonInternalSettingsFragment"

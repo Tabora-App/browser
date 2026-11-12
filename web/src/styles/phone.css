@@ -18,3 +18,23 @@
 .btn.block .ic, .btn.block svg { margin-right: 8px; }
 /* внутри приложения вход занимает экран целиком и начинается сверху: клавиатура не должна закрывать поля */
 .auth { min-height: 100dvh; }
+
+/* Коды входа: колонка карточек, код крупно, круг показывает оставшееся время */
+.codes-page { display: flex; flex-direction: column; gap: 10px; min-height: 100dvh; padding-bottom: calc(96px + var(--safe-bottom)); }
+.codes-page .pane-tools { padding: 0; }
+.codes-body { flex: 1; display: flex; flex-direction: column; }
+.codes { display: flex; flex-direction: column; gap: 8px; }
+.code-card { display: flex; align-items: center; gap: 2px; padding-right: 6px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--card-2); }
+.code-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 68px; padding: 10px 6px 10px 12px; border: 0; border-radius: var(--r); background: transparent; color: var(--text); text-align: left; font: inherit; }
+.code-value { flex: none; font-size: 21px; font-weight: 650; letter-spacing: 0.02em; font-variant-numeric: tabular-nums; color: var(--text-strong); }
+.code-main:active .code-value { color: var(--accent-ink); }
+.ring { flex: none; }
+.ring-track { stroke: var(--raised-2); }
+.ring-bar { stroke: var(--accent-ink); stroke-linecap: round; transition: stroke-dashoffset 1s linear, stroke var(--ease); }
+.ring-bar.ending { stroke: var(--tone-bad); }
+.section-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.fab { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(20px + var(--safe-bottom)); display: inline-flex; align-items: center; gap: 8px; min-height: 52px; padding: 0 20px; border: 0; border-radius: 26px; background: var(--accent); color: var(--on-accent); font: inherit; font-weight: 750; box-shadow: var(--shadow-pop); }
+.codes-body > .empty, .codes-body > .loading { margin: auto; }
+@media (max-width: 380px) {
+  .code-main .avatar { display: none; }
+}

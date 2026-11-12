@@ -1,0 +1,36 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/MenuDialogFragment.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/MenuDialogFragment.kt
+index 73ad762875..43cc20d34c 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/MenuDialogFragment.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/MenuDialogFragment.kt
+@@ -104,6 +104,7 @@ import org.mozilla.fenix.components.menu.store.TranslationInfo
+ import org.mozilla.fenix.components.menu.store.WebExtensionMenuItem
+ import org.mozilla.fenix.ext.canGoBackInHistoryOrToStories
+ import org.mozilla.fenix.ext.components
++import org.mozilla.fenix.ext.nav
+ import org.mozilla.fenix.ext.openSetDefaultBrowserOption
+ import org.mozilla.fenix.ext.openToBrowser
+ import org.mozilla.fenix.ext.requireComponents
+@@ -118,6 +119,7 @@ import org.mozilla.fenix.settings.deletebrowsingdata.DefaultDeleteBrowsingDataCo
+ import org.mozilla.fenix.settings.deletebrowsingdata.DeleteBrowsingDataController
+ import org.mozilla.fenix.snackbar.FenixSnackbarDelegate
+ import org.mozilla.fenix.tabgroups.flow.TabGroupFlowEntryPoint
++import org.mozilla.fenix.tabora.TaboraAccount
+ import org.mozilla.fenix.theme.FirefoxTheme
+ import org.mozilla.fenix.translations.TranslationsEnabledSettings
+ import org.mozilla.fenix.utils.DELAY_MS_MAIN_MENU
+@@ -620,6 +622,15 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
+                                 onPasswordsMenuClick = {
+                                     menuStore.dispatch(MenuAction.Navigate.Passwords)
+                                 },
++                                onTaboraCodesClick = {
++                                    findNavController()
++                                        .nav(
++                                            R.id.menuDialogFragment,
++                                            MenuDialogFragmentDirections.actionGlobalTaboraAccountFragment(
++                                                TaboraAccount.PAGE_CODES
++                                            ),
++                                        )
++                                },
+                                 onCustomizeReaderViewMenuClick = {
+                                     menuStore.dispatch(MenuAction.CustomizeReaderView)
+                                 },

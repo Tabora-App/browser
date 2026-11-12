@@ -14,4 +14,13 @@
     <string name="tabora_synced_tabs_signed_out_title">Pestañas de tus otros dispositivos</string>
     <string name="tabora_synced_tabs_signed_out_text">Inicia sesión en tu cuenta de Tabora para ver aquí las pestañas del ordenador y de otros dispositivos.</string>
     <string name="tabora_synced_tabs_sign_in">Iniciar sesión</string>
+    <!-- Коды входа (второй шаг на сайтах): экран, пункт меню и настроек, запрос отпечатка -->
+    <string name="tabora_codes_title">Códigos de acceso</string>
+    <string name="tabora_codes_summary">Códigos de dos pasos para sitios web, compartidos con tus dispositivos</string>
+    <string name="tabora_codes_auth_title">Desbloquear los códigos de acceso</string>
+    <string name="tabora_codes_auth_text">Confirma que eres tú para ver e introducir códigos</string>
+    <plurals name="tabora_codes_count">
+        <item quantity="one">%d código</item>
+        <item quantity="other">%d códigos</item>
+    </plurals>
 </resources>

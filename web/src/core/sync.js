@@ -30,9 +30,15 @@ function fail(message, code, extra = {}) {
 }
 
 export class SyncClient {
-  /** @param {import("./account.js").Account} account */
-  constructor(account) {
+  /**
+   * @param {import("./account.js").Account} account
+   * @param {{ only?: string[] }} [options] only — наборы, которые нужны этому клиенту: записи
+   *   остальных наборов он не расшифровывает и в памяти не держит (приложению для телефона ни к
+   *   чему пароли сайтов, пока оно ими не пользуется).
+   */
+  constructor(account, { only = null } = {}) {
     this.account = account;
+    this.only = only ? new Set(only) : null;
     this._keys = null;
     this._keyFor = "";
     this._listeners = new Set();
@@ -141,11 +147,11 @@ export class SyncClient {
 
   /** Записи набора: [{ id, rev, data }]. */
   list(name) {
-    return [...this.coll(name)].map(([id, v]) => ({ id, rev: v.rev, data: v.data }));
+    return [...(this.items.get(name) || [])].map(([id, v]) => ({ id, rev: v.rev, data: v.data }));
   }
 
   get(name, id) {
-    return this.coll(name).get(id)?.data || null;
+    return this.items.get(name)?.get(id)?.data || null;
   }
 
   _set(state, error = "") {
@@ -199,6 +205,9 @@ export class SyncClient {
             continue;
           }
           last = Math.max(last, it.rev);
+          if (this.only && !this.only.has(it.c)) {
+            continue;
+          }
           const bucket = this.coll(it.c);
           if (it.deleted) {
             changed = bucket.delete(it.id) || changed;
@@ -237,6 +246,83 @@ export class SyncClient {
       }
       throw e;
     }
+  }
+
+  /* ---- набор нужных данных и копия на устройстве ---- */
+
+  /** Сменить список нужных наборов. Убранные стираются из памяти; если добавился новый, всё
+   * читается с сервера заново (его записи могли прийти раньше и были пропущены). Возвращает true,
+   * если нужна новая сверка. */
+  setOnly(names) {
+    const next = new Set(names);
+    const added = [...next].some(n => !this.only || !this.only.has(n));
+    const same = this.only && next.size === this.only.size && !added;
+    if (same) {
+      return false;
+    }
+    this.only = next;
+    if (added) {
+      const keep = this.status;
+      this.reset();
+      this.status = keep;
+    } else {
+      for (const name of [...this.items.keys()]) {
+        if (!next.has(name)) {
+          this.items.delete(name);
+          this.gone.delete(name);
+        }
+      }
+    }
+    this._emit("data");
+    return added;
+  }
+
+  /** Всё, что клиент знает, одним объектом — чтобы приложение сохранило это у себя (в открытом
+   * виде: шифрует хранилище приложения) и данные были под рукой без сети. */
+  snapshot() {
+    return {
+      v: 1, email: this.account.email, only: this.only ? [...this.only].sort() : null,
+      rev: this.rev, gen: this.gen, keyId: this.keyId || "", at: this.at,
+      items: [...this.items].map(([name, m]) => [name, [...m].map(([id, v]) => [id, v.rev, v.data])]),
+      gone: [...this.gone].map(([name, m]) => [name, [...m]]),
+    };
+  }
+
+  /** Поднять сохранённое snapshot(). Чужое (другой аккаунт, другой список наборов) не берётся. */
+  restore(saved) {
+    const only = this.only ? [...this.only].sort() : null;
+    if (!saved || saved.v !== 1 || saved.email !== this.account.email || JSON.stringify(saved.only) !== JSON.stringify(only)
+      || !Number.isInteger(saved.rev) || !Number.isInteger(saved.gen) || !Array.isArray(saved.items) || !Array.isArray(saved.gone)) {
+      return false;
+    }
+    this.reset();
+    this.rev = saved.rev;
+    this.gen = saved.gen;
+    this.keyId = String(saved.keyId || "");
+    this.at = Number(saved.at) || 0;
+    for (const [name, list] of saved.items) {
+      if (!COLL_RE.test(name) || !Array.isArray(list)) {
+        continue;
+      }
+      for (const [id, rev, data] of list) {
+        if (ID_RE.test(id) && Number.isInteger(rev) && data && typeof data === "object") {
+          this.coll(name).set(id, { rev, data });
+        }
+      }
+    }
+    for (const [name, list] of saved.gone) {
+      if (!COLL_RE.test(name) || !Array.isArray(list)) {
+        continue;
+      }
+      for (const [id, rev] of list) {
+        if (ID_RE.test(id) && Number.isInteger(rev)) {
+          this._gone(name).set(id, rev);
+        }
+      }
+    }
+    this.loaded = true;
+    this._emit("data");
+    return true;
   }
 
   /* ---- запись ---- */

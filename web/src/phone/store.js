@@ -62,4 +62,25 @@ export class NativeStore {
     this._session = null;
     await this._bridge.request({ type: "store-clear" });
   }
+
+  /* ---- копия данных синхронизации: чтобы коды и чужие вкладки были под рукой без сети ---- */
+
+  /** Сохранённый объект или null. */
+  async loadData(name) {
+    try {
+      const r = await this._bridge.request({ type: "data-load", name });
+      const value = typeof r.value === "string" && r.value ? JSON.parse(r.value) : null;
+      return value && typeof value === "object" ? value : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async saveData(name, value) {
+    await this._bridge.request({ type: "data-save", name, value: JSON.stringify(value) });
+  }
+
+  async clearData(name) {
+    await this._bridge.request({ type: "data-clear", name });
+  }
 }

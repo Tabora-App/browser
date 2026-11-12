@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.navigation.fragment.findNavController
+import androidx.navigation.fragment.navArgs
 import org.mozilla.fenix.R
 import org.mozilla.fenix.addons.AddonPopupBaseFragment
 import org.mozilla.fenix.databinding.FragmentAddOnInternalSettingsBinding
@@ -18,12 +19,13 @@ import org.mozilla.fenix.ext.requireComponents
 import org.mozilla.fenix.ext.showToolbar
 
 /**
- * Экран «Аккаунт Tabora»: вход и настройки синхронизации. Содержимое рисует встроенный модуль
- * аккаунта (страница index.html), приложение даёт ему место под своим заголовком — так же, как
- * страницам настроек расширений.
+ * Экраны встроенного модуля аккаунта: «Аккаунт Tabora» (вход и настройки синхронизации) и «Коды
+ * входа». Содержимое рисует модуль (страницы index.html и codes.html), приложение даёт ему место
+ * под своим заголовком — так же, как страницам настроек расширений.
  */
 class TaboraAccountFragment : AddonPopupBaseFragment(), SystemInsetsPaddedFragment {
 
+    private val args by navArgs<TaboraAccountFragmentArgs>()
     private var _binding: FragmentAddOnInternalSettingsBinding? = null
     private val binding
         get() = _binding!!
@@ -40,7 +42,7 @@ class TaboraAccountFragment : AddonPopupBaseFragment(), SystemInsetsPaddedFragme
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         _binding = FragmentAddOnInternalSettingsBinding.bind(view)
-        val url = requireComponents.core.taboraAccount.pageUrl
+        val url = requireComponents.core.taboraAccount.pageUrl(args.page)
         val pageSession = engineSession
         if (url == null || pageSession == null) {
             findNavController().navigateUp()
@@ -54,7 +56,11 @@ class TaboraAccountFragment : AddonPopupBaseFragment(), SystemInsetsPaddedFragme
 
     override fun onResume() {
         super.onResume()
-        showToolbar(getString(R.string.tabora_account_title))
+        showToolbar(
+            getString(
+                if (args.page == TaboraAccount.PAGE_CODES) R.string.tabora_codes_title else R.string.tabora_account_title
+            )
+        )
     }
 
     override fun onDestroyView() {

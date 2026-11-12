@@ -14,4 +14,15 @@
     <string name="tabora_synced_tabs_signed_out_title">Вкладки с других устройств</string>
     <string name="tabora_synced_tabs_signed_out_text">Войдите в аккаунт Tabora, чтобы видеть здесь вкладки с компьютера и других устройств.</string>
     <string name="tabora_synced_tabs_sign_in">Войти</string>
+    <!-- Коды входа (второй шаг на сайтах): экран, пункт меню и настроек, запрос отпечатка -->
+    <string name="tabora_codes_title">Коды входа</string>
+    <string name="tabora_codes_summary">Коды второго шага для сайтов — общие с вашими устройствами</string>
+    <string name="tabora_codes_auth_title">Открыть коды входа</string>
+    <string name="tabora_codes_auth_text">Подтвердите, что это вы, чтобы видеть и вставлять коды</string>
+    <plurals name="tabora_codes_count">
+        <item quantity="one">%d код</item>
+        <item quantity="few">%d кода</item>
+        <item quantity="many">%d кодов</item>
+        <item quantity="other">%d кода</item>
+    </plurals>
 </resources>

@@ -18,6 +18,7 @@ const between = (text, from, to) => {
 const T = "src/browser/base/content/tabora";
 const cases = [
   ["оценка пароля", `${T}/vault/Vault.sys.mjs`, "web/src/core/password.js", "const COMMON = new Set(", "/* ---------- счётчик неудачных попыток ---------- */", s => s, s => s],
+  ["коды входа", `${T}/vault/Otp.sys.mjs`, "web/src/core/otp.js", 'const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";', "function stamp() {", s => s.replace(/\btt`/g, "t`"), s => s],
   ["операции OpenPGP", `${T}/mail/pgp/host.mjs`, "web/src/core/pgp-ops.js", "const HASH = {", "window.pgpCall = ", s => s.replace("const API = {", "export const API = {"), s => s],
   ["разбор и сборка писем", `${T}/mail/net/Mime.sys.mjs`, "web/src/core/mime.js", "/* ---- байты и кодировки ---- */", "", s => s.replace("lazy.parser.parseFromString", "new DOMParser().parseFromString"), s => s],
 ];

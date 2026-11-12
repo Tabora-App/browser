@@ -22,28 +22,30 @@ function clean(list) {
     .map(x => ({ t: str(x.t, 200), u: x.u, ...(x.p ? { p: 1 } : {}) }));
 }
 
-/** Настройка «синхронизировать вкладки» в хранилище страницы; включена, пока человек не выключит. */
-export const pageSettings = {
-  get() {
-    try {
-      return localStorage.getItem(SETTING) !== "0";
-    } catch (e) {
-      return true;
-    }
-  },
-  set(on) {
-    try {
-      localStorage.setItem(SETTING, on ? "1" : "0");
-    } catch (e) {}
-  },
-};
+/** Переключатель в хранилище страницы: включён, пока человек не выключит. */
+export function pageSetting(key) {
+  return {
+    get() {
+      try {
+        return localStorage.getItem(key) !== "0";
+      } catch (e) {
+        return true;
+      }
+    },
+    set(on) {
+      try {
+        localStorage.setItem(key, on ? "1" : "0");
+      } catch (e) {}
+    },
+  };
+}
 
 export class TabSync {
   /**
    * @param {{ account: import("../core/account.js").Account, sync: import("../core/sync.js").SyncClient,
    *   store: { deviceId(): string, deviceName(): string }, settings?: { get(): boolean, set(on: boolean): void } }} deps
    */
-  constructor({ account, sync, store, settings = pageSettings }) {
+  constructor({ account, sync, store, settings = pageSetting(SETTING) }) {
     this.account = account;
     this.sync = sync;
     this.store = store;

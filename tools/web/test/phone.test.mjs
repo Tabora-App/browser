@@ -1,5 +1,6 @@
 // Модуль аккаунта для телефона (web/src/phone) на местном сервере: вход, сохранение входа у
-// приложения, вкладки телефона на другом устройстве и наоборот, выключение, выход, отзыв сессии.
+// приложения, вкладки телефона на другом устройстве и наоборот, коды входа (общие с другим
+// устройством, расчёт, привязка к сайтам, работа без сети), выключение, выход, отзыв сессии.
 // Приложение заменено имитацией канала связи; второе устройство — клиент веб-ядра, который пишет
 // запись вкладок в том же виде, что браузер на компьютере.
 //   TABORA_API=http://127.0.0.1:7711 node test/run.mjs phone
@@ -11,7 +12,7 @@ import { SyncClient } from "../../../web/src/core/sync.js";
 import { Service } from "../../../web/src/phone/service.js";
 import { NativeStore } from "../../../web/src/phone/store.js";
 import { TabSync } from "../../../web/src/phone/tabs.js";
-import { check, rejects, summary } from "./lib.mjs";
+import { check, rejects, summary, totp } from "./lib.mjs";
 
 const API = process.env.TABORA_API || "http://127.0.0.1:7711";
 const name = `ph${Date.now().toString(36)}`;
@@ -22,6 +23,8 @@ const PHONE_ID = `and-${Date.now().toString(36)}xxxxxxxxxx`.slice(0, 22);
 class FakeApp {
   constructor() {
     this.saved = null;
+    this.data = {};
+    this.asked = [];
     this.states = [];
     this.handlers = [];
     this.failSave = false;
@@ -31,7 +34,15 @@ class FakeApp {
     this.handlers.push(fn);
   }
   post(message) {
-    this.states.push(JSON.parse(JSON.stringify(message)));
+    if (message.type === "state") {
+      this.states.push(JSON.parse(JSON.stringify(message)));
+    } else {
+      this.asked.push(JSON.parse(JSON.stringify(message)));
+    }
+  }
+  async call(message) {
+    this.asked.push(JSON.parse(JSON.stringify(message)));
+    return { ok: this.allow !== false };
   }
   async request(message) {
     if (message.type === "store-load") {
@@ -48,6 +59,17 @@ class FakeApp {
       this.saved = null;
       return { ok: true };
     }
+    if (message.type === "data-load") {
+      return { value: this.data[message.name] ?? null };
+    }
+    if (message.type === "data-save") {
+      this.data[message.name] = message.value;
+      return { ok: true };
+    }
+    if (message.type === "data-clear") {
+      delete this.data[message.name];
+      return { ok: true };
+    }
     return {};
   }
   send(message) {
@@ -62,7 +84,8 @@ const memory = () => {
   let on = true;
   return { get: () => on, set: v => (on = v) };
 };
-const phone = app => new Service({ bridge: app, store: new NativeStore(app), api: new Api(API), settings: memory() });
+const switches = { tabs: memory(), codes: memory() };
+const phone = (app, api = API) => new Service({ bridge: app, store: new NativeStore(app), api: new Api(api), settings: switches });
 
 /* ---- аккаунт и «компьютер» ---- */
 
@@ -157,6 +180,87 @@ await svc.run();
 await desk.refresh();
 check("сверка после перезапуска работает", [svc.state().status, desk.get("tabs", PHONE_ID).tabs[0].u], ["ok", "https://restart.example/"]);
 
+/* ---- коды входа ---- */
+
+const SECRET = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
+await desk.put("otp", "o1desktop0001", { i: "GitHub", a: "anna", s: SECRET, al: "SHA1", d: 6, p: 30, w: [{ host: "github.com", sub: false }, { host: "example.net", sub: true }], c: new Date().toISOString() });
+await desk.put("otp", "o2broken00001", { i: "Сломанная", a: "", s: "short", al: "SHA1", d: 6, p: 30, w: [], c: "" });
+await desk.put("logins", "l1secret00001", { o: "https://bank.example", u: "anna", p: "desktop-password-1" });
+await svc.run();
+const want = await totp(SECRET);
+const got = await svc.codes.code("o1desktop0001");
+check("код, добавленный на компьютере, виден на телефоне и считается так же", [svc.codes.list().map(c => [c.id, c.issuer, c.account, c.sites.map(x => x.host)]), got.code, got.left > 0 && got.left <= 30], [[["o1desktop0001", "GitHub", "anna", ["github.com", "example.net"]]], want, true]);
+check("запись с негодным секретом в список не попадает", svc.codes.list().some(c => c.id === "o2broken00001"), false);
+check("код предлагается только на привязанном сайте: точный хост, поддомены — где разрешены", [svc.codes.forHost("github.com").map(c => c.match), svc.codes.forHost("gist.github.com"), svc.codes.forHost("login.example.net").map(c => c.match), svc.codes.forHost("github.com.evil.example"), svc.codes.forHost("evil-github.com")], [["exact"], [], ["sub"], [], []]);
+check("пароли сайтов телефон не расшифровывает: ни в памяти, ни в копии данных", [svc.sync.list("logins"), JSON.stringify(svc.sync.snapshot()).includes("desktop-password-1")], [[], false]);
+check("секретов в сообщениях приложению нет", app.states.some(m => JSON.stringify(m).includes(SECRET)), false);
+check("приложению сообщается только число кодов", [app.last.codesOn, app.last.codes], [true, 1]);
+
+const added = await svc.codes.add([{ issuer: "gitlab.com", account: "anna@example.org", secret: "GEZD GNBV GY3T QOJQ GEZD GNBV GY3T QOJQ" }]);
+const again = await svc.codes.add([{ issuer: "gitlab.com", account: "anna@example.org", secret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ" }]);
+await desk.refresh();
+const mineOtp = desk.list("otp").find(o => o.data.i === "gitlab.com");
+check("код, добавленный на телефоне, уходит на сервер в том же виде, что с компьютера; повтор не добавляется", [added, again, mineOtp?.data.s, mineOtp?.data.al, mineOtp?.data.d, mineOtp?.data.p, mineOtp?.data.w], [1, 0, "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", "SHA1", 6, 30, [{ host: "gitlab.com", sub: false }]]);
+check("название сервиса, похожее на домен, сразу привязывает код к сайту", svc.codes.forHost("gitlab.com").map(c => c.account), ["anna@example.org"]);
+check("неверный секрет и пустое название отклоняются", [await rejects(() => svc.codes.add([{ issuer: "X", account: "", secret: "не секрет" }])), await rejects(() => svc.codes.add([{ issuer: "", account: "", secret: SECRET }]))], ["bad-code", "bad-code"]);
+
+await svc.codes.edit(mineOtp.id, { issuer: "GitLab", account: "anna@example.org", sites: "gitlab.com, https://About.GitLab.com/x" });
+await desk.refresh();
+check("правка названия и сайтов доходит до компьютера, секрет не меняется", [desk.get("otp", mineOtp.id).i, desk.get("otp", mineOtp.id).w.map(w => w.host), desk.get("otp", mineOtp.id).s], ["GitLab", ["gitlab.com", "about.gitlab.com"], "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"]);
+await svc.codes.remove(mineOtp.id);
+await desk.refresh();
+check("удаление на телефоне убирает код и на компьютере", [desk.get("otp", mineOtp.id), svc.codes.list().length, await rejects(() => svc.codes.code(mineOtp.id))], [null, 1, "no-code"]);
+
+/* ---- автоввод на странице сайта ---- */
+
+const page = (url, extra = {}) => ({ url, frameId: 0, ...extra });
+const field = await svc.fromPage({ type: "otp-field" }, page("https://github.com/sessions/two-factor"));
+check("поле кода на привязанном сайте: модуль называет код, но не выдаёт ни его, ни секрет", [field.entries, JSON.stringify(field).includes(SECRET), /\d{6}/.test(JSON.stringify(field.entries))], [[{ id: "o1desktop0001", label: "GitHub, anna" }], false, false]);
+check("чужой сайт, http и рамка другого сайта подсказку не получают", [
+  (await svc.fromPage({ type: "otp-field" }, page("https://github.com.evil.example/"))).entries,
+  (await svc.fromPage({ type: "otp-field" }, page("http://github.com/login"))).entries,
+  (await svc.fromPage({ type: "otp-field" }, page("https://github.com/frame", { frameId: 7, tab: { url: "https://evil.example/" } }))).entries,
+  (await svc.fromPage({ type: "otp-field" }, page("https://github.com/frame", { frameId: 7, tab: { url: "https://github.com/login" } }))).entries.length,
+  await svc.fromPage({ type: "otp-field" }, page("not a url")),
+], [[], undefined, undefined, 1, {}]);
+app.asked.length = 0;
+const filled = await svc.fromPage({ type: "otp-fill", id: "o1desktop0001" }, page("https://github.com/sessions/two-factor"));
+check("нажатие «Вставить код»: приложение спрашивает подтверждение, затем модуль отдаёт код", [filled.code, app.asked.map(m => m.type)], [await totp(SECRET), ["auth"]]);
+check("код чужого сайта по номеру записи не выдаётся", [(await svc.fromPage({ type: "otp-fill", id: "o1desktop0001" }, page("https://evil.example/"))).code, (await svc.fromPage({ type: "otp-fill", id: "нет такого" }, page("https://github.com/"))).code], [undefined, undefined]);
+app.allow = false;
+const refused = await svc.fromPage({ type: "otp-fill", id: "o1desktop0001" }, page("https://github.com/sessions/two-factor"));
+check("без подтверждения владельца код не выдаётся", [refused.code, refused.error], [undefined, "Не подтверждено"]);
+app.allow = true;
+
+check("подтверждение владельца спрашивается у приложения", [await svc.unlock(), app.asked.pop().type], [true, "auth"]);
+app.allow = false;
+check("отказ подтверждения — отказ", await svc.unlock(), false);
+app.allow = true;
+svc.open("codes");
+check("экран кодов открывает приложение", app.asked.pop(), { type: "open", page: "codes" });
+
+/* ---- без сети: копия данных у приложения ---- */
+
+await svc.saveNow();
+check("копия данных отдана приложению", [typeof app.data.sync, JSON.parse(app.data.sync).items.map(x => x[0]).sort()], ["string", ["otp", "tabs"]]);
+svc.stop();
+svc = phone(app, "http://127.0.0.1:9");
+await svc.ready;
+await svc.run();
+const offline = await svc.codes.code("o1desktop0001");
+check("сервер недоступен: вход на месте, коды считаются, вкладки других устройств видны", [svc.account.signedIn, svc.state().status, offline.code, svc.state().devices.length > 0], [true, "offline", await totp(SECRET), true]);
+svc.stop();
+svc = phone(app);
+await svc.ready;
+await svc.run();
+
+await svc.setCodes(false);
+await svc.saveNow();
+check("коды выключили: на телефоне их нет ни в списке, ни в копии данных; на сервере остались", [svc.codes.list(), svc.state().codesOn, JSON.parse(app.data.sync).items.map(x => x[0]), (await desk.refresh(), desk.get("otp", "o1desktop0001")?.i)], [[], false, ["tabs"], "GitHub"]);
+await svc.setCodes(true);
+await svc.run();
+check("включили снова — коды вернулись с сервера", svc.codes.list().map(c => c.issuer), ["GitHub"]);
+
 /* ---- сбой хранилища не стирает вход ---- */
 
 app.failSave = true;
@@ -170,6 +274,7 @@ const token = svc.account.token;
 await svc.signOut();
 await desk.refresh();
 check("выход: запись телефона убрана, вход стёрт у приложения, сессия на сервере завершена", [desk.get("tabs", PHONE_ID), app.saved, svc.state().signedIn, app.last.signedIn, app.last.devices, await rejects(() => svc.api.devices(token))], [null, null, false, false, [], "session-expired"]);
+check("после выхода кодов и копии данных на телефоне нет", [svc.codes.list(), app.data.sync, app.last.codes], [[], undefined, 0]);
 
 /* ---- сессию завершили с другого устройства ---- */
 

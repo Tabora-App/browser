@@ -12,10 +12,18 @@
     "page": "background.html",
     "persistent": true
   },
+  "content_scripts": [
+    {
+      "matches": __FILL_MATCHES__,
+      "js": ["assets/fill.js"],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ],
   "permissions": [
     "nativeMessaging",
     "geckoViewAddons",
     "__API_PATTERN__"
   ],
-  "content_security_policy": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src __API_ORIGIN__; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+  "content_security_policy": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src __API_ORIGIN__; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 }

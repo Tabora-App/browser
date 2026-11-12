@@ -6,34 +6,14 @@
  * ничего не хранит: аккаунт и синхронизация живут в фоновой странице модуля (background.js),
  * отсюда берётся тот же объект. */
 
-import { clear, h } from "../lib/dom.js";
+import { clear } from "../lib/dom.js";
 import { toast } from "../lib/ui.js";
 import { mountAuth } from "../views/auth.js";
-import { language, t } from "../core/i18n.js";
+import { t } from "../core/i18n.js";
+import { boot } from "./boot.js";
 import { mountPhoneAccount } from "./view.js";
 
-const root = document.getElementById("app");
-document.documentElement.lang = language();
-document.title = t`Аккаунт Tabora`;
-
-function broken(e) {
-  console.error("Tabora: экран аккаунта не открылся", e);
-  clear(root, h("div", { class: "empty" }, h("h3", {}, t`Аккаунт не открылся`), h("p", {}, t`Закройте приложение и откройте его снова.`),
-    // в сборке для разработки причина видна на экране: журнал страницы в выпускном приложении не читается
-    typeof __DEV__ !== "undefined" && __DEV__ && h("p", { class: "mono small-text" }, `${e}\n${e?.stack || ""}`)));
-}
-
-(async () => {
-  const background = await globalThis.browser.runtime.getBackgroundPage();
-  // фоновая страница может ещё запускаться: её объект появляется, когда выполнится её скрипт
-  for (let i = 0; i < 200 && background && !background.tabora; i++) {
-    await new Promise(resolve => setTimeout(resolve, 50));
-  }
-  const service = background?.tabora;
-  if (!service) {
-    throw new Error("фоновая страница модуля недоступна");
-  }
-  await service.ready;
+boot(t`Аккаунт Tabora`, (root, service) => {
   const { account } = service;
   let current = null;
   let shown = "";
@@ -48,7 +28,7 @@ function broken(e) {
     clear(root);
     current = want === "account"
       ? mountPhoneAccount(root, { service })
-      : mountAuth(root, { account, embedded: true, intro: { title: t`Вход`, text: t`Войдите, чтобы вкладки этого телефона и других ваших устройств были видны друг другу.` } });
+      : mountAuth(root, { account, embedded: true, intro: { title: t`Вход`, text: t`Войдите, чтобы вкладки и коды входа были общими для этого телефона и других ваших устройств.` } });
   }
 
   const off = account.subscribe(what => {
@@ -66,4 +46,4 @@ function broken(e) {
     account.onStep = null;
   });
   render();
-})().catch(broken);
+});

@@ -1,5 +1,5 @@
 diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/HomeActivity.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/HomeActivity.kt
-index cc25d9e578..2b0de9d883 100644
+index cc25d9e578..2262fb4c86 100644
 --- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/HomeActivity.kt
 +++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/HomeActivity.kt
 @@ -291,6 +291,8 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
@@ -11,3 +11,22 @@ index cc25d9e578..2b0de9d883 100644
          )
      }
  
+@@ -830,6 +832,9 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
+     override fun onResume() {
+         super.onResume()
+ 
++        // Tabora: запрос отпечатка и экраны модуля аккаунта показываются поверх этого экрана
++        components.core.taboraAccount.attach(this)
++
+         // Diagnostic breadcrumb for "Display already aquired" crash:
+         // https://github.com/mozilla-mobile/android-components/issues/7960
+         breadcrumb(message = "onResume()")
+@@ -992,6 +997,8 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
+ 
+         super.onDestroy()
+ 
++        components.core.taboraAccount.detach(this)
++
+         // Diagnostic breadcrumb for "Display already aquired" crash:
+         // https://github.com/mozilla-mobile/android-components/issues/7960
+         breadcrumb(
