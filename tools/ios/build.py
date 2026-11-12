@@ -49,7 +49,12 @@ SIMULATOR = os.environ.get("TABORA_IOS_SIMULATOR", "iPhone 17")
 
 
 def log(text: str) -> None:
-    print(f"\033[1;32m›\033[0m {text}", flush=True)
+    # вывод могут обрезать (… | head): это не должно прерывать работу на полпути — например,
+    # import между наложением патчей и заменой названия в надписях
+    try:
+        print(f"\033[1;32m›\033[0m {text}", flush=True)
+    except BrokenPipeError:
+        sys.stdout = open(os.devnull, "w")
 
 
 def die(text: str) -> None:
@@ -108,8 +113,34 @@ def reset_tree() -> None:
         ADDED.unlink()
 
 
+def automatic(rel: str) -> bool:
+    """Правки, которые import делает сам (файл проекта, название в надписях): в патчи не выгружаются."""
+    return rel.endswith((".strings", ".stringsdict", "project.pbxproj", "/Info.plist")) or rel == "firefox-ios/Shared/Strings.swift"
+
+
+def unexported() -> list[str]:
+    """Файлы исходников, правка которых не совпадает с патчем в src/ios: reset их потерял бы."""
+    if not (TREE / ".git").is_dir() or not ADDED.exists():
+        return []
+    lost = []
+    for rel in git("diff", "--name-only", capture=True).splitlines():
+        if not rel or automatic(rel) or (SRC / rel).is_file():
+            continue
+        patch = SRC / (rel + ".patch")
+        if not patch.is_file() or patch.read_text() != git("diff", "--", rel, capture=True):
+            lost.append(rel)
+    return lost
+
+
+def guard_unexported(args: argparse.Namespace) -> None:
+    lost = unexported()
+    if lost and not getattr(args, "force", False):
+        die("в исходниках есть правки, не выгруженные в src/ios (сначала export, или --force, чтобы их бросить):\n  " + "\n  ".join(lost[:12]))
+
+
 def cmd_reset(args: argparse.Namespace) -> None:
     need_tree()
+    guard_unexported(args)
     reset_tree()
     log("исходники возвращены к чистому Firefox для iOS")
 
@@ -124,6 +155,7 @@ def cmd_import(args: argparse.Namespace) -> None:
     """src/ios повторяет пути исходников: «файл.patch» — правка существующего файла, остальное —
     файлы целиком (новые или заменяющие)."""
     need_tree()
+    guard_unexported(args)
     reset_tree()
     patches, copied, added = 0, 0, []
     for path in source_files():
@@ -180,8 +212,6 @@ def cmd_export(args: argparse.Namespace) -> None:
     whole = {str(p.relative_to(SRC)) for p in source_files() if p.suffix != ".patch"}
     if whole and not ADDED.exists():
         die("в src/ios есть файлы, ещё не наложенные на исходники: сначала tools/ios/build.py import")
-    # правки, которые import делает сам (файл проекта, название в надписях), в патчи не выгружаются
-    automatic = lambda rel: rel.endswith((".strings", ".stringsdict", "project.pbxproj")) or rel == "firefox-ios/Shared/Strings.swift"
     changed = [line for line in git("diff", "--name-only", capture=True).splitlines() if line and not automatic(line)]
     patches, copies = 0, 0
     for rel in changed:
@@ -213,7 +243,7 @@ def cmd_export(args: argparse.Namespace) -> None:
 # Название в надписях. Имя приложения в коде — AppName (патч в src/ios), но в переводах сотни
 # надписей, где переводчики написали «Firefox» буквально, на сотне языков: править их патчами
 # нельзя, поэтому замена идёт по месту при каждом import, и только в тексте надписи, не в ключе.
-STRINGS_LINE = re.compile(r'^(\s*"(?:[^"\\]|\\.)*"\s*=\s*")((?:[^"\\]|\\.)*)(";.*)$')
+STRINGS_LINE = re.compile(r'^(\s*(?:"(?:[^"\\]|\\.)*"|[\w.-]+)\s*=\s*")((?:[^"\\]|\\.)*)(".*)$')
 SWIFT_VALUE = re.compile(r'(\bvalue:\s*")((?:[^"\\]|\\.)*)(")')
 STRING_ROOTS = ["firefox-ios/Shared", "firefox-ios/Client", "firefox-ios/Extensions", "firefox-ios/WidgetKit", "BrowserKit/Sources"]
 
@@ -243,6 +273,15 @@ def rebrand_strings() -> None:
                 path.write_bytes("\n".join(out).encode(encoding))
                 files += 1
                 values += changed
+    # описания приложения и расширений: тексты системных запросов доступа и название действия
+    # «Открыть в …» (имена картинок вроде logoFirefoxLarge — не надписи, их не трогаем)
+    plists = [TREE / "firefox-ios" / "Client" / "Info.plist", *sorted((TREE / "firefox-ios" / "Extensions").glob("*/Info.plist"))]
+    for path in plists:
+        text = path.read_text(encoding="utf-8")
+        out = [line.replace("Firefox", "Tabora") if "<string>" in line and " " in line.strip() and "Firefox" in line else line for line in text.split("\n")]
+        if out != text.split("\n"):
+            path.write_text("\n".join(out), encoding="utf-8")
+            files += 1
     # английские надписи записаны в коде как значения по умолчанию
     code = TREE / "firefox-ios" / "Shared" / "Strings.swift"
     text, count = SWIFT_VALUE.subn(lambda m: m.group(1) + m.group(2).replace("Firefox", "Tabora") + m.group(3) if "Firefox" in m.group(2) else m.group(0), code.read_text(encoding="utf-8"))
@@ -350,8 +389,12 @@ def cmd_status(args: argparse.Namespace) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Сборка Tabora для iPhone")
     sub = parser.add_subparsers(dest="command", required=True)
-    for name, fn in [("fetch", cmd_fetch), ("prepare", cmd_prepare), ("import", cmd_import), ("export", cmd_export), ("reset", cmd_reset), ("status", cmd_status)]:
+    for name, fn in [("fetch", cmd_fetch), ("prepare", cmd_prepare), ("export", cmd_export), ("status", cmd_status)]:
         sub.add_parser(name).set_defaults(fn=fn)
+    for name, fn in [("import", cmd_import), ("reset", cmd_reset)]:
+        p = sub.add_parser(name)
+        p.add_argument("--force", action="store_true", help="бросить правки исходников, не выгруженные в src/ios")
+        p.set_defaults(fn=fn)
     p = sub.add_parser("build")
     p.add_argument("--device", action="store_true")
     p.set_defaults(fn=cmd_build)

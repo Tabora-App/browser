@@ -120,6 +120,22 @@ MARKS = [
     IMG + "foxConfirmation.imageset/foxConfirmation.pdf",
     IMG + "foxWithStars.imageset/foxWithStars.pdf",
     IMG + "foxDefaultBrowser.imageset/Illu.png",
+    IMG + "noBookmarksInRoot.imageset/noBookmarks.pdf",
+    IMG + "noBookmarksInFolder.imageset/MobileBookmarks_folder.pdf",
+    IMG + "NativeErrorPage/noInternetConnection.imageset/kit-error-plug.pdf",
+    IMG + "NativeErrorPage/securityError.imageset/securityError.pdf",
+    IMG + "protectionPanelAlert.imageset/Protection-Panel-Illustration-On.pdf",
+    IMG + "protectionPanelOff.imageset/Protection-Panel-Illustration-On.pdf",
+    IMG + "protectionPanelOn.imageset/Protection-Panel-Illustration-On.pdf",
+    IMG + "homepage-pocket.imageset/homepage-pocket.pdf",
+    "BrowserKit/Sources/SiteImageView/BundledTopSitesFavicons.xcassets/firefox-jp.imageset/firefox-jp.png",
+    "firefox-ios/Extensions/ShareTo/Images.xcassets/Icon-Small.imageset/icon-40.png",
+    "firefox-ios/Extensions/ShareTo/Images.xcassets/Icon-Small.imageset/icon-40@2x.png",
+    "firefox-ios/Extensions/ShareTo/Images.xcassets/Icon-Small.imageset/icon-40@3x.png",
+    KIT + "onboardingToolbarIconBottomJapan.imageset/onboardingToolbarIconBottomJapan-notselected.pdf",
+    KIT + "onboardingToolbarIconBottomJapanSelected.imageset/onboardingToolbarIconBottomJapan-selected.pdf",
+    KIT + "onboardingToolbarIconTopJapan.imageset/onboardingToolbarIconTopJapan-notselected.pdf",
+    KIT + "onboardingToolbarIconTopJapanSelected.imageset/onboardingToolbarIconTopJapan-selected.pdf",
     IMG + "faviconFox.imageset/back-panel-home.png",
     IMG + "faviconFox.imageset/back-panel-home@2x.png",
     IMG + "faviconFox.imageset/back-panel-home@3x.png",
@@ -148,6 +164,12 @@ MARKS = [
     "firefox-ios/Client/Assets/easterEggGif.gif",
 ]
 WORDMARK = IMG + "fxHomeHeaderLogoText.imageset/fxHomeHeaderLogoText.pdf"
+# Отметка выбранного варианта (фиолетовая и синяя у Firefox) — лаймовый круг с тёмной галочкой
+CHECKS = [
+    IMG + "radioButtonSelectedNova.imageset/radioButtonSelectedNova.pdf",
+    IMG + "radioButtonSelected.imageset/radioButtonSelected.pdf",
+    KIT + "radioButtonSelected.imageset/radioButtonSelected.pdf",
+]
 
 
 def original_size(rel: str) -> tuple[float, float]:
@@ -200,6 +222,16 @@ def logos(browser) -> None:
                 flat.save(out, "GIF")
             else:
                 im.save(out, "PNG", optimize=True)
+        print(f"  {rel}  {width:g}×{height:g}")
+    for rel in CHECKS:
+        width, height = original_size(rel)
+        side = min(width, height)
+        check = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="{side}" height="{side}">'
+                 f'<circle cx="12" cy="12" r="12" fill="{LIME}"/>'
+                 f'<path d="M6.8 12.4l3.4 3.4 7-7.2" fill="none" stroke="{INK}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>')
+        out = OUT / rel
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(pdf(browser, check, width, height))
         print(f"  {rel}  {width:g}×{height:g}")
     # надпись в шапке домашней страницы: рисуется как шаблон, цвет даёт тема
     width, height = original_size(WORDMARK)
