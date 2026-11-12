@@ -3120,5 +3120,21 @@
  "screenshot снимок скриншот картинка": "screenshot capture image",
  "Печать": "Print",
  "Напечатать страницу или сохранить её в PDF": "Print the page or save it as PDF",
- "print печать pdf распечатать": "print pdf"
+ "print печать pdf распечатать": "print pdf",
+ "Сверяет сохранённые пароли с базой паролей, которые уже попадали в утечки. Пароли этот компьютер не покидают: в сервис Have I Been Pwned уходят только первые пять знаков хеша каждого пароля. По ним пароль не восстановить, сравнение делается здесь.": "Compares your saved passwords with a database of passwords that have already appeared in breaches. The passwords do not leave this computer: only the first five characters of each password’s hash go to the Have I Been Pwned service. A password cannot be recovered from them, and the comparison happens here.",
+ "Сейф заблокирован: разблокируйте его, чтобы проверить пароли.": "The vault is locked: unlock it to check the passwords.",
+ "Проверка идёт только по вашей команде.": "The check runs only when you start it.",
+ "Проверяем: {0} из {1}…": "Checking: {0} of {1}…",
+ "Проверяем…": "Checking…",
+ "Проверить не удалось: {0}": "The check failed: {0}",
+ "Сохранённых паролей нет.": "There are no saved passwords.",
+ "В утечках найдено: {0}. Смените эти пароли на сайтах.": "Found in breaches: {0}. Change these passwords on the sites.",
+ "В утечках не найден ни один.": "None of them was found in breaches.",
+ "Проверено паролей: {0}. {1}": "Passwords checked: {0}. {1}",
+ "Не удалось проверить: {0} — сервис не ответил, повторите позже.": "Could not check: {0}. The service did not answer; try again later.",
+ "Имя входа: {0}.": "Username: {0}.",
+ "раз|раза|раз": "time|times",
+ "Этот пароль встречался в утечках {0} {1}.": "This password has appeared in breaches {0} {1}.",
+ "Пароли из утечек": "Passwords from breaches",
+ "Сохранённые пароли": "Saved passwords"
 }

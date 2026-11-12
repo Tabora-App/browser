@@ -26,7 +26,7 @@
 | | |
 |---|---|
 | **Ad and tracker blocker** | Our own filter engine, on by default, no extension to install. Filter lists (EasyList, RU AdList, EasyPrivacy, Peter Lowe's list) update on their own; every site has its own switch. |
-| **Password vault** | Saved passwords are encrypted with a key derived from your account password. The vault opens only for the signed-in account and can be locked at any moment. |
+| **Password vault** | Saved passwords are encrypted with a key derived from your account password. The vault opens only for the signed-in account and can be locked at any moment. Saved passwords can be checked against known breaches: only the first five characters of a password's hash leave the computer. |
 | **Sign-in codes (2FA)** | One-time codes for your sites live next to the passwords and are filled into the code field for you. Import from Google Authenticator, Aegis and 2FAS. |
 | **Mail** | A mailbox on `@tabora.app` inside the browser, a separate alias for every site, OpenPGP encryption with keys generated on your device, and external mailboxes over IMAP and SMTP. |
 | **Crypto wallet** | Ethereum-compatible networks, Bitcoin, Solana and TRON. The recovery phrase stays on the device and is never synced. |

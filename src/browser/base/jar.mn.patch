@@ -1,8 +1,8 @@
 diff --git a/browser/base/jar.mn b/browser/base/jar.mn
-index b2b5db6040..fad0a9a6ba 100644
+index b2b5db6040..e8cf50aaae 100644
 --- a/browser/base/jar.mn
 +++ b/browser/base/jar.mn
-@@ -33,6 +33,105 @@ browser.jar:
+@@ -33,6 +33,106 @@ browser.jar:
          content/browser/aboutTabCrashed.xhtml         (content/aboutTabCrashed.xhtml)
          content/browser/blanktab.html                 (content/blanktab.html)
          content/browser/browser.js                    (content/browser.js)
@@ -48,6 +48,7 @@ index b2b5db6040..fad0a9a6ba 100644
 +        content/tabora/vault/vault.js  (content/tabora/vault/vault.js)
 +        content/tabora/vault/vault.css  (content/tabora/vault/vault.css)
 +        content/tabora/vault/Otp.sys.mjs  (content/tabora/vault/Otp.sys.mjs)
++        content/tabora/vault/Breach.sys.mjs  (content/tabora/vault/Breach.sys.mjs)
 +        content/tabora/vault/vendor/qr.sys.mjs  (content/tabora/vault/vendor/qr.sys.mjs)
 +        content/tabora/vault/vendor/argon2.sys.mjs  (content/tabora/vault/vendor/argon2.sys.mjs)
 +        content/tabora/actors/TaboraVaultChild.sys.mjs  (content/tabora/actors/TaboraVaultChild.sys.mjs)

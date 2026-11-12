@@ -3120,5 +3120,21 @@
  "screenshot снимок скриншот картинка": "screenshot captura imagen",
  "Печать": "Imprimir",
  "Напечатать страницу или сохранить её в PDF": "Imprimir la página o guardarla en PDF",
- "print печать pdf распечатать": "print imprimir pdf"
+ "print печать pdf распечатать": "print imprimir pdf",
+ "Сверяет сохранённые пароли с базой паролей, которые уже попадали в утечки. Пароли этот компьютер не покидают: в сервис Have I Been Pwned уходят только первые пять знаков хеша каждого пароля. По ним пароль не восстановить, сравнение делается здесь.": "Compara tus contraseñas guardadas con una base de contraseñas que ya han aparecido en filtraciones. Las contraseñas no salen de este ordenador: al servicio Have I Been Pwned solo van los cinco primeros caracteres del hash de cada contraseña. Con ellos no se puede recuperar la contraseña, y la comparación se hace aquí.",
+ "Сейф заблокирован: разблокируйте его, чтобы проверить пароли.": "La caja fuerte está bloqueada: desbloquéala para comprobar las contraseñas.",
+ "Проверка идёт только по вашей команде.": "La comprobación solo se hace cuando tú la inicias.",
+ "Проверяем: {0} из {1}…": "Comprobando: {0} de {1}…",
+ "Проверяем…": "Comprobando…",
+ "Проверить не удалось: {0}": "No se pudo comprobar: {0}",
+ "Сохранённых паролей нет.": "No hay contraseñas guardadas.",
+ "В утечках найдено: {0}. Смените эти пароли на сайтах.": "Encontradas en filtraciones: {0}. Cambia estas contraseñas en los sitios.",
+ "В утечках не найден ни один.": "Ninguna aparece en filtraciones.",
+ "Проверено паролей: {0}. {1}": "Contraseñas comprobadas: {0}. {1}",
+ "Не удалось проверить: {0} — сервис не ответил, повторите позже.": "No se pudieron comprobar: {0}. El servicio no respondió; inténtalo más tarde.",
+ "Имя входа: {0}.": "Usuario: {0}.",
+ "раз|раза|раз": "vez|veces",
+ "Этот пароль встречался в утечках {0} {1}.": "Esta contraseña ha aparecido en filtraciones {0} {1}.",
+ "Пароли из утечек": "Contraseñas filtradas",
+ "Сохранённые пароли": "Contraseñas guardadas"
 }

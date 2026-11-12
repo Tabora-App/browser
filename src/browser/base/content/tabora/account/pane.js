@@ -38,7 +38,9 @@ window.TaboraAccountPane = (function () {
   ];
 
   // security: настройки входа с сервера (null — ещё не загружены, { error } — сервер не ответил)
-  const state = { tab: "profile", root: null, pane: null, devices: null, devicesFor: "", profiles: null, security: null, timer: null };
+  // breach: the last check of saved passwords against breaches (null: not run in this window,
+  // { busy, done, total } while it runs, { checked, failed, found } when done, { error } if it failed)
+  const state = { tab: "profile", root: null, pane: null, devices: null, devicesFor: "", profiles: null, security: null, timer: null, breach: null };
 
   /* ---- Помощники разметки -------------------------------------------------- */
 
@@ -92,6 +94,81 @@ window.TaboraAccountPane = (function () {
   /** Действие оболочки; если страницу открыли вне окна браузера, ничего не делаем. */
   const shell = fn => () => Shell && fn(Shell);
 
+
+  /* ---- Passwords from breaches -----------------------------------------------------------
+   * Saved passwords are compared with passwords that appeared in known breaches
+   * (vault/Breach.sys.mjs). The check runs only on request; only the first five characters of
+   * each password's hash leave the computer. */
+
+  async function runBreachCheck() {
+    if (state.breach?.busy) {
+      return;
+    }
+    state.breach = { busy: true, done: 0, total: 0 };
+    render();
+    try {
+      const { Breach } = ChromeUtils.importESModule("chrome://tabora/content/vault/Breach.sys.mjs");
+      // only passwords of sites: the password store also keeps internal records of the browser
+      // (the wallet's, for one), which are not passwords and must not be looked up
+      const logins = (await Services.logins.getAllLogins())
+        .filter(l => /^https?:\/\//.test(l.origin))
+        .map(l => ({ origin: l.origin, username: l.username, password: l.password }));
+      let shown = 0;
+      const result = await Breach.check(logins, {
+        onProgress: (done, total) => {
+          state.breach = { busy: true, done, total };
+          // the page is redrawn a few times during the check, not on every answer
+          if (done === total || done - shown >= Math.max(1, Math.ceil(total / 10))) {
+            shown = done;
+            render();
+          }
+        },
+      });
+      state.breach = { ...result, total: logins.length };
+    } catch (e) {
+      state.breach = { error: e.message || String(e) };
+    }
+    render();
+  }
+
+  function breachGroup() {
+    const b = state.breach;
+    const about = tt`Сверяет сохранённые пароли с базой паролей, которые уже попадали в утечки. Пароли этот компьютер не покидают: в сервис Have I Been Pwned уходят только первые пять знаков хеша каждого пароля. По ним пароль не восстановить, сравнение делается здесь.`;
+    let text;
+    if (!Vault.unlocked) {
+      text = tt`Сейф заблокирован: разблокируйте его, чтобы проверить пароли.`;
+    } else if (!b) {
+      text = tt`Проверка идёт только по вашей команде.`;
+    } else if (b.busy) {
+      text = b.total ? tt`Проверяем: ${b.done} из ${b.total}…` : tt`Проверяем…`;
+    } else if (b.error) {
+      text = tt`Проверить не удалось: ${b.error}`;
+    } else if (!b.total) {
+      text = tt`Сохранённых паролей нет.`;
+    } else {
+      const part = b.found.length ? tt`В утечках найдено: ${b.found.length}. Смените эти пароли на сайтах.` : tt`В утечках не найден ни один.`;
+      text = tt`Проверено паролей: ${b.checked}. ${part}` + (b.failed ? " " + tt`Не удалось проверить: ${b.failed} — сервис не ответил, повторите позже.` : "");
+    }
+    const check = Vault.unlocked
+      ? button(b && !b.busy ? tt`Проверить снова` : tt`Проверить`, runBreachCheck, { type: b?.found?.length ? "default" : "primary", disabled: !!b?.busy })
+      : button(tt`Разблокировать`, shell(s => s.vaultUnlockByUser()), { type: "primary" });
+    const host = origin => {
+      try {
+        return new URL(origin).host;
+      } catch (e) {
+        return origin;
+      }
+    };
+    const open = origin => () => window.browsingContext?.topChromeWindow?.openTrustedLinkIn(origin, "tab");
+    const found = (b?.found || []).slice(0, 100).map(f =>
+      item(
+        host(f.origin),
+        (f.username ? tt`Имя входа: ${f.username}.` + " " : "") + tt`Этот пароль встречался в утечках ${f.count.toLocaleString(ttLocale())} ${plural(f.count, tt`раз|раза|раз`)}.`,
+        /^https?:/.test(f.origin) ? [button(tt`Открыть сайт`, open(f.origin))] : []
+      )
+    );
+    return group(tt`Пароли из утечек`, about, [item(tt`Сохранённые пароли`, text, [check]), ...found]);
+  }
 
   /* ---- Поддержка: обращения ---------------------------------------------------------------
    * Своя переписка с поддержкой вместо внешнего трекера. Обращения хранит сервер аккаунтов
@@ -605,6 +682,7 @@ window.TaboraAccountPane = (function () {
             [button(rkAt ? tt`Создать новый` : tt`Создать ключ`, shell(s => s.vaultRecoveryCreateSheet()), { type: !rkAt || upgrade ? "primary" : "default" })]
           ),
         ]),
+        breachGroup(),
         group(tt`Сейф`, "", [
           item(tt`Открывать сейф через связку ключей macOS`, silent ? tt`Сейф открывается сам при запуске браузера на этом компьютере.` : tt`При каждом запуске браузер спрашивает пароль.`, [toggle]),
           item(tt`Состояние`, Vault.unlocked ? tt`Сейф открыт: пароли и коды подставляются на сайтах.` : tt`Сейф заблокирован: пароли и коды закрыты до проверки.`, [
