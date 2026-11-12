@@ -12,7 +12,24 @@ import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.unit.dp
 
 /** Outline of a space icon in a 16 x 16 box. */
-private class SpaceIconPath(val evenOdd: Boolean, val data: String)
+class SpaceIconPath(val evenOdd: Boolean, val data: String)
+
+/** Colors of spaces as ARGB: the same names and shades as on the desktop. */
+val SPACE_COLORS_ARGB =
+    mapOf(
+        "blue" to 0xFF37ADFF,
+        "turquoise" to 0xFF00C79A,
+        "green" to 0xFF51CD00,
+        "yellow" to 0xFFFFCB00,
+        "orange" to 0xFFFF9F00,
+        "red" to 0xFFFF613D,
+        "pink" to 0xFFFF4BDA,
+        "purple" to 0xFFAF51F5,
+        "toolbar" to 0xFF8F8F9D,
+    )
+
+/** The color of a space by its name; an unknown name gets blue. */
+fun spaceColorArgb(name: String): Long = SPACE_COLORS_ARGB[name] ?: SPACE_COLORS_ARGB.getValue("blue")
 
 /**
  * Icons of spaces: the same set and the same outlines as the container icons of the desktop
@@ -179,14 +196,19 @@ private val SPACE_ICON_PATHS =
             ),
     )
 
-private const val ICON_BOX = 16f
+/** The outline of a space icon by its name; an unknown name gets the circle. */
+fun spaceIconPath(name: String): SpaceIconPath = SPACE_ICON_PATHS[name] ?: SPACE_ICON_PATHS.getValue("circle")
+
+/** Side of the box the outlines are drawn in. */
+const val SPACE_ICON_BOX = 16f
+private const val ICON_BOX = SPACE_ICON_BOX
 private val icons = HashMap<String, ImageVector>()
 
 /** The icon of a space by its name; an unknown name gets the circle. */
 fun spaceIcon(name: String): ImageVector =
     synchronized(icons) {
         icons.getOrPut(name) {
-            val path = SPACE_ICON_PATHS[name] ?: SPACE_ICON_PATHS.getValue("circle")
+            val path = spaceIconPath(name)
             ImageVector.Builder(
                 name = "space-$name",
                 defaultWidth = ICON_BOX.dp,

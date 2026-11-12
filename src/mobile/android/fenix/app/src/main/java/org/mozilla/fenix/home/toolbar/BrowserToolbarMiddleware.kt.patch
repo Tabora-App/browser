@@ -1,5 +1,5 @@
 diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/home/toolbar/BrowserToolbarMiddleware.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/home/toolbar/BrowserToolbarMiddleware.kt
-index 9c8c89423b..3be267b691 100644
+index 9c8c89423b..160a45abb8 100644
 --- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/home/toolbar/BrowserToolbarMiddleware.kt
 +++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/home/toolbar/BrowserToolbarMiddleware.kt
 @@ -19,7 +19,6 @@ import kotlinx.coroutines.flow.distinctUntilChangedBy
@@ -10,15 +10,27 @@ index 9c8c89423b..3be267b691 100644
  import mozilla.components.browser.state.selector.selectedTab
  import mozilla.components.browser.state.state.selectedOrDefaultSearchEngine
  import mozilla.components.browser.state.store.BrowserStore
-@@ -97,6 +96,7 @@ import org.mozilla.fenix.nimbus.FxNimbus
+@@ -97,6 +96,8 @@ import org.mozilla.fenix.nimbus.FxNimbus
  import org.mozilla.fenix.search.BrowserToolbarSearchMiddleware
  import org.mozilla.fenix.search.ext.searchEngineShortcuts
  import org.mozilla.fenix.settings.ShortcutType
 +import org.mozilla.fenix.tabora.TaboraSpaces
++import org.mozilla.fenix.tabora.spaceBadgeActions
  import org.mozilla.fenix.tabstray.redux.state.Page
  import org.mozilla.fenix.translations.TranslationsEnabledSettings
  import org.mozilla.fenix.utils.Settings
-@@ -548,7 +548,7 @@ class BrowserToolbarMiddleware(
+@@ -424,7 +425,9 @@ class BrowserToolbarMiddleware(
+     }
+ 
+     private fun buildStartBrowserActions(): List<Action> =
+-        listOf(
++        // Tabora: the badge of the current space comes first; a tap opens the tab manager
++        spaceBadgeActions(uiContext, TabCounterClicked(Source.AddressBar.BrowserStart)) +
++            listOf(
+                 HomeToolbarActionConfig(HomeToolbarAction.Back) {
+                     isWideScreen() && settings.enableHomepageAsNewTab
+                 },
+@@ -548,7 +551,7 @@ class BrowserToolbarMiddleware(
  
      private fun updateTabsCount(store: Store<BrowserToolbarState, BrowserToolbarAction>) {
          browserStore.observeWhileActive {
@@ -27,7 +39,7 @@ index 9c8c89423b..3be267b691 100644
                  .collect {
                      updateEndBrowserActions(store)
                      updateNavigationActions(store)
-@@ -673,7 +673,7 @@ class BrowserToolbarMiddleware(
+@@ -673,7 +676,7 @@ class BrowserToolbarMiddleware(
          when (action) {
              HomeToolbarAction.TabCounter -> {
                  val isInPrivateMode = browsingModeManager.mode.isPrivate

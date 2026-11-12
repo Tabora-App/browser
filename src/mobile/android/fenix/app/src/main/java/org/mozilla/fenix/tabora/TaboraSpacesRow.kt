@@ -57,21 +57,7 @@ import org.mozilla.fenix.R
 import org.mozilla.fenix.components.Components
 import org.mozilla.fenix.ext.components
 
-/** Colors of spaces: the same names and shades as on the desktop. */
-private val SPACE_COLORS =
-    mapOf(
-        "blue" to Color(0xFF37ADFF),
-        "turquoise" to Color(0xFF00C79A),
-        "green" to Color(0xFF51CD00),
-        "yellow" to Color(0xFFFFCB00),
-        "orange" to Color(0xFFFF9F00),
-        "red" to Color(0xFFFF613D),
-        "pink" to Color(0xFFFF4BDA),
-        "purple" to Color(0xFFAF51F5),
-        "toolbar" to Color(0xFF8F8F9D),
-    )
-
-private fun colorOf(name: String): Color = SPACE_COLORS[name] ?: SPACE_COLORS.getValue("blue")
+private fun colorOf(name: String): Color = Color(spaceColorArgb(name))
 
 /** The page of normal tabs with the row of spaces above it. */
 @Composable

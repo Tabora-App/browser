@@ -45,4 +45,7 @@
         <item quantity="one">Se cerrará %1$d pestaña de este espacio y los inicios de sesión en sitios de este espacio se borrarán del teléfono.</item>
         <item quantity="other">Se cerrarán %1$d pestañas de este espacio y los inicios de sesión en sitios de este espacio se borrarán del teléfono.</item>
     </plurals>
+    <!-- Espacios: la marca junto a la dirección y la opción del menú del enlace -->
+    <string name="tabora_space_badge">Espacio «%1$s»</string>
+    <string name="tabora_space_open_link">Abrir en el espacio «%1$s»</string>
 </resources>

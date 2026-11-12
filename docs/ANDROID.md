@@ -104,6 +104,10 @@ What lives where:
     same set as on the desktop, `TaboraSpaceIcons.kt`), a long press opens the menu of a space
     (edit, move left or right, delete). Deleting closes the tabs of the space and erases the site
     data kept for it; every change is carried to the account right away.
+  - outside the tab manager: the address bar shows the icon of the current space in its color
+    (`TaboraSpaceBadge.kt`; "Personal" has no badge, a tap opens the tab manager), the link menu
+    offers "Open in the space ..." for the other spaces, and the "Jump back in" card of the home
+    screen shows a tab of the current space only.
 - **Mail** — the "Tabora Mail" screen (main menu, shortcut on the home screen), the module page
   `mail.html`: the same code as the web app, with the same sign-in as sync. Messages with
   HTML layout are shown in frames without scripts, third-party images load only on a button press, a link from
@@ -179,8 +183,7 @@ The built-in "make this your default browser" messages are turned off.
 Kotlin edits are made to change as little as possible: a default value, a visibility condition,
 a list item. The build runs with "warnings = errors", and it can only be checked on GitHub.
 
-Not done yet (next steps): the label of the current space next to the address bar and opening a
-link in another space,
+Not done yet (next steps):
 adding a code from an `otpauth://` link on a website page; the "Learn more" links in
 settings and "Who might be able to see my activity?" in private mode lead to Mozilla help;
 Google libraries (Firebase, Play Services) are part of the app; images of the former Firefox icons

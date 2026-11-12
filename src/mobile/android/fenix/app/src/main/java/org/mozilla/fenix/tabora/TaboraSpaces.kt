@@ -74,9 +74,12 @@ class TaboraSpaces(private val context: Context) {
         get() = state.value.current.contextId
 
     /** The space of a tab; a tab with an unknown context counts as personal. */
-    fun spaceOf(tab: TabSessionState): Space {
+    fun spaceOf(tab: TabSessionState): Space = spaceOfContext(tab.contextId)
+
+    /** The space that owns a context; null and unknown contexts belong to "Personal". */
+    fun spaceOfContext(contextId: String?): Space {
         val spaces = state.value.spaces
-        return spaces.firstOrNull { it.contextId != null && it.contextId == tab.contextId } ?: spaces.first()
+        return spaces.firstOrNull { it.contextId != null && it.contextId == contextId } ?: spaces.first()
     }
 
     /** Whether a tab is visible in the current space (private tabs always are). */
@@ -331,6 +334,9 @@ class TaboraSpaces(private val context: Context) {
 
         /** Whether a tab is visible in the current space; until spaces start, every tab is. */
         fun shows(tab: TabSessionState): Boolean = instance?.shows(tab) ?: true
+
+        /** The current space, or null until spaces start. */
+        fun current(): Space? = instance?.state?.value?.current
     }
 }
 

@@ -1,0 +1,24 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/ext/BrowserState.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/ext/BrowserState.kt
+index 1a018071ee..f21770d563 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/ext/BrowserState.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/ext/BrowserState.kt
+@@ -14,6 +14,7 @@ import mozilla.components.browser.state.state.TabSessionState
+ import mozilla.components.concept.engine.utils.ABOUT_HOME_URL
+ import org.mozilla.fenix.components.menu.middleware.getTabUrl
+ import org.mozilla.fenix.home.recenttabs.RecentTab
++import org.mozilla.fenix.tabora.TaboraSpaces
+ import org.mozilla.fenix.tabstray.ext.isNormalTabInactive
+ import org.mozilla.fenix.utils.Settings
+ import org.mozilla.fenix.utils.Stories.hasUrlOfInternallyOpenedStory
+@@ -40,8 +41,9 @@ fun BrowserState.asRecentTabs(): List<RecentTab> =
+  */
+ val BrowserState.lastOpenedNormalTab: TabSessionState?
+     get() =
+-        selectedNormalTab?.takeIf { !it.isHomepageTab }
+-            ?: normalTabs.filterNot { it.isHomepageTab }.maxByOrNull { it.lastAccess }
++        // Tabora: only tabs of the current space
++        selectedNormalTab?.takeIf { !it.isHomepageTab && TaboraSpaces.shows(it) }
++            ?: normalTabs.filter { TaboraSpaces.shows(it) && !it.isHomepageTab }.maxByOrNull { it.lastAccess }
+ 
+ private val TabSessionState.isHomepageTab: Boolean
+     get() = getTabUrl() == ABOUT_HOME_URL

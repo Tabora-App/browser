@@ -49,4 +49,7 @@
         <item quantity="many">Закроется %1$d вкладок этого пространства, а входы на сайтах в нём сотрутся с телефона.</item>
         <item quantity="other">Закроется %1$d вкладки этого пространства, а входы на сайтах в нём сотрутся с телефона.</item>
     </plurals>
+    <!-- Пространства: метка у адреса и пункт меню ссылки -->
+    <string name="tabora_space_badge">Пространство «%1$s»</string>
+    <string name="tabora_space_open_link">Открыть в пространстве «%1$s»</string>
 </resources>

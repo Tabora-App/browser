@@ -49,4 +49,7 @@
         <item quantity="many">Закриється %1$d вкладок цього простору, а входи на сайтах у ньому буде стерто з телефона.</item>
         <item quantity="other">Закриється %1$d вкладки цього простору, а входи на сайтах у ньому буде стерто з телефона.</item>
     </plurals>
+    <!-- Простори: позначка біля адреси та пункт меню посилання -->
+    <string name="tabora_space_badge">Простір «%1$s»</string>
+    <string name="tabora_space_open_link">Відкрити у просторі «%1$s»</string>
 </resources>

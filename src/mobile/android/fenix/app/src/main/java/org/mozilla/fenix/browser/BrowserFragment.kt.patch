@@ -1,0 +1,23 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/browser/BrowserFragment.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/browser/BrowserFragment.kt
+index 3d806855a4..998ecc9009 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/browser/BrowserFragment.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/browser/BrowserFragment.kt
+@@ -87,6 +87,7 @@ import org.mozilla.fenix.onboarding.continuous.ContinuousOnboardingFeature
+ import org.mozilla.fenix.pdf.PdfToolsIntegration
+ import org.mozilla.fenix.settings.downloads.DownloadLocationManager
+ import org.mozilla.fenix.summarization.SummarizationNavigator
++import org.mozilla.fenix.tabora.spaceContextMenuCandidates
+ import org.mozilla.fenix.termsofuse.store.Surface
+ import org.mozilla.fenix.utils.Settings
+ 
+@@ -597,7 +598,9 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
+                 requireContext(),
+                 contextMenuCandidateAppLinksUseCases,
+             ) +
+-            createOpenWithGoogleLensCandidate(context)
++            createOpenWithGoogleLensCandidate(context) +
++            // Tabora: "Open in the space ..." for the other spaces
++            spaceContextMenuCandidates(context)
+     }
+ 
+     private fun navigateToShareFragment(

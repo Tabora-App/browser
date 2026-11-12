@@ -1,5 +1,5 @@
 diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/toolbar/BrowserToolbarMiddleware.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/toolbar/BrowserToolbarMiddleware.kt
-index 7500c18a76..8b10ac782e 100644
+index 7500c18a76..345dc87482 100644
 --- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/toolbar/BrowserToolbarMiddleware.kt
 +++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/toolbar/BrowserToolbarMiddleware.kt
 @@ -21,7 +21,6 @@ import kotlinx.coroutines.withContext
@@ -10,15 +10,16 @@ index 7500c18a76..8b10ac782e 100644
  import mozilla.components.browser.state.selector.selectedTab
  import mozilla.components.browser.state.state.SecurityInfo
  import mozilla.components.browser.state.state.selectedOrDefaultSearchEngine
-@@ -152,6 +151,7 @@ import org.mozilla.fenix.nimbus.FxNimbus
+@@ -152,6 +151,8 @@ import org.mozilla.fenix.nimbus.FxNimbus
  import org.mozilla.fenix.settings.ShortcutType
  import org.mozilla.fenix.summarization.SummarizationNavigator
  import org.mozilla.fenix.summarization.onboarding.SummarizationFeatureDiscoveryConfiguration
 +import org.mozilla.fenix.tabora.TaboraSpaces
++import org.mozilla.fenix.tabora.spaceBadgeActions
  import org.mozilla.fenix.tabstray.ext.isActiveDownload
  import org.mozilla.fenix.tabstray.redux.state.Page
  import org.mozilla.fenix.translations.TranslationsEnabledSettings
-@@ -386,7 +386,7 @@ class BrowserToolbarMiddleware(
+@@ -386,7 +387,7 @@ class BrowserToolbarMiddleware(
              }
              is CloseCurrentTab -> {
                  browserStore.state.selectedTab?.let { selectedTab ->
@@ -27,16 +28,50 @@ index 7500c18a76..8b10ac782e 100644
  
                      if (!isLastTab) {
                          useCases.tabsUseCases.removeTab(selectedTab.id, selectParentIfExists = true)
-@@ -974,7 +974,7 @@ class BrowserToolbarMiddleware(
+@@ -760,17 +761,19 @@ class BrowserToolbarMiddleware(
+     }
+ 
+     private fun buildStartPageActions(): List<Action> {
+-        return listOf(
+-                ToolbarActionConfig(ToolbarAction.SiteInfo) {
+-                    !browserScreenStore.state.readerModeStatus.isActive
++        // Tabora: the badge of the current space comes first; a tap opens the tab manager
++        return spaceBadgeActions(uiContext, TabCounterClicked(Source.AddressBar.PageStart)) +
++            listOf(
++                    ToolbarActionConfig(ToolbarAction.SiteInfo) {
++                        !browserScreenStore.state.readerModeStatus.isActive
++                    }
++                )
++                .filter { config ->
++                    config.isVisible()
++                }
++                .map { config ->
++                    buildAction(config.action, Source.AddressBar.PageStart)
+                 }
+-            )
+-            .filter { config ->
+-                config.isVisible()
+-            }
+-            .map { config ->
+-                buildAction(config.action, Source.AddressBar.PageStart)
+-            }
+     }
+ 
+     private fun updateEndPageActions(store: Store<BrowserToolbarState, BrowserToolbarAction>) =
+@@ -974,10 +977,11 @@ class BrowserToolbarMiddleware(
  
      private fun observeTabsCountUpdates(store: Store<BrowserToolbarState, BrowserToolbarAction>) {
          browserStore.observeWhileActive {
 -            distinctUntilChangedBy { it.tabs.size }
-+            distinctUntilChangedBy { state -> state.tabs.count { TaboraSpaces.shows(it) } }
++            distinctUntilChangedBy { state -> state.tabs.count { TaboraSpaces.shows(it) } to TaboraSpaces.current()?.id }
                  .collect {
                      updateEndBrowserActions(store)
                      updateNavigationActions(store)
-@@ -1340,7 +1340,7 @@ class BrowserToolbarMiddleware(
++                    updateStartPageActions(store)
+                 }
+         }
+     }
+@@ -1340,7 +1344,7 @@ class BrowserToolbarMiddleware(
  
              ToolbarAction.TabCounter -> {
                  val isInPrivateMode = browsingModeManager.mode.isPrivate
