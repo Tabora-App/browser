@@ -1,0 +1,23 @@
+diff --git a/browser/components/migration/ChromeProfileMigrator.sys.mjs b/browser/components/migration/ChromeProfileMigrator.sys.mjs
+index e88b69dc79..4df3b53734 100644
+--- a/browser/components/migration/ChromeProfileMigrator.sys.mjs
++++ b/browser/components/migration/ChromeProfileMigrator.sys.mjs
+@@ -142,6 +142,18 @@ export class ChromeProfileMigrator extends MigratorBase {
+       let fp = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
+       fp.init(win?.browsingContext, "", Ci.nsIFilePicker.modeGetFolder);
+       fp.filterIndex = 1;
++      // Tabora: open the picker right in the folder that is asked for. On macOS
++      // it lies inside "Library", which the picker does not show, so a person
++      // had no way to get there by hand.
++      if (originalDataPath) {
++        try {
++          let dir = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
++          dir.initWithPath(originalDataPath);
++          fp.displayDirectory = dir;
++        } catch (ex) {
++          console.error(ex);
++        }
++      }
+       // Now wait for the filepicker to open and close. If the user picks
+       // the local state folder, the OS should grant us read access to everything
+       // inside, so we don't need to check or do anything else with what's
