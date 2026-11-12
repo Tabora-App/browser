@@ -1,4 +1,4 @@
-// Сеансы устройств аккаунта: показать и завершить проверочные (веб-версия, пробы).
+// Сеансы устройств аккаунта: показать и завершить проверочные (веб-версия, пробы, эмулятор Android).
 //   node <сборка> <сервер аккаунтов> <имя> <файл с паролем> list|clean
 import { readFileSync } from "node:fs";
 import "./setup.mjs";
@@ -17,7 +17,7 @@ try {
   if (mode === "clean") {
     const loginHash = await account.loginHashFor(password);
     out.revoked = [];
-    for (const d of devices.filter(d => !d.current && /^(Веб-версия|Проба веб-версии)/.test(d.name))) {
+    for (const d of devices.filter(d => !d.current && /^(Веб-версия|Проба веб-версии|sdk_gphone)/.test(d.name))) {
       await account.api.deviceRevoke(account.token, d.id, loginHash);
       out.revoked.push(d.name);
     }
