@@ -3103,5 +3103,22 @@
  "Список пространств общий с компьютером: названия, цвета и порядок. Вкладки и входы на сайтах внутри пространства остаются на этом телефоне.": "La lista de espacios se comparte con tu ordenador: nombres, colores y orden. Las pestañas y los inicios de sesión dentro de un espacio se quedan en este teléfono.",
  "Пространства не сверены: {0}": "Espacios sin sincronizar: {0}",
  "пространство|пространства|пространств": "espacio|espacios",
- "Пока только «Личное»": "Por ahora solo «Personal»"
+ "Пока только «Личное»": "Por ahora solo «Personal»",
+ "Найти на странице": "Buscar en la página",
+ "Поиск по тексту открытой страницы": "Buscar en el texto de la página abierta",
+ "find найти поиск текст страница": "find buscar texto página",
+ "Перевести страницу": "Traducir la página",
+ "Перевод делается на этом компьютере, текст страницы никуда не уходит": "La traducción se hace en este ordenador; el texto de la página no se envía a ningún sitio",
+ "translate перевод перевести язык": "translate traducir traducción idioma",
+ "Только текст статьи, без оформления сайта": "Solo el texto del artículo, sin el diseño del sitio",
+ "reader чтение статья текст": "reader lectura artículo texto",
+ "Картинка в картинке": "Imagen en imagen",
+ "Видео со страницы в отдельном окошке поверх остальных окон": "El vídeo de la página en una ventana pequeña sobre las demás ventanas",
+ "pip picture видео окошко картинка": "pip picture vídeo ventana imagen",
+ "Снимок страницы": "Captura de la página",
+ "Сохранить страницу или её часть картинкой": "Guardar la página o una parte como imagen",
+ "screenshot снимок скриншот картинка": "screenshot captura imagen",
+ "Печать": "Imprimir",
+ "Напечатать страницу или сохранить её в PDF": "Imprimir la página o guardarla en PDF",
+ "print печать pdf распечатать": "print imprimir pdf"
 }

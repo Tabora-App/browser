@@ -3576,6 +3576,14 @@ var Tabora = {
       { glyph: "✎", title: tt`Написать письмо`, note: tt`Окно письма поверх любой вкладки`, key: "", tags: tt`compose написать письмо mail new`, run: () => this.openCompose() },
       { glyph: "✉", title: tt`Почта и алиасы`, note: tt`Входящие, коды подтверждения, алиасы`, key: "⌘⇧M", tags: tt`mail почта email письма алиасы inbox`, run: () => this.openMail() },
       { glyph: "⚙", title: tt`Настройки`, note: tt`Поведение, приватность, внешний вид`, key: "⌘,", tags: "settings preferences", run: () => openPreferences() },
+      // Page tools of the engine: they have shortcuts and items in the application menu, and the
+      // command bar lists them too, so they can be found by name.
+      { glyph: "⌕", title: tt`Найти на странице`, note: tt`Поиск по тексту открытой страницы`, key: "⌘F", tags: tt`find найти поиск текст страница`, run: () => gLazyFindCommand("onFindCommand") },
+      { glyph: "文", title: tt`Перевести страницу`, note: tt`Перевод делается на этом компьютере, текст страницы никуда не уходит`, key: "", tags: tt`translate перевод перевести язык`, run: () => document.getElementById("cmd_translate")?.doCommand() },
+      { glyph: "≣", title: tt`Режим чтения`, note: tt`Только текст статьи, без оформления сайта`, key: "⌘⌥R", tags: tt`reader чтение статья текст`, run: () => document.getElementById("View:ReaderView")?.doCommand() },
+      { glyph: "◳", title: tt`Картинка в картинке`, note: tt`Видео со страницы в отдельном окошке поверх остальных окон`, key: "", tags: tt`pip picture видео окошко картинка`, run: () => document.getElementById("View:PictureInPicture")?.doCommand() },
+      { glyph: "⌗", title: tt`Снимок страницы`, note: tt`Сохранить страницу или её часть картинкой`, key: "", tags: tt`screenshot снимок скриншот картинка`, run: () => document.getElementById("Browser:Screenshot")?.doCommand() },
+      { glyph: "⎙", title: tt`Печать`, note: tt`Напечатать страницу или сохранить её в PDF`, key: "⌘P", tags: tt`print печать pdf распечатать`, run: () => PrintUtils.startPrintWindow(gBrowser.selectedBrowser.browsingContext) },
       { glyph: "⟨", title: document.documentElement.getAttribute("tabora-sidebar") === "compact" ? tt`Развернуть боковую панель` : tt`Свернуть боковую панель`, note: tt`Только значки вкладок, названия по наведению`, key: "⌘B", tags: tt`sidebar панель свернуть compact`, run: () => this.toggleSidebar() },
       { glyph: "▭", title: this.horizontalTabs ? tt`Вкладки сбоку` : tt`Вкладки сверху`, note: this.horizontalTabs ? tt`Вернуть боковую панель с вкладками` : tt`Вкладки и адрес двумя строками сверху, страница на всю ширину`, tags: tt`layout раскладка вкладки сверху сбоку горизонтальные вертикальные tabs`, run: () => Services.prefs.setBoolPref(this.TABS_LAYOUT_PREF, this.horizontalTabs) },
     ];

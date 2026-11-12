@@ -3103,5 +3103,22 @@
  "Список пространств общий с компьютером: названия, цвета и порядок. Вкладки и входы на сайтах внутри пространства остаются на этом телефоне.": "The list of spaces is shared with your computer: names, colors and order. Tabs and site sign-ins inside a space stay on this phone.",
  "Пространства не сверены: {0}": "Spaces not synced: {0}",
  "пространство|пространства|пространств": "space|spaces",
- "Пока только «Личное»": "Only “Personal” so far"
+ "Пока только «Личное»": "Only “Personal” so far",
+ "Найти на странице": "Find in page",
+ "Поиск по тексту открытой страницы": "Search the text of the open page",
+ "find найти поиск текст страница": "find search text page",
+ "Перевести страницу": "Translate page",
+ "Перевод делается на этом компьютере, текст страницы никуда не уходит": "Translation runs on this computer; the text of the page is not sent anywhere",
+ "translate перевод перевести язык": "translate translation language",
+ "Только текст статьи, без оформления сайта": "Just the text of the article, without the site’s design",
+ "reader чтение статья текст": "reader reading article text",
+ "Картинка в картинке": "Picture-in-picture",
+ "Видео со страницы в отдельном окошке поверх остальных окон": "Video from the page in a small window on top of other windows",
+ "pip picture видео окошко картинка": "pip picture video window",
+ "Снимок страницы": "Page screenshot",
+ "Сохранить страницу или её часть картинкой": "Save the page or part of it as an image",
+ "screenshot снимок скриншот картинка": "screenshot capture image",
+ "Печать": "Print",
+ "Напечатать страницу или сохранить её в PDF": "Print the page or save it as PDF",
+ "print печать pdf распечатать": "print pdf"
 }
