@@ -217,10 +217,11 @@
   }
 
   .top {
+    --top-gap: clamp(12px, 2.5vw, 24px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: 16px var(--top-gap);
     padding-block: 20px;
   }
 
@@ -239,10 +240,11 @@
     height: 30px;
   }
 
-  .top-links {
+  .top-links,
+  .langs {
     display: flex;
     align-items: center;
-    gap: clamp(12px, 2.5vw, 24px);
+    gap: var(--top-gap);
     font-weight: 600;
     font-size: 0.9375rem;
 
@@ -253,6 +255,29 @@
     & a:not(.pill):hover {
       text-decoration: underline;
       text-underline-offset: 0.3em;
+    }
+  }
+
+  /* Языки страницы: такие же ссылки, как соседние в шапке. Текущий язык написан цветом текста,
+     остальные тише; от ссылок справа группу отделяет волосяная черта. */
+  .langs {
+    margin-left: auto;
+
+    & a {
+      color: var(--ink-2);
+      transition: color 0.15s;
+    }
+
+    & a:hover,
+    & a[aria-current] {
+      color: var(--ink);
+    }
+
+    &::after {
+      content: "";
+      width: 1px;
+      height: 1.1em;
+      background: var(--line);
     }
   }
 
@@ -413,7 +438,8 @@
   /* Ниже первого экрана: «боковая панель» разделов и сами разделы */
   .guide {
     display: grid;
-    grid-template-columns: 236px minmax(0, 1fr);
+    /* панель разделов не уже 236px и растёт под самую длинную подпись: на других языках они длиннее */
+    grid-template-columns: minmax(236px, max-content) minmax(0, 1fr);
     gap: clamp(24px, 4vw, 56px);
     align-items: start;
   }
@@ -515,6 +541,42 @@
 
     .rail {
       display: none;
+    }
+  }
+
+  /* в узком окне языки уходят отдельной строкой под шапку */
+  @media (max-width: 760px) {
+    .top {
+      flex-wrap: wrap;
+    }
+
+    .langs {
+      order: 1;
+      flex: 0 0 100%;
+      flex-wrap: wrap;
+      gap: 6px 18px;
+      margin-left: 0;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+      font-size: 0.875rem;
+
+      &::after {
+        display: none;
+      }
+    }
+  }
+
+  /* самые узкие экраны: в шапке остаётся кнопка загрузки (ссылка на GitHub есть ниже и в подвале),
+     а главная кнопка плотнее, чтобы длинная надпись не переносилась */
+  @media (max-width: 340px) {
+    .top-links a:not(.pill) {
+      display: none;
+    }
+
+    .capsule {
+      gap: 12px;
+      padding-left: 22px;
+      font-size: 0.9375rem;
     }
   }
 
@@ -663,6 +725,16 @@
 
     & .capsule {
       margin-top: 12px;
+    }
+  }
+
+  /* в узкой карточке кнопка плотнее: «Завантажити .dmg, 127 МБ» и «Descargar .dmg, 127 MB»
+     длиннее русской надписи и иначе переносятся на вторую строку */
+  @container (max-width: 357px) {
+    .dl-main .capsule {
+      gap: 12px;
+      padding-left: 22px;
+      font-size: 0.9375rem;
     }
   }
 

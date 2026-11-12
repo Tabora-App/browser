@@ -30,7 +30,7 @@ API аккаунтов и синхронизации (`tabora-server`, PostgreSQ
 | nginx | `infra/nginx/*`; почтовый хост включается, когда есть сертификат |
 | tabora-server | `/opt/tabora/bin/tabora-server` (root), данные `/opt/tabora/data`, служба `tabora-server` |
 | PostgreSQL | база `tabora`, роль `tabora`, строка подключения в `server.env` |
-| Сайт | `/var/www/tabora.app` ← `site/` (владелец root, nginx только читает) |
+| Сайт | `/var/www/tabora.app` ← `site/` (владелец root, nginx только читает). Страницы по языкам `/ru/`, `/en/`, `/uk/`, `/es/` собирает `tools/site/build.sh` из шаблона `tools/site/pages/index.html` и словарей `i18n/site/`; «/» nginx перенаправляет на язык из `Accept-Language` |
 | Резервные копии | `infra/backup/*`, таймеры `tabora-backup`, `tabora-backup-check`; состояние `/var/lib/tabora/backup.json` |
 | Мониторинг | `infra/monitor/health.py`, таймер `tabora-health` (5 минут), `/run/tabora/health.json`, motd |
 | Сеть | `/etc/netplan/50-tabora.yaml` ← `infra/network/netplan.py`, служба `tabora-network` |

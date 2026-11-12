@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tabora — ad-free browser with mail, passwords and a wallet</title>
+<meta name="description" content="Tabora removes ads from pages, remembers your passwords and sign-in codes, and gives you a mail address at tabora.app and a crypto wallet. A free, open-source browser for Mac.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#e7e6e0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141517" media="(prefers-color-scheme: dark)">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Tabora">
+<meta property="og:locale" content="en_US">
+<meta property="og:url" content="https://tabora.app/en/">
+<meta property="og:title" content="Tabora: ad-free browser with mail, passwords and a wallet">
+<meta property="og:description" content="Tabora removes ads from pages, remembers your passwords and sign-in codes, and gives you a mail address at tabora.app and a crypto wallet. A free, open-source browser for Mac.">
+<meta property="og:image" content="https://tabora.app/assets/og-en.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://tabora.app/en/">
+<link rel="alternate" hreflang="ru" href="https://tabora.app/ru/">
+<link rel="alternate" hreflang="en" href="https://tabora.app/en/">
+<link rel="alternate" hreflang="uk" href="https://tabora.app/uk/">
+<link rel="alternate" hreflang="es" href="https://tabora.app/es/">
+<link rel="alternate" hreflang="x-default" href="https://tabora.app/en/">
+<link rel="icon" href="/assets/mark.svg" type="image/svg+xml">
+<link rel="preload" href="/assets/fonts/Manrope-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/Manrope-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/site.css">
+<script type="module" src="/site.js"></script>
+</head>
+<body>
+
+<header class="top">
+  <a class="brand" href="./" aria-label="Tabora, home">
+    <svg class="brand-mark" viewBox="0 0 256 256" aria-hidden="true">
+      <rect class="m-tile" width="256" height="256" rx="58"/>
+      <rect class="m-ink" x="56" y="66" width="144" height="38" rx="19"/>
+      <rect class="m-ink" x="109" y="66" width="38" height="134" rx="19"/>
+      <circle class="m-tile" cx="181" cy="85" r="11"/>
+    </svg>
+    <span>Tabora</span>
+  </a>
+  <nav class="langs" aria-label="Page language">
+    <a href="/ru/" lang="ru" hreflang="ru" translate="no">Русский</a>
+    <a href="/en/" lang="en" hreflang="en" translate="no" aria-current="page">English</a>
+    <a href="/uk/" lang="uk" hreflang="uk" translate="no">Українська</a>
+    <a href="/es/" lang="es" hreflang="es" translate="no">Español</a>
+  </nav>
+  <nav class="top-links" aria-label="Main">
+    <a href="https://github.com/Tabora-App/browser">GitHub</a>
+    <a class="pill" href="#download">Download</a>
+  </nav>
+</header>
+
+<main>
+
+<section class="hero">
+  <div class="hero-copy">
+    <h1>An ad-free browser with mail and a&nbsp;wallet</h1>
+    <p class="lead">Tabora removes ads from pages, remembers your passwords and fills in sign-in codes for you. It has mail with a separate address for every site and a crypto wallet. There’s nothing extra to install.</p>
+    <div class="hero-actions">
+      <a class="capsule" href="/downloads/Tabora-0.2.0-mac-aarch64.dmg">
+        <span>Download for&nbsp;macOS</span>
+        <span class="capsule-dot" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v13"/><path d="m6.5 12.5 5.5 5.5 5.5-5.5"/></svg></span>
+      </a>
+      <a class="quiet-link" href="https://github.com/Tabora-App/browser">Source code on&nbsp;GitHub</a>
+    </div>
+    <p class="hero-note">Free. Version 0.2.0 for Mac with Apple silicon (M1 and&nbsp;later).</p>
+  </div>
+  <div class="stage" data-hero-stage role="img" aria-label="The Tabora mark: a letter T with a lime ball rolling along its crossbar">
+    <svg class="stage-fallback" viewBox="46 56 164 154" aria-hidden="true">
+      <rect class="m-ink" x="56" y="66" width="144" height="38" rx="19"/>
+      <rect class="m-ink" x="109" y="66" width="38" height="134" rx="19"/>
+      <circle class="m-lime" cx="181" cy="85" r="11"/>
+    </svg>
+  </div>
+</section>
+
+<div class="guide">
+
+  <nav class="rail" aria-label="Page sections">
+    <a href="#noads">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l7.5 3v5.5c0 4.2-3.1 7.6-7.5 8.5-4.4-.9-7.5-4.3-7.5-8.5V6.5z"/></svg>
+      <span>No ads</span>
+    </a>
+    <a href="#vault">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3"/><path d="M5 11h14v10H5z"/></svg>
+      <span>Passwords and codes</span><kbd>⌘⇧K</kbd>
+    </a>
+    <a href="#mail">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 6.5h17v11h-17z"/><path d="m3.5 7 8.5 6 8.5-6"/></svg>
+      <span>Mail</span><kbd>⌘⇧M</kbd>
+    </a>
+    <a href="#sync">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 9a8 8 0 0 0-14.3-2.5"/><path d="M4.5 3.5v3.5h3.5"/><path d="M4.5 15a8 8 0 0 0 14.3 2.5"/><path d="M19.5 20.500v-3.5h-3.5"/></svg>
+      <span>Sync</span>
+    </a>
+    <a href="#wallet">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5h17v11h-17z"/><path d="M3.5 11h17"/></svg>
+      <span>Wallet</span><kbd>⌘⇧W</kbd>
+    </a>
+    <a href="#agent">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle class="fill" cx="12" cy="12" r="4.5"/></svg>
+      <span>Agent</span><kbd>⌘J</kbd>
+    </a>
+    <a href="#daily">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 5.5h7v6h-7z"/><path d="M13.5 5.5h7v6h-7z"/><path d="M3.5 14.5h17v4h-17z"/></svg>
+      <span>More in&nbsp;Tabora</span>
+    </a>
+    <a href="#source">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8.5 7-5 5 5 5"/><path d="m15.5 7 5 5-5 5"/></svg>
+      <span>Open source</span>
+    </a>
+    <a href="#download">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
+      <span>Download</span>
+    </a>
+  </nav>
+
+  <div class="parts">
+
+    <section class="part" id="noads">
+      <div class="part-grid">
+        <div class="part-text">
+          <h2>Pages open without ads</h2>
+          <p class="part-lead">Tabora doesn’t load ad banners or the trackers that follow you from site to site. Pages open faster, and you see only what you came for.</p>
+          <dl class="points">
+            <div>
+              <dt>Works right after you install it</dt>
+              <dd>There’s nothing to turn on or set up. The browser updates its lists of ad addresses on its own.</dd>
+            </div>
+            <div>
+              <dt>You can see what was blocked</dt>
+              <dd>A counter in the toolbar shows how many requests were blocked on the page. Click it to see the list of addresses.</dd>
+            </div>
+            <div>
+              <dt>If a site breaks</dt>
+              <dd>Sometimes a site doesn’t work properly without its ads. You can turn blocking off for just that site in one click. It stays on everywhere else.</dd>
+            </div>
+            <div>
+              <dt>Cookie pop-ups close on their own</dt>
+              <dd>The browser closes the “We use cookies” banner for you and chooses “Reject”.</dd>
+            </div>
+          </dl>
+          <p class="status-note">The ad blocker doesn’t remove ads inside YouTube videos yet.</p>
+        </div>
+        <div class="part-mock">
+          <div class="mock blocked" role="img" aria-label="Example of the list under the counter: 57 requests blocked on the page, 12 from ads and 45 from trackers, with a “Don’t block on this site” button at the bottom">
+            <div class="mock-head"><b><svg viewBox="0 0 24 24"><path d="M12 3.5l7.5 3v5.5c0 4.2-3.1 7.6-7.5 8.5-4.4-.9-7.5-4.3-7.5-8.5V6.5z"/></svg>57 blocked</b><span>on this page</span></div>
+            <p class="blocked-group">Ads</p>
+            <ul>
+              <li><span>amazon-adsystem.com</span><span class="num">×7</span></li>
+              <li><span>googlesyndication.com</span><span class="num">×3</span></li>
+              <li><span>doubleclick.net</span><span class="num">×2</span></li>
+            </ul>
+            <p class="blocked-group">Analytics and trackers</p>
+            <ul>
+              <li><span>connect.facebook.net</span><span class="num">×31</span></li>
+              <li><span>google-analytics.com</span><span class="num">×9</span></li>
+              <li><span>analytics.tiktok.com</span><span class="num">×5</span></li>
+            </ul>
+            <div class="mock-actions"><span class="mbtn">Don’t block on this site</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="part" id="vault">
+      <div class="part-grid">
+        <div class="part-text">
+          <h2>The browser remembers your passwords and sign-in codes</h2>
+          <p class="part-lead">Your site passwords and one-time codes (the ones an app on your phone usually shows) are kept in the browser, protected by a single password of yours. On a site, you just click the suggestion.</p>
+          <dl class="points">
+            <div>
+              <dt>The code appears right under the field</dt>
+              <dd>When a site asks for a six-digit code, the browser offers it. No need to reach for your phone.</dd>
+            </div>
+            <div>
+              <dt>Codes move over from your phone</dt>
+              <dd>Codes from Google Authenticator, Aegis and 2FAS come over with a QR code. Passwords are imported as a file from another browser.</dd>
+            </div>
+            <div>
+              <dt>Only you know your password</dt>
+              <dd>It’s never sent to our servers, so even we can’t open your passwords and codes.</dd>
+            </div>
+            <div>
+              <dt>If you forget your password</dt>
+              <dd>When you create an account, you get a recovery key. Keep it somewhere safe: it will get you back in.</dd>
+            </div>
+          </dl>
+        </div>
+        <div class="part-mock">
+          <div class="mock vault" role="img" aria-label="Example: a one-time code for GitHub with a countdown and a saved password for bahn.de">
+            <div class="otp">
+              <div class="otp-who"><b>GitHub</b><span>anna</span></div>
+              <div class="otp-code" data-demo-code>482 913</div>
+              <div class="otp-ring" data-demo-ring data-seconds="30" data-label="code changes in {0} s"></div>
+            </div>
+            <div class="pw">
+              <div class="pw-who"><b>bahn.de</b><code>bahn-x4k1@tabora.app</code></div>
+              <span class="pw-dots">•••••••••</span>
+            </div>
+            <p class="vault-foot"><svg viewBox="0 0 24 24"><path d="M8.5 8.5h11v11h-11z"/><path d="M15.5 8.5v-4h-11v11h4"/></svg>Code copied. The clipboard clears in 30&nbsp;seconds</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="part" id="mail">
+      <div class="part-grid">
+        <div class="part-text">
+          <h2>Mail with a separate address for every site</h2>
+          <p class="part-lead">Along with the browser you get a mailbox like name@tabora.app. When a site asks for your email, the browser offers a separate address just for that site. Messages arrive in your mailbox, and the site never learns your real address.</p>
+          <dl class="points">
+            <div>
+              <dt>Tired of newsletters? Turn the address off</dt>
+              <dd>A site started sending you ads or passed your email on to someone else. Turn off the address you gave that site, and the messages stop coming.</dd>
+            </div>
+            <div>
+              <dt>Read and write mail in the browser</dt>
+              <dd>You don’t need a separate mail app. You can also add the mailboxes you already have.</dd>
+            </div>
+            <div>
+              <dt>You can encrypt your messages</dt>
+              <dd>A message to another Tabora address can be encrypted, so only the recipient can read it. The subject line stays unencrypted.</dd>
+            </div>
+            <div>
+              <dt>A notification tells you about new mail</dt>
+              <dd>No need to check your mailbox by hand.</dd>
+            </div>
+          </dl>
+        </div>
+        <div class="part-mock">
+          <div class="mock aliases">
+            <div class="mock-head"><b>Addresses for sites</b><span>try turning one off</span></div>
+            <ul>
+              <li class="alias">
+                <div class="alias-main">
+                  <code>booking-k3f9@tabora.app</code>
+                  <span class="alias-meta" data-status data-on="booking.com, 1 message" data-off="turned off">booking.com, 1 message</span>
+                </div>
+                <input type="checkbox" role="switch" class="switch" data-alias checked aria-label="Address booking-k3f9@tabora.app">
+              </li>
+              <li class="alias">
+                <div class="alias-main">
+                  <code>bahn-x4k1@tabora.app</code>
+                  <span class="alias-meta" data-status data-on="bahn.de, 3 messages" data-off="turned off">bahn.de, 3 messages</span>
+                </div>
+                <input type="checkbox" role="switch" class="switch" data-alias checked aria-label="Address bahn-x4k1@tabora.app">
+              </li>
+              <li class="alias">
+                <div class="alias-main">
+                  <code>notion-p1z7@tabora.app</code>
+                  <span class="alias-meta" data-status data-on="notion.so, 27 messages" data-off="turned off">notion.so, 27 messages</span>
+                  <span class="alias-warn">14 newsletters this week</span>
+                </div>
+                <input type="checkbox" role="switch" class="switch" data-alias checked aria-label="Address notion-p1z7@tabora.app">
+              </li>
+              <li class="alias">
+                <div class="alias-main">
+                  <code>zalando-t7r2@tabora.app</code>
+                  <span class="alias-meta" data-status data-on="zalando.cz, 41 messages" data-off="turned off">turned off: spam</span>
+                </div>
+                <input type="checkbox" role="switch" class="switch" data-alias aria-label="Address zalando-t7r2@tabora.app">
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="part" id="sync">
+      <div class="part-grid">
+        <div class="part-text">
+          <h2>The same passwords and bookmarks on your second computer</h2>
+          <p class="part-lead">Sign in to your account on another computer, and your passwords, sign-in codes, bookmarks and open tabs show up there.</p>
+          <dl class="points">
+            <div>
+              <dt>Your data is encrypted before it’s sent</dt>
+              <dd>The server holds a copy that can’t be read without your password. We can’t read it either.</dd>
+            </div>
+            <div>
+              <dt>You choose what to sync</dt>
+              <dd>Passwords, codes, bookmarks and tabs are each turned on separately. You can turn sync off and erase the copy from the server.</dd>
+            </div>
+            <div>
+              <dt>The wallet stays on your computer</dt>
+              <dd>The wallet’s secret phrase is never sent anywhere.</dd>
+            </div>
+          </dl>
+        </div>
+        <div class="part-mock">
+          <div class="mock sync">
+            <div class="mock-head"><b>Sync</b><span>synced at 2:02&nbsp;PM</span></div>
+            <ul>
+              <li class="alias">
+                <div class="alias-main"><b>Site passwords</b><span class="alias-meta">128 passwords</span></div>
+                <input type="checkbox" role="switch" class="switch" checked aria-label="Sync site passwords">
+              </li>
+              <li class="alias">
+                <div class="alias-main"><b>Sign-in codes</b><span class="alias-meta">16 codes</span></div>
+                <input type="checkbox" role="switch" class="switch" checked aria-label="Sync sign-in codes">
+              </li>
+              <li class="alias">
+                <div class="alias-main"><b>Bookmarks</b><span class="alias-meta">214 items</span></div>
+                <input type="checkbox" role="switch" class="switch" checked aria-label="Sync bookmarks">
+              </li>
+              <li class="alias">
+                <div class="alias-main"><b>Tabs and spaces</b><span class="alias-meta">see what’s open on your other computer</span></div>
+                <input type="checkbox" role="switch" class="switch" checked aria-label="Sync tabs and spaces">
+              </li>
+              <li class="alias">
+                <div class="alias-main"><b>Wallet phrase</b><span class="alias-meta">stays only on this computer</span></div>
+                <span class="never">never</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="part" id="wallet">
+      <div class="part-grid">
+        <div class="part-text">
+          <h2>A crypto wallet right in the browser</h2>
+          <p class="part-lead">The wallet works with Ethereum, Base, Arbitrum, Polygon, Bitcoin, Solana and TRON. The secret phrase is encrypted and kept only on your computer.</p>
+          <dl class="points">
+            <div>
+              <dt>Sites connect in one click</dt>
+              <dd>On exchanges and in apps like Uniswap, just click “Connect”. You don’t need a separate extension.</dd>
+            </div>
+            <div>
+              <dt>You can see what you’re signing</dt>
+              <dd>Before you confirm, the wallet shows in plain words how much will leave, who gets it and what permissions the site will get. Risky requests are flagged.</dd>
+            </div>
+            <div>
+              <dt>One coin, one line</dt>
+              <dd>USDT on different networks is shown as one total. You pick the network when you send or receive.</dd>
+            </div>
+            <div>
+              <dt>Protection from look-alike addresses</dt>
+              <dd>Scammers send tiny amounts from an address that looks like yours, hoping you’ll copy it later by mistake. The wallet hides these transfers from your history.</dd>
+            </div>
+          </dl>
+          <p class="status-note">For developers: EIP-6963 and EIP-1193, Wallet Standard for Solana, TronLink compatibility. .eth names and ipfs:// links open from the address bar.</p>
+        </div>
+        <div class="part-mock">
+          <div class="mock sign" role="img" aria-label="Example of a confirmation window: app.uniswap.org asks you to sign a swap of 0.5 ETH for 1,702.40 USDC, and the recipient is your address">
+            <p class="sign-from"><b>app.uniswap.org</b> asks you to sign</p>
+            <p class="sign-title">Swap</p>
+            <dl class="kv">
+              <div><dt>You pay</dt><dd><span class="num">0.5</span> ETH</dd></div>
+              <div><dt>You receive</dt><dd>≈ <span class="num">1,702.40</span> USDC</dd></div>
+              <div><dt>Recipient</dt><dd><span class="check"><svg viewBox="0 0 24 24"><path d="m6.5 12.5 3.5 3.5 7.5-8"/></svg></span>your address <code>0x7a3…91c2</code></dd></div>
+              <div><dt>Network</dt><dd><i class="net base"></i>Base</dd></div>
+              <div><dt>Fee</dt><dd>≈ <span class="num">$0.04</span></dd></div>
+            </dl>
+            <div class="mock-actions"><span class="mbtn">Reject</span><span class="mbtn primary">Sign</span></div>
+          </div>
+          <ul class="nets" aria-label="Wallet networks">
+            <li><i class="net ethereum"></i>Ethereum</li>
+            <li><i class="net base"></i>Base</li>
+            <li><i class="net arbitrum"></i>Arbitrum</li>
+            <li><i class="net polygon"></i>Polygon</li>
+            <li><i class="net bitcoin"></i>Bitcoin</li>
+            <li><i class="net solana"></i>Solana</li>
+            <li><i class="net tron"></i>TRON</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="part" id="agent">
+      <div class="part-grid">
+        <div class="part-text">
+          <h2>The agent fills in forms and finds messages for you</h2>
+          <p class="part-lead">Tell the agent what you need: sign up on a site, find the message with a code, fill in a form. It does it in a browser tab while you watch.</p>
+          <dl class="points">
+            <div>
+              <dt>It asks before sending</dt>
+              <dd>Before submitting a form, the agent shows what will be sent and to which site. Nothing is sent without your OK.</dd>
+            </div>
+            <div>
+              <dt>A page can’t give it orders</dt>
+              <dd>Text on a site or in a message can’t make the agent do something behind your back: once it has read a page, every action it takes needs your confirmation.</dd>
+            </div>
+          </dl>
+          <p class="status-note">The agent needs your OpenAI key. The key is stored in the browser, protected by your password.</p>
+        </div>
+        <div class="part-mock">
+          <div class="mock agent" role="img" aria-label="Example of the agent panel: asked to sign up on bahn.de, the agent created a separate address, filled in the form and is asking permission to send it">
+            <div class="mock-head"><b><i class="live"></i>Agent</b><kbd>⌘J</kbd></div>
+            <p class="say">Sign me up on&nbsp;bahn.de</p>
+            <ul class="steps">
+              <li><span class="check"><svg viewBox="0 0 24 24"><path d="m6.5 12.5 3.5 3.5 7.5-8"/></svg></span>Created the address <code>bahn-x4k1@tabora.app</code></li>
+              <li><span class="check"><svg viewBox="0 0 24 24"><path d="m6.5 12.5 3.5 3.5 7.5-8"/></svg></span>Filled in the sign-up form</li>
+            </ul>
+            <div class="ask">
+              <p class="ask-title">Send the form?</p>
+              <p class="ask-site">bahn.de</p>
+              <p class="ask-note">The site will get your name and the address bahn-x4k1@tabora.app.</p>
+              <div class="mock-actions"><span class="mbtn">Reject</span><span class="mbtn primary">Send</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="part" id="daily">
+      <h2>More in&nbsp;Tabora</h2>
+      <dl class="points wide">
+        <div>
+          <dt>Spaces</dt>
+          <dd>Personal, Work, Projects. Each has its own tabs, pinned sites and sign-ins: on the same site you can be in your work account in one space and your personal one in another.</dd>
+        </div>
+        <div>
+          <dt>Tabs on the side or on top</dt>
+          <dd>The tab list sits on the left and collapses to icons. If you’re used to tabs on top, turn them on in settings.</dd>
+        </div>
+        <div>
+          <dt>One bar for search <kbd>⌘K</kbd></dt>
+          <dd>It searches your open tabs and history, opens parts of the browser and takes tasks for the agent.</dd>
+        </div>
+        <div>
+          <dt>Sleeping tabs</dt>
+          <dd>Tabs you haven’t returned to in a while can be put to sleep so they don’t take up memory.</dd>
+        </div>
+        <div>
+          <dt>Account protection</dt>
+          <dd>You can protect sign-in with a second step (a code from an app) and add a backup email in case you forget your password.</dd>
+        </div>
+        <div>
+          <dt>Support right in the browser</dt>
+          <dd>Send a question or a bug report from settings, with a screenshot if you like. The reply arrives in the same place.</dd>
+        </div>
+      </dl>
+    </section>
+
+    <section class="part" id="source">
+      <div class="part-grid">
+        <div class="part-text">
+          <h2>The code is open, so you can check it</h2>
+          <p class="part-lead">All of Tabora’s code is published on GitHub. You’ll also find the security review reports there, and a description of how passwords, mail and the wallet are protected.</p>
+          <dl class="points">
+            <div>
+              <dt>Updates are signed</dt>
+              <dd>The browser installs only updates signed with Tabora’s key. The Mac installer is checked by Apple.</dd>
+            </div>
+            <div>
+              <dt>Built on the Firefox engine</dt>
+              <dd>Pages are displayed by the Firefox engine. Security fixes arrive with its releases.</dd>
+            </div>
+            <div>
+              <dt>Encryption libraries are verified</dt>
+              <dd>The code that encrypts passwords and signs transfers is built from open-source code at pinned versions. You can verify this with one command from the repository.</dd>
+            </div>
+          </dl>
+        </div>
+        <div class="part-mock">
+          <div class="mock docs">
+            <div class="mock-head"><b>Tabora-App/browser</b><span>MPL&nbsp;2.0</span></div>
+            <ul>
+              <li><a href="https://github.com/Tabora-App/browser"><code>README.md</code><span>Repository layout and build</span></a></li>
+              <li><a href="https://github.com/Tabora-App/browser/blob/main/src/browser/base/content/tabora/vault/SECURITY.md"><code>vault/SECURITY.md</code><span>How passwords and codes are protected</span></a></li>
+              <li><a href="https://github.com/Tabora-App/browser/blob/main/src/browser/base/content/tabora/wallet/SECURITY.md"><code>wallet/SECURITY.md</code><span>Wallet threat model</span></a></li>
+              <li><a href="https://github.com/Tabora-App/browser/blob/main/src/browser/base/content/tabora/mail/SECURITY.md"><code>mail/SECURITY.md</code><span>How mail works</span></a></li>
+              <li><a href="https://github.com/Tabora-App/browser/blob/main/docs/security-audit-2026-11-09.md"><code>docs/security-audit-2026-11-09.md</code><span>Security review, November 2026</span></a></li>
+              <li><a href="https://github.com/Tabora-App/browser/blob/main/docs/UPDATES.md"><code>docs/UPDATES.md</code><span>How updates are verified</span></a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="mock term">
+        <div class="mock-head"><b>Build it yourself</b><span>macOS and&nbsp;Linux</span></div>
+        <pre tabindex="0"><code>git clone https://github.com/Tabora-App/browser
+cd browser
+python3 tools/build.py download   <span class="rem"># Firefox source code</span>
+python3 tools/build.py import     <span class="rem"># Tabora branding and code</span>
+python3 tools/build.py bootstrap  <span class="rem"># build tools, one time only</span>
+python3 tools/build.py build      <span class="rem"># full build, 1.5–2 hours</span>
+python3 tools/build.py run</code></pre>
+      </div>
+    </section>
+
+    <section class="part" id="download">
+      <h2>Download Tabora</h2>
+      <div class="dl">
+        <div class="dl-main">
+          <h3>Mac with Apple silicon</h3>
+          <p>macOS&nbsp;11 or later, M1 chips and later. Version 0.2.0. Free.</p>
+          <a class="capsule" href="/downloads/Tabora-0.2.0-mac-aarch64.dmg">
+            <span>Download .dmg, 127&nbsp;MB</span>
+            <span class="capsule-dot" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v13"/><path d="m6.5 12.5 5.5 5.5 5.5-5.5"/></svg></span>
+          </a>
+        </div>
+        <div class="dl-check">
+          <h3>SHA-256 checksum</h3>
+          <code class="hash" id="dmg-sha">11c37f9cbe4ad5e33b3a097ab47f143bf16336ef7329eb9eb8856aaae1572d3e</code>
+          <div class="dl-buttons">
+            <button type="button" class="btn" data-copy="dmg-sha" data-copied="Copied" data-selected="Selected. Copy it manually">Copy</button>
+            <button type="button" class="btn" popovertarget="verify-help">How to verify the file</button>
+          </div>
+        </div>
+      </div>
+
+      <p class="dl-other">You create your account and mailbox in the browser itself the first time you open it. Windows and Linux builds are on the way: watch the <a href="https://github.com/Tabora-App/browser">GitHub repository</a>. Send questions to <a href="mailto:hello@tabora.app">hello@tabora.app</a>.</p>
+
+      <div class="pop" id="verify-help" popover>
+        <h3>How to verify the file</h3>
+        <ol>
+          <li>
+            <p>Calculate the checksum and compare it with the one on this page.</p>
+            <pre tabindex="0"><code>shasum -a 256 ~/Downloads/Tabora-0.2.0-mac-aarch64.dmg</code></pre>
+          </li>
+          <li>
+            <p>Check that the installer is notarized by Apple.</p>
+            <pre tabindex="0"><code>spctl -a -vv -t install ~/Downloads/Tabora-0.2.0-mac-aarch64.dmg</code></pre>
+            <p>The output should include <code>Notarized Developer ID</code> and the team ID <code>7YQU9YBJQ8</code>.</p>
+          </li>
+        </ol>
+        <button type="button" class="btn" popovertarget="verify-help" popovertargetaction="hide">Close</button>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+</main>
+
+<footer class="foot">
+  <p>Tabora is a free, open-source browser built on the Firefox engine. Firefox is a trademark of the Mozilla Foundation; Tabora is not affiliated with or endorsed by Mozilla.</p>
+  <ul>
+    <li><a href="mailto:hello@tabora.app">hello@tabora.app</a></li>
+    <li><a href="https://github.com/Tabora-App/browser">GitHub</a></li>
+    <li><a href="https://github.com/Tabora-App/browser/blob/main/LICENSE">MPL&nbsp;2.0 license</a></li>
+  </ul>
+</footer>
+
+</body>
+</html>

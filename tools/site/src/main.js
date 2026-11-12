@@ -20,25 +20,29 @@ async function startHero() {
   mountHero(host, { reducedMotion });
 }
 
+// Надписей в скриптах нет: страница на каждом языке приносит их сама, в тексте кнопок и в data-атрибутах.
 function copyButtons() {
   for (const btn of document.querySelectorAll("[data-copy]")) {
+    const idle = btn.textContent;
+    let timer = 0;
     btn.addEventListener("click", async () => {
       const target = document.getElementById(btn.dataset.copy);
       const text = target?.textContent.trim() || "";
       const done = label => {
         btn.textContent = label;
-        setTimeout(() => (btn.textContent = "Скопировать"), 1600);
+        clearTimeout(timer);
+        timer = setTimeout(() => (btn.textContent = idle), 1600);
       };
       try {
         await navigator.clipboard.writeText(text);
-        done("Скопировано");
+        done(btn.dataset.copied);
       } catch (e) {
         const range = document.createRange();
         range.selectNodeContents(target);
         const sel = window.getSelection();
         sel.removeAllRanges();
         sel.addRange(range);
-        done("Выделено, скопируйте вручную");
+        done(btn.dataset.selected);
       }
     });
   }
@@ -61,7 +65,7 @@ function demoCode() {
     if (ring) {
       ring.style.setProperty("--left", String(left / 30));
       ring.dataset.seconds = String(left);
-      ring.setAttribute("aria-label", `код сменится через ${left} с`);
+      ring.setAttribute("aria-label", ring.dataset.label.replace("{0}", String(left)));
     }
     if (left === 30) {
       fresh();
