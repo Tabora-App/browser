@@ -1,0 +1,13 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/bookmarks/BookmarksScreen.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/bookmarks/BookmarksScreen.kt
+index 8b89f91315..f8035940c4 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/bookmarks/BookmarksScreen.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/bookmarks/BookmarksScreen.kt
+@@ -1039,7 +1039,7 @@ private fun EmptyList(
+                 is EmptyListState.NotAuthenticated ->
+                     RootEmptyContent(
+                         dispatcher,
+-                        showSignIn = true,
++                        showSignIn = false,
+                     )
+                 EmptyListState.Authenticated ->
+                     RootEmptyContent(

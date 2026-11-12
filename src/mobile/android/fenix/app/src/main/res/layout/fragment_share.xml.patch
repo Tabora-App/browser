@@ -1,0 +1,14 @@
+diff --git a/mobile/android/fenix/app/src/main/res/layout/fragment_share.xml b/mobile/android/fenix/app/src/main/res/layout/fragment_share.xml
+index ac1755ae7d..6e6cef6148 100644
+--- a/mobile/android/fenix/app/src/main/res/layout/fragment_share.xml
++++ b/mobile/android/fenix/app/src/main/res/layout/fragment_share.xml
+@@ -82,7 +82,8 @@
+             android:id="@+id/devicesShareGroup"
+             android:layout_width="wrap_content"
+             android:layout_height="wrap_content"
+-            app:constraint_referenced_ids="divider_line,devicesShareLayout" />
++            app:constraint_referenced_ids="divider_line,devicesShareLayout"
++            android:visibility="gone" />
+ 
+     </androidx.constraintlayout.widget.ConstraintLayout>
+ 

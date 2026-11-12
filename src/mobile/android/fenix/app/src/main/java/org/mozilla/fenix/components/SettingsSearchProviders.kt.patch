@@ -1,0 +1,14 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/SettingsSearchProviders.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/SettingsSearchProviders.kt
+index 433fc89141..4b1d7dbe86 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/SettingsSearchProviders.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/SettingsSearchProviders.kt
+@@ -28,9 +28,7 @@ internal fun settingsSearchProviders(
+     summarizationFeatureConfiguration: SummarizationFeatureDiscoveryConfiguration
+ ): List<SettingsSearchProvider> =
+     listOf(
+-        DataChoicesSearchProvider,
+         AIControlsSearchProvider,
+         PageSummariesSettingsSearchProvider(summarizationFeatureConfiguration),
+-        FirefoxLabsSettingsSearchProvider(),
+         ToolbarShortcutSettingsSearchProvider,
+     )

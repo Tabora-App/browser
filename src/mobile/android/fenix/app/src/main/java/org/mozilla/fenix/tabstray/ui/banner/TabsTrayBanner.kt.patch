@@ -1,0 +1,27 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/ui/banner/TabsTrayBanner.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/ui/banner/TabsTrayBanner.kt
+index 840dc9e1a5..8a2d2f783f 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/ui/banner/TabsTrayBanner.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/ui/banner/TabsTrayBanner.kt
+@@ -353,13 +353,15 @@ private fun TabPageBannerTabs(
+         }
+     }
+ 
+-    BannerTab(
+-        selected = selectedPage == Page.SyncedTabs,
+-        testTag = TabsTrayTestTag.SYNCED_TABS_PAGE_BUTTON,
+-        contentDescription = syncedTabDescription,
+-        onClick = { onTabPageIndicatorClicked(Page.SyncedTabs) },
+-    ) {
+-        Icon(painterResource(iconsR.drawable.mozac_ic_sync_tabs_24), null)
++    if (Page.SyncedTabs in Page.visiblePages(shouldShowTabGroupsPage)) {
++        BannerTab(
++            selected = selectedPage == Page.SyncedTabs,
++            testTag = TabsTrayTestTag.SYNCED_TABS_PAGE_BUTTON,
++            contentDescription = syncedTabDescription,
++            onClick = { onTabPageIndicatorClicked(Page.SyncedTabs) },
++        ) {
++            Icon(painterResource(iconsR.drawable.mozac_ic_sync_tabs_24), null)
++        }
+     }
+ }
+ 

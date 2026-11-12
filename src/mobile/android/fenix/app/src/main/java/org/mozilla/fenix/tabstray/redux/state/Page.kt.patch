@@ -1,0 +1,12 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/redux/state/Page.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/redux/state/Page.kt
+index 500ba6b8f5..a94313878a 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/redux/state/Page.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/tabstray/redux/state/Page.kt
+@@ -30,7 +30,6 @@ enum class Page {
+                 PrivateTabs,
+                 NormalTabs,
+                 TabGroups.takeIf { shouldShowTabGroupsPage },
+-                SyncedTabs,
+             )
+ 
+         /**

@@ -1,0 +1,15 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/autofill/AutofillSettingFragment.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/autofill/AutofillSettingFragment.kt
+index 7acca4ad5b..8c5c5d03c4 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/autofill/AutofillSettingFragment.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/autofill/AutofillSettingFragment.kt
+@@ -310,7 +310,9 @@ class AutofillSettingFragment : BiometricPromptPreferenceFragment(), SystemInset
+ 
+         // show address sync preference if address sync is enabled
+         val addressSyncPreference = requirePreference<Preference>(R.string.pref_key_addresses_sync_cards_across_devices)
+-        addressSyncPreference.isVisible = requireComponents.settings.isAddressSyncEnabled
++        addressSyncPreference.isVisible =
++            requireComponents.settings.isAddressSyncEnabled &&
++                requireComponents.backgroundServices.accountManager.authenticatedAccount() != null
+ 
+         if (hasAddresses) {
+             manageAddressesPreference.icon = null

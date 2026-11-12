@@ -829,6 +829,7 @@ mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-android-{target_arch()}
 ac_add_options --target={target_triple()}
 ac_add_options --with-branding=mobile/android/branding/tabora
 ac_add_options --enable-update-channel={brand}
+ac_add_options --with-l10n-base="{L10N_BASE}"
 
 export MOZ_SOURCE_REPO={config.get('repository', '')}
 export MOZ_SOURCE_CHANGESET={changeset}
@@ -837,6 +838,7 @@ export BROWSER_BRAND={brand}
 export TARGET_PLATFORM=android
 export TARGET_ARCH={target_arch()}
 """
+    L10N_BASE.mkdir(parents=True, exist_ok=True)
     path = CONFIGS / "android" / "mozconfig"
     out = ENGINE / "mozconfig"
     out.write_text(header + "\n# ---- configs/android/mozconfig ----\n" + path.read_text())
@@ -1020,6 +1022,17 @@ def _apk_problems(apk: Path) -> List[str]:
     return problems
 
 
+def _apk_engine_locales(apk: Path) -> str:
+    """Языки служебных страниц движка в готовом файле (res/multilocale.txt внутри omni.ja)."""
+    import io
+    import zipfile
+    try:
+        with zipfile.ZipFile(apk) as z, zipfile.ZipFile(io.BytesIO(z.read("assets/omni.ja"))) as omni:
+            return omni.read("res/multilocale.txt").decode("utf-8", "replace").strip()
+    except (OSError, KeyError, zipfile.BadZipFile):
+        return ""
+
+
 def package_android(config: dict, brand: str) -> None:
     """Кладёт собранное приложение в dist/ и проверяет его. Файл неподписанный: поставить его
     на телефон нельзя, пока он не подписан ключом Tabora (tools/android/sign.sh)."""
@@ -1037,6 +1050,12 @@ def package_android(config: dict, brand: str) -> None:
         warn(problem)
     if problems:
         die(f"приложение для Android не прошло проверку ({len(problems)}): в dist/ не кладётся")
+    engine_locales = _apk_engine_locales(apk)
+    wanted = [loc for loc in config.get("locales", []) if loc != "en-US"]
+    if any(loc not in engine_locales.split(",") for loc in wanted):
+        warn(f"служебные страницы движка только на: {engine_locales or 'en-US'} (нет {', '.join(wanted)})")
+    else:
+        log(f"языки служебных страниц движка: {engine_locales}")
     DIST.mkdir(exist_ok=True)
     name = f"tabora-{version}-android-{ANDROID_ABI}-unsigned.apk"
     if not release:
@@ -1066,6 +1085,7 @@ def build_android(config: dict, brand: str) -> None:
     rebrand_android_strings()
     log(f"полная сборка android/{target_arch()}, бренд «{brand}»: движок")
     mach(["build"], config, brand)
+    android_multilocale(config, brand)
     log(f"сборка приложения Tabora {version} для Android")
     mach(["gradle", f"fenix:assemble{ANDROID_BUILD_TYPE.capitalize()}", f"-PversionName={version}",
           "-PdisableDebugSigning"], config, brand)
@@ -1074,6 +1094,25 @@ def build_android(config: dict, brand: str) -> None:
         die(f"приложение не собрано: в {android_apk_dir()} нет файлов .apk")
     for apk in apks:
         log(f"собрано: {apk.relative_to(ENGINE)} ({apk.stat().st_size >> 20} МБ)")
+
+
+def android_multilocale(config: dict, brand: str) -> None:
+    """Перевод служебных страниц движка (страницы ошибок и т. п.) встраивается в omni.ja.
+    Интерфейс самого приложения переведён отдельно, своими ресурсами. Если шаг не удался,
+    сборка продолжается с английскими страницами движка: это заметно, но не мешает работе."""
+    locales = [loc for loc in config.get("locales", []) if loc != "en-US"]
+    if not locales:
+        return
+    fetch_l10n(config)
+    try:
+        mach(["package-multi-locale", "--locales", "en-US", *locales], config, brand)
+    except subprocess.CalledProcessError as e:
+        warn(f"перевод движка ({', '.join(locales)}) не встроен, код {e.returncode}: "
+             "служебные страницы движка останутся английскими")
+        return
+    # gradle берёт omni.ja из dist/geckoview; переменная нужна, чтобы он не пересобрал его без перевода
+    os.environ["MOZ_CHROME_MULTILOCALE"] = " ".join(["en-US", *locales])
+    log(f"перевод движка встроен: {', '.join(locales)}")
 
 
 def cmd_build(args: argparse.Namespace) -> None:

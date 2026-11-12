@@ -1,0 +1,13 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/accounts/MozillaAccountMenuItemProvider.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/accounts/MozillaAccountMenuItemProvider.kt
+index c571959051..3947464db6 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/accounts/MozillaAccountMenuItemProvider.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/accounts/MozillaAccountMenuItemProvider.kt
+@@ -144,7 +144,7 @@ private val SyncState.title: Text?
+     get() =
+         when (accountState) {
+             NotAuthenticated,
+-            Unknown -> Text.Resource(R.string.browser_menu_sign_in)
++            Unknown -> null
+ 
+             AuthenticationProblem ->
+                 account?.displayName?.let(Text::String)

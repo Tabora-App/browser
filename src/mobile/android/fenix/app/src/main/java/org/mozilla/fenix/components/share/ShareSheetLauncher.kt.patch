@@ -1,0 +1,20 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/share/ShareSheetLauncher.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/share/ShareSheetLauncher.kt
+index 23317d7044..c8c376132e 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/share/ShareSheetLauncher.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/share/ShareSheetLauncher.kt
+@@ -226,6 +226,7 @@ class DefaultShareSheetLauncher(
+                     subject = shareSubject,
+                     actions =
+                         chooserActions
++                            .filterNot { it == ShareSheetChooserAction.SEND_TO_DEVICES }
+                             .mapNotNull {
+                                 it.toChooserAction(
+                                     applicationContext = applicationContext,
+@@ -299,6 +300,7 @@ class DefaultShareSheetLauncher(
+                     subject = shareSubject,
+                     actions =
+                         chooserActions
++                            .filterNot { it == ShareSheetChooserAction.SEND_TO_DEVICES }
+                             .mapNotNull {
+                                 it.toChooserAction(
+                                     applicationContext = applicationContext,

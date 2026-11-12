@@ -1,0 +1,23 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/compose/MainMenu.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/compose/MainMenu.kt
+index aec18f553f..4e4df04e9c 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/compose/MainMenu.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/compose/MainMenu.kt
+@@ -317,11 +317,13 @@ fun MainMenu(
+         )
+ 
+         MenuGroup {
+-            MozillaAccountMenuItem(
+-                account = account,
+-                accountState = accountState,
+-                onClick = onMozillaAccountButtonClick,
+-            )
++            if (accountState == AccountState.Authenticated || accountState == AuthenticationProblem) {
++                MozillaAccountMenuItem(
++                    account = account,
++                    accountState = accountState,
++                    onClick = onMozillaAccountButtonClick,
++                )
++            }
+ 
+             if (accessPoint == MenuAccessPoint.Home) {
+                 MenuItem(

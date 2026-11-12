@@ -1,5 +1,5 @@
 diff --git a/mobile/android/fenix/app/nimbus.fml.yaml b/mobile/android/fenix/app/nimbus.fml.yaml
-index 0fb0a2cc86..8efd3e73ca 100644
+index 0fb0a2cc86..ae65e93fe9 100644
 --- a/mobile/android/fenix/app/nimbus.fml.yaml
 +++ b/mobile/android/fenix/app/nimbus.fml.yaml
 @@ -45,9 +45,9 @@ features:
@@ -15,3 +15,21 @@ index 0fb0a2cc86..8efd3e73ca 100644
              "collections": true,
              "privacy-report": true,
            }
+@@ -217,7 +217,7 @@ features:
+       enabled:
+         type: Boolean
+         description: If true, shake to summarize will be enabled
+-        default: true
++        default: false
+     defaults:
+       - channel: developer
+         value:
+@@ -1062,7 +1062,7 @@ features:
+       enabled:
+         description: If true, IP Protection feature is enabled.
+         type: Boolean
+-        default: true
++        default: false
+       show-beta-badge:
+         description: If true, a BETA badge is shown next to the IP Protection entry in the settings list.
+         type: Boolean

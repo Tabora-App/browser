@@ -1,0 +1,29 @@
+diff --git a/mobile/android/app/geckoview-prefs.js b/mobile/android/app/geckoview-prefs.js
+index 3cf841dd1b..8843ed2469 100644
+--- a/mobile/android/app/geckoview-prefs.js
++++ b/mobile/android/app/geckoview-prefs.js
+@@ -387,3 +387,24 @@ pref("xpinstall.whitelist.fileRequest", false);
+ pref("browser.ipProtection.enabled", true);
+ pref("browser.ipProtection.guardian.endpoint", "https://vpn.mozilla.org/");
+ pref("toolkit.ipProtection.android.authProvider", "fxa");
++
++// ---- Tabora ----
++// Телеметрия движка: не собирается и не отправляется (сборка без MOZ_TELEMETRY_REPORTING,
++// выгрузка Glean выключена в приложении; здесь второй рубеж)
++pref("datareporting.healthreport.uploadEnabled", false);
++pref("datareporting.policy.dataSubmissionEnabled", false);
++pref("toolkit.telemetry.archive.enabled", false);
++pref("toolkit.telemetry.server", "data:,");
++pref("toolkit.telemetry.user_characteristics_ping.opt-out", true);
++// Проверка «портала авторизации» и определение страны через сервисы Mozilla выключены
++pref("network.captive-portal-service.enabled", false);
++pref("browser.region.network.url", "");
++pref("browser.region.update.enabled", false);
++// Список установленных дополнений не отправляется в каталог Mozilla
++pref("extensions.getAddons.cache.enabled", false);
++// VPN Mozilla
++pref("browser.ipProtection.enabled", false);
++// Блокировщик рекламы (chrome://tabora/content/shield/Shield.sys.mjs)
++pref("tabora.shield.enabled", true);
++pref("tabora.shield.lists", "easylist,ruadlist,easyprivacy,lowe");
++pref("tabora.shield.allow", "[]");

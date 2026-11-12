@@ -1,0 +1,12 @@
+diff --git a/mobile/android/fenix/app/src/main/res/xml/customization_preferences.xml b/mobile/android/fenix/app/src/main/res/xml/customization_preferences.xml
+index 87758782a9..a842232f56 100644
+--- a/mobile/android/fenix/app/src/main/res/xml/customization_preferences.xml
++++ b/mobile/android/fenix/app/src/main/res/xml/customization_preferences.xml
+@@ -10,6 +10,7 @@
+         android:title="@string/preferences_app_icon"
+         android:key="@string/pref_key_customization_category_app_icon"
+         app:allowDividerBelow="false"
++        app:isPreferenceVisible="false"
+         app:iconSpaceReserved="false">
+         <org.mozilla.fenix.iconpicker.ui.AppIconPreference
+             android:key="@string/pref_key_app_icon" />

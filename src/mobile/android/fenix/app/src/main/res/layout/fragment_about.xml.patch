@@ -1,0 +1,12 @@
+diff --git a/mobile/android/fenix/app/src/main/res/layout/fragment_about.xml b/mobile/android/fenix/app/src/main/res/layout/fragment_about.xml
+index 5074dedad0..2598c3d76c 100644
+--- a/mobile/android/fenix/app/src/main/res/layout/fragment_about.xml
++++ b/mobile/android/fenix/app/src/main/res/layout/fragment_about.xml
+@@ -34,6 +34,7 @@
+ 
+         <TextView
+             android:id="@+id/about_content"
++            android:visibility="gone"
+             style="@style/Header16TextStyle"
+             android:layout_width="wrap_content"
+             android:layout_height="wrap_content"

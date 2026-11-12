@@ -1,0 +1,13 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/account/AccountUiView.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/account/AccountUiView.kt
+index 77c4c2c5b9..d03acd50a6 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/account/AccountUiView.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/account/AccountUiView.kt
+@@ -66,7 +66,7 @@ class AccountUiView(
+ 
+             // Signed-out.
+         } else {
+-            preferenceSignIn.isVisible = true
++            preferenceSignIn.isVisible = false
+             preferenceFirefoxAccount.isVisible = false
+             preferenceFirefoxAccountAuthError.isVisible = false
+             accountPreferenceCategory.isVisible = false

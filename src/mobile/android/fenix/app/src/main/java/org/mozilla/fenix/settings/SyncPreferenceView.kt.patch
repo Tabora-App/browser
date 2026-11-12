@@ -1,0 +1,20 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SyncPreferenceView.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SyncPreferenceView.kt
+index 659929e2f3..01d2b956e3 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SyncPreferenceView.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SyncPreferenceView.kt
+@@ -74,6 +74,7 @@ class SyncPreferenceView(
+     /** Shows a switch toggle for the sync preference when the user is logged in. */
+     private fun updateSyncPreferenceStatus() {
+         syncPreference.apply {
++            isVisible = true
+             isSwitchWidgetVisible = true
+ 
+             val syncEnginesStatus = SyncEnginesStorage(context).getStatus()
+@@ -95,6 +96,7 @@ class SyncPreferenceView(
+     /** Display that the user can sync across devices when the user is logged off. */
+     private fun updateSyncPreferenceNeedsLogin() {
+         syncPreference.apply {
++            isVisible = false
+             isSwitchWidgetVisible = false
+ 
+             title = loggedOffTitle
