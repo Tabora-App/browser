@@ -5,7 +5,7 @@
 """Картинки Tabora для приложения iPhone вместо логотипов Firefox.
 
 Рисует знак (лаймовый квадрат с монограммой T — те же числа, что в web/static/icons/mark.svg)
-и кладёт результат в src/ios/…: оттуда tools/ios/build.py import подключает файлы поверх картинок
+и кладёт результат в каталог ios/…: оттуда tools/ios/build.py import подключает файлы поверх картинок
 Firefox для iOS. Запускать нужно только при смене знака; готовые файлы лежат в репозитории.
 
 Нужны: Python с Pillow и Playwright с Chromium.
@@ -23,7 +23,7 @@ from PIL import Image
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-OUT = ROOT / "src" / "ios"
+OUT = ROOT / "ios"
 TREE = ROOT / ".build" / "ios" / "firefox-ios"  # исходники Firefox для iOS: по ним берутся размеры картинок
 FONT = ROOT / "src" / "browser" / "base" / "content" / "tabora" / "fonts" / "Manrope-latin.woff2"
 CLIENT = "firefox-ios/Client/Assets/"

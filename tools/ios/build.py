@@ -6,13 +6,14 @@
 
 На iPhone браузеру разрешён только движок системы (WebKit), поэтому основа — Firefox для iOS:
 он целиком работает на WebKit. Его исходники в репозитории не хранятся: инструмент скачивает
-закреплённый коммит в .build/ios/firefox-ios и накладывает наши изменения из src/ios/.
+закреплённый коммит в .build/ios/firefox-ios и накладывает наши изменения из каталога ios/.
+(Не src/ios: всё в src/ сборка браузера накладывает на движок Firefox.)
 
 Команды:
   fetch            скачать исходники Firefox для iOS (коммит из browser.json, раздел ios)
   prepare          инструменты сборки: генератор настроек (закреплённый сценарий), скрипты страниц
-  import           наложить изменения из src/ios на исходники
-  export           превратить правки, сделанные прямо в исходниках, в патчи в src/ios
+  import           наложить изменения из каталога ios/ на исходники
+  export           превратить правки, сделанные прямо в исходниках, в патчи в ios/
   reset            вернуть исходники к чистому Firefox для iOS
   build [--device] собрать приложение: для симулятора (по умолчанию) или для телефона
   run              поставить в симулятор и запустить
@@ -41,7 +42,7 @@ IOS = CONFIG["ios"]
 WORK = ROOT / ".build" / "ios"
 TREE = WORK / "firefox-ios"
 APP = TREE / "firefox-ios"
-SRC = ROOT / "src" / "ios"
+SRC = ROOT / "ios"
 DERIVED = WORK / "DerivedData"
 PACKAGES = WORK / "SourcePackages"
 ADDED = TREE / ".tabora-added"  # файлы, которых нет в Firefox для iOS: их убирает reset
@@ -119,7 +120,7 @@ def automatic(rel: str) -> bool:
 
 
 def unexported() -> list[str]:
-    """Файлы исходников, правка которых не совпадает с патчем в src/ios: reset их потерял бы."""
+    """Файлы исходников, правка которых не совпадает с патчем в ios/: reset их потерял бы."""
     if not (TREE / ".git").is_dir() or not ADDED.exists():
         return []
     lost = []
@@ -135,7 +136,7 @@ def unexported() -> list[str]:
 def guard_unexported(args: argparse.Namespace) -> None:
     lost = unexported()
     if lost and not getattr(args, "force", False):
-        die("в исходниках есть правки, не выгруженные в src/ios (сначала export, или --force, чтобы их бросить):\n  " + "\n  ".join(lost[:12]))
+        die("в исходниках есть правки, не выгруженные в ios/ (сначала export, или --force, чтобы их бросить):\n  " + "\n  ".join(lost[:12]))
 
 
 def cmd_reset(args: argparse.Namespace) -> None:
@@ -152,7 +153,7 @@ def source_files() -> list[Path]:
 
 
 def cmd_import(args: argparse.Namespace) -> None:
-    """src/ios повторяет пути исходников: «файл.patch» — правка существующего файла, остальное —
+    """Каталог ios/ повторяет пути исходников: «файл.patch» — правка существующего файла, остальное —
     файлы целиком (новые или заменяющие)."""
     need_tree()
     guard_unexported(args)
@@ -163,7 +164,7 @@ def cmd_import(args: argparse.Namespace) -> None:
         if path.suffix == ".patch":
             r = run(["git", "apply", "--whitespace=nowarn", str(path)], cwd=TREE, check=False, capture_output=True, text=True)
             if r.returncode:
-                die(f"патч не лёг: src/ios/{rel}\n{r.stderr.strip()[:600]}")
+                die(f"патч не лёг: ios/{rel}\n{r.stderr.strip()[:600]}")
             patches += 1
         else:
             target = TREE / rel
@@ -173,7 +174,7 @@ def cmd_import(args: argparse.Namespace) -> None:
             shutil.copy2(path, target)
             copied += 1
     ADDED.write_text("\n".join(added) + ("\n" if added else ""))
-    log(f"src/ios: наложено патчей {patches}, положено файлов {copied}")
+    log(f"ios/: наложено патчей {patches}, положено файлов {copied}")
     project_edits()
     rebrand_strings()
 
@@ -206,12 +207,12 @@ def project_edits() -> None:
 
 
 def cmd_export(args: argparse.Namespace) -> None:
-    """Правки текстовых файлов исходников → патчи. Файлы, которые лежат в src/ios целиком,
+    """Правки текстовых файлов исходников → патчи. Файлы, которые лежат в ios/ целиком,
     обновляются копией."""
     need_tree()
     whole = {str(p.relative_to(SRC)) for p in source_files() if p.suffix != ".patch"}
     if whole and not ADDED.exists():
-        die("в src/ios есть файлы, ещё не наложенные на исходники: сначала tools/ios/build.py import")
+        die("в ios есть файлы, ещё не наложенные на исходники: сначала tools/ios/build.py import")
     changed = [line for line in git("diff", "--name-only", capture=True).splitlines() if line and not automatic(line)]
     patches, copies = 0, 0
     for rel in changed:
@@ -221,7 +222,7 @@ def cmd_export(args: argparse.Namespace) -> None:
             continue
         numstat = git("diff", "--numstat", "--", rel, capture=True)
         if numstat.startswith("-\t-"):
-            die(f"двоичный файл изменён: {rel} — положите его в src/ios целиком")
+            die(f"двоичный файл изменён: {rel} — положите его в ios/ целиком")
         diff = git("diff", "--", rel, capture=True)
         out = SRC / (rel + ".patch")
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -231,16 +232,16 @@ def cmd_export(args: argparse.Namespace) -> None:
     for p in stale:
         p.unlink()
     # новые файлы (их нет в Firefox для iOS) git diff не показывает: они известны по списку, который
-    # ведёт import. Без import файлы из src/ios в исходниках ещё не лежат — их не трогаем.
+    # ведёт import. Без import файлы из ios/ в исходниках ещё не лежат — их не трогаем.
     added = set(ADDED.read_text().splitlines()) if ADDED.exists() else set()
     for rel in sorted(whole & added):
         if (TREE / rel).is_file() and (TREE / rel).read_bytes() != (SRC / rel).read_bytes():
             shutil.copy2(TREE / rel, SRC / rel)
             copies += 1
-    log(f"src/ios: патчей {patches}, обновлено файлов {copies}, убрано устаревших патчей {len(stale)}")
+    log(f"ios/: патчей {patches}, обновлено файлов {copies}, убрано устаревших патчей {len(stale)}")
 
 
-# Название в надписях. Имя приложения в коде — AppName (патч в src/ios), но в переводах сотни
+# Название в надписях. Имя приложения в коде — AppName (патч в ios/), но в переводах сотни
 # надписей, где переводчики написали «Firefox» буквально, на сотне языков: править их патчами
 # нельзя, поэтому замена идёт по месту при каждом import, и только в тексте надписи, не в ключе.
 STRINGS_LINE = re.compile(r'^(\s*(?:"(?:[^"\\]|\\.)*"|[\w.-]+)\s*=\s*")((?:[^"\\]|\\.)*)(".*)$')
@@ -379,7 +380,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     print(f"Firefox для iOS: {IOS['tag']} ({IOS['commit'][:12]})")
     print(f"исходники: {'есть' if (TREE / '.git').is_dir() else 'нет'} — {TREE.relative_to(ROOT)}")
     files = source_files()
-    print(f"src/ios: патчей {sum(p.suffix == '.patch' for p in files)}, файлов {sum(p.suffix != '.patch' for p in files)}")
+    print(f"ios/: патчей {sum(p.suffix == '.patch' for p in files)}, файлов {sum(p.suffix != '.patch' for p in files)}")
     for device in (False, True):
         app = products(device)
         if app.is_dir():
@@ -393,7 +394,7 @@ def main() -> None:
         sub.add_parser(name).set_defaults(fn=fn)
     for name, fn in [("import", cmd_import), ("reset", cmd_reset)]:
         p = sub.add_parser(name)
-        p.add_argument("--force", action="store_true", help="бросить правки исходников, не выгруженные в src/ios")
+        p.add_argument("--force", action="store_true", help="бросить правки исходников, не выгруженные в ios/")
         p.set_defaults(fn=fn)
     p = sub.add_parser("build")
     p.add_argument("--device", action="store_true")
