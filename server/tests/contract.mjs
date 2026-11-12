@@ -78,7 +78,8 @@ function totp(secret, shift = 0) {
 const otherCode = code => String((Number(code) + 1) % 1e6).padStart(6, "0");
 
 /** Последнее письмо сервера на адрес: { subject, text, code }. Письма уходят в фоне, поэтому ждём. */
-async function lastMail(to, { wait = 2500, after = 0 } = {}) {
+// subject — ждать письмо именно с этой темой: письмо уходит в фоне и может появиться чуть позже ответа
+async function lastMail(to, { wait = 2500, after = 0, subject = null } = {}) {
   const until = Date.now() + wait;
   for (;;) {
     const found = fs
@@ -86,7 +87,7 @@ async function lastMail(to, { wait = 2500, after = 0 } = {}) {
       .filter(f => f.endsWith(".json") && Number(f.split("-")[0]) >= after)
       .sort()
       .map(f => JSON.parse(fs.readFileSync(path.join(OUTBOX, f), "utf8")))
-      .filter(m => m.to === to)
+      .filter(m => m.to === to && (subject === null || m.subject === subject))
       .pop();
     if (found || Date.now() > until) {
       const m = found && /(\d{3,4}) (\d{3,4})/.exec(found.text);
@@ -343,7 +344,7 @@ r = await call("POST", "/v1/account/reset/email", { body: { email: B.email }, ip
 check("запрос сброса для неизвестного адреса и для аккаунта без резервной почты отвечает одинаково", r.status === 200 && r.text === ghostReset && r.text === "{}", r.text);
 r = await call("POST", "/v1/account/reset/email", { body: { email: C.email }, ip: "198.51.100.60" });
 check("запрос сброса для аккаунта с резервной почтой отвечает так же", r.status === 200 && r.text === ghostReset, r.text);
-letter = await lastMail(BOX, { after: t0 - 5 });
+letter = await lastMail(BOX, { after: t0 - 5, subject: "Tabora: сброс пароля" });
 check("на резервный адрес ушёл код сброса из восьми цифр", !!letter && /^\d{8}$/.test(letter.code || "") && letter.subject === "Tabora: сброс пароля", JSON.stringify(letter));
 check("другим адресам писем о сбросе нет", mailsTo(B.email).length === 0 && mailsTo(mail("ghost")).length === 0);
 r = await call("POST", "/v1/account/reset/email/confirm", { body: { email: C.email, code: letter.code.replace(/.$/, d => (Number(d) + 1) % 10), newLoginHash: C.pw2, kdf: 2 }, ip: "198.51.100.60" });

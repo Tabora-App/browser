@@ -82,6 +82,8 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_fails INT NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_locked_until BIGINT NOT NULL DEFAULT 0;
 -- Резервный адрес: сюда приходит код сброса пароля. Записывается только после подтверждения.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS backup_email TEXT;
+-- Язык писем аккаунта (ru, en, uk, es): его присылает приложение своими запросами.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS lang TEXT NOT NULL DEFAULT 'ru';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS backup_email_at BIGINT;
 -- Одноразовые резервные коды входа: в базе только HMAC от кода.
 CREATE TABLE IF NOT EXISTS backup_codes (
@@ -432,6 +434,20 @@ pub async fn session<C: GenericClient>(c: &C, token_hash: &[u8], now: i64) -> Re
         c.execute("UPDATE devices SET last_seen = $3 WHERE user_id = $1 AND device_id = $2", &[&u.id, &device_id, &now]).await?;
     }
     Ok(Some((u, device_id)))
+}
+
+/// Язык писем для адреса: свой ящик аккаунта, его резервный адрес или адрес, ждущий
+/// подтверждения кодом. Чужой адрес — русский.
+pub async fn lang_for_address<C: GenericClient>(c: &C, address: &str) -> Result<String, DbError> {
+    let row = c
+        .query_opt(
+            "SELECT lang FROM users WHERE email = $1 OR backup_email = $1
+             UNION ALL SELECT u.lang FROM mail_codes m JOIN users u ON u.id = m.user_id WHERE m.address = $1
+             LIMIT 1",
+            &[&address],
+        )
+        .await?;
+    Ok(row.map(|r| r.get(0)).unwrap_or_else(|| "ru".to_string()))
 }
 
 pub async fn delete_session<C: GenericClient>(c: &C, token_hash: &[u8]) -> Result<(), DbError> {

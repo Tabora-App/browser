@@ -5,9 +5,11 @@
 // Перевод считается испорченным, если в нём другой набор подстановок {0}, {1}… чем в исходной надписи.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { LANGS, ROOT, collect, webSet } from "./catalog.mjs";
+import { LANGS, ROOT, collect, desktopSet, serverKeys, webSet } from "./catalog.mjs";
 
-const SETS = { web: webSet };
+// web — надписи веб-версии (i18n/<язык>.json); server — сообщения и письма сервера (i18n/server/<язык>.json)
+// desktop — оболочка браузера (те же i18n/<язык>.json, что у веб-версии: общие надписи переводятся один раз)
+const SETS = { web: webSet, desktop: desktopSet, server: () => ({ keys: serverKeys(), dir: "i18n/server" }) };
 const [name, ...flags] = process.argv.slice(2);
 if (!SETS[name]) {
   console.error(`набор: ${Object.keys(SETS).join(" | ")}`);

@@ -286,6 +286,7 @@ impl App {
         let hash = sha256(token.as_bytes());
         let c = self.pool.get().await?;
         let (user, device_id) = db::session(&c, &hash, now_ms()).await?.ok_or_else(expired)?;
+        crate::i18n::remember(&c, user.id, headers).await;
         Ok((user, device_id, hash))
     }
 }
@@ -379,7 +380,13 @@ impl App {
                 db::set_setting(&c, "system_mail_id", &id).await?;
             }
         }
-        self.mail.send_system(to, subject, text).await.map_err(mail_err)
+        // письмо — на языке аккаунта, которому оно адресовано (ящик, резервный адрес, адрес с кодом)
+        let lang = match self.pool.get().await {
+            Ok(c) => db::lang_for_address(&c, to).await.unwrap_or_else(|_| "ru".to_string()),
+            Err(_) => "ru".to_string(),
+        };
+        let (subject, text) = (crate::i18n::tr(&lang, subject), crate::i18n::tr(&lang, text));
+        self.mail.send_system(to, &subject, &text).await.map_err(mail_err)
     }
 
     /// Письмо о событии входа (подбор пароля, новое устройство): в ящик аккаунта и на резервный
@@ -523,6 +530,7 @@ async fn register(State(app): State<Arc<App>>, headers: HeaderMap, body: Bytes) 
     }
     db::upsert_device(&tx, user_id, &b.device_id, &device_name, now).await?;
     let session = app.new_session(&tx, user_id, &b.device_id, now).await?;
+    crate::i18n::remember(&tx, user_id, &headers).await;
     if let Err(e) = tx.commit().await {
         if let Some(id) = &mail_id {
             if let Err(me) = app.mail.destroy_account(id).await {
@@ -647,6 +655,7 @@ async fn login(State(app): State<Arc<App>>, headers: HeaderMap, body: Bytes) -> 
     let device_name = clean_name(&b.device_name, "Устройство");
     let old_cred = db::upsert_device(&c, user.id, &b.device_id, &device_name, now).await?;
     let session = app.new_session(&c, user.id, &b.device_id, now).await?;
+    crate::i18n::remember(&c, user.id, &headers).await;
     if !known {
         app.security_notice(&c, &user, "Tabora: вход с нового устройства", &format!("В аккаунт вошли с устройства, которого раньше не было: «{device_name}».\n\nЕсли это были вы, делать ничего не нужно. Если нет — смените пароль в настройках аккаунта и завершите сеанс этого устройства в списке устройств.")).await;
     }
@@ -1082,6 +1091,8 @@ pub fn router(app: Arc<App>) -> Router {
         .fallback(not_found)
         .layer(DefaultBodyLimit::max(64 * 1024))
         .layer(axum::middleware::map_response(no_store))
+        // ответы с ошибкой — на языке запроса
+        .layer(axum::middleware::from_fn(crate::i18n::localize))
         .with_state(app)
 }
 

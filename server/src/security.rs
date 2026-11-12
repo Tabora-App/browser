@@ -358,6 +358,7 @@ pub async fn reset_email_confirm(State(app): State<Arc<App>>, headers: HeaderMap
     let device_name = clean_name(&b.device_name, "Устройство");
     db::upsert_device(&c, user.id, &device_id, &device_name, now).await?;
     let session = app.new_session(&c, user.id, &device_id, now).await?;
+    crate::i18n::remember(&c, user.id, &headers).await;
     drop(c);
     // пароли приложений только что отозваны все: прежнего у устройства нет
     let mail = app.device_mail(&user, &device_id, &device_name, None, b.mail_access.as_deref()).await;

@@ -26,6 +26,7 @@
 
 mod api;
 mod db;
+mod i18n;
 mod limit;
 mod mail;
 mod pgp;
