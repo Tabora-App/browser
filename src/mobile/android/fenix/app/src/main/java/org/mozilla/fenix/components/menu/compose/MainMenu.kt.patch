@@ -1,24 +1,26 @@
 diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/compose/MainMenu.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/compose/MainMenu.kt
-index aec18f553f..96e8494b8e 100644
+index aec18f553f..3b9e3faa04 100644
 --- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/compose/MainMenu.kt
 +++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/compose/MainMenu.kt
-@@ -111,6 +111,7 @@ import org.mozilla.fenix.theme.FirefoxTheme
+@@ -111,6 +111,8 @@ import org.mozilla.fenix.theme.FirefoxTheme
   * @param onDownloadsMenuClick Invoked when the user clicks on the downloads menu item.
   * @param onPasswordsMenuClick Invoked when the user clicks on the passwords menu item.
   * @param onQuitMenuClick Invoked when the user clicks on the quit menu item.
 + * @param onTaboraCodesClick Tabora: нажатие на «Коды входа».
++ * @param onTaboraMailClick Tabora: нажатие на «Почта».
   * @param onBackButtonClick Invoked when the user clicks on the back button.
   * @param onForwardButtonClick Invoked when the user clicks on the forward button.
   * @param onRefreshButtonClick Invoked when the user clicks on the refresh button.
-@@ -167,6 +168,7 @@ fun MainMenu(
+@@ -167,6 +169,8 @@ fun MainMenu(
      onDownloadsMenuClick: () -> Unit,
      onPasswordsMenuClick: () -> Unit,
      onQuitMenuClick: () -> Unit,
 +    onTaboraCodesClick: () -> Unit = {},
++    onTaboraMailClick: () -> Unit = {},
      onBackButtonClick: (longPress: Boolean) -> Unit,
      onForwardButtonClick: (longPress: Boolean) -> Unit,
      onRefreshButtonClick: (longPress: Boolean) -> Unit,
-@@ -317,10 +319,19 @@ fun MainMenu(
+@@ -317,10 +321,26 @@ fun MainMenu(
          )
  
          MenuGroup {
@@ -33,6 +35,13 @@ index aec18f553f..96e8494b8e 100644
 +                    onClick = onMozillaAccountButtonClick,
 +                )
 +            }
++
++            // Tabora: почта аккаунта
++            MenuItem(
++                label = stringResource(id = R.string.tabora_mail_title),
++                beforeIconPainter = painterResource(id = R.drawable.tabora_ic_mail_24),
++                onClick = onTaboraMailClick,
++            )
 +
 +            // Tabora: коды входа (второй шаг на сайтах) из аккаунта
 +            MenuItem(

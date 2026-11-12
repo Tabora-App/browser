@@ -3053,5 +3053,6 @@
  "Пароли не сверены: {0}": "Las contraseñas no se sincronizaron: {0}",
  "Паролей пока нет": "Aún no hay contraseñas",
  "Удалить пароли везде?": "¿Eliminar las contraseñas en todas partes?",
- "Пароли, пропавшие с этого телефона, будут удалены из аккаунта и с остальных ваших устройств.": "Las contraseñas que desaparecieron de este teléfono se eliminarán de tu cuenta y de tus otros dispositivos."
+ "Пароли, пропавшие с этого телефона, будут удалены из аккаунта и с остальных ваших устройств.": "Las contraseñas que desaparecieron de este teléfono se eliminarán de tu cuenta y de tus otros dispositivos.",
+ "Почта открывается тем же входом, что и синхронизация.": "El correo se abre con el mismo inicio de sesión que la sincronización."
 }

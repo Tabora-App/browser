@@ -23,4 +23,6 @@
         <item quantity="one">%d código</item>
         <item quantity="other">%d códigos</item>
     </plurals>
+    <!-- Экран и пункт меню: почта аккаунта внутри приложения -->
+    <string name="tabora_mail_title">Correo de Tabora</string>
 </resources>

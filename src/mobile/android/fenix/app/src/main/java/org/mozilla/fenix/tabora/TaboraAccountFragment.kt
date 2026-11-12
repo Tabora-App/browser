@@ -11,6 +11,8 @@ import android.view.ViewGroup
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
+import mozilla.components.concept.engine.window.WindowRequest
+import org.mozilla.fenix.NavGraphDirections
 import org.mozilla.fenix.R
 import org.mozilla.fenix.addons.AddonPopupBaseFragment
 import org.mozilla.fenix.databinding.FragmentAddOnInternalSettingsBinding
@@ -19,9 +21,9 @@ import org.mozilla.fenix.ext.requireComponents
 import org.mozilla.fenix.ext.showToolbar
 
 /**
- * Экраны встроенного модуля аккаунта: «Аккаунт Tabora» (вход и настройки синхронизации) и «Коды
- * входа». Содержимое рисует модуль (страницы index.html и codes.html), приложение даёт ему место
- * под своим заголовком — так же, как страницам настроек расширений.
+ * Экраны встроенного модуля аккаунта: «Аккаунт Tabora» (вход и настройки синхронизации), «Коды
+ * входа» и «Почта». Содержимое рисует модуль (страницы index.html, codes.html, mail.html),
+ * приложение даёт ему место под своим заголовком — так же, как страницам настроек расширений.
  */
 class TaboraAccountFragment : AddonPopupBaseFragment(), SystemInsetsPaddedFragment {
 
@@ -58,9 +60,28 @@ class TaboraAccountFragment : AddonPopupBaseFragment(), SystemInsetsPaddedFragme
         super.onResume()
         showToolbar(
             getString(
-                if (args.page == TaboraAccount.PAGE_CODES) R.string.tabora_codes_title else R.string.tabora_account_title
+                when (args.page) {
+                    TaboraAccount.PAGE_CODES -> R.string.tabora_codes_title
+                    TaboraAccount.PAGE_MAIL -> R.string.tabora_mail_title
+                    else -> R.string.tabora_account_title
+                }
             )
         )
+    }
+
+    /** Ссылка из письма открывается обычной вкладкой браузера, а не на месте экрана модуля. */
+    override fun onWindowRequest(windowRequest: WindowRequest) {
+        if (windowRequest.type == WindowRequest.Type.CLOSE) {
+            findNavController().popBackStack()
+            return
+        }
+        requireComponents.useCases.tabsUseCases.addTab(
+            url = windowRequest.url,
+            selectTab = true,
+            engineSession = windowRequest.prepare(),
+        )
+        windowRequest.start()
+        findNavController().navigate(NavGraphDirections.actionGlobalBrowser())
     }
 
     override fun onDestroyView() {

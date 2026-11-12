@@ -3053,5 +3053,6 @@
  "Пароли не сверены: {0}": "Passwords weren’t synced: {0}",
  "Паролей пока нет": "No passwords yet",
  "Удалить пароли везде?": "Delete the passwords everywhere?",
- "Пароли, пропавшие с этого телефона, будут удалены из аккаунта и с остальных ваших устройств.": "The passwords that disappeared from this phone will be deleted from your account and from your other devices."
+ "Пароли, пропавшие с этого телефона, будут удалены из аккаунта и с остальных ваших устройств.": "The passwords that disappeared from this phone will be deleted from your account and from your other devices.",
+ "Почта открывается тем же входом, что и синхронизация.": "Mail opens with the same sign-in as sync."
 }

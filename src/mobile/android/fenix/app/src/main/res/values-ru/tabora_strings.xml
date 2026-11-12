@@ -25,4 +25,6 @@
         <item quantity="many">%d кодов</item>
         <item quantity="other">%d кода</item>
     </plurals>
+    <!-- Экран и пункт меню: почта аккаунта внутри приложения -->
+    <string name="tabora_mail_title">Почта Tabora</string>
 </resources>

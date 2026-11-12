@@ -37,7 +37,8 @@ export function mountShell(root, deps) {
   const view = h("main", { class: "view", id: "view" });
   let active = null; // { id, api }
   const timers = [];
-  const mail = new Mail({ account, jmap: new Jmap(account), pgp: new MailPgp(account) });
+  // у веб-версии почта на том же имени, что и страница; модуль в приложении ходит на сервер аккаунтов по полному адресу
+  const mail = new Mail({ account, jmap: new Jmap(account, { proxy: deps.api?.base || "" }), pgp: new MailPgp(account) });
   const mailListeners = new Set();
 
   const navigate = (path, { replace = false } = {}) => {

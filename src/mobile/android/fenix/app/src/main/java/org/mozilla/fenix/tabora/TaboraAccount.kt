@@ -99,7 +99,13 @@ class TaboraAccount(
 
     /** Адрес экрана внутри модуля; null, пока модуль не установлен. */
     fun pageUrl(page: String): String? =
-        baseUrl?.let { base -> if (page == PAGE_CODES) "${base}codes.html" else "${base}index.html" }
+        baseUrl?.let { base ->
+            when (page) {
+                PAGE_CODES -> "${base}codes.html"
+                PAGE_MAIL -> "${base}mail.html"
+                else -> "${base}index.html"
+            }
+        }
 
     /** Установить модуль в движок и начать передавать ему вкладки. Вызывается один раз при запуске. */
     fun install(runtime: WebExtensionRuntime, store: BrowserStore) {
@@ -332,10 +338,10 @@ class TaboraAccount(
             )
     }
 
-    /** Открыть экран модуля: «Аккаунт Tabora» или «Коды входа». */
+    /** Открыть экран модуля: «Аккаунт Tabora», «Коды входа» или «Почта». */
     fun openPage(page: String) {
         val activity = host?.get() ?: return
-        if (page != PAGE_ACCOUNT && page != PAGE_CODES) {
+        if (page != PAGE_ACCOUNT && page != PAGE_CODES && page != PAGE_MAIL) {
             return
         }
         runCatching {
@@ -401,6 +407,12 @@ class TaboraAccount(
 
         /** Экран «Коды входа». */
         const val PAGE_CODES = "codes"
+
+        /** Экран «Почта». */
+        const val PAGE_MAIL = "mail"
+
+        /** Адрес ярлыка почты на домашнем экране: вместо веб-почты он открывает почту в приложении. */
+        const val MAIL_SHORTCUT_URL = "https://app.tabora.app"
         private val DATA_NAME = Regex("^[a-z]{1,16}$")
         private const val AUTH_GRACE_MS = 5 * 60 * 1000L
         private const val MAX_CODES = 5000

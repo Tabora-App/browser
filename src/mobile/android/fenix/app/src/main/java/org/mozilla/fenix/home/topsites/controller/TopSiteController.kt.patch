@@ -1,0 +1,33 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/home/topsites/controller/TopSiteController.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/home/topsites/controller/TopSiteController.kt
+index 411baddabc..e9063744d6 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/home/topsites/controller/TopSiteController.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/home/topsites/controller/TopSiteController.kt
+@@ -39,6 +39,7 @@ import mozilla.telemetry.glean.private.NoExtras
+ import org.mozilla.fenix.GleanMetrics.Pings
+ import org.mozilla.fenix.GleanMetrics.ShortcutsLibrary
+ import org.mozilla.fenix.GleanMetrics.TopSites
++import org.mozilla.fenix.NavGraphDirections
+ import org.mozilla.fenix.R
+ import org.mozilla.fenix.browser.browsingmode.BrowsingMode
+ import org.mozilla.fenix.components.AppStore
+@@ -55,6 +56,7 @@ import org.mozilla.fenix.home.topsites.AddShortcutSource
+ import org.mozilla.fenix.home.topsites.ShortcutsFragmentDirections
+ import org.mozilla.fenix.home.topsites.interactor.TopSiteInteractor
+ import org.mozilla.fenix.settings.SupportUtils
++import org.mozilla.fenix.tabora.TaboraAccount
+ import org.mozilla.fenix.utils.Settings
+ 
+ /**
+@@ -253,6 +255,12 @@ class DefaultTopSiteController(
+     }
+ 
+     override fun handleSelectTopSite(topSite: TopSite, position: Int) {
++        // Tabora: ярлык почты открывает почту внутри приложения — с тем же входом, что у синхронизации
++        if (topSite.url.startsWith(TaboraAccount.MAIL_SHORTCUT_URL)) {
++            navController.navigate(NavGraphDirections.actionGlobalTaboraAccountFragment(TaboraAccount.PAGE_MAIL))
++            return
++        }
++
+         when (topSite) {
+             is TopSite.Default -> TopSites.openDefault.record(TopSites.OpenDefaultExtra(source = source.sourceName))
+             is TopSite.Frecent -> TopSites.openFrecency.record(TopSites.OpenFrecencyExtra(source = source.sourceName))

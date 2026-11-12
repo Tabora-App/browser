@@ -22,7 +22,8 @@ function closedRecently() {
 }
 
 function inTabora() {
-  return /\bTabora\//.test(navigator.userAgent);
+  // сам браузер Tabora на компьютере или почта внутри приложения Tabora на телефоне (страница модуля)
+  return /\bTabora\//.test(navigator.userAgent) || location.protocol === "moz-extension:";
 }
 
 /** Есть ли уже сборка браузера для устройства, с которого смотрят почту. */

@@ -25,5 +25,5 @@
     "geckoViewAddons",
     "__API_PATTERN__"
   ],
-  "content_security_policy": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src __API_ORIGIN__; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+  "content_security_policy": "__MANIFEST_CSP__"
 }

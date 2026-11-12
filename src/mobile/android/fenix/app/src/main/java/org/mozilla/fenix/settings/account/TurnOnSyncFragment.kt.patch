@@ -1,8 +1,16 @@
 diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/account/TurnOnSyncFragment.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/account/TurnOnSyncFragment.kt
-index 9f2eb44912..d7dbb011e1 100644
+index 9f2eb44912..325e8e5185 100644
 --- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/account/TurnOnSyncFragment.kt
 +++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/account/TurnOnSyncFragment.kt
-@@ -25,6 +25,7 @@ import mozilla.components.support.ktx.android.view.hideKeyboard
+@@ -11,6 +11,7 @@ import android.view.View
+ import android.view.ViewGroup
+ import androidx.core.text.HtmlCompat
+ import androidx.fragment.app.Fragment
++import androidx.navigation.NavOptions
+ import androidx.navigation.findNavController
+ import androidx.navigation.fragment.findNavController
+ import androidx.navigation.fragment.navArgs
+@@ -25,6 +26,7 @@ import mozilla.components.support.ktx.android.view.hideKeyboard
  import mozilla.telemetry.glean.private.NoExtras
  import org.mozilla.fenix.GleanMetrics.SyncAuth
  import org.mozilla.fenix.HomeActivity
@@ -10,7 +18,7 @@ index 9f2eb44912..d7dbb011e1 100644
  import org.mozilla.fenix.R
  import org.mozilla.fenix.components.appstate.AppAction
  import org.mozilla.fenix.databinding.FragmentTurnOnSyncBinding
-@@ -89,16 +90,11 @@ class TurnOnSyncFragment : Fragment(), AccountObserver, SystemInsetsPaddedFragme
+@@ -89,16 +91,15 @@ class TurnOnSyncFragment : Fragment(), AccountObserver, SystemInsetsPaddedFragme
  
      override fun onCreate(savedInstanceState: Bundle?) {
          super.onCreate(savedInstanceState)
@@ -26,9 +34,13 @@ index 9f2eb44912..d7dbb011e1 100644
 -        }
 +        // Tabora: входа в аккаунт Mozilla в приложении нет. Все оставшиеся переходы на этот экран
 +        // (закладки, «Поделиться», автозаполнение, ссылки) открывают «Аккаунт Tabora». Сам экран
-+        // остаётся без вида и закрывается, когда человек возвращается (см. onResume).
++        // остаётся без вида и сразу уходит из истории: «Назад» ведёт туда, откуда пришли.
 +        shouldLoginJustWithEmail = true
-+        findNavController().navigate(NavGraphDirections.actionGlobalTaboraAccountFragment())
++        findNavController()
++            .navigate(
++                NavGraphDirections.actionGlobalTaboraAccountFragment(),
++                NavOptions.Builder().setPopUpTo(R.id.turnOnSyncFragment, true).build(),
++            )
      }
  
      override fun onDestroy() {

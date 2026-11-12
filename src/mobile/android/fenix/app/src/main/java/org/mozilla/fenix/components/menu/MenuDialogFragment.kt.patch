@@ -1,5 +1,5 @@
 diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/MenuDialogFragment.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/MenuDialogFragment.kt
-index 73ad762875..43cc20d34c 100644
+index 73ad762875..2434328f48 100644
 --- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/MenuDialogFragment.kt
 +++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/components/menu/MenuDialogFragment.kt
 @@ -104,6 +104,7 @@ import org.mozilla.fenix.components.menu.store.TranslationInfo
@@ -18,10 +18,19 @@ index 73ad762875..43cc20d34c 100644
  import org.mozilla.fenix.theme.FirefoxTheme
  import org.mozilla.fenix.translations.TranslationsEnabledSettings
  import org.mozilla.fenix.utils.DELAY_MS_MAIN_MENU
-@@ -620,6 +622,15 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
+@@ -620,6 +622,24 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                  onPasswordsMenuClick = {
                                      menuStore.dispatch(MenuAction.Navigate.Passwords)
                                  },
++                                onTaboraMailClick = {
++                                    findNavController()
++                                        .nav(
++                                            R.id.menuDialogFragment,
++                                            MenuDialogFragmentDirections.actionGlobalTaboraAccountFragment(
++                                                TaboraAccount.PAGE_MAIL
++                                            ),
++                                        )
++                                },
 +                                onTaboraCodesClick = {
 +                                    findNavController()
 +                                        .nav(
