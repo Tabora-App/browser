@@ -2,8 +2,8 @@ name: iOS
 
 # Сборка Tabora для iPhone на раннере GitHub с Xcode 27: исходники Firefox для iOS (WebKit)
 # закреплённого коммита плюс наши правки из src/ios. Запуск только вручную. Результат — приложение
-# для симулятора iPhone (проверка, что всё собирается с чистого листа); сборка для телефона и
-# App Store подписывается отдельно, ключи подписи в CI не хранятся (docs/IOS.md).
+# для симулятора iPhone и проверка, что выпускная конфигурация для телефона собирается (без подписи);
+# подпись и выкладка в App Store делаются отдельно, ключи подписи в CI не хранятся (docs/IOS.md).
 # Сторонние actions закреплены по полному SHA коммита (тег в комментарии).
 
 on:
@@ -47,6 +47,11 @@ jobs:
           cd .build/ios/DerivedData/Build/Products/Debug-iphonesimulator
           ditto -c -k --keepParent Client.app "$GITHUB_WORKSPACE/tabora-iphone-simulator.zip"
 
+      # Выпускная конфигурация для телефона, без подписи: проверка, что она собирается
+      # (в ней другой канал сборки и оптимизация; подпись и выкладка — отдельно, docs/IOS.md)
+      - name: Build for iPhone (release configuration, unsigned)
+        run: python3 tools/ios/build.py build --device
+
       - name: Upload build log if the build failed
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -54,7 +59,9 @@ jobs:
           name: tabora-iphone-build-log
           retention-days: 3
           if-no-files-found: ignore
-          path: .build/ios/build-sim.log
+          path: |
+            .build/ios/build-sim.log
+            .build/ios/build-device.log
 
       - name: Upload artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
