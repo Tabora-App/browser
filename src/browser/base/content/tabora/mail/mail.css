@@ -536,7 +536,7 @@ kbd {
 .mail-item-head .spacer { flex: 1; }
 .to-chip.link { transition: border-color var(--ease), color var(--ease); }
 .to-chip.link:hover { border-color: var(--stroke); color: var(--text-strong); }
-.to-chip.link::after { content: " · управлять"; color: var(--text-4); font-family: var(--font); font-weight: 600; }
+.to-chip.link::after { content: var(--text-manage, " · управлять"); /* перевод задаёт mail.js */ color: var(--text-4); font-family: var(--font); font-weight: 600; }
 .to-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 8px; background: var(--field); border: 1px solid var(--field-border); font: 500 11px/1 var(--mono); color: var(--text-2); white-space: nowrap; }
 .mail-item.collapsed .paper, .mail-item.collapsed .attachments, .mail-item.collapsed .pgp-note { display: none; }
 

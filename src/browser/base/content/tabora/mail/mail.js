@@ -27,6 +27,8 @@ const { RichEditor } = ChromeUtils.importESModule("chrome://tabora/content/mail/
 // языки: надписи в коде (tt`…`) и в разметке mail.html (переводятся здесь же, до показа)
 const { tt, tr: ttr, form: ttForm, locale: ttLocale, translateDocument } = ChromeUtils.importESModule("chrome://tabora/content/i18n/I18n.sys.mjs");
 translateDocument(document);
+// надпись, которую рисуют стили (mail.css, адрес-ссылка в шапке письма)
+document.documentElement.style.setProperty("--text-manage", JSON.stringify(` · ${tt`управлять`}`));
 const Shell = window.browsingContext?.topChromeWindow?.Tabora || null;
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, { Pgp: "chrome://tabora/content/mail/Pgp.sys.mjs" });

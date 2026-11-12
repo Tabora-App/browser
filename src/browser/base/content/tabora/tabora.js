@@ -11,6 +11,8 @@
 // для числа, ttLocale — язык для дат и чисел. Объявлено один раз на всё окно: скрипты, которые
 // подключаются ниже через loadSubScript, пользуются этими же именами.
 var { tt, tr: ttr, form: ttForm, locale: ttLocale } = ChromeUtils.importESModule("chrome://tabora/content/i18n/I18n.sys.mjs");
+// надпись, которую рисуют стили (метка спящей вкладки в tabora.css)
+document.documentElement.style.setProperty("--tabora-text-sleeping", JSON.stringify(tt`спит`));
 
 var Tabora = {
   // Автоусыпление неактивных вкладок: минуты простоя, 0 — никогда (по умолчанию). Усыплённая

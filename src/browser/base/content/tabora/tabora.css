@@ -735,7 +735,7 @@ sidebar-main {
 
 
 #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab[pending] .tab-label-container::after {
-  content: "спит";
+  content: var(--tabora-text-sleeping, "спит"); /* перевод задаёт tabora.js */
   font: 700 10px/1 var(--tabora-font);
   color: var(--tabora-text-4);
   border: 1px solid var(--tabora-line);
