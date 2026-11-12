@@ -1,0 +1,14 @@
+diff --git a/browser/components/tabbrowser/content/opentabs-splitview.css b/browser/components/tabbrowser/content/opentabs-splitview.css
+index 350d2f3b8e..c99b213890 100644
+--- a/browser/components/tabbrowser/content/opentabs-splitview.css
++++ b/browser/components/tabbrowser/content/opentabs-splitview.css
+@@ -15,7 +15,8 @@ moz-card {
+ }
+ 
+ .sticky-header {
+-  background: linear-gradient(to bottom, light-dark(#f0ebfd, #332a50) 0%, light-dark(#f1ebf8, #342a47) 95%, transparent 100%);
++  /* Tabora: the same plain background as the page */
++  background: linear-gradient(to bottom, light-dark(#f6f4ef, #0f1013) 0%, light-dark(#f6f4ef, #0f1013) 95%, transparent 100%);
+   position: sticky;
+   top: 0;
+   z-index: 1;

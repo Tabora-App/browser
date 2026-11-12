@@ -4500,3 +4500,56 @@ toolbarseparator {
     animation: tabora-fade-in var(--tabora-t-slow) var(--tabora-curve);
   }
 }
+
+/* ---- Tab groups and two sites side by side (the engine's features, see tabora.js) ---- */
+
+/* a group belongs to the space it was made in: in the other spaces its label is not shown */
+tab-group[tabora-elsewhere] > :not(tab, tab-split-view-wrapper) {
+  display: none !important;
+}
+
+/* two sites side by side: the gaps around the two pages take the color of the shell, not the
+   light backing that lies under a single page; the page the address bar belongs to has a thin
+   accent outline */
+#tabbrowser-tabpanels[splitview]:has(> .split-view-panel-active) {
+  background: var(--tabora-start-bg) !important;
+}
+
+#tabbrowser-tabpanels[splitview] .split-view-panel.deck-selected > .browserContainer {
+  outline: 1.5px solid color-mix(in srgb, var(--tabora-accent-ink) 75%, transparent) !important;
+  outline-offset: -1.5px;
+}
+
+/* the sheet with the name and the color of a group */
+.w-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 4px 0 2px;
+}
+
+.w-swatch {
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--swatch);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  cursor: pointer;
+  transition: outline-color var(--tabora-ease, 0.15s ease), transform var(--tabora-ease, 0.15s ease);
+}
+
+.w-swatch:hover {
+  transform: scale(1.08);
+}
+
+.w-swatch[aria-checked="true"] {
+  outline-color: var(--swatch);
+}
+
+.w-swatch:focus-visible {
+  outline-color: var(--tabora-accent-ink, currentColor);
+}

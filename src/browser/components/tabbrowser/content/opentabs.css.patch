@@ -1,0 +1,15 @@
+diff --git a/browser/components/tabbrowser/content/opentabs.css b/browser/components/tabbrowser/content/opentabs.css
+index 2134f550cb..96b41fbddd 100644
+--- a/browser/components/tabbrowser/content/opentabs.css
++++ b/browser/components/tabbrowser/content/opentabs.css
+@@ -7,8 +7,8 @@
+ :root {
+   height: 100%;
+   --splitview-opentabs-card-width: 358px;
+-  background: no-repeat light-dark(linear-gradient(#f0ebfd, #f7ebeb), linear-gradient(#332a50, #3f2a2f));
+-  background-attachment: fixed;
++  /* Tabora: the plain background of the shell instead of the purple gradient */
++  background: light-dark(#f6f4ef, #0f1013);
+ }
+ 
+ body {

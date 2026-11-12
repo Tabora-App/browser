@@ -743,6 +743,120 @@ var Tabora = {
     setTimeout(() => node.remove(), 3200);
   },
 
+  /* ---- Tab groups and two sites side by side ------------------------------------------------
+   * Both are the engine's own features (tab-group, tab-split-view-wrapper): the tab strip draws
+   * them, the session keeps them. Ours are the menus, the sheet with the name and the color, and
+   * the rule that a group belongs to the space it was made in: its label is not shown in the
+   * other spaces, and a tab moved to another space leaves its group. */
+
+  GROUP_COLORS: ["blue", "purple", "cyan", "orange", "yellow", "pink", "green", "gray", "red"],
+
+  /** Groups of the current space: the ones that have a tab shown now. */
+  spaceGroups() {
+    return gBrowser.tabGroups.filter(g => g.tabs.some(t => !t.hidden));
+  },
+
+  groupName(group) {
+    return group.label || tt`Без названия`;
+  },
+
+  /** Hide the labels of groups whose tabs all belong to other spaces. */
+  markGroups() {
+    for (const group of gBrowser.tabGroups) {
+      group.toggleAttribute("tabora-elsewhere", group.tabs.length > 0 && group.tabs.every(t => t.hidden));
+    }
+  },
+
+  /** A tab that shares a split view is grouped and ungrouped together with its neighbour. */
+  newGroupWith(tab) {
+    const member = tab.splitview || tab;
+    const group = gBrowser.addTabGroup([member], { insertBefore: member });
+    this.groupSheet(group);
+  },
+
+  addToGroup(tab, group) {
+    if (tab.splitview) {
+      group.addTabs([tab.splitview]);
+    } else {
+      gBrowser.moveTabToExistingGroup(tab, group);
+    }
+  },
+
+  ungroupTab(tab) {
+    if (tab.splitview) {
+      gBrowser.ungroupSplitView(tab.splitview);
+    } else {
+      gBrowser.ungroupTab(tab);
+    }
+  },
+
+  /** The sheet with the name and the color of a group. */
+  groupSheet(group) {
+    const name = this.wField(tt`Название`, { type: "text", value: group.label || "", maxlength: "40", placeholder: tt`Например, «Поездка»`, autocomplete: "off" });
+    let color = group.color;
+    const swatches = this.html("div", { class: "w-swatches", role: "radiogroup", "aria-label": tt`Цвет группы` }, null, this.GROUP_COLORS.map(c => {
+      const b = this.html("button", { class: "w-swatch", type: "button", role: "radio", "aria-checked": String(c === color), "aria-label": this.groupColorName(c), title: this.groupColorName(c), style: `--swatch: var(--tab-group-${c})` });
+      b.addEventListener("click", () => {
+        color = c;
+        for (const other of swatches.children) {
+          other.setAttribute("aria-checked", String(other === b));
+        }
+      });
+      return b;
+    }));
+    this.vaultSheet(tt`Группа вкладок`, "", [name.wrap, swatches], tt`Готово`, async () => {
+      if (!group.isConnected) {
+        return; // the group was closed while the sheet was open
+      }
+      group.label = name.input.value.trim();
+      group.color = color;
+    });
+  },
+
+  groupColorName(color) {
+    return {
+      blue: tt`Синий`, purple: tt`Фиолетовый`, cyan: tt`Бирюзовый`, orange: tt`Оранжевый`, yellow: tt`Жёлтый`,
+      pink: tt`Розовый`, green: tt`Зелёный`, gray: tt`Серый`, red: tt`Красный`,
+    }[color] || color;
+  },
+
+  newTabInGroup(group) {
+    const userContextId = this.activeSpace()?.userContextId || 0;
+    const tab = gBrowser.addTab(BROWSER_NEW_TAB_URL, { userContextId, triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+    group.addTabs([tab]);
+    group.collapsed = false;
+    gBrowser.selectedTab = tab;
+  },
+
+  groupMenuItems(group) {
+    const n = group.tabs.length;
+    return [
+      { label: tt`Название и цвет`, icon: ["M4 20h4l10-10-4-4L4 16z", "M13.5 6.5l4 4"], run: () => this.groupSheet(group) },
+      { label: tt`Новая вкладка в группе`, icon: ["M12 5v14M5 12h14"], run: () => this.newTabInGroup(group) },
+      { label: group.collapsed ? tt`Развернуть` : tt`Свернуть`, icon: group.collapsed ? ["m6 9 6 6 6-6"] : ["m6 15 6-6 6 6"], run: () => (group.collapsed = !group.collapsed) },
+      { separator: true },
+      { label: tt`Разгруппировать`, icon: ["M4 7h6l2 2h8v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z", "M9 14h6"], run: () => group.ungroupTabs() },
+      { label: tt`Закрыть группу${n ? ` (${n})` : ""}`, icon: ["M6 6l12 12M18 6 6 18"], danger: true, run: () => gBrowser.removeTabGroup(group) },
+    ];
+  },
+
+  /** Two sites side by side. For the current tab the engine's page with the list of open tabs is
+   * opened next to it to choose the second site; another tab is put next to the current one. */
+  splitTab(tab) {
+    const current = gBrowser.selectedTab;
+    if (tab !== current) {
+      if (current.splitview || current.pinned || tab.splitview || tab.pinned) {
+        return;
+      }
+      gBrowser.addTabSplitView([current, tab], { insertBefore: current, trigger: "menu_open" });
+      return;
+    }
+    const userContextId = this.contextOf(tab);
+    const picker = gBrowser.addTrustedTab("about:opentabs", { userContextId });
+    gBrowser.addTabSplitView([tab, picker], { insertBefore: tab, trigger: "menu_add" });
+    gBrowser.selectedTab = picker;
+  },
+
   /** Open the engine's wizard that imports bookmarks, history and passwords from another browser.
    * It lives on the settings page, so the page is opened first. Passwords are among the things
    * it brings and they go into the vault: with a locked vault the wizard would wait forever. */
@@ -856,9 +970,10 @@ var Tabora = {
       "contextmenu",
       e => {
         const tab = e.target.closest?.("tab.tabbrowser-tab");
+        const group = tab ? null : e.target.closest?.(".tab-group-label-container")?.closest("tab-group");
         e.preventDefault();
         e.stopPropagation();
-        this.showMenu(tab ? this.tabMenuItems(tab) : this.tabListMenuItems(), e.clientX, e.clientY);
+        this.showMenu(tab ? this.tabMenuItems(tab) : group ? this.groupMenuItems(group) : this.tabListMenuItems(), e.clientX, e.clientY);
       },
       true
     );
@@ -1062,6 +1177,10 @@ var Tabora = {
       restore: ["M4 12a8 8 0 1 0 2.3-5.7", "M4 4v5h5"],
       newTab: ["M12 5v14M5 12h14"],
       send: ["M3 6h11v8H3z", "M1 18h15", "M17 10h5M19.5 7.5 22 10l-2.5 2.5"],
+      group: ["M4 7h6l2 2h8v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"],
+      ungroup: ["M4 7h6l2 2h8v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z", "M9 14h6"],
+      split: ["M4 5h16v14H4z", "M12 5v14"],
+      unsplit: ["M4 5h16v14H4z", "M9 12h6"],
     };
     const url = tab.linkedBrowser?.currentURI?.spec || "";
     const pending = tab.hasAttribute("pending");
@@ -1072,6 +1191,9 @@ var Tabora = {
     const realUrl = /^https?:/.test(url);
     const spaces = this.spaces.filter(s => s.userContextId !== this.contextOf(tab));
     const devices = this.sendDevices();
+    const group = tab.group;
+    const groups = this.spaceGroups().filter(g => g !== group);
+    const current = gBrowser.selectedTab;
     const items = [
       tab.pinned
         ? { label: tt`Открепить`, icon: I.unpin, run: () => gBrowser.unpinTab(tab) }
@@ -1090,6 +1212,26 @@ var Tabora = {
             children: spaces.map(s => ({ label: s.name, swatch: this.spaceHex(s), run: () => this.moveTabToSpace(tab, s) })),
           }
         : null,
+      // tab groups and two sites side by side are the engine's features; a pinned tab takes no part
+      tab.pinned
+        ? null
+        : group
+          ? { label: tt`Убрать из группы`, icon: I.ungroup, run: () => this.ungroupTab(tab) }
+          : {
+              label: tt`Добавить в группу`,
+              icon: I.group,
+              children: [
+                { label: tt`Новая группа`, icon: I.newTab, run: () => this.newGroupWith(tab) },
+                ...groups.map(g => ({ label: this.groupName(g), swatch: `var(--tab-group-${g.color})`, run: () => this.addToGroup(tab, g) })),
+              ],
+            },
+      tab.pinned
+        ? null
+        : tab.splitview
+          ? { label: tt`Убрать разделение`, icon: I.unsplit, run: () => tab.splitview.unsplitTabs() }
+          : tab === current
+            ? { label: tt`Два сайта рядом`, hint: tt`выбрать второй`, icon: I.split, run: () => this.splitTab(tab) }
+            : { label: tt`Открыть рядом с текущей`, icon: I.split, disabled: !!current.splitview || current.pinned, run: () => this.splitTab(tab) },
       { label: tt`Копировать адрес`, icon: I.copy, disabled: !realUrl, run: () => this.copyText(url, tt`Адрес скопирован`) },
       { label: tt`В закладки`, icon: I.star, hint: "⌘D", disabled: !realUrl, run: () => { gBrowser.selectedTab = tab; PlacesCommandHook.bookmarkPage(); } },
       devices.length && realUrl
@@ -1139,6 +1281,10 @@ var Tabora = {
       triggeringPrincipal: web ? ssm.createNullPrincipal({ userContextId: space.userContextId }) : ssm.getSystemPrincipal(),
       index: tab._tPos + 1,
     });
+    // a group belongs to its space: the tab does not take the group along
+    if (fresh.group) {
+      gBrowser.ungroupTab(fresh);
+    }
     gBrowser.removeTab(tab);
     this.switchSpace(space.id);
     gBrowser.selectedTab = fresh;
@@ -3642,6 +3788,8 @@ var Tabora = {
       ...(/^https?:/.test(gBrowser.selectedBrowser?.currentURI?.spec || "")
         ? this.sendDevices().map(d => ({ glyph: "⇥", title: tt`Отправить вкладку на устройство «${d.name}»`, note: tt`Страница откроется там при следующей синхронизации`, key: "", tags: tt`send отправить вкладку устройство телефон компьютер`, run: () => this.sendTabTo(d) }))
         : []),
+      { glyph: "▤", title: tt`Новая группа вкладок`, note: tt`Текущая вкладка становится первой в группе`, key: "", tags: tt`group группа вкладок сгруппировать папка`, run: () => !gBrowser.selectedTab.pinned && !gBrowser.selectedTab.group && this.newGroupWith(gBrowser.selectedTab) },
+      { glyph: "◫", title: gBrowser.selectedTab.splitview ? tt`Убрать разделение` : tt`Два сайта рядом`, note: tt`Вторая страница в этом же окне, рядом с текущей`, key: "", tags: tt`split разделить экран рядом два сайта сравнить`, run: () => (gBrowser.selectedTab.splitview ? gBrowser.selectedTab.splitview.unsplitTabs() : !gBrowser.selectedTab.pinned && this.splitTab(gBrowser.selectedTab)) },
       { glyph: "⇲", title: tt`Перенести данные из другого браузера`, note: tt`Закладки, история и пароли из Chrome, Safari, Edge и других`, key: "", tags: tt`import импорт перенести chrome safari edge закладки пароли история миграция`, run: () => this.importFromBrowser() },
       { glyph: "⟨", title: document.documentElement.getAttribute("tabora-sidebar") === "compact" ? tt`Развернуть боковую панель` : tt`Свернуть боковую панель`, note: tt`Только значки вкладок, названия по наведению`, key: "⌘B", tags: tt`sidebar панель свернуть compact`, run: () => this.toggleSidebar() },
       { glyph: "▭", title: this.horizontalTabs ? tt`Вкладки сбоку` : tt`Вкладки сверху`, note: this.horizontalTabs ? tt`Вернуть боковую панель с вкладками` : tt`Вкладки и адрес двумя строками сверху, страница на всю ширину`, tags: tt`layout раскладка вкладки сверху сбоку горизонтальные вертикальные tabs`, run: () => Services.prefs.setBoolPref(this.TABS_LAYOUT_PREF, this.horizontalTabs) },
@@ -4066,12 +4214,16 @@ var Tabora = {
         this.setTabShown(tab, inSpace(tab));
       }
     }
+    this.markGroups();
     this.updateMemory();
   },
 
   /* ---- Вкладки: заголовок, блокировка, сон ------------------------------ */
 
   initTabHooks() {
+    for (const type of ["TabGrouped", "TabUngrouped", "TabGroupCreate", "TabGroupRemoved", "TabShow", "TabHide"]) {
+      gBrowser.tabContainer.addEventListener(type, () => this.markGroups());
+    }
     gBrowser.tabContainer.addEventListener("TabSelect", () => {
       const space = this.activeSpaceFor(gBrowser.selectedTab);
       if (space && space.id !== this.activeSpaceId) {
