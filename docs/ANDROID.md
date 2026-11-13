@@ -53,6 +53,9 @@ What lives where:
 - **The "Tabora account" screen** (Settings, first item) — the module page `index.html` inside an app
   screen (`TaboraAccountFragment`): sign-in, sign-up, the second step, password reset; after sign-in —
   sync switches (tabs, sign-in codes, site passwords, bookmarks), sync status, sign-out.
+  The screens of the module (account, sign-in codes, mail, history) have a cross in the title next
+  to the back arrow: back walks through what was opened inside the screen (a letter, a folder),
+  the cross closes the screen at once and returns to the tab or the home screen it was opened from.
 - **The sign-in** (the session token and the account data key) is stored not in the page's storage but by the app:
   in `SecureAbove22Preferences`, encrypted with a key from the Android keystore
   (`TaboraAccount.kt`). The sign-in never ends on its own; signing out erases the record and removes the phone's

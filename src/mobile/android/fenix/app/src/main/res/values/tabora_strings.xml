@@ -30,6 +30,7 @@
     </plurals>
     <!-- Экран и пункт меню: почта аккаунта внутри приложения -->
     <string name="tabora_mail_title">Tabora Mail</string>
+    <string name="tabora_close">Close</string>
     <!-- Sign in with a QR code shown by another device: scanner hint -->
     <string name="tabora_pair_scan_hint">Point the camera at the QR code on your computer screen</string>
     <!-- Spaces: the one every device has -->
