@@ -196,6 +196,10 @@ request as a JSON string: the engine does not accept an object in a reply.
   collection services, Adjust and install source attribution do not start; data submission is
   off by default (`Settings.kt.patch`); crash reports are neither collected nor offered
   (`Analytics.kt.patch`).
+- The advertising identifier and install attribution are not used, and the app does not ask for them:
+  the permissions and components that the bundled attribution libraries declare (advertising ID,
+  Play install referrer, Adjust's pre-install receiver and start-up provider) are dropped from the
+  manifest (`AndroidManifest.xml.patch`). `tools/build.py` refuses a package that still has any of them.
 - Mozilla experiments and remote changes (Nimbus) are not loaded; the bundled list is empty
   (`NimbusSetup.kt.patch`, `initial_experiments.json`).
 - The first screen with Mozilla's terms is not shown (`FeatureFlags.kt.patch`).
@@ -314,7 +318,9 @@ the only format Google Play takes for new apps; it holds the same code and the s
 (arm64-v8a). In Google Play the key above is the upload key: Google checks that each upload is
 signed with it and re-signs what phones download with an app signing key that it keeps (Play App
 Signing). The version code of both files comes from the build time, so every later build is newer
-for Google Play without any counter to maintain.
+for Google Play without any counter to maintain. The bundle carries libraries for arm64-v8a only:
+third-party dependencies ship other architectures too, and with them in the bundle Google Play would
+offer the app to phones that have no engine to run it (`build.gradle.patch`; checked by `tools/build.py`).
 
 ## Checking in the emulator
 
