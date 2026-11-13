@@ -54,10 +54,11 @@ var Tabora = {
     Services.scriptloader.loadSubScript("chrome://tabora/content/vault/vault.js", window);
     Services.scriptloader.loadSubScript("chrome://tabora/content/account/account.js", window);
     Services.scriptloader.loadSubScript("chrome://tabora/content/update/update.js", window);
+    Services.scriptloader.loadSubScript("chrome://tabora/content/pins/pins.js", window);
     for (const step of [
       "buildSidebarExtras", "buildTopbar", "initPrivate", "initTheme", "buildStartPage", "buildAgentPanel", "buildCommandBar", "buildCompose", "buildContextMenu",
       "searchEngineName", "initSpaces", "buildDrawer", "initUserAgent", "initCookieBanners", "initShield", "initWalletProvider", "initVaultActor", "initAccount", "initUpdates", "initSidebarCompact", "initKeys", "initTabHooks", "initDownloads", "initLegacyShellUrls", "initMailToggle", "initMailBackground", "startTimers", "updateTitle", "localizeUrlbar",
-      "routeUrlbarToCommandBar", "initTabMotion", "initMotion", "initBookmarkDefaults", "initTabsLayout", "initAddonsPage", "initAppMenu",
+      "routeUrlbarToCommandBar", "initTabMotion", "initMotion", "initBookmarkDefaults", "initTabsLayout", "initAddonsPage", "initAppMenu", "initPins",
     ]) {
       try {
         this[step]();
