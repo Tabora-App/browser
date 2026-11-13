@@ -148,14 +148,43 @@ users (the directory needs `chmod 700` and the files `600`).
 
 1. Raise `displayVersion` in `browser.json`, build and package:
    `python3 tools/build.py import && python3 tools/build.py build && python3 tools/build.py package`
-   (package checks the updater).
-2. `python3 tools/release.py publish --notes "What's new"` — builds the MAR from
-   `engine/obj-*/dist/tabora/Tabora.app` (symbolic links are not dereferenced and are forbidden),
+   (package checks the updater), or take the packaged app from the **Build** workflow
+   (`tabora-app-<platform>.tar` → `engine/obj-*/dist/tabora/Tabora.app`).
+2. Sign and notarize: `tools/sign_macos.sh` → `.build/signed/Tabora.app` and the dmg.
+3. `python3 tools/release.py publish --app .build/signed/Tabora.app --notes "What's new"` — builds the MAR
+   from the **signed** app (symbolic links are not dereferenced and are forbidden),
    signs it with the primary key, verifies the signature against the DER from `src/`, the channel and the version in the MAR, writes
-   `manifest.json`, `update.xml`, `channel.json`, creates the `vX.Y.Z` release on GitHub with the MAR and the dmg (the tag is
+   `manifest.json`, `update.xml`, `channel.json`, creates the `vX.Y.Z` release on GitHub with the MAR and the signed dmg (the tag is
    on the current commit, if it has already been pushed to GitHub).
-3. Commit and push `updates/`: only after that do clients see the update. To make
+4. Commit and push `updates/`: only after that do clients see the update. To make
    an update mandatory after the fact: `python3 tools/release.py manifest --minimum X.Y.Z` and a push.
+
+**The macOS package is made from the signed app, and only from it.** After a full update the app on
+disk must be exactly the app that was signed and notarized, otherwise its signature no longer verifies
+(`codesign --verify --deep --strict`: "a sealed resource is missing or invalid") and macOS can refuse to
+open it. Three things follow, and `release.py` enforces them:
+
+- an unsigned macOS app is refused (`--unsigned` exists for checks only);
+- `precomplete` is not regenerated for a signed app: it is a sealed resource, the one written at
+  packaging time stays;
+- the stock packaging scripts keep `ChannelPrefs.framework` and `UpdateSettings.framework` from the
+  installed version (`add-if-not`, so that one Firefox build can serve several channels). Both are signed
+  code sealed into the app's signature, so `release.py` packs with a copy of the scripts in which they
+  are replaced like any other file. Tabora has one channel per build, nothing is lost.
+
+At the end `release.py` unpacks the package and compares it with the app file by file. To check a
+package by hand, apply it to a copy of an older release with that release's own updater (the staged
+update lives next to the package, not inside the app):
+
+```sh
+P=/tmp/patch; A=/tmp/Tabora.app            # A: a copy of an older release, P: an empty directory
+ditto "$A/Contents/MacOS/updater.app" "$P/updater.app"; cp tabora-X.Y.Z-….complete.mar "$P/update.mar"
+printf 'pending\n' > "$P/update.status"
+"$P/updater.app/Contents/MacOS/org.mozilla.updater" 3 "$P" "$A" "$P/Updated.app" first -1         # stage
+"$P/updater.app/Contents/MacOS/org.mozilla.updater" 3 "$P" "$A" "$P/Updated.app" first 0/replace  # replace
+cat "$P/update.status"                      # succeeded
+codesign --verify --deep --strict "$A" && spctl -a -vv "$A" && diff -rq "$A" .build/signed/Tabora.app
+```
 
 `release.py` rules for files already in `updates/` (they can be changed by a commit, so by
 themselves they are not trusted):
@@ -178,6 +207,10 @@ must be uploaded before the release is published; currently one target is releas
 several targets, publication will have to be split (a shared draft → publication after the last target).
 
 ### In CI
+
+The CI flow below signs the package but cannot sign the app: the Developer ID key is not in CI. It is
+therefore usable for Linux targets only; a macOS update is released locally (see above) until the app
+itself is signed in CI.
 
 1. The **Build** workflow (main branch, `ubuntu-24.04` runner) → the `tabora-<platform>` artifact with the dmg and
    `tabora-app-<platform>.tar` (the packaged app for the MAR). Before the build,

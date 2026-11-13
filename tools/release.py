@@ -257,6 +257,16 @@ def packaged_app(plat: str, arch: str) -> Path:
     return app
 
 
+def chosen_app(args, plat: str, arch: str) -> Path:
+    """The app to pack: --app (the signed copy on macOS) or the packaged app of the local build."""
+    if getattr(args, "app", None):
+        app = Path(args.app).resolve()
+        if not (app / ("Contents/Resources/application.ini" if plat == "darwin" else "application.ini")).exists():
+            die(f"в {app} нет приложения Tabora")
+        return app
+    return packaged_app(plat, arch)
+
+
 def safe_extract_app_tar(tar_path: Path, dest: Path, plat: str) -> Path:
     """Распаковать архив приложения из артефакта: только обычные файлы и каталоги внутри
     dest, без ссылок, абсолютных путей и «..»."""
@@ -295,6 +305,61 @@ def check_tree(app: Path) -> None:
         for part in rel.parts:
             if not SAFE_NAME_RE.match(part):
                 die(f"недопустимое имя файла в приложении: {str(rel)!r}")
+
+
+def is_signed_mac_app(app: Path) -> bool:
+    return (app / "Contents" / "_CodeSignature" / "CodeResources").is_file()
+
+
+def mac_packaging_scripts(src: Path, dest: Path) -> Path:
+    """A copy of the engine's update-packaging scripts in which a full update replaces ChannelPrefs.framework
+    and UpdateSettings.framework like any other file.
+
+    The stock scripts keep these two from the installed version (`add-if-not`), so that one build can
+    serve several channels. On macOS they are signed code sealed into the app's signature: an updated
+    app that keeps the old copies fails `codesign --verify` ("a sealed resource is missing or invalid"),
+    and macOS can then refuse to open it. Tabora has one channel per build, so nothing is lost."""
+    shutil.copytree(src, dest, symlinks=True)
+    common = dest / "common.sh"
+    text = common.read_text()
+    patched = text
+    for line in ('        "$add_if_not_file_chk" =~ (^|/)ChannelPrefs\\.framework/ || \\\n',
+                 '        "$add_if_not_file_chk" =~ (^|/)UpdateSettings\\.framework/ || \\\n'):
+        if patched.count(line) != 1:
+            die("скрипты упаковки обновлений изменились: в common.sh нет ожидаемой строки про "
+                "ChannelPrefs/UpdateSettings (check_for_add_if_not_update)")
+        patched = patched.replace(line, "")
+    common.write_text(patched)
+    return dest
+
+
+def check_mar_matches_app(tools: Tools, mar: Path, app: Path, work: Path) -> None:
+    """Every file of the app is in the package with the same bytes, and nothing is left to the installed
+    version: after this full update the app on disk is exactly the app that was signed and notarized."""
+    import lzma
+    out = work / "mar-check"
+    out.mkdir()
+    sh([tools.signmar, "-C", out, "-x", mar], env=tools.env())
+    manifest = lzma.decompress((out / "updatev3.manifest").read_bytes()).decode()
+    kept = [line for line in manifest.splitlines() if line.startswith("add-if-not ")]
+    if kept:
+        die("пакет оставляет файлы от установленной версии, подпись приложения после обновления не сойдётся: "
+            + "; ".join(kept[:4]))
+    missing, differ = [], []
+    for path in sorted(app.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(app)
+        packed = out / rel
+        if not packed.is_file():
+            missing.append(str(rel))
+        elif lzma.decompress(packed.read_bytes()) != path.read_bytes():
+            differ.append(str(rel))
+    if missing or differ:
+        die(f"пакет не совпадает с приложением: нет в пакете {len(missing)} ({', '.join(missing[:3])}), "
+            f"отличаются {len(differ)} ({', '.join(differ[:3])})")
+    shutil.rmtree(out)
+    print(f"пакет совпадает с приложением файл в файл ({sum(1 for p in app.rglob('*') if p.is_file())} файлов)")
 
 
 def app_ini(app: Path, plat: str) -> Path:
@@ -364,13 +429,18 @@ def make_mar(args) -> dict:
         if args.app_tar:
             app = safe_extract_app_tar(Path(args.app_tar), work / "app", plat)
         else:
-            src_app = packaged_app(plat, arch)
+            src_app = chosen_app(args, plat, arch)
             app = work / "app" / src_app.name
             app.parent.mkdir(parents=True)
             # ссылки не разыменовываются: если они есть, check_tree остановит выпуск
             shutil.copytree(src_app, app, symlinks=True)
         check_tree(app)
         buildtool.verify_packaged_app(app, plat, config)
+        signed_mac = plat == "darwin" and is_signed_mac_app(app)
+        if plat == "darwin" and not signed_mac and not args.unsigned:
+            die("приложение для macOS не подписано: после такого обновления установленная копия теряет подпись "
+                "Developer ID и нотаризацию. Пакет собирается из подписанного приложения: "
+                "--app .build/signed/Tabora.app (после tools/sign_macos.sh). Для проверки без выпуска: --unsigned")
         if app_version(app, plat) != ff_ver:
             die(f"в приложении Firefox {app_version(app, plat)}, в browser.json {ff_ver}")
         bid = build_id(app, plat)
@@ -382,13 +452,22 @@ def make_mar(args) -> dict:
             "MOZ_PRODUCT_VERSION": disp,  # версия Tabora: её сверяет обновлятор (TABORA_APP_VERSION)
             "MAR_CHANNEL_ID": buildtool.MAR_CHANNEL_ID,
         })
-        spec = importlib.util.spec_from_file_location("createprecomplete", tools.precomplete)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        module.generate_precomplete(str(app / "Contents" / "Resources") if plat == "darwin" else str(app))
-        sh(["bash", tools.update_packaging / "make_full_update.sh", unsigned, app], env=env)
-        shutil.rmtree(work / "app")
+        packaging = tools.update_packaging
+        if signed_mac:
+            # precomplete is a sealed resource of the signed app: the one written at packaging time stays
+            if not (app / "Contents" / "Resources" / "precomplete").is_file():
+                die("в подписанном приложении нет Contents/Resources/precomplete")
+            packaging = mac_packaging_scripts(tools.update_packaging, work / "update-packaging")
+        else:
+            spec = importlib.util.spec_from_file_location("createprecomplete", tools.precomplete)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            module.generate_precomplete(str(app / "Contents" / "Resources") if plat == "darwin" else str(app))
+        sh(["bash", packaging / "make_full_update.sh", unsigned, app], env=env)
         sign_mar(tools, unsigned, signed, args.key)
+        if signed_mac:
+            check_mar_matches_app(tools, signed, app, work)
+        shutil.rmtree(work / "app")
     finally:
         shutil.rmtree(work, ignore_errors=True)
     check_mar_info(tools, signed, disp)
@@ -744,7 +823,7 @@ def cmd_refresh(args) -> None:
 def cmd_check(args) -> None:
     plat, arch = target_env()
     if not args.app_tar:
-        app = packaged_app(plat, arch)
+        app = chosen_app(args, plat, arch)
         check_tree(app)
         buildtool.verify_packaged_app(app, plat, cfg())
         print(f"приложение {app} в порядке")
@@ -820,7 +899,13 @@ def cmd_publish(args) -> None:
     meta = make_mar(args)
     write_manifests(args, meta)
     plat, arch = target_env()
-    dmgs = sorted((objdir(plat, arch) / "dist").glob("*.dmg")) if not args.app_tar else []
+    if args.app_tar:
+        dmgs = []
+    elif getattr(args, "app", None):
+        # the signed installer lies next to the signed app (.build/signed after tools/sign_macos.sh)
+        dmgs = sorted(Path(args.app).resolve().parent.glob("*.dmg"))
+    else:
+        dmgs = sorted((objdir(plat, arch) / "dist").glob("*.dmg"))
     notes = check_text(args.notes, 2000, "заметки") or f"Tabora {meta['version']}"
     target = pushed_head()
     if not target:
@@ -851,6 +936,10 @@ def main() -> None:
 
     def common(p, signing=True):
         p.add_argument("--app-tar", help="архив приложения из артефакта CI вместо engine/obj-*/dist/tabora")
+        p.add_argument("--app", help="the app to pack instead of engine/obj-*/dist/tabora; on macOS the signed "
+                                     "copy: .build/signed/Tabora.app")
+        p.add_argument("--unsigned", action="store_true",
+                       help="macOS: allow a package from an unsigned app (for checks only, never for a release)")
         p.add_argument("--tools", help="каталог из `release.py tools` (signmar и скрипты упаковки)")
         if signing:
             p.add_argument("--key", choices=("primary", "secondary"), default="primary",
