@@ -28,7 +28,8 @@
         "whatsnew": "",
         "welcome": "",
         "privacy": "",
-        "privacyPolicy": "https://tabora.app/%LANG%/privacy/"
+        "privacyPolicy": "https://tabora.app/%LANG%/privacy/",
+        "terms": "https://tabora.app/%LANG%/terms/"
       }
     }
   },
