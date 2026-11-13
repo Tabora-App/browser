@@ -11,6 +11,7 @@ import { formatFingerprint } from "../core/pgp.js";
 import { clear, h, icon } from "../lib/dom.js";
 import { busy, confirmDialog, copyText, errorText, field, formError, languagePicker, modal, shortDate, toast } from "../lib/ui.js";
 import { t, tr } from "../core/i18n.js";
+import { sitePage } from "../core/site.js";
 
 function strength(input) {
   const label = h("span", {}, "");
@@ -309,7 +310,8 @@ export function mountAccount(el, ctx) {
         devices ? devices.filter(d => d.current || d.active !== false).sort((a, b) => Number(b.current) - Number(a.current) || (b.at || 0) - (a.at || 0)).map(d => row(d.current ? t`Это устройство` : t`Был в сети ${shortDate(d.at)}`, d.name || t`Устройство`, d.current ? [] : [h("button", { class: "btn small", onclick: () => revoke(d) }, t`Завершить`)], { wrap: true })) : row("", "…")),
       card(t`Удаление аккаунта`,
         row(t`Удалить аккаунт`, t`Вместе с почтовым ящиком и данными на сервере. Отменить нельзя`, [h("button", { class: "btn small danger", onclick: deleteAccount }, t`Удалить`)], { wrap: true })),
-      h("p", { class: "settings-foot" }, t`Почта Tabora · `, h("a", { href: "https://tabora.app/", target: "_blank", rel: "noopener" }, "tabora.app"), " · ", h("a", { href: "https://github.com/Tabora-App/browser", target: "_blank", rel: "noopener noreferrer" }, t`исходный код`)));
+      h("p", { class: "settings-foot" }, t`Почта Tabora · `, h("a", { href: "https://tabora.app/", target: "_blank", rel: "noopener" }, "tabora.app"), " · ", h("a", { href: "https://github.com/Tabora-App/browser", target: "_blank", rel: "noopener noreferrer" }, t`исходный код`),
+        " · ", h("a", { href: sitePage("terms"), target: "_blank", rel: "noopener" }, t`условия`), " · ", h("a", { href: sitePage("privacy"), target: "_blank", rel: "noopener" }, t`конфиденциальность`)));
   }
 
   /* ---- удаление аккаунта: сразу и навсегда, после пароля и кода второго шага ---- */

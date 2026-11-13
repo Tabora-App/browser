@@ -35,8 +35,9 @@
 .auth-fine { color: var(--text-4); font-size: 12.5px; line-height: 1.5; text-wrap: pretty; }
 .auth-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .auth-row .btn { flex: 1; }
-.auth-foot { display: flex; align-items: center; gap: 20px; width: 100%; max-width: 420px; padding-top: 18px; font-size: 12.5px; }
-.auth-foot a { color: var(--text-4); text-decoration: none; }
+/* five links and the language picker do not fit one line on a phone: whole links move to the next line */
+.auth-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; width: 100%; max-width: 420px; padding-top: 18px; font-size: 12.5px; }
+.auth-foot a { color: var(--text-4); text-decoration: none; white-space: nowrap; }
 .auth-foot a:hover { color: var(--text-2); text-decoration: underline; }
 
 .name-status[data-tone="ok"] { color: var(--tone-ok); }

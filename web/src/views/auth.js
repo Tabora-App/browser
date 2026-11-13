@@ -8,6 +8,7 @@ import { passwordStrength } from "../core/password.js";
 import { clear, h, icon, mark } from "../lib/dom.js";
 import { busy, copyText, debounce, errorText, field, formError, languagePicker, toast } from "../lib/ui.js";
 import { t, tr } from "../core/i18n.js";
+import { sitePage } from "../core/site.js";
 
 const DOMAIN = "tabora.app";
 
@@ -43,7 +44,8 @@ function page(content, embedded = false) {
   return h("div", { class: "auth" },
     h("main", { class: "auth-card" }, content),
     // в приложении для телефона язык задаёт система, а ссылки на сайт и установку ни к чему
-    !embedded && h("footer", { class: "auth-foot" }, languagePicker(), h("a", { href: "https://tabora.app/", rel: "noopener" }, t`О Tabora`), h("a", { href: "https://tabora.app/#download", rel: "noopener" }, t`Скачать браузер`), h("a", { href: "https://support.tabora.app/", rel: "noopener" }, t`Поддержка`)));
+    !embedded && h("footer", { class: "auth-foot" }, languagePicker(), h("a", { href: "https://tabora.app/", rel: "noopener" }, t`О Tabora`), h("a", { href: "https://tabora.app/#download", rel: "noopener" }, t`Скачать браузер`), h("a", { href: "https://support.tabora.app/", rel: "noopener" }, t`Поддержка`),
+      h("a", { href: sitePage("terms"), rel: "noopener" }, t`Условия`), h("a", { href: sitePage("privacy"), rel: "noopener" }, t`Конфиденциальность`)));
 }
 
 function head(title, text = "") {
@@ -277,7 +279,9 @@ export function mountAuth(root, { account, intro = null, embedded = false, pair 
     user.input.addEventListener("input", check);
     const form = h("form", { class: "auth-form", novalidate: true }, user.el, pass.el,
       error.el, submit,
-      h("p", { class: "auth-fine" }, t`Пароль знаете только вы: на сервер он не уходит и восстановить его нельзя. После регистрации мы покажем ключ восстановления — сохраните его.`));
+      h("p", { class: "auth-fine" }, t`Пароль знаете только вы: на сервер он не уходит и восстановить его нельзя. После регистрации мы покажем ключ восстановления — сохраните его.`),
+      h("p", { class: "auth-fine" }, t`Создавая аккаунт, вы принимаете `, h("a", { href: sitePage("terms"), target: "_blank", rel: "noopener" }, t`условия использования`),
+        t` и @@согласие`, h("a", { href: sitePage("privacy"), target: "_blank", rel: "noopener" }, t`политику конфиденциальности`), "."));
     form.addEventListener("submit", async e => {
       e.preventDefault();
       error.set("");

@@ -3278,5 +3278,12 @@
  "Проматывать рекламу в роликах YouTube": "Saltar los anuncios en los vídeos de YouTube",
  "Когда в ролике начинается реклама, браузер сразу проматывает её до конца без звука и не показывает её.": "Cuando empieza un anuncio en un vídeo, el navegador lo pasa enseguida hasta el final, sin sonido, y no lo muestra.",
  "реклама в ролике": "anuncio en el vídeo",
- "Чтобы установить версию {0}, закройте окна других аккаунтов Tabora": "Para instalar la versión {0}, cierra las ventanas de Tabora de tus otras cuentas"
+ "Чтобы установить версию {0}, закройте окна других аккаунтов Tabora": "Para instalar la versión {0}, cierra las ventanas de Tabora de tus otras cuentas",
+ "условия": "condiciones",
+ "конфиденциальность": "privacidad",
+ "Условия": "Condiciones",
+ "Создавая аккаунт, вы принимаете ": "Al crear la cuenta aceptas las ",
+ "условия использования": "condiciones de uso",
+ " и @@согласие": " y la ",
+ "политику конфиденциальности": "política de privacidad"
 }
