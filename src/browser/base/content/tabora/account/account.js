@@ -192,6 +192,23 @@ Object.assign(Tabora, {
     return b;
   },
 
+  /** The line under the sign-up form: creating an account means accepting the terms of use and the
+   * privacy policy, each a link to its page on the site. Null when the build has no such pages. */
+  taTermsLine() {
+    const lang = String(ttLocale()).toLowerCase().split("-")[0];
+    const page = key => Services.prefs.getStringPref(`tabora.url.${key}`, "").replace("%LANG%", ["ru", "en", "uk", "es"].includes(lang) ? lang : "en");
+    const [terms, privacy] = [page("terms"), page("privacy")];
+    if (!terms || !privacy) {
+      return null;
+    }
+    const link = (label, url) => {
+      const b = this.html("button", { class: "ta-inline-link", type: "button" }, label);
+      b.addEventListener("click", () => openTrustedLinkIn(url, "tab"));
+      return b;
+    };
+    return this.html("p", { class: "ta-hint" }, null, [tt`Создавая аккаунт, вы принимаете `, link(tt`условия использования`, terms), tt` и @@согласие`, link(tt`политику конфиденциальности`, privacy), "."]);
+  },
+
   /** Поле пароля с индикатором стойкости и повтором. */
   taPasswordPair(label = tt`Пароль`, { withRepeat = true } = {}) {
     const h = (t, a, x, c) => this.html(t, a, x, c);
@@ -321,6 +338,10 @@ Object.assign(Tabora, {
       fields.push(h("p", { class: "ta-hint" }, tt`В этом профиле уже есть сейф с мастер-паролем. Пароль аккаунта должен быть тем же: он откроет и сейф, и аккаунт.`));
     } else {
       fields.push(h("p", { class: "ta-hint" }, tt`Один пароль для почты и сейфа. Сервер получает только его хеш для входа, сам пароль не покидает компьютер, поэтому забытый пароль восстанавливается только ключом восстановления, который вы получите на следующем шаге.`));
+    }
+    const accept = this.taTermsLine();
+    if (accept) {
+      fields.push(accept);
     }
     return this.taForm({
       title: tt`Создать аккаунт`,

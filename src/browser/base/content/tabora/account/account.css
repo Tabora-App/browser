@@ -59,6 +59,29 @@
   color: var(--tabora-text-4);
 }
 
+#tabora-account-dialog .ta-inline-link {
+  appearance: none;
+  background: none;
+  border: none;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--tabora-text-3);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+#tabora-account-dialog .ta-inline-link:hover {
+  color: var(--tabora-text-strong);
+}
+
+#tabora-account-dialog .ta-inline-link:focus-visible {
+  outline: 2px solid var(--tabora-accent, currentColor);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
 #tabora-account-dialog .ta-orb {
   width: 44px;
   height: 44px;
