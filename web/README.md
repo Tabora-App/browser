@@ -49,6 +49,33 @@ has no sync and no codes.
 Build — `node tools/web/build-phone.mjs`, logic check — `node test/run.mjs phone`. How the module
 is embedded in the app — `docs/ANDROID.md`.
 
+## Support site
+
+https://support.tabora.app is built from this same directory: `support.html`, `src/support`
+(entry, sign-in, screens) and `src/styles/support.css`, on top of the shared base (`src/core/api.js`,
+`kdf.js`, `store.js`, `i18n.js`, `src/lib`). What it does:
+
+- **With a Tabora account**: the list of one's support requests, a new request with screenshots,
+  the conversation, closing and reopening — the same requests as in the browser (Settings →
+  Support). Support staff also get the queue of everyone's requests.
+- **Without an account**: someone who cannot sign in, or has no account yet, leaves an e-mail
+  address. The request reaches support only after the address is confirmed with the link from a
+  letter; the same link (`#t=<number>.<secret>`) is the key to the request afterwards. The secret
+  stays after `#`, which a browser does not send to a server.
+- **The sign-in is narrow.** The page asks the account server for a session of the scope
+  `support`: it reaches the support requests and nothing else — not the mail, not the keys, not
+  the settings (the server repository, `src/api.rs`: `auth_for`). The page has no code for the
+  account's keys: from the password it derives the login hash and discards the rest
+  (`src/support/session.js`). What is stored in the browser is the address and the token of that
+  narrow session, encrypted as in the web app.
+- Conversations are read by support staff and are not encrypted from them; the page says so where
+  a person writes. Everything a person or the server sends is put into the page as text.
+
+Build — `node tools/web/build-support.mjs` (→ `.build/support`; only the strings of the site get
+into it, one file per language), checks — `node test/run.mjs support` against a local account
+server, deployment — `tools/deploy.sh support`. The server side (endpoints, limits, letters) is
+described in the server repository's README.
+
 ## Build and checks
 
 ```sh

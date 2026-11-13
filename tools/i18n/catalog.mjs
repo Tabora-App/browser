@@ -102,6 +102,14 @@ export function webSet() {
   return { files: all.filter(f => !rawNames.includes(f)), raw: all.filter(f => rawNames.includes(f)) };
 }
 
+/** What the support site consists of: its own screens and the part of the shared base it imports
+ *  (tools/web/build-support.mjs). Only these strings get into its build. */
+export function supportSet() {
+  const dir = join(ROOT, "web/src");
+  const core = ["core/api.js", "core/i18n.js", "core/kdf.js", "core/store.js", "core/bytes.js"].map(n => join(dir, n));
+  return { files: [...listFiles(join(dir, "support"), [".js"]), ...listFiles(join(dir, "lib"), [".js"]), ...core], raw: [join(dir, "core/kdf-core.js")] };
+}
+
 /** Надписи из разметки страницы: текст и подписи элементов с русскими буквами — то, что переводит
  *  translateDocument в I18n.sys.mjs (тот же приём: текст узла без краевых пробелов). */
 export function htmlKeysOf(file) {

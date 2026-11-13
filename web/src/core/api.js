@@ -274,6 +274,29 @@ export class Api {
     return res.blob();
   }
 
+  /* ---- requests without an account (the support site): access by the key of the link ---- */
+
+  supportGuestCreate({ email, subject, text, lang }) {
+    return this.call("POST", "/v1/support/guest", { email, subject, text, lang });
+  }
+
+  supportGuestOpen(key) {
+    return this.call("POST", "/v1/support/guest/open", { key });
+  }
+
+  supportGuestReply(key, text) {
+    return this.call("POST", "/v1/support/guest/messages", { key, text });
+  }
+
+  supportGuestStatus(key, status) {
+    return this.call("POST", "/v1/support/guest/status", { key, status });
+  }
+
+  async supportGuestFile(key, id) {
+    const res = await this.call("POST", "/v1/support/guest/file", { key, id: Number(id) }, null, { raw: true, timeout: 60000 });
+    return res.blob();
+  }
+
   health() {
     return this.call("GET", "/v1/health");
   }

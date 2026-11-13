@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Deployment from a laptop of what this repository builds for the Tabora host:
 #   tools/deploy.sh web         the web app (app.tabora.app)
+#   tools/deploy.sh support     the support site (support.tabora.app)
 #   tools/deploy.sh downloads   signed installers from .build/signed
 # The host itself (nginx, TLS, DNS, the account server) is set up from the server repository
 # (Tabora-App/server, infra/); the website is deployed from Tabora-App/site.
@@ -26,6 +27,21 @@ case "$what" in
       rm -rf "/var/www/app.$DOMAIN.next"
       echo "web app updated: $(python3 -c "import json; d = json.load(open(\"/var/www/app.$DOMAIN/build.json\")); print(\"version\", d[\"version\"], \"files\", len(d[\"files\"]))")"'
     ;;
+  support)
+    # The support site: built on this machine (tools/web/build-support.mjs) and published to
+    # /var/www/support.<domain> the same way as the web app. The host name must be enabled in nginx
+    # and DNS first (server repository: infra/deploy.sh tls, nginx, dns), and the account server
+    # must know the sign-in of the support site and requests without an account (infra/deploy.sh server).
+    (cd "$ROOT/tools/i18n" && npm ci --ignore-scripts --no-audit --no-fund --silent && node extract.mjs web --strict)
+    (cd "$ROOT/tools/web" && npm ci --ignore-scripts --no-audit --no-fund --silent && node build-support.mjs "$ROOT/.build/support")
+    [ -f "$ROOT/.build/support/index.html" ] && [ -f "$ROOT/.build/support/build.json" ] || { echo "the support site build failed"; exit 1; }
+    ssh "$HOST" 'set -euo pipefail; DOMAIN=${DOMAIN:-tabora.app}; install -d -m 755 -o root -g root "/var/www/support.$DOMAIN" "/var/www/support.$DOMAIN.next"'
+    rsync -az --delete "$ROOT/.build/support/" "$HOST:/var/www/support.${DOMAIN:-tabora.app}.next/"
+    ssh "$HOST" 'set -euo pipefail; DOMAIN=${DOMAIN:-tabora.app}
+      rsync -a --delete --chown=root:root --chmod=D755,F644 "/var/www/support.$DOMAIN.next/" "/var/www/support.$DOMAIN/"
+      rm -rf "/var/www/support.$DOMAIN.next"
+      echo "support site updated: $(python3 -c "import json; d = json.load(open(\"/var/www/support.$DOMAIN/build.json\")); print(\"version\", d[\"version\"], \"files\", len(d[\"files\"]))")"'
+    ;;
   downloads)
     # Installers from .build/signed -> /var/www/downloads (nginx serves them as /downloads/). Older
     # versions on the host are kept. Prints sha256 from the host at the end: compare it with the
@@ -39,5 +55,5 @@ case "$what" in
     rsync -az --progress "${files[@]}" "$HOST:/var/www/downloads/"
     ssh "$HOST" 'cd /var/www/downloads && chown root:root -- *.dmg && chmod 644 -- *.dmg && echo "on the host:" && sha256sum -- *.dmg'
     ;;
-  *) echo "usage: tools/deploy.sh web | downloads"; exit 1 ;;
+  *) echo "usage: tools/deploy.sh web | support | downloads"; exit 1 ;;
 esac
