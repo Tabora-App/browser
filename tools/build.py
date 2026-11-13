@@ -1184,12 +1184,14 @@ def build_android(config: dict, brand: str) -> None:
     # Память: по умолчанию gradle берёт до 7 ГБ кучи и 6 ГБ метаданных, демон Kotlin — ещё столько же;
     # на машине с 15 ГБ это кончается остановкой сборки. Куча остаётся (её требует R8), остальное
     # ограничено.
-    # the bundle task reuses everything the APK task compiled; only the packaging differs
-    mach(["gradle", f"fenix:assemble{ANDROID_BUILD_TYPE.capitalize()}", f"fenix:bundle{ANDROID_BUILD_TYPE.capitalize()}",
-          f"-PtaboraVersionName={version}",
-          "-PdisableDebugSigning",
-          "-Dorg.gradle.jvmargs=-Xmx7g -XX:MaxMetaspaceSize=2g -XX:+UseParallelGC",
-          "-Pkotlin.daemon.jvmargs=-Xmx3g", "--max-workers=3"], config, brand)
+    # Two gradle runs, not one: with a bundle task among the requested ones the app's build file turns the
+    # per-ABI split off (isAppBundle), and the APK would come out universal, without arm64-v8a in its
+    # name. The bundle run reuses everything the APK run compiled; only the packaging differs.
+    gradle_flags = [f"-PtaboraVersionName={version}", "-PdisableDebugSigning",
+                    "-Dorg.gradle.jvmargs=-Xmx7g -XX:MaxMetaspaceSize=2g -XX:+UseParallelGC",
+                    "-Pkotlin.daemon.jvmargs=-Xmx3g", "--max-workers=3"]
+    mach(["gradle", f"fenix:assemble{ANDROID_BUILD_TYPE.capitalize()}", *gradle_flags], config, brand)
+    mach(["gradle", f"fenix:bundle{ANDROID_BUILD_TYPE.capitalize()}", *gradle_flags], config, brand)
     apks = android_apks()
     if not apks:
         die(f"приложение не собрано: в {android_apk_dir()} нет файлов .apk")
