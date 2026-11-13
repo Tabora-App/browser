@@ -508,6 +508,19 @@ button.tabora-sup-chip.link:hover {
   color: var(--tabora-text-3);
 }
 
+.tabora-acc-site {
+  color: var(--tabora-accent-ink, var(--tabora-text));
+  font-weight: 650;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.tabora-acc-site:hover {
+  text-decoration-thickness: 2px;
+}
+
 #tabora-account,
 .tabora-acc-panel {
   display: flex;

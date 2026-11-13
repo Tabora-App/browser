@@ -59,6 +59,8 @@ export function mountMail(el, ctx, rest) {
 
   const accountItems = () => [
     { label: t`Настройки аккаунта`, icon: "settings", run: () => ctx.navigate("account") },
+    // the support site: requests and the replies to them (it has its own, narrow sign-in)
+    { label: t`Поддержка`, icon: "support", run: () => window.open("https://support.tabora.app/", "_blank", "noopener") },
     { label: t`Выйти`, icon: "logout", danger: true, run: () => account.signOut() },
   ];
   const accountButton = h("button", { class: "mail-account", "aria-label": t`Аккаунт ${account.email}` },

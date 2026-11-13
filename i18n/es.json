@@ -3265,5 +3265,9 @@
  "Эта страница открывается только по ссылке из письма: сохраните письмо, чтобы вернуться к обращению. Ответ поддержки придёт на тот же адрес.": "Esta página solo se abre con el enlace del correo: guarda el correo para volver a la solicitud. La respuesta del soporte llegará a la misma dirección.",
  "Ссылка устарела или скопирована не целиком. Откройте её из письма ещё раз или напишите нам заново.": "El enlace ha caducado o no se copió entero. Ábrelo de nuevo desde el correo o escríbenos otra vez.",
  "На главную": "Inicio",
- "Чем помочь?": "¿En qué podemos ayudarte?"
+ "Чем помочь?": "¿En qué podemos ayudarte?",
+ "Те же обращения открываются в любом браузере и на телефоне.": "Las mismas solicitudes se abren en cualquier navegador y en el teléfono.",
+ "Напишите нам на сайте поддержки": "Escríbenos en el sitio de soporte",
+ "Не получается войти?": "¿No puedes iniciar sesión?",
+ " — аккаунт для этого не нужен.": ": no hace falta cuenta para eso."
 }

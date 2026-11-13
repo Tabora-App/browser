@@ -94,6 +94,10 @@ window.TaboraAccountPane = (function () {
   /** Действие оболочки; если страницу открыли вне окна браузера, ничего не делаем. */
   const shell = fn => () => Shell && fn(Shell);
 
+  /** The support site: the same requests in any browser, and requests without an account. */
+  const SUPPORT_SITE = "https://support.tabora.app/";
+  const openSupportSite = () => window.browsingContext?.topChromeWindow?.openTrustedLinkIn(SUPPORT_SITE, "tab");
+
 
   /* ---- Passwords from breaches -----------------------------------------------------------
    * Saved passwords are compared with passwords that appeared in known breaches
@@ -613,6 +617,7 @@ window.TaboraAccountPane = (function () {
       scope,
       group(sup.scope === "all" && sup.staff ? tt`Очередь поддержки` : tt`Поддержка`, sup.scope === "all" && sup.staff ? tt`Обращения всех пользователей: сначала те, что изменились последними.` : head, [
         sup.scope === "all" && sup.staff ? null : item(tt`Что-то не работает или есть идея?`, tt`Опишите, приложите снимок экрана — и следите за ответом здесь.`, [create]),
+        sup.scope === "all" && sup.staff ? null : item(tt`Сайт поддержки`, tt`Те же обращения открываются в любом браузере и на телефоне.`, [button(tt`Открыть`, openSupportSite)]),
         sup.error ? item(tt`Обращения не загрузились`, sup.error, [button(tt`Повторить`, () => {
           sup.stale = true;
           render();
@@ -1050,7 +1055,13 @@ window.TaboraAccountPane = (function () {
     // состояние читает preferences.css: без входа — только приглашение
     state.pane?.setAttribute("data-acc-tab", signedIn ? state.tab : "out");
     if (!signedIn) {
-      root.replaceChildren(who(), el("p", { class: "tabora-acc-contact" }, tt`Не получается войти? Напишите нам на hello@tabora.app.`));
+      // the support site takes requests without an account too: that is where someone who cannot sign in writes
+      const site = el("a", { href: SUPPORT_SITE, class: "tabora-acc-site" }, tt`Напишите нам на сайте поддержки`);
+      site.addEventListener("click", e => {
+        e.preventDefault();
+        openSupportSite();
+      });
+      root.replaceChildren(who(), el("p", { class: "tabora-acc-contact" }, [tt`Не получается войти?` + " ", site, tt` — аккаунт для этого не нужен.`]));
       return;
     }
     // появление панели проигрывается только при смене вкладки: перерисовка на месте (пришли данные,

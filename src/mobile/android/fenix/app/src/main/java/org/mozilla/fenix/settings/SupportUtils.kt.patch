@@ -1,0 +1,102 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SupportUtils.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SupportUtils.kt
+index 73e8b7f32e..25a48438a8 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SupportUtils.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SupportUtils.kt
+@@ -10,10 +10,7 @@ import androidx.browser.customtabs.CustomTabColorSchemeParams
+ import androidx.browser.customtabs.CustomTabsIntent
+ import androidx.core.net.toUri
+ import com.google.android.material.R as materialR
+-import java.io.UnsupportedEncodingException
+-import java.net.URLEncoder
+ import java.util.Locale
+-import mozilla.components.support.ktx.android.content.appVersionName
+ import mozilla.components.support.ktx.android.content.getColorFromAttr
+ import org.mozilla.fenix.BuildConfig
+ import org.mozilla.fenix.IntentReceiverActivity
+@@ -26,9 +23,13 @@ object SupportUtils {
+     const val GOOGLE_URL = "https://www.google.com/"
+     const val GOOGLE_US_URL = "https://www.google.com/webhp?client=firefox-b-1-m&channel=ts"
+     const val GOOGLE_XX_URL = "https://www.google.com/webhp?client=firefox-b-m&channel=ts"
+-    const val WHATS_NEW_URL = "https://www.mozilla.org/firefox/android/notes"
+-    const val FXACCOUNT_SUMO_URL = "https://support.mozilla.org/kb/access-mozilla-services-firefox-account"
+-    const val ANDROID_SUPPORT_SUMO_URL = "mzl.la/AndroidSupport"
++    // Tabora: every "Help" and "Learn more" link of the app leads to the Tabora support site (requests
++    // with an account or without one), and Mozilla's own pages are replaced by the Tabora website.
++    const val TABORA_SUPPORT_URL = "https://support.tabora.app/"
++    const val TABORA_SITE_URL = "https://tabora.app/"
++    const val WHATS_NEW_URL = TABORA_SITE_URL
++    const val FXACCOUNT_SUMO_URL = TABORA_SUPPORT_URL
++    const val ANDROID_SUPPORT_SUMO_URL = "support.tabora.app"
+     const val RELAY_MANAGE_URL = "https://relay.firefox.com"
+ 
+     // This is locale-less on purpose so that the content negotiation happens on the AMO side because the current
+@@ -91,43 +92,24 @@ object SupportUtils {
+         TERMS_OF_SERVICE("about/legal/terms/firefox/"),
+     }
+ 
+-    /** Gets a support page URL for the corresponding topic. */
++    /** Gets a support page URL for the corresponding topic. Tabora: always the support site. */
++    @Suppress("UNUSED_PARAMETER")
+     fun getSumoURLForTopic(
+         context: Context,
+         topic: SumoTopic,
+         locale: Locale = Locale.getDefault(),
+         useMobilePage: Boolean = true,
+-    ): String {
+-        val escapedTopic = getEncodedTextUTF8(topic.topicStr)
+-        val fragment = if (topic.fragmentStr == null) "" else "#${getEncodedTextUTF8(topic.fragmentStr)}"
+-        // Remove the whitespace so a search is not triggered:
+-        val appVersion = context.appVersionName.replace(" ", "")
+-        val osTarget = "Android"
+-        val langTag = getLanguageTag(locale)
+-        val platform =
+-            if (useMobilePage) {
+-                "mobile"
+-            } else {
+-                "firefox"
+-            }
+-        return "https://support.mozilla.org/1/$platform/$appVersion/$osTarget/$langTag/$escapedTopic$fragment"
+-    }
++    ): String = TABORA_SUPPORT_URL
+ 
+     /**
+      * Gets a support page URL for the corresponding topic. Used when the app version and os are not part of the URL.
+      */
+-    fun getGenericSumoURLForTopic(topic: SumoTopic, locale: Locale = Locale.getDefault()): String {
+-        val escapedTopic = getEncodedTextUTF8(topic.topicStr)
+-        val fragment = if (topic.fragmentStr == null) "" else "#${getEncodedTextUTF8(topic.fragmentStr)}"
+-        val langTag = getLanguageTag(locale)
+-        return "https://support.mozilla.org/$langTag/kb/$escapedTopic$fragment"
+-    }
++    @Suppress("UNUSED_PARAMETER")
++    fun getGenericSumoURLForTopic(topic: SumoTopic, locale: Locale = Locale.getDefault()): String = TABORA_SUPPORT_URL
+ 
+-    fun getMozillaPageUrl(page: MozillaPage, locale: Locale = Locale.getDefault()): String {
+-        val path = page.path
+-        val langTag = getLanguageTag(locale)
+-        return "https://www.mozilla.org/$langTag/$path"
+-    }
++    /** Tabora: Mozilla's pages (privacy notice, rights) do not describe this app; the Tabora website does. */
++    @Suppress("UNUSED_PARAMETER")
++    fun getMozillaPageUrl(page: MozillaPage, locale: Locale = Locale.getDefault()): String = TABORA_SITE_URL
+ 
+     fun createCustomTabIntent(context: Context, url: String): Intent =
+         CustomTabsIntent.Builder()
+@@ -164,17 +146,4 @@ object SupportUtils {
+         context.startActivity(intent)
+     }
+ 
+-    private fun getEncodedTextUTF8(text: String): String {
+-        try {
+-            return URLEncoder.encode(text, "UTF-8")
+-        } catch (e: UnsupportedEncodingException) {
+-            throw IllegalStateException("utf-8 should always be available", e)
+-        }
+-    }
+-
+-    private fun getLanguageTag(locale: Locale): String {
+-        val language = locale.language
+-        val country = locale.country // Can be an empty string.
+-        return if (country.isEmpty()) language else "$language-$country"
+-    }
+ }

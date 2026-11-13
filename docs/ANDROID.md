@@ -196,6 +196,10 @@ request as a JSON string: the engine does not accept an object in a reply.
 - The first screen with Mozilla's terms is not shown (`FeatureFlags.kt.patch`).
 - Recommendations and promotional content on the start page and sponsored shortcuts are turned off
   (`nimbus.fml.yaml.patch`, `Settings.kt.patch`).
+- Every "Help" and "Learn more" link leads to the Tabora support site, https://support.tabora.app
+  (requests with an account or without one), instead of Mozilla's help pages about Firefox; links
+  to Mozilla's own pages (privacy notice, rights) lead to the Tabora website (`SupportUtils.kt.patch`).
+  "About" has a "Support" item again, pointing to the same site.
 - Notifications via Firebase do not work: the build has no Firebase configuration.
 - Engine preferences (`src/mobile/android/app/geckoview-prefs.js.patch`): telemetry, captive
   portal detection, country detection, sending the add-on list and Mozilla VPN are turned off —

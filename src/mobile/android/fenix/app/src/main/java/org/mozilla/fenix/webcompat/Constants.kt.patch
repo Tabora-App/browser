@@ -1,0 +1,11 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/webcompat/Constants.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/webcompat/Constants.kt
+index 42204ee958..d137e4c4d7 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/webcompat/Constants.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/webcompat/Constants.kt
+@@ -5,5 +5,5 @@
+ package org.mozilla.fenix.webcompat
+ 
+ const val WEB_COMPAT_REPORTER_URL = "https://webcompat.com/issues/new?url="
+-const val WEB_COMPAT_REPORTER_SUMO_URL = "https://support.mozilla.org/km/kb/report-breakage-due-blocking"
++const val WEB_COMPAT_REPORTER_SUMO_URL = "https://support.tabora.app/"
+ const val GOOGLE_SAFE_BROWSING_REPORT_URL = "https://safebrowsing.google.com/safebrowsing/report_phish/?url="

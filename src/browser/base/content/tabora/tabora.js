@@ -76,7 +76,7 @@ var Tabora = {
   BOOKMARK_DEFAULTS: [
     [tt`Сайт Tabora`, "https://tabora.app/"],
     [tt`Исходный код`, "https://github.com/Tabora-App/browser"],
-    [tt`Поддержка`, "about:preferences#sync-support"],
+    [tt`Поддержка`, "https://support.tabora.app/"],
   ],
 
   initBookmarkDefaults() {

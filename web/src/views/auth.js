@@ -43,7 +43,7 @@ function page(content, embedded = false) {
   return h("div", { class: "auth" },
     h("main", { class: "auth-card" }, content),
     // в приложении для телефона язык задаёт система, а ссылки на сайт и установку ни к чему
-    !embedded && h("footer", { class: "auth-foot" }, languagePicker(), h("a", { href: "https://tabora.app/", rel: "noopener" }, t`О Tabora`), h("a", { href: "https://tabora.app/#download", rel: "noopener" }, t`Скачать браузер`)));
+    !embedded && h("footer", { class: "auth-foot" }, languagePicker(), h("a", { href: "https://tabora.app/", rel: "noopener" }, t`О Tabora`), h("a", { href: "https://tabora.app/#download", rel: "noopener" }, t`Скачать браузер`), h("a", { href: "https://support.tabora.app/", rel: "noopener" }, t`Поддержка`)));
 }
 
 function head(title, text = "") {

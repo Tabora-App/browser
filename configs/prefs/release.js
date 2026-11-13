@@ -44,8 +44,14 @@ pref("extensions.htmlaboutaddons.recommendations.enabled", false);
 // Страница расширений открывается сразу на списке расширений: вводный экран «Рекомендации»
 // без самих рекомендаций — это только реклама каталога Mozilla (и упоминание Firefox)
 pref("extensions.getAddons.showPane", false);
-// «Поделиться идеей или оставить отзыв» в меню помощи: в репозиторий Tabora, а не на сайт Mozilla
-pref("app.feedback.baseURL", "https://github.com/Tabora-App/browser/issues/new");
+// Help, "Learn more" and feedback links lead to the Tabora support site (requests with an account or
+// without one), not to Mozilla's help pages: the engine appends the topic of a link to this address.
+pref("app.support.baseURL", "https://support.tabora.app/?topic=");
+pref("app.feedback.baseURL", "https://support.tabora.app/");
+// The "Privacy notice" links of the settings led to Mozilla's notice about Firefox, which does not
+// describe this browser.
+pref("toolkit.datacollection.infoURL", "https://tabora.app/");
+pref("datareporting.healthreport.infoURL", "https://tabora.app/");
 // Сборка идёт без MOZ_DATA_REPORTING (src/browser/moz.configure.patch), поэтому all.js не задаёт
 // значения политики отправки данных. Задаём их сами, чтобы код, читающий их без запасного
 // значения, не падал; отправка при этом выключена и сборкой, и настройками выше.

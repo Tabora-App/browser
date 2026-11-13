@@ -1,15 +1,16 @@
 diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/about/AboutFragment.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/about/AboutFragment.kt
-index 1a9f9ca087..0dd35206d9 100644
+index 1a9f9ca087..2bd6aad0a5 100644
 --- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/about/AboutFragment.kt
 +++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/about/AboutFragment.kt
-@@ -192,42 +192,7 @@ class AboutFragment(private val toastHandler: ToastHandler = DefaultToastHandler
+@@ -192,42 +192,12 @@ class AboutFragment(private val toastHandler: ToastHandler = DefaultToastHandler
      }
  
      private fun populateAboutList(): List<AboutPageItem> {
 -        val context = requireContext()
 -
          return listOf(
--            AboutPageItem(
++            // Tabora: support is the Tabora support site (requests with an account or without one)
+             AboutPageItem(
 -                AboutItem.ExternalLink(
 -                    WHATS_NEW,
 -                    SupportUtils.WHATS_NEW_URL,
@@ -22,8 +23,9 @@ index 1a9f9ca087..0dd35206d9 100644
 -                    SUPPORT,
 -                    SupportUtils.getSumoURLForTopic(context, SupportUtils.SumoTopic.HELP),
 -                ),
--                getString(R.string.about_support),
--            ),
++                AboutItem.ExternalLink(SUPPORT, SupportUtils.TABORA_SUPPORT_URL),
+                 getString(R.string.about_support),
+             ),
 -            AboutPageItem(
 -                AboutItem.Crashes,
 -                getString(R.string.about_crashes),
