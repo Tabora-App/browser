@@ -39,7 +39,11 @@
    own history database. Deleting a page from history removes it from the device's records;
    turning history sync off removes them all. Autofill addresses and bank cards are synced from
    the engine's autofill storage while the vault is open; cards only after the person turns
-   that on, and the card's security code is never stored or sent.
+   that on, and the card's security code is never stored or sent. A fixed list of settings
+   (theme, language, the ad blocker and its exceptions, the sections of the side panel and the
+   like) is merged setting by setting, the later change winning; only names of the list with
+   values that pass its check are ever applied. Each computer also publishes the list of its
+   extensions; the others show it and open an extension's catalog page, installing nothing.
 10. **Web app and Android account module** (`web/`): the same account, sync and mail code
     (`web/src/core`) runs in the web app and, as a built-in extension, inside the Android app.
 

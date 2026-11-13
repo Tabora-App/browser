@@ -63,6 +63,8 @@ export const GROUPS = {
   history: ["history"],
   addresses: ["addresses"],
   cards: ["cards"],
+  settings: ["prefs"],
+  extensions: ["addons"],
 };
 
 const te = new TextEncoder();
@@ -863,6 +865,12 @@ export const Sync = {
    * Empty while history sync is off. See SOURCES.history.others for the filter. */
   remoteHistory(filter = {}) {
     return this.groupOn("history") && this.enabled ? lazy.SOURCES.history.others(filter) : [];
+  },
+
+  /** Extensions installed on the other computers of the account and not here:
+   * [{ id, name, devices }]. Empty while extension sync is off. */
+  async missingExtensions() {
+    return this.groupOn("extensions") && this.enabled ? lazy.SOURCES.addons.missing() : [];
   },
 
   /** Other devices of the account that a page can be sent to: [{ id, name, at }]. */

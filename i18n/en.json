@@ -3202,5 +3202,10 @@
  "Удалить записи везде?": "Delete the records everywhere?",
  "Записи, пропавшие с этого телефона, будут удалены из аккаунта и с остальных ваших устройств.": "The records that disappeared from this phone will be deleted from the account and from your other devices.",
  "С телефона разом пропало много записей: {0} из {1}. На других устройствах они пока не удалены.": "Many records disappeared from the phone at once: {0} of {1}. They have not been deleted on your other devices yet.",
- "Не сверено: приложение не ответило": "Not synced: the app did not answer"
+ "Не сверено: приложение не ответило": "Not synced: the app did not answer",
+ "Тема, язык, блокировщик рекламы и его исключения, уведомления, состав боковой панели. Расположение окна, сейф и кошелёк у каждого компьютера свои.": "Theme, language, the ad blocker and its exceptions, notifications, the sections of the side panel. Window layout, the vault and the wallet stay each computer’s own.",
+ "Список установленных расширений. Само расширение на другом компьютере не ставится: его можно открыть в каталоге и установить.": "The list of installed extensions. An extension is not installed on another computer by itself: it can be opened in the catalog and installed there.",
+ "На других компьютерах нет расширений, которых нет здесь": "Your other computers have no extensions that are missing here",
+ "Расширения с других компьютеров": "Extensions from other computers",
+ "Установленные на других ваших компьютерах, но не здесь. Нажатие открывает страницу расширения в каталоге.": "Installed on your other computers but not here. A click opens the extension’s page in the catalog."
 }

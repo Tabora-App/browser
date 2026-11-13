@@ -234,6 +234,8 @@ pref("tabora.sync.history", true);
 pref("tabora.sync.addresses", true);
 // bank cards are synced only after the person turns it on
 pref("tabora.sync.cards", false);
+pref("tabora.sync.settings", true);
+pref("tabora.sync.extensions", true);
 // Address autofill is offered to everyone: the engine enables it by the detected country, and
 // country detection is turned off here.
 pref("extensions.formautofill.addresses.supported", "on");

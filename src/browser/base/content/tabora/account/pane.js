@@ -732,8 +732,24 @@ window.TaboraAccountPane = (function () {
         ["tabs", tt`Вкладки и пространства`, tt`Список открытых вкладок, ярлыки стартовой страницы и пространства.`, null],
         ["addresses", tt`Адреса`, tt`Адреса, телефоны и почта, которые браузер подставляет в формы.`, tt`адрес|адреса|адресов`],
         ["cards", tt`Банковские карты`, tt`Номер, срок действия и имя владельца. Код безопасности карты браузер не хранит и никуда не передаёт.`, tt`карта|карты|карт`],
+        ["settings", tt`Настройки`, tt`Тема, язык, блокировщик рекламы и его исключения, уведомления, состав боковой панели. Расположение окна, сейф и кошелёк у каждого компьютера свои.`, null],
+        ["extensions", tt`Расширения`, tt`Список установленных расширений. Само расширение на другом компьютере не ставится: его можно открыть в каталоге и установить.`, null],
         ["history", tt`История`, tt`Страницы, открытые за последние два месяца: адрес, заголовок и время. История других устройств видна в разделе «История»; приватные окна в неё не попадают.`, null],
       ];
+      // extensions of the other computers that are not installed here: a menu, each item opens the catalog page
+      const extensionsMenu = async e => {
+        const r = e.currentTarget.getBoundingClientRect();
+        const frame = window.browsingContext?.embedderElement?.getBoundingClientRect() || { left: 0, top: 0 };
+        const list = await Sync.missingExtensions();
+        if (!list.length) {
+          shell(s => s.notice(tt`На других компьютерах нет расширений, которых нет здесь`))();
+          return;
+        }
+        shell(s => s.showMenu(list.map(a => ({
+          label: a.name, hint: a.devices.join(", "),
+          run: () => s.openUrl(`https://addons.mozilla.org/firefox/addon/${encodeURIComponent(a.id)}/`),
+        })), frame.left + r.right, frame.top + r.bottom + 6, { end: true }))();
+      };
       const rows = [];
       for (const [id, label, text, words] of what) {
         const g = st.groups[id];
@@ -743,6 +759,9 @@ window.TaboraAccountPane = (function () {
         toggle.addEventListener("toggle", () => Sync.setGroup(id, toggle.pressed));
         const count = on && g.on && words && g.count ? tt` На сервере ${g.count} ${plural(g.count, words)}.` : "";
         rows.push(item(label, text + count, [toggle]));
+        if (id === "extensions" && on && g.on) {
+          rows.push(item(tt`Расширения с других компьютеров`, tt`Установленные на других ваших компьютерах, но не здесь. Нажатие открывает страницу расширения в каталоге.`, [button(tt`Показать`, extensionsMenu)]));
+        }
         if (on && g.hold) {
           // с этого компьютера разом пропала заметная часть записей: удаления не отправлены, решает пользователь
           rows.push(item(

@@ -33,7 +33,7 @@
 | **AI agent** | Works inside your tabs: plans the steps, fills in forms, and asks before it sends anything. |
 | **Spaces** | Work, personal, a side project: each space has its own tabs and its own sign-ins on sites. |
 | **Tab groups and split view** | Tabs can be gathered into named, colored groups, and two sites can be shown side by side in one window. A group stays in the space it was made in. |
-| **Sync** | Tabs, history, bookmarks, passwords, sign-in codes, spaces and autofill addresses are shared between your devices; bank cards too, if you turn that on. A page can be sent from one device to another. Everything is encrypted on the device with a key the server never sees. A phone signs in by scanning a QR code from the computer. |
+| **Sync** | Tabs, history, bookmarks, passwords, sign-in codes, spaces, autofill addresses and settings are shared between your devices; bank cards too, if you turn that on. Extensions installed on one computer are offered on the others. A page can be sent from one device to another. Everything is encrypted on the device with a key the server never sees. A phone signs in by scanning a QR code from the computer. |
 | **Import** | Bookmarks, history and passwords come over from Chrome, Safari, Edge and other browsers; passwords and sign-in codes also from files. |
 | **No telemetry** | Mozilla telemetry, studies, sponsored tiles and account prompts are switched off. |
 

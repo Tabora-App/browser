@@ -31,6 +31,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
   formAutofillStorage: "resource://autofill/FormAutofillStorage.sys.mjs",
+  AddonManager: "resource://gre/modules/AddonManager.sys.mjs",
 });
 
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
@@ -1120,4 +1121,265 @@ const addresses = autofillSource("addresses", "addresses", addressFields, sameFi
 // the card's network is worked out from the number by every storage itself and is not a part of the content
 const cards = autofillSource("cards", "creditCards", cardFields, (a, b) => !!a && !!b && a["cc-number"] === b["cc-number"], ({ "cc-type": _type, ...rest }) => rest);
 
-export const SOURCES = { logins, otp, marks, spaces, start, tabs, sent, history, addresses, cards };
+/* ---- settings ---------------------------------------------------------------------------------
+ * A fixed list of settings that describe the person rather than the computer: theme, language,
+ * the ad blocker and its exceptions, cookie banners, mail notifications, the sections of the side
+ * panel and a few of the engine's. Window layout, the vault, the wallet, keys and addresses of
+ * servers are not here. One record, "desktop", shared by the computers of the account:
+ * { p: { name: value | null }, t: { name: time of the change } }; null means "as by default".
+ *
+ * Settings are merged one by one: the later change of a setting wins, whichever computer made
+ * it. A setting that was changed before this computer joined has the time 1 and gives way to any
+ * change made later. Only names of the list and values that pass its check are ever applied. */
+
+const PREFS_TIMES = "tabora.sync.prefs.times";
+const jsonList = (max, each) => v => {
+  try {
+    const list = JSON.parse(v);
+    return v.length <= max && (list === null || (Array.isArray(list) && list.every(each)));
+  } catch (e) {
+    return false;
+  }
+};
+const word = x => typeof x === "string" && /^[a-z0-9_-]{1,40}$/.test(x);
+const host = x => typeof x === "string" && /^[a-z0-9.-]{1,255}$/i.test(x);
+const SYNCED_PREFS = {
+  "layout.css.prefers-color-scheme.content-override": ["int", v => v >= 0 && v <= 2],
+  "tabora.lang": ["string", v => /^(|ru|en|uk|es)$/.test(v)],
+  "tabora.user.name": ["string", v => v.length <= 80],
+  "tabora.account.avatarColor": ["string", v => /^(|#[0-9a-f]{6})$/i.test(v)],
+  "tabora.shield.enabled": ["bool"],
+  "tabora.shield.lists": ["string", v => /^[a-z0-9,_-]{0,300}$/.test(v)],
+  "tabora.shield.allow": ["string", jsonList(40000, host)],
+  "tabora.cookies.banners": ["string", v => /^(reject|accept|off)$/.test(v)],
+  "tabora.cookies.notify": ["bool"],
+  "tabora.tabs.sleepAfterMinutes": ["int", v => v >= 0 && v <= 10080],
+  "tabora.mail.notify": ["bool"],
+  "tabora.mail.suggest": ["bool"],
+  "tabora.drawer.sections": ["string", jsonList(2000, word)],
+  "tabora.drawer.removed": ["string", jsonList(2000, word)],
+  "tabora.drawer.pinned": ["string", v => v.length <= 200],
+  "tabora.dock.items": ["string", v => /^[a-z0-9,_ -]{0,400}$/.test(v)],
+  "tabora.agent.model": ["string", v => /^[A-Za-z0-9._:-]{0,100}$/.test(v)],
+  "browser.startup.page": ["int", v => v >= 0 && v <= 3],
+  "browser.search.suggest.enabled": ["bool"],
+  "browser.tabs.warnOnClose": ["bool"],
+  "browser.ctrlTab.sortByRecentlyUsed": ["bool"],
+  "browser.translations.automaticallyPopup": ["bool"],
+  "media.autoplay.default": ["int", v => v >= 0 && v <= 5],
+  "signon.rememberSignons": ["bool"],
+  "signon.autofillForms": ["bool"],
+  "extensions.formautofill.addresses.enabled": ["bool"],
+  "extensions.formautofill.creditCards.enabled": ["bool"],
+  "privacy.globalprivacycontrol.enabled": ["bool"],
+  "general.autoScroll": ["bool"],
+  "layout.spellcheckDefault": ["int", v => v >= 0 && v <= 2],
+};
+
+const prefs = {
+  name: "prefs",
+  _applying: false,
+  _times: null,
+
+  /** A value of the list that may be applied: of the right type and passing the check. null: reset. */
+  _ok(name, value) {
+    const [type, check] = SYNCED_PREFS[name] || [];
+    if (!type) {
+      return false;
+    }
+    if (value === null) {
+      return true;
+    }
+    const typed = type === "bool" ? typeof value === "boolean" : type === "int" ? Number.isInteger(value) : typeof value === "string";
+    return typed && (!check || check(value));
+  },
+
+  _read(name) {
+    if (!Services.prefs.prefHasUserValue(name)) {
+      return null;
+    }
+    const [type] = SYNCED_PREFS[name];
+    try {
+      return type === "bool" ? Services.prefs.getBoolPref(name) : type === "int" ? Services.prefs.getIntPref(name) : Services.prefs.getStringPref(name);
+    } catch (e) {
+      return null;
+    }
+  },
+
+  _write(name, value) {
+    const [type] = SYNCED_PREFS[name];
+    if (value === null) {
+      Services.prefs.clearUserPref(name);
+    } else if (type === "bool") {
+      Services.prefs.setBoolPref(name, value);
+    } else if (type === "int") {
+      Services.prefs.setIntPref(name, value);
+    } else {
+      Services.prefs.setStringPref(name, value);
+    }
+  },
+
+  /** Times of the changes: { name: ms }. The first time, every setting the person has changed gets the time 1. */
+  times() {
+    if (!this._times) {
+      let saved = null;
+      try {
+        saved = JSON.parse(Services.prefs.getStringPref(PREFS_TIMES, "null"));
+      } catch (e) {}
+      if (saved && typeof saved === "object") {
+        this._times = Object.fromEntries(Object.entries(saved).filter(([name, at]) => SYNCED_PREFS[name] && Number(at) > 0));
+      } else {
+        this._times = Object.fromEntries(Object.keys(SYNCED_PREFS).filter(name => Services.prefs.prefHasUserValue(name)).map(name => [name, 1]));
+        this._saveTimes();
+      }
+    }
+    return this._times;
+  },
+
+  _saveTimes() {
+    Services.prefs.setStringPref(PREFS_TIMES, JSON.stringify(this._times));
+  },
+
+  async list() {
+    const t = this.times();
+    const p = {};
+    for (const name of Object.keys(t)) {
+      const value = this._read(name);
+      // a value that does not pass the check is not offered to the other computers
+      p[name] = this._ok(name, value) ? value : null;
+    }
+    return Object.keys(t).length ? new Map([["desktop", { p, t: { ...t } }]]) : new Map();
+  },
+
+  hashable: d => ({ p: d.p, t: d.t }),
+
+  async apply(changes) {
+    const change = changes.find(c => c.id === "desktop");
+    const theirs = change?.data;
+    if (!theirs || typeof theirs.p !== "object" || typeof theirs.t !== "object") {
+      return {}; // the record was removed elsewhere: the settings here stay, and it goes up again
+    }
+    const t = this.times();
+    let mine = false;
+    this._applying = true;
+    try {
+      for (const name of Object.keys(SYNCED_PREFS)) {
+        const at = Number(theirs.t?.[name]) || 0;
+        const here = t[name] || 0;
+        if (at > here && name in theirs.p && this._ok(name, theirs.p[name])) {
+          this._write(name, theirs.p[name]);
+          t[name] = at;
+        } else if (here > at) {
+          mine = true; // changed here later (or not known there at all): the merged record goes up
+        }
+      }
+    } finally {
+      this._applying = false;
+      this._saveTimes();
+    }
+    return mine ? { dirty: ["desktop"] } : {};
+  },
+
+  watch(notify) {
+    const observer = {
+      observe: (subject, topic, name) => {
+        if (!this._applying && SYNCED_PREFS[name]) {
+          this.times()[name] = Date.now();
+          this._saveTimes();
+          notify();
+        }
+      },
+    };
+    for (const name of Object.keys(SYNCED_PREFS)) {
+      Services.prefs.addObserver(name, observer);
+    }
+  },
+};
+
+/* ---- extensions -------------------------------------------------------------------------------
+ * Every computer publishes the list of extensions the person has installed on it (one record
+ * under its device ID): ID, name, version. The other computers only show the list and offer to
+ * open the extension's page in the catalog; nothing is installed by itself. */
+
+const ADDONS_MAX = 300;
+const addonItem = a =>
+  a && typeof a.id === "string" && a.id.length <= 255 && /^[\x21-\x7e]+$/.test(a.id) ? { id: a.id, n: str(a.n, 120), v: str(a.v, 40), ...(a.off ? { off: 1 } : {}) } : null;
+
+const addons = {
+  name: "addons",
+  _remote: new Map(), // device ID → { name, list }
+
+  owns(id) {
+    return id === lazy.Account.deviceId();
+  },
+
+  /** Extensions the person installed here: not the browser's own, not themes, not temporary ones. */
+  async _mine() {
+    const all = await lazy.AddonManager.getAddonsByTypes(["extension"]);
+    return all
+      .filter(a => !a.isSystem && !a.isBuiltin && !a.hidden && !a.temporarilyInstalled)
+      .map(a => addonItem({ id: a.id, n: a.name, v: a.version, off: !a.isActive }))
+      .filter(Boolean)
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .slice(0, ADDONS_MAX);
+  },
+
+  async list() {
+    return new Map([[lazy.Account.deviceId(), { name: str(lazy.Account.deviceName(), 80), list: await this._mine() }]]);
+  },
+
+  hashable: d => ({ list: d.list }),
+
+  async apply(changes) {
+    for (const { id, data } of changes) {
+      if (this.owns(id)) {
+        continue;
+      }
+      if (data && Array.isArray(data.list)) {
+        this._remote.set(id, { name: str(data.name, 80), list: data.list.map(addonItem).filter(Boolean).slice(0, ADDONS_MAX) });
+      } else {
+        this._remote.delete(id);
+      }
+    }
+    return {};
+  },
+
+  dump() {
+    return { remote: [...this._remote] };
+  },
+
+  restore(saved) {
+    for (const [id, data] of Array.isArray(saved?.remote) ? saved.remote : []) {
+      if (ID_RE.test(id) && !this.owns(id) && data && Array.isArray(data.list)) {
+        this._remote.set(id, { name: str(data.name, 80), list: data.list.map(addonItem).filter(Boolean) });
+      }
+    }
+  },
+
+  forget() {
+    this._remote.clear();
+  },
+
+  watch(notify) {
+    const changed = () => notify();
+    lazy.AddonManager.addAddonListener({ onInstalled: changed, onUninstalled: changed, onEnabled: changed, onDisabled: changed });
+  },
+
+  /** Extensions of the other computers that are not installed here: [{ id, name, devices: [name] }]. */
+  async missing() {
+    const here = new Set((await this._mine()).map(a => a.id));
+    const out = new Map();
+    for (const dev of this._remote.values()) {
+      for (const a of dev.list) {
+        if (!here.has(a.id)) {
+          const item = out.get(a.id) || { id: a.id, name: a.n || a.id, devices: [] };
+          item.devices.push(dev.name);
+          out.set(a.id, item);
+        }
+      }
+    }
+    return [...out.values()].sort((a, b) => a.name.localeCompare(b.name));
+  },
+};
+
+export const SOURCES = { logins, otp, marks, spaces, start, tabs, sent, history, addresses, cards, prefs, addons };
