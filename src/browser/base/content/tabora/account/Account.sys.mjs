@@ -311,6 +311,10 @@ class LocalBackend {
     this._noServer();
   }
 
+  async accountDelete() {
+    this._noServer();
+  }
+
   async twoFactorCodes() {
     this._noServer();
   }
@@ -567,6 +571,11 @@ class HttpBackend {
 
   twoFactorDisable({ session, loginHash, code }) {
     return this._call("POST", "/v1/account/2fa/disable", { loginHash, code }, session?.token);
+  }
+
+  /** The account is deleted at once and for good; the server checks the password again and, with two-step protection, the code. */
+  accountDelete({ session, loginHash, code }) {
+    return this._call("POST", "/v1/account/delete", { loginHash, code }, session?.token, 60000);
   }
 
   twoFactorCodes({ session, loginHash, code }) {
@@ -1731,6 +1740,26 @@ export const Account = {
 
   async twoFactorDisable(password, code) {
     return this._securityChanged(await this.backend.twoFactorDisable({ ...(await this._reauth(password)), code }));
+  },
+
+  /**
+   * Delete the account at once and for good: the mailbox with all its mail, the addresses for
+   * sites, the sync data on the server, the support requests, every sign-in. The server checks
+   * the password again and, with two-step protection on, the code.
+   *
+   * What is kept on this computer (the vault, the wallet, the copy of the mail) stays in the
+   * profile, encrypted and closed: nobody can sign in to this account any more. The profile is
+   * marked (`deleted`), so the settings say what happened and offer to remove it.
+   */
+  async deleteAccount(password, code = "") {
+    const reauth = await this._reauth(password);
+    this._step(tt`Удаляем аккаунт`);
+    await this.backend.accountDelete({ ...reauth, code: String(code || "").replace(/\s+/g, "") || undefined });
+    this.data.session = null;
+    delete this.data.mailAccess;
+    this.data.deleted = new Date().toISOString();
+    await this.save("signed-out");
+    await Vault.lock();
   },
 
   async twoFactorCodes(password, code) {

@@ -243,6 +243,11 @@ export class Api {
     return this.call("POST", "/v1/sync", { gen, keyId, items }, token, { timeout: 30000 });
   }
 
+  /** Delete the account for good: the server checks the password again and, with two-step protection on, the code. */
+  accountDelete(token, { loginHash, code }) {
+    return this.call("POST", "/v1/account/delete", { loginHash, code }, token, { timeout: 60000 });
+  }
+
   /* ---- обращения в поддержку ---- */
 
   supportTickets(token, { scope = "mine", status = "" } = {}) {

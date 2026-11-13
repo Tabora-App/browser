@@ -3269,5 +3269,19 @@
  "Те же обращения открываются в любом браузере и на телефоне.": "Las mismas solicitudes se abren en cualquier navegador y en el teléfono.",
  "Напишите нам на сайте поддержки": "Escríbenos en el sitio de soporte",
  "Не получается войти?": "¿No puedes iniciar sesión?",
- " — аккаунт для этого не нужен.": ": no hace falta cuenta para eso."
+ " — аккаунт для этого не нужен.": ": no hace falta cuenta para eso.",
+ "{0}. Данные этого профиля на компьютере остались зашифрованными и больше не откроются. Убрать профиль или войти в другой аккаунт можно в списке аккаунтов.": "{0}. Los datos de este perfil en el ordenador siguen cifrados y ya no se abrirán. Puedes quitar el perfil o entrar en otra cuenta desde la lista de cuentas.",
+ "Аккаунт {0} будет удалён сразу и навсегда: почтовый ящик со всеми письмами, адреса для сайтов, данные синхронизации на сервере и обращения в поддержку. Адрес больше никому не выдаётся, вернуть ничего нельзя.": "La cuenta {0} se eliminará de inmediato y para siempre: el buzón con todo su correo, las direcciones para sitios, los datos de sincronización del servidor y las solicitudes de soporte. La dirección no se dará a nadie más y no se podrá recuperar nada.",
+ "Аккаунт {0} удалён": "La cuenta {0} se ha eliminado",
+ "Аккаунт удалён": "La cuenta se ha eliminado",
+ "В этом профиле есть кошелёк. После удаления аккаунта открыть его здесь будет нельзя: сначала сохраните фразу восстановления. Пароли сайтов и коды входа на этом компьютере тоже станут недоступны.": "Este perfil tiene un monedero. Tras eliminar la cuenta no se podrá abrir aquí: guarda antes su frase de recuperación. Las contraseñas de sitios y los códigos de acceso de este ordenador tampoco estarán disponibles.",
+ "Введите код из приложения": "Introduce el código de la aplicación",
+ "Вкладки, закладки и пароли, уже сохранённые на этом телефоне, останутся на нём.": "Las pestañas, los marcadores y las contraseñas ya guardados en este teléfono se quedan en él.",
+ "Вместе с почтовым ящиком и данными на сервере. Отменить нельзя": "Junto con el buzón y los datos del servidor. No se puede deshacer",
+ "Нужен, если у аккаунта включена двухфакторная защита.": "Hace falta si la cuenta tiene activada la protección en dos pasos.",
+ "Пароли сайтов и коды входа, сохранённые на этом компьютере, тоже станут недоступны.": "Las contraseñas de sitios y los códigos de acceso guardados en este ordenador tampoco estarán disponibles.",
+ "Удаление аккаунта": "Eliminación de la cuenta",
+ "Удалить навсегда": "Eliminar para siempre",
+ "Удаляем аккаунт": "Eliminando la cuenta",
+ "Я понимаю, что отменить это нельзя": "Entiendo que esto no se puede deshacer"
 }

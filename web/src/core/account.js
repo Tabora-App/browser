@@ -606,6 +606,17 @@ export class Account {
     return k.loginHash;
   }
 
+  /**
+   * Delete the account at once and for good: the mailbox with all its mail, the aliases, the sync
+   * data on the server, the support requests, every sign-in. The server checks the password again
+   * (loginHash, see loginHashFor) and, with two-step protection on, the code. After it this
+   * device is signed out.
+   */
+  async deleteAccount({ loginHash, code = "" }) {
+    await this.api.accountDelete(this.token, { loginHash, code: code || undefined });
+    await this._drop("signed-out");
+  }
+
   /* ---- регистрация ---- */
 
   async register(name, password, { hold = false } = {}) {

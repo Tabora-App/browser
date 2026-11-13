@@ -121,12 +121,12 @@ export function mountAccount(el, ctx) {
   }
 
   /** Окно, которое просит пароль (и код, если защита включена) и выполняет действие с хешем входа. */
-  function reauth({ title, text, confirm, danger = false, extra = [], needCode = security?.twoFactor?.enabled, run, done }) {
+  function reauth({ title, text, confirm, danger = false, extra = [], after = [], needCode = security?.twoFactor?.enabled, run, done }) {
     const pass = field(t`Пароль аккаунта`, { type: "password", autocomplete: "current-password", autofocus: true });
     const code = needCode ? field(t`Код из приложения`, { mono: true, inputmode: "numeric", autocomplete: "one-time-code", placeholder: "000 000", hint: t`Или резервный код.` }) : null;
     const error = formError();
     const submit = h("button", { class: `btn ${danger ? "danger" : "primary"}` }, confirm);
-    const m = modal({ title, content: [text && h("p", { class: "modal-text" }, text), h("form", { class: "modal-form", novalidate: true, onsubmit: e => { e.preventDefault(); submit.click(); } }, extra.map(f => f.el), pass.el, code?.el, error.el)], actions: [h("button", { class: "btn", onclick: () => m.close() }, t`Отмена`), submit] });
+    const m = modal({ title, content: [text && h("p", { class: "modal-text" }, text), h("form", { class: "modal-form", novalidate: true, onsubmit: e => { e.preventDefault(); submit.click(); } }, extra.map(f => f.el), pass.el, code?.el, after.map(f => f.el), error.el)], actions: [h("button", { class: "btn", onclick: () => m.close() }, t`Отмена`), submit] });
     submit.addEventListener("click", async () => {
       error.set("");
       if (!pass.value) {
@@ -307,7 +307,30 @@ export function mountAccount(el, ctx) {
         k.fingerprint ? row(t`Отпечаток ключа почты`, h("span", { class: "mono wrap small-text" }, formatFingerprint(k.fingerprint)), [h("button", { class: "icon-btn", "aria-label": t`Скопировать отпечаток`, onclick: () => copyText(formatFingerprint(k.fingerprint), t`Отпечаток скопирован`) }, icon("copy", 18))], { tall: true }) : null),
       card(t`Устройства`,
         devices ? devices.filter(d => d.current || d.active !== false).sort((a, b) => Number(b.current) - Number(a.current) || (b.at || 0) - (a.at || 0)).map(d => row(d.current ? t`Это устройство` : t`Был в сети ${shortDate(d.at)}`, d.name || t`Устройство`, d.current ? [] : [h("button", { class: "btn small", onclick: () => revoke(d) }, t`Завершить`)], { wrap: true })) : row("", "…")),
+      card(t`Удаление аккаунта`,
+        row(t`Удалить аккаунт`, t`Вместе с почтовым ящиком и данными на сервере. Отменить нельзя`, [h("button", { class: "btn small danger", onclick: deleteAccount }, t`Удалить`)], { wrap: true })),
       h("p", { class: "settings-foot" }, t`Почта Tabora · `, h("a", { href: "https://tabora.app/", target: "_blank", rel: "noopener" }, "tabora.app"), " · ", h("a", { href: "https://github.com/Tabora-App/browser", target: "_blank", rel: "noopener noreferrer" }, t`исходный код`)));
+  }
+
+  /* ---- удаление аккаунта: сразу и навсегда, после пароля и кода второго шага ---- */
+
+  function deleteAccount() {
+    const sure = h("input", { type: "checkbox" });
+    const email = account.email;
+    reauth({
+      title: t`Удалить аккаунт`,
+      text: t`Аккаунт ${email} будет удалён сразу и навсегда: почтовый ящик со всеми письмами, адреса для сайтов, данные синхронизации на сервере и обращения в поддержку. Адрес больше никому не выдаётся, вернуть ничего нельзя.`,
+      confirm: t`Удалить навсегда`,
+      danger: true,
+      after: [{ el: h("label", { class: "check" }, sure, h("span", {}, t`Я понимаю, что отменить это нельзя`)) }],
+      run: async ({ loginHash, code }) => {
+        if (!sure.checked) {
+          throw new Error(t`Отметьте, что понимаете последствия`);
+        }
+        await account.deleteAccount({ loginHash, code });
+      },
+      done: () => toast(t`Аккаунт ${email} удалён`, { ms: 6000 }),
+    });
   }
 
   function revoke(d) {

@@ -2,7 +2,7 @@
 
 Tabora account mail in any browser, including on a phone: https://app.tabora.app.
 The web app has only mail and account settings (password, two-factor protection, backup email,
-recovery key, devices). Site passwords, sign-in codes, bookmarks and the wallet live in the Tabora
+recovery key, devices, deleting the account). Site passwords, sign-in codes, bookmarks and the wallet live in the Tabora
 browser: vault secrets do not belong on a page whose code comes from the server every time.
 
 ## How the protection works
@@ -48,6 +48,16 @@ client), `src/core/otp.js` and `codes.js` (code calculation and code records). T
 has no sync and no codes.
 Build — `node tools/web/build-phone.mjs`, logic check — `node test/run.mjs phone`. How the module
 is embedded in the app — `docs/ANDROID.md`.
+
+## Deleting the account
+
+Account settings (`#/account`) end with "Delete the account": the password again, the code if
+two-step protection is on, and a tick that this cannot be undone. The account is deleted at once
+and for good — the mailbox with all its mail, the addresses for sites, the sync data on the
+server, the support requests — and every device is signed out. The address is never given to
+anyone else. The same request is made by the browser (Settings → Account → Sign out) and by the
+phone app (the account screen); the server side is described in the server repository's README.
+This page is also the place to send someone who wants the account deleted without the app.
 
 ## Support site
 

@@ -25,7 +25,6 @@ window.TaboraAccountPane = (function () {
   const { Sync } = ChromeUtils.importESModule("chrome://tabora/content/sync/Sync.sys.mjs");
   const Shell = window.browsingContext?.topChromeWindow?.Tabora || null;
   const HTML = "http://www.w3.org/1999/xhtml";
-  const LATER = tt`появится в одной из следующих версий`;
 
   const TABS = [
     ["profile", tt`Профиль`],
@@ -902,7 +901,12 @@ window.TaboraAccountPane = (function () {
         group(tt`Выход`, tt`После выхода кошелёк, коды, пароли и почта закрыты до следующего входа. Данные остаются на этом компьютере зашифрованными.`, [
           item(tt`Выйти из аккаунта`, Account.email, [button(tt`Выйти`, shell(s => s.accountLogout({ thenLogin: false })))]),
         ]),
-        group(tt`Удаление`, "", [item(tt`Удалить аккаунт`, tt`Удаление аккаунта вместе с почтой ${LATER}.`, [button(tt`Удалить`, () => {}, { type: "destructive", disabled: true })])]),
+        // the account itself, on the server: at once and for good, after the password and the code
+        group(tt`Удаление`, "", [
+          Account.needsServerLink
+            ? item(tt`Удалить аккаунт`, tt`Появится, когда аккаунт подключат к серверу Tabora.`, [button(tt`Удалить`, () => {}, { type: "destructive", disabled: true })])
+            : item(tt`Удалить аккаунт`, tt`Вместе с почтовым ящиком и данными на сервере. Отменить нельзя`, [button(tt`Удалить`, shell(s => s.accountDialog("delete")), { type: "destructive" })]),
+        ]),
       ];
     },
   };
@@ -980,19 +984,27 @@ window.TaboraAccountPane = (function () {
 
   function who() {
     const email = Account.email;
+    // the account of this profile was deleted on the server: nobody can sign in to it any more
+    const deleted = !Account.signedIn && !!Account.data?.deleted;
     if (!Account.signedIn) {
       return el("div", { class: "tabora-acc-who out" }, [
         el("div", { class: "tabora-acc-id" }, [
-          el("b", {}, email ? tt`Вы вышли из аккаунта` : tt`Аккаунт Tabora`),
-          el("span", {}, email ? tt`${email}. Кошелёк, коды, пароли и почта этого профиля закрыты, пока вы не войдёте снова.` : tt`Адрес почты на tabora.app и один пароль для входа и сейфа. Кошелёк, коды и почта открываются после входа в аккаунт.`),
+          el("b", {}, deleted ? tt`Аккаунт удалён` : email ? tt`Вы вышли из аккаунта` : tt`Аккаунт Tabora`),
+          el("span", {}, deleted ? tt`${email}. Данные этого профиля на компьютере остались зашифрованными и больше не откроются. Убрать профиль или войти в другой аккаунт можно в списке аккаунтов.` : email ? tt`${email}. Кошелёк, коды, пароли и почта этого профиля закрыты, пока вы не войдёте снова.` : tt`Адрес почты на tabora.app и один пароль для входа и сейфа. Кошелёк, коды и почта открываются после входа в аккаунт.`),
         ]),
         el("div", { class: "tabora-acc-actions" }, [
           (() => {
-            const b = button(email ? tt`Войти` : tt`Создать аккаунт`, shell(s => s.accountDialog(email ? "login" : "register")), { type: "primary" });
+            // nobody can sign in to a deleted account: the main action is the list of accounts
+            const b = deleted
+              ? button(tt`Аккаунты на этом компьютере`, shell(s => s.accountShowAccounts()), { type: "primary" })
+              : button(email ? tt`Войти` : tt`Создать аккаунт`, shell(s => s.accountDialog(email ? "login" : "register")), { type: "primary" });
             b.removeAttribute("slot");
             return b;
           })(),
           (() => {
+            if (deleted) {
+              return null;
+            }
             const b = button(email ? tt`Другой аккаунт` : tt`Войти`, shell(s => (email ? s.accountShowAccounts() : s.accountDialog("login"))));
             b.removeAttribute("slot");
             return b;

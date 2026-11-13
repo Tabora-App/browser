@@ -161,7 +161,7 @@ Object.assign(Tabora, {
     this.account.step = step;
     const builders = {
       welcome: this.accountWelcome, register: this.accountRegister, recovery: this.accountRecovery, done: this.accountDone, login: this.accountLogin, change: this.accountChange, link: this.accountLink,
-      accounts: this.accountAccounts, remove: this.accountRemove,
+      accounts: this.accountAccounts, remove: this.accountRemove, delete: this.accountDeleteForever,
       vault: this.accountVault, forgot: this.accountForgot, "forgot-key": this.accountForgotKey, "forgot-mail": this.accountForgotMail,
       twofa: this.accountTwoFactor, "twofa-scan": this.accountTwoFactorScan, "twofa-off": this.accountTwoFactorOff, "twofa-codes": this.accountTwoFactorCodes, codes: this.accountBackupCodes,
       bemail: this.accountBackupEmail, "bemail-code": this.accountBackupEmailCode, "bemail-off": this.accountBackupEmailOff,
@@ -629,6 +629,50 @@ Object.assign(Tabora, {
   },
 
   /** Удаление с компьютера профиля другого аккаунта. Сам аккаунт на сервере остаётся. */
+  /** Deleting the account itself, on the server: at once and for good, after the password and, with
+   * two-step protection on, the code. What is kept in this profile stays encrypted and closed. */
+  accountDeleteForever() {
+    const h = (t, a, x, c) => this.html(t, a, x, c);
+    const { Account } = this.accountMod();
+    const email = Account.email;
+    const pass = this.taField(tt`Пароль аккаунта`, { type: "password", autocomplete: "current-password" });
+    // the code field appears when the server says the account has two-step protection (taSecondFactor)
+    const code = this.taCodeField();
+    code.wrap.hidden = true;
+    const check = h("input", { type: "checkbox" });
+    let wallet = false;
+    try {
+      wallet = !!this.walletStore().WalletStore.exists;
+    } catch (e) {}
+    return this.taForm({
+      title: tt`Удалить аккаунт`,
+      text: tt`Аккаунт ${email} будет удалён сразу и навсегда: почтовый ящик со всеми письмами, адреса для сайтов, данные синхронизации на сервере и обращения в поддержку. Адрес больше никому не выдаётся, вернуть ничего нельзя.`,
+      fields: [
+        h("p", { class: "ta-hint" }, wallet
+          ? tt`В этом профиле есть кошелёк. После удаления аккаунта открыть его здесь будет нельзя: сначала сохраните фразу восстановления. Пароли сайтов и коды входа на этом компьютере тоже станут недоступны.`
+          : tt`Пароли сайтов и коды входа, сохранённые на этом компьютере, тоже станут недоступны.`),
+        pass.wrap,
+        code.wrap,
+        h("label", { class: "ta-check" }, null, [check, h("span", {}, tt`Я понимаю, что отменить это нельзя`)]),
+      ],
+      okLabel: tt`Удалить навсегда`,
+      busyLabel: tt`Удаляем`,
+      danger: true,
+      onOk: async () => {
+        if (!check.checked) {
+          throw new Error(tt`Отметьте, что понимаете последствия`);
+        }
+        try {
+          await Account.deleteAccount(pass.input.value, code.wrap.hidden ? "" : code.input.value);
+        } catch (e) {
+          throw this.taSecondFactor(e, code);
+        }
+        this.notice(tt`Аккаунт ${email} удалён`);
+        this.accountClose();
+      },
+    });
+  },
+
   accountRemove({ profile }) {
     const h = (t, a, x, c) => this.html(t, a, x, c);
     const check = h("input", { type: "checkbox" });

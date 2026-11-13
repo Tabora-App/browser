@@ -3269,5 +3269,19 @@
  "Те же обращения открываются в любом браузере и на телефоне.": "The same requests open in any browser and on a phone.",
  "Напишите нам на сайте поддержки": "Write to us on the support site",
  "Не получается войти?": "Can’t sign in?",
- " — аккаунт для этого не нужен.": " — no account is needed for that."
+ " — аккаунт для этого не нужен.": " — no account is needed for that.",
+ "{0}. Данные этого профиля на компьютере остались зашифрованными и больше не откроются. Убрать профиль или войти в другой аккаунт можно в списке аккаунтов.": "{0}. The data of this profile on the computer stays encrypted and will not open again. You can remove the profile or sign in to another account in the list of accounts.",
+ "Аккаунт {0} будет удалён сразу и навсегда: почтовый ящик со всеми письмами, адреса для сайтов, данные синхронизации на сервере и обращения в поддержку. Адрес больше никому не выдаётся, вернуть ничего нельзя.": "The account {0} will be deleted at once and for good: the mailbox with all its mail, the addresses for sites, the sync data on the server and the support requests. The address is never given to anyone else, and nothing can be restored.",
+ "Аккаунт {0} удалён": "The account {0} is deleted",
+ "Аккаунт удалён": "The account is deleted",
+ "В этом профиле есть кошелёк. После удаления аккаунта открыть его здесь будет нельзя: сначала сохраните фразу восстановления. Пароли сайтов и коды входа на этом компьютере тоже станут недоступны.": "This profile has a wallet. After the account is deleted it cannot be opened here: save its recovery phrase first. The site passwords and sign-in codes on this computer will become unavailable too.",
+ "Введите код из приложения": "Enter the code from the app",
+ "Вкладки, закладки и пароли, уже сохранённые на этом телефоне, останутся на нём.": "The tabs, bookmarks and passwords already saved on this phone stay on it.",
+ "Вместе с почтовым ящиком и данными на сервере. Отменить нельзя": "Together with the mailbox and the data on the server. This cannot be undone",
+ "Нужен, если у аккаунта включена двухфакторная защита.": "Needed if the account has two-step protection on.",
+ "Пароли сайтов и коды входа, сохранённые на этом компьютере, тоже станут недоступны.": "The site passwords and sign-in codes saved on this computer will become unavailable too.",
+ "Удаление аккаунта": "Deleting the account",
+ "Удалить навсегда": "Delete for good",
+ "Удаляем аккаунт": "Deleting the account",
+ "Я понимаю, что отменить это нельзя": "I understand that this cannot be undone"
 }

@@ -7,7 +7,7 @@
  * приложения — здесь только сведения о них. */
 
 import { clear, h, icon } from "../lib/dom.js";
-import { avatar, busy, confirmDialog, errorText, plural, shortDate, toast, toggle } from "../lib/ui.js";
+import { avatar, busy, confirmDialog, errorText, field, formError, modal, plural, shortDate, toast, toggle } from "../lib/ui.js";
 import { unlockKeysDialog } from "../views/account.js";
 import { t } from "../core/i18n.js";
 
@@ -197,6 +197,39 @@ export function mountPhoneAccount(root, { service }) {
     });
   }
 
+  /** Deleting the account: at once and for good, after the password and, with two-step protection, the code. */
+  function deleteAccount() {
+    const email = service.account.email;
+    const pass = field(t`Пароль аккаунта`, { type: "password", autocomplete: "current-password" });
+    const code = field(t`Код из приложения`, { mono: true, inputmode: "numeric", autocomplete: "one-time-code", placeholder: "000 000", hint: t`Нужен, если у аккаунта включена двухфакторная защита.` });
+    const sure = h("input", { type: "checkbox" });
+    const error = formError();
+    const submit = h("button", { class: "btn danger" }, t`Удалить навсегда`);
+    const m = modal({
+      title: t`Удалить аккаунт`,
+      content: [
+        h("p", { class: "modal-text" }, t`Аккаунт ${email} будет удалён сразу и навсегда: почтовый ящик со всеми письмами, адреса для сайтов, данные синхронизации на сервере и обращения в поддержку. Адрес больше никому не выдаётся, вернуть ничего нельзя.`),
+        h("p", { class: "modal-text" }, t`Вкладки, закладки и пароли, уже сохранённые на этом телефоне, останутся на нём.`),
+        h("form", { class: "modal-form", novalidate: true, onsubmit: e => { e.preventDefault(); submit.click(); } }, pass.el, code.el, h("label", { class: "check" }, sure, h("span", {}, t`Я понимаю, что отменить это нельзя`)), error.el),
+      ],
+      actions: [h("button", { class: "btn", onclick: () => m.close() }, t`Отмена`), submit],
+    });
+    submit.addEventListener("click", async () => {
+      error.set("");
+      if (!pass.value || !sure.checked) {
+        error.set(!pass.value ? t`Введите пароль` : t`Отметьте, что понимаете последствия`);
+        return;
+      }
+      try {
+        await busy(submit, () => service.deleteAccount(pass.value, code.value), t`Проверяем пароль`);
+        m.close();
+        toast(t`Аккаунт ${email} удалён`, { ms: 6000 });
+      } catch (e) {
+        error.set(e.code === "bad-credentials" ? t`Пароль введён неверно` : e.code === "2fa-required" ? t`Введите код из приложения` : e.code === "bad-2fa" ? t`Код не подошёл` : errorText(e));
+      }
+    });
+  }
+
   function draw() {
     const s = service.state();
     clear(body,
@@ -205,7 +238,8 @@ export function mountPhoneAccount(root, { service }) {
         h("div", { class: "kv-text" }, h("span", {}, s.email), h("small", {}, t`Вы вошли на этом телефоне`))),
       syncCard(s),
       devicesCard(s),
-      h("button", { class: "btn danger block large", onclick: signOut }, icon("logout", 18), t`Выйти из аккаунта`));
+      h("button", { class: "btn danger block large", onclick: signOut }, icon("logout", 18), t`Выйти из аккаунта`),
+      h("button", { class: "btn ghost block", onclick: deleteAccount }, t`Удалить аккаунт`));
   }
 
   draw();

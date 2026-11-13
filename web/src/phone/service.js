@@ -516,6 +516,16 @@ export class Service {
     await this.account.signOut();
   }
 
+  /**
+   * Delete the account for good: the server checks the password again and, with two-step
+   * protection on, the code, and erases the mailbox, the sync data and every sign-in. The phone
+   * is then signed out like after "Sign out"; its own tabs, bookmarks and passwords stay on it.
+   */
+  async deleteAccount(password, code = "") {
+    const loginHash = await this.account.loginHashFor(password);
+    await this.account.deleteAccount({ loginHash, code: String(code).replace(/\s+/g, "") });
+  }
+
   /* ---- состояние ---- */
 
   state() {

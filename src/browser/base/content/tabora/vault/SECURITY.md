@@ -177,6 +177,17 @@
 - Следствие: после выхода (или отзыва сессии) открыть сейф, кошелёк и коды можно только новым входом,
   а вход требует связи с сервером аккаунтов. Пока вход выполнен, сеть для них не нужна.
 
+## Deleting the account (`Account.deleteAccount`, Settings → Account → Sign out)
+- The account is deleted on the server at once and for good, after the password is entered again
+  and, with two-step protection on, the code; the dialog also asks for a tick that this cannot be
+  undone. The mailbox with all its mail, the addresses for sites, the sync data and the support
+  requests are erased, every device is signed out, the address is never given out again.
+- What is kept in the profile on this computer (the vault, the wallet, the copy of the mail) is
+  not touched: it stays encrypted and closed, because nobody can sign in to this account any more.
+  The dialog says so, and warns about the wallet if the profile has one: its recovery phrase must
+  be saved first. The profile is marked as belonging to a deleted account; the settings then say
+  "The account is deleted" and lead to the list of accounts, where the profile can be removed.
+
 ## Вход в аккаунт: двухфакторная защита и резервный адрес
 - Двухфакторная защита необязательна и включается в «Настройки → Аккаунт → Безопасность». Это коды
   приложения на телефоне (TOTP) и десять одноразовых резервных кодов; их хранит и проверяет сервер
