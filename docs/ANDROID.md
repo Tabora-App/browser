@@ -303,10 +303,18 @@ The build produces an unsigned file; there is no signing key in CI. Signing is d
 ```sh
 tools/android/sign.sh init                       # once: create the key
 tools/android/sign.sh dist/tabora-…-unsigned.apk # align, sign, verify
+tools/android/sign.sh dist/tabora-…-unsigned.aab # the app bundle for Google Play
 ```
 
 Key: `~/.config/tabora/android-keys` (`TABORA_ANDROID_KEYS_DIR`). A phone accepts an update
 only with the same signature, so there is one key for the whole life of the app — keep a copy of it separately.
+
+The build gives two files. The APK is for installing directly on a phone. The app bundle (`.aab`) is
+the only format Google Play takes for new apps; it holds the same code and the same engine
+(arm64-v8a). In Google Play the key above is the upload key: Google checks that each upload is
+signed with it and re-signs what phones download with an app signing key that it keeps (Play App
+Signing). The version code of both files comes from the build time, so every later build is newer
+for Google Play without any counter to maintain.
 
 ## Checking in the emulator
 

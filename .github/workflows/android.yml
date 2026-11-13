@@ -142,4 +142,7 @@ jobs:
           name: tabora-android-aarch64
           retention-days: 7
           if-no-files-found: error
-          path: dist/*.apk
+          # the APK is for direct installs, the app bundle (.aab) is what Google Play takes
+          path: |
+            dist/*.apk
+            dist/*.aab

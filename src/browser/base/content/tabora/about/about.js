@@ -9,12 +9,16 @@ const { AppConstants } = ChromeUtils.importESModule("resource://gre/modules/AppC
 const { tt, tr: ttr, form: ttForm, locale: ttLocale, translateDocument } = ChromeUtils.importESModule("chrome://tabora/content/i18n/I18n.sys.mjs");
 translateDocument(document);
 
+// The website has its pages in these languages; any other interface language gets the English page.
+const SITE_LANGUAGES = ["ru", "en", "uk", "es"];
+
+/** The address behind a link of the window, or "" when the build has no such page (the link is then hidden). */
 function url(key) {
   if (key.startsWith("about:")) {
     return key;
   }
-  const home = Services.prefs.getStringPref("tabora.url.homepage", "https://tabora.app");
-  return Services.prefs.getStringPref(`tabora.url.${key}`, "") || home;
+  const lang = String(ttLocale()).toLowerCase().split("-")[0];
+  return Services.prefs.getStringPref(`tabora.url.${key}`, "").replace("%LANG%", SITE_LANGUAGES.includes(lang) ? lang : "en");
 }
 
 function open(target) {
@@ -63,7 +67,9 @@ function fill() {
   });
   restart.addEventListener("click", () => TaboraUpdate.restart());
   for (const b of document.querySelectorAll(".link[data-url]")) {
-    b.addEventListener("click", () => open(url(b.dataset.url)));
+    const target = url(b.dataset.url);
+    b.hidden = !target;
+    b.addEventListener("click", () => open(target));
   }
   window.addEventListener("keydown", e => {
     if (e.key === "Escape" || (e.key === "w" && (e.metaKey || e.ctrlKey))) {

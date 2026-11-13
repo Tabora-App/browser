@@ -4,7 +4,7 @@
 
 /* Страница настроек (about:preferences) в палитре Tabora.
  * Firefox 159 красит её дизайн-токенами в @layer, поэтому объявления здесь,
- * вне слоёв, перекрывают их. Макет: Settings.dc.html из Claude Design. */
+ * вне слоёв, перекрывают их. Макет: Settings.dc.html. */
 
 @import url("chrome://browser/content/tabora/fonts.css");
 

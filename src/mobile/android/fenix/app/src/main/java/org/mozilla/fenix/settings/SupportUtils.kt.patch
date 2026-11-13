@@ -1,5 +1,5 @@
 diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SupportUtils.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SupportUtils.kt
-index 73e8b7f32e..25a48438a8 100644
+index 73e8b7f32e..a19db6f210 100644
 --- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SupportUtils.kt
 +++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/SupportUtils.kt
 @@ -10,10 +10,7 @@ import androidx.browser.customtabs.CustomTabColorSchemeParams
@@ -13,7 +13,7 @@ index 73e8b7f32e..25a48438a8 100644
  import mozilla.components.support.ktx.android.content.getColorFromAttr
  import org.mozilla.fenix.BuildConfig
  import org.mozilla.fenix.IntentReceiverActivity
-@@ -26,9 +23,13 @@ object SupportUtils {
+@@ -26,9 +23,14 @@ object SupportUtils {
      const val GOOGLE_URL = "https://www.google.com/"
      const val GOOGLE_US_URL = "https://www.google.com/webhp?client=firefox-b-1-m&channel=ts"
      const val GOOGLE_XX_URL = "https://www.google.com/webhp?client=firefox-b-m&channel=ts"
@@ -24,13 +24,14 @@ index 73e8b7f32e..25a48438a8 100644
 +    // with an account or without one), and Mozilla's own pages are replaced by the Tabora website.
 +    const val TABORA_SUPPORT_URL = "https://support.tabora.app/"
 +    const val TABORA_SITE_URL = "https://tabora.app/"
++    private val TABORA_SITE_LANGUAGES = setOf("ru", "uk", "es")
 +    const val WHATS_NEW_URL = TABORA_SITE_URL
 +    const val FXACCOUNT_SUMO_URL = TABORA_SUPPORT_URL
 +    const val ANDROID_SUPPORT_SUMO_URL = "support.tabora.app"
      const val RELAY_MANAGE_URL = "https://relay.firefox.com"
  
      // This is locale-less on purpose so that the content negotiation happens on the AMO side because the current
-@@ -91,43 +92,24 @@ object SupportUtils {
+@@ -91,44 +93,37 @@ object SupportUtils {
          TERMS_OF_SERVICE("about/legal/terms/firefox/"),
      }
  
@@ -75,14 +76,26 @@ index 73e8b7f32e..25a48438a8 100644
 -        val path = page.path
 -        val langTag = getLanguageTag(locale)
 -        return "https://www.mozilla.org/$langTag/$path"
--    }
-+    /** Tabora: Mozilla's pages (privacy notice, rights) do not describe this app; the Tabora website does. */
-+    @Suppress("UNUSED_PARAMETER")
-+    fun getMozillaPageUrl(page: MozillaPage, locale: Locale = Locale.getDefault()): String = TABORA_SITE_URL
++    /** The Tabora privacy policy in the language of the phone (the site has it in four languages). */
++    fun taboraPrivacyUrl(locale: Locale = Locale.getDefault()): String {
++        val language = locale.language.takeIf { it in TABORA_SITE_LANGUAGES } ?: "en"
++        return "${TABORA_SITE_URL}$language/privacy/"
+     }
  
++    /** Tabora: Mozilla's pages do not describe this app; the Tabora website and its privacy policy do. */
++    fun getMozillaPageUrl(page: MozillaPage, locale: Locale = Locale.getDefault()): String =
++        when (page) {
++            MozillaPage.PRIVACY_NOTICE,
++            MozillaPage.PRIVACY_NOTICE_UPDATE,
++            MozillaPage.PRIVACY_NOTICE_NEXT,
++            -> taboraPrivacyUrl(locale)
++            else -> TABORA_SITE_URL
++        }
++
      fun createCustomTabIntent(context: Context, url: String): Intent =
          CustomTabsIntent.Builder()
-@@ -164,17 +146,4 @@ object SupportUtils {
+             .setInstantAppsEnabled(false)
+@@ -164,17 +159,4 @@ object SupportUtils {
          context.startActivity(intent)
      }
  

@@ -292,10 +292,10 @@ var { tt, tr: ttr, form: ttForm, locale: ttLocale } = ChromeUtils.importESModule
     card.before(shieldCard());
   }
 
-  /* Ссылки поддержки ведут в обращения Tabora (Аккаунт → Поддержка), а не на сайты Mozilla.
-   * Щелчок перехватывается на подъёме: адрес этим элементам задаёт сама страница настроек
-   * (support-page), и при перерисовке она вернула бы его обратно. */
-  const SUPPORT = "about:preferences#sync-support";
+  /* Help links lead to the Tabora support site, not to Mozilla's sites (the requests themselves are
+   * also in Account → Support). The click is caught on the way down: the settings page itself sets
+   * the address of these elements (support-page) and would put it back on a redraw. */
+  const SUPPORT = Services.prefs.getStringPref("tabora.url.support", "") || "https://support.tabora.app/";
   const SUPPORT_LINKS = {
     supportGetHelp: SUPPORT,
     supportShareIdeas: SUPPORT,
@@ -312,8 +312,7 @@ var { tt, tr: ttr, form: ttForm, locale: ttLocale } = ChromeUtils.importESModule
         if (url) {
           e.preventDefault();
           e.stopImmediatePropagation();
-          // раздел открывается в этой же вкладке настроек
-          window.browsingContext.topChromeWindow.Tabora?.openAccountPage("support");
+          window.browsingContext.topChromeWindow.openWebLinkIn(url, "tab");
           return;
         }
       }

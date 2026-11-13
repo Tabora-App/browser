@@ -1,8 +1,8 @@
 diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/about/AboutFragment.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/about/AboutFragment.kt
-index 1a9f9ca087..2bd6aad0a5 100644
+index 1a9f9ca087..2d3ab3f05a 100644
 --- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/about/AboutFragment.kt
 +++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/about/AboutFragment.kt
-@@ -192,42 +192,12 @@ class AboutFragment(private val toastHandler: ToastHandler = DefaultToastHandler
+@@ -192,42 +192,17 @@ class AboutFragment(private val toastHandler: ToastHandler = DefaultToastHandler
      }
  
      private fun populateAboutList(): List<AboutPageItem> {
@@ -26,7 +26,8 @@ index 1a9f9ca087..2bd6aad0a5 100644
 +                AboutItem.ExternalLink(SUPPORT, SupportUtils.TABORA_SUPPORT_URL),
                  getString(R.string.about_support),
              ),
--            AboutPageItem(
++            // Tabora: the privacy policy of Tabora, not Mozilla's notice
+             AboutPageItem(
 -                AboutItem.Crashes,
 -                getString(R.string.about_crashes),
 -            ),
@@ -35,8 +36,9 @@ index 1a9f9ca087..2bd6aad0a5 100644
 -                    PRIVACY_NOTICE,
 -                    SupportUtils.getMozillaPageUrl(SupportUtils.MozillaPage.PRIVACY_NOTICE),
 -                ),
--                getString(R.string.about_privacy_notice),
--            ),
++                AboutItem.ExternalLink(PRIVACY_NOTICE, SupportUtils.taboraPrivacyUrl()),
+                 getString(R.string.about_privacy_notice),
+             ),
 -            AboutPageItem(
 -                AboutItem.ExternalLink(
 -                    RIGHTS,

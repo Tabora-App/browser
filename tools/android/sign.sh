@@ -7,6 +7,7 @@
 #
 #   tools/android/sign.sh init                         создать ключ (один раз)
 #   tools/android/sign.sh <неподписанный.apk> [итог.apk]  выровнять, подписать и проверить
+#   tools/android/sign.sh <unsigned.aab> [signed.aab]  sign the app bundle for Google Play
 #   tools/android/sign.sh cert                         отпечаток сертификата ключа
 #
 # Ключ лежит вне репозитория: ~/.config/tabora/android-keys (TABORA_ANDROID_KEYS_DIR), пароль
@@ -74,6 +75,20 @@ case "${1:-}" in
     in="$1"
     [ -f "$in" ] || die "нет файла $in"
     [ -s "$STORE" ] || die "нет ключа: $STORE (сначала: tools/android/sign.sh init)"
+    case "$in" in
+      *.aab)
+        # App bundle for Google Play: signed as a jar. With Play App Signing this signature is the
+        # upload key; Google re-signs what phones receive with the app signing key it keeps.
+        out="${2:-$(echo "$in" | sed 's/-unsigned\.aab$/.aab/')}"
+        [ "$out" != "$in" ] || out="${in%.aab}-signed.aab"
+        cp "$in" "$out"
+        jarsigner -keystore "$STORE" -storetype PKCS12 -storepass:file "$PASS" -sigalg SHA256withRSA \
+          -digestalg SHA-256 "$out" "$ALIAS" > /dev/null
+        jarsigner -verify "$out" | grep -E 'jar verified|unsigned' | head -1
+        echo "подписано: $out"
+        exit 0
+        ;;
+    esac
     out="${2:-$(echo "$in" | sed 's/-unsigned\.apk$/.apk/')}"
     [ "$out" != "$in" ] || out="${in%.apk}-signed.apk"
     tools=$(find_tools)

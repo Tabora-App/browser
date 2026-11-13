@@ -50,8 +50,8 @@ pref("app.support.baseURL", "https://support.tabora.app/?topic=");
 pref("app.feedback.baseURL", "https://support.tabora.app/");
 // The "Privacy notice" links of the settings led to Mozilla's notice about Firefox, which does not
 // describe this browser.
-pref("toolkit.datacollection.infoURL", "https://tabora.app/");
-pref("datareporting.healthreport.infoURL", "https://tabora.app/");
+pref("toolkit.datacollection.infoURL", "https://tabora.app/privacy/");
+pref("datareporting.healthreport.infoURL", "https://tabora.app/privacy/");
 // Сборка идёт без MOZ_DATA_REPORTING (src/browser/moz.configure.patch), поэтому all.js не задаёт
 // значения политики отправки данных. Задаём их сами, чтобы код, читающий их без запасного
 // значения, не падал; отправка при этом выключена и сборкой, и настройками выше.

@@ -658,8 +658,12 @@ def branding_prefs_text(config: dict, brand: str) -> str:
         + pref("tabora.url.homepage", home)
         + pref("tabora.url.help", urls.get("help") or home)
         + pref("tabora.url.releaseNotes", urls.get("releaseNotes") or home)
-        + pref("tabora.url.terms", urls.get("terms") or home)
-        + pref("tabora.url.privacy", urls.get("privacy") or home)
+        + pref("tabora.url.support", urls.get("support") or urls.get("help") or home)
+        # no page, no pref: the About window hides a link that has nowhere to lead. "privacy" above is the
+        # page opened next to the welcome page on first run; the policy itself is "privacyPolicy"
+        # (%LANG% is replaced with the language of the interface).
+        + pref("tabora.url.terms", urls.get("terms", ""))
+        + pref("tabora.url.privacy", urls.get("privacyPolicy", ""))
         + safebrowsing
         + product_prefs(brand)
     )
@@ -1052,6 +1056,37 @@ def _apk_problems(apk: Path) -> List[str]:
     return problems
 
 
+def _aab_problems(aab: Path) -> List[str]:
+    """The app bundle for Google Play: the same product as the APK, unsigned, built for the production server."""
+    import zipfile
+    problems = []
+    try:
+        with zipfile.ZipFile(aab) as z:
+            names = set(z.namelist())
+            for need in (f"base/lib/{ANDROID_ABI}/libxul.so", "base/assets/omni.ja", "base/manifest/AndroidManifest.xml",
+                         "base/dex/classes.dex", "BundleConfig.pb"):
+                if need not in names:
+                    problems.append(f"в {aab.name} нет {need}")
+            manifest = z.read("base/manifest/AndroidManifest.xml") if "base/manifest/AndroidManifest.xml" in names else b""
+            if b"sharedID" in manifest:
+                problems.append(f"в описании пакета {aab.name} остался общий пользователь с Firefox (sharedUserId)")
+            if ANDROID_APP_ID.encode() not in manifest:
+                problems.append(f"имя пакета в {aab.name} не {ANDROID_APP_ID}")
+            if any(n.startswith("META-INF/") and n.endswith((".RSA", ".DSA", ".EC")) for n in names):
+                problems.append(f"{aab.name} уже подписан: сборка должна отдавать неподписанный файл "
+                                "(подпись — tools/android/sign.sh)")
+            build = "base/assets/extensions/tabora/build.json"
+            if build not in names:
+                problems.append(f"в {aab.name} нет модуля аккаунта: {build}")
+            else:
+                info = json.loads(z.read(build))
+                if info.get("api") != ACCOUNT_SERVER or info.get("test"):
+                    problems.append(f"модуль аккаунта в {aab.name} собран для сервера {info.get('api')!r}, а не для {ACCOUNT_SERVER}")
+    except (OSError, zipfile.BadZipFile) as e:
+        problems.append(f"{aab.name} не читается: {e}")
+    return problems
+
+
 def _apk_has_engine_locale(apk: Path, locale: str) -> bool:
     """Есть ли в готовом файле перевод служебных страниц движка на этот язык (по именам файлов
     в оглавлении omni.ja; сам архив zipfile не открывает, см. _apk_problems)."""
@@ -1094,6 +1129,21 @@ def package_android(config: dict, brand: str) -> None:
     shutil.copy(apk, DIST / name)
     digest = hashlib.sha256((DIST / name).read_bytes()).hexdigest()
     log(f"→ dist/{name} ({apk.stat().st_size >> 20} МБ, sha256 {digest})")
+    # Google Play takes new apps only as an app bundle (.aab); the APK above is for direct installs
+    bundles = android_bundles()
+    if len(bundles) != 1:
+        die(f"в {android_bundle_dir()} ожидался один пакет .aab, найдено {len(bundles)}: сначала tools/build.py build")
+    bundle_problems = _aab_problems(bundles[0])
+    for problem in bundle_problems:
+        warn(problem)
+    if bundle_problems:
+        die(f"пакет для Google Play не прошёл проверку ({len(bundle_problems)}): в dist/ не кладётся")
+    bundle_name = f"tabora-{version}-android-{ANDROID_ABI}-unsigned.aab"
+    if not release:
+        bundle_name = _dev_name(bundle_name)
+    shutil.copy(bundles[0], DIST / bundle_name)
+    digest = hashlib.sha256((DIST / bundle_name).read_bytes()).hexdigest()
+    log(f"→ dist/{bundle_name} ({bundles[0].stat().st_size >> 20} МБ, sha256 {digest})")
 
 
 def android_apk_dir() -> Path:
@@ -1104,6 +1154,15 @@ def android_apks(abi: str = "") -> List[Path]:
     """Собранные файлы приложения нужного типа сборки (по одному на архитектуру процессора)."""
     return sorted(p for p in android_apk_dir().rglob("*.apk")
                   if f"-{ANDROID_BUILD_TYPE}" in p.name and (not abi or f"-{abi}-" in p.name))
+
+
+def android_bundle_dir() -> Path:
+    return objdir() / "gradle" / "build" / "mobile" / "android" / "fenix" / "app" / "outputs" / "bundle"
+
+
+def android_bundles() -> List[Path]:
+    """App bundles (.aab) of the build type in use: one file, all the code and the engine for arm64-v8a."""
+    return sorted(p for p in android_bundle_dir().rglob("*.aab") if f"-{ANDROID_BUILD_TYPE}" in p.name)
 
 
 def build_android(config: dict, brand: str) -> None:
@@ -1125,7 +1184,9 @@ def build_android(config: dict, brand: str) -> None:
     # Память: по умолчанию gradle берёт до 7 ГБ кучи и 6 ГБ метаданных, демон Kotlin — ещё столько же;
     # на машине с 15 ГБ это кончается остановкой сборки. Куча остаётся (её требует R8), остальное
     # ограничено.
-    mach(["gradle", f"fenix:assemble{ANDROID_BUILD_TYPE.capitalize()}", f"-PtaboraVersionName={version}",
+    # the bundle task reuses everything the APK task compiled; only the packaging differs
+    mach(["gradle", f"fenix:assemble{ANDROID_BUILD_TYPE.capitalize()}", f"fenix:bundle{ANDROID_BUILD_TYPE.capitalize()}",
+          f"-PtaboraVersionName={version}",
           "-PdisableDebugSigning",
           "-Dorg.gradle.jvmargs=-Xmx7g -XX:MaxMetaspaceSize=2g -XX:+UseParallelGC",
           "-Pkotlin.daemon.jvmargs=-Xmx3g", "--max-workers=3"], config, brand)
@@ -1134,6 +1195,8 @@ def build_android(config: dict, brand: str) -> None:
         die(f"приложение не собрано: в {android_apk_dir()} нет файлов .apk")
     for apk in apks:
         log(f"собрано: {apk.relative_to(ENGINE)} ({apk.stat().st_size >> 20} МБ)")
+    for bundle in android_bundles():
+        log(f"собрано: {bundle.relative_to(ENGINE)} ({bundle.stat().st_size >> 20} МБ)")
 
 
 def android_multilocale(config: dict, brand: str) -> None:

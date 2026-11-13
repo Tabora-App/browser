@@ -13,7 +13,7 @@
   "macTeamId": "7YQU9YBJQ8",
   "brands": {
     "release": {
-      "displayVersion": "0.3.0",
+      "displayVersion": "0.3.1",
       "backgroundColor": "#0B0C0E",
       "shorterName": "Tabora",
       "shortName": "Tabora",
@@ -21,12 +21,14 @@
       "bundleId": "app.tabora.browser",
       "urls": {
         "homepage": "https://tabora.app",
-        "help": "https://tabora.app",
+        "help": "https://support.tabora.app/",
+        "support": "https://support.tabora.app/",
         "releaseNotes": "https://github.com/Tabora-App/browser/releases",
         "download": "https://tabora.app",
         "whatsnew": "",
         "welcome": "",
-        "privacy": ""
+        "privacy": "",
+        "privacyPolicy": "https://tabora.app/%LANG%/privacy/"
       }
     }
   },
