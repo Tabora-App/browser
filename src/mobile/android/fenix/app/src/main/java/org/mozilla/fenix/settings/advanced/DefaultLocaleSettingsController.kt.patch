@@ -1,0 +1,47 @@
+diff --git a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/advanced/DefaultLocaleSettingsController.kt b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/advanced/DefaultLocaleSettingsController.kt
+index 811b336e3f..8b850af7bd 100644
+--- a/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/advanced/DefaultLocaleSettingsController.kt
++++ b/mobile/android/fenix/app/src/main/java/org/mozilla/fenix/settings/advanced/DefaultLocaleSettingsController.kt
+@@ -13,6 +13,7 @@ import mozilla.components.browser.state.action.SearchAction
+ import mozilla.components.browser.state.store.BrowserStore
+ import mozilla.components.support.locale.LocaleManager
+ import mozilla.components.support.locale.LocaleUseCases
++import org.mozilla.fenix.ext.components
+ import org.mozilla.fenix.nimbus.FxNimbus
+ 
+ /**
+@@ -70,6 +71,7 @@ class DefaultLocaleSettingsController(
+         browserStore.dispatch(SearchAction.RefreshSearchEnginesAction)
+         updateLocale(locale)
+         updateBaseConfiguration(activity, locale)
++        refreshEngineLanguage()
+ 
+         // Invalidate cached values to use the new locale
+         FxNimbus.features.nimbusValidation.withCachedValue(null)
+@@ -84,6 +86,7 @@ class DefaultLocaleSettingsController(
+         browserStore.dispatch(SearchAction.RefreshSearchEnginesAction)
+         resetToSystemDefault()
+         updateBaseConfiguration(activity, localeSettingsStore.state.localeList[0])
++        refreshEngineLanguage()
+ 
+         // Invalidate cached values to use the default locale
+         FxNimbus.features.nimbusValidation.withCachedValue(null)
+@@ -94,6 +97,18 @@ class DefaultLocaleSettingsController(
+         localeSettingsStore.dispatch(LocaleSettingsAction.Search(query))
+     }
+ 
++    /**
++     * Tabora: the engine reads the app language at start-up and when the system language changes, but
++     * not when the language is chosen here, so the app's own pages (account, mail, sign-in codes) and
++     * websites kept the previous language until a restart. Turning the engine's language tracking off
++     * and on makes it read the language again.
++     */
++    private fun refreshEngineLanguage() {
++        val settings = activity.components.core.engine.settings
++        settings.automaticLanguageAdjustment = false
++        settings.automaticLanguageAdjustment = true
++    }
++
+     /** Recreates the activity to apply locale changes and provides a smooth, instant transition. */
+     @VisibleForTesting
+     internal fun recreateActivity() {
