@@ -1,5 +1,5 @@
 diff --git a/mobile/android/fenix/app/build.gradle b/mobile/android/fenix/app/build.gradle
-index e8032b0120..cec69c6c28 100644
+index e8032b0120..8a9f4f7dea 100644
 --- a/mobile/android/fenix/app/build.gradle
 +++ b/mobile/android/fenix/app/build.gradle
 @@ -46,7 +46,8 @@ android {
@@ -50,7 +50,7 @@ index e8032b0120..cec69c6c28 100644
                      "deepLinkScheme": deepLinkSchemeValue,
              ])
          }
-@@ -300,16 +303,25 @@ androidComponents {
+@@ -300,16 +303,27 @@ androidComponents {
              // The Google Play Store does not allow multiple APKs for the same app that all have the
              // same version code. Therefore we need to have different version codes for our ARM and x86
              // builds.
@@ -71,16 +71,18 @@ index e8032b0120..cec69c6c28 100644
                  // channels that never shipped a Fennec build.
                  def abi = output.filters.find { it.filterType == FilterConfiguration.FilterType.ABI }?.identifier ?: "universal"
 -                def versionCodeOverride = Config.generateFennecVersionCode(abi)
-+                // Tabora: ten-minute steps since 2026-01-01 UTC, one number for every output of a build
-+                // (-PtaboraVersionCode). The code inherited from Fennec starts near Google Play's limit
-+                // of 2 100 000 000 and runs out in 2029; Google Play does not take a first release with it.
++                // Tabora: 2 016 200 000 plus ten-minute steps since 2026-11-13 UTC, one number for every
++                // output of a build (-PtaboraVersionCode). The first builds in Google Play carry codes of
++                // the scheme inherited from Fennec (about 2 016 196 000), and an update must have a higher
++                // code. That scheme runs out in 2029; this one grows by 52 560 a year and stays under
++                // Google Play's limit of 2 100 000 000 for centuries.
 +                def versionCodeOverride = project.hasProperty("taboraVersionCode") ?
 +                        project.property("taboraVersionCode").toString().toInteger() :
-+                        (int) ((System.currentTimeMillis() - 1767225600000L) / 600000L) + 1
++                        2016200000 + (int) ((System.currentTimeMillis() - 1794528000000L) / 600000L) + 1
                  project.logger.debug("versionCode for $abi = $versionCodeOverride")
                  output.versionName.set(versionName)
                  output.versionCode.set(versionCodeOverride)
-@@ -343,8 +355,9 @@ androidComponents {
+@@ -343,8 +357,9 @@ androidComponents {
  // -------------------------------------------------------------------------------------------------
  
  android.defaultConfig.with {

@@ -317,10 +317,12 @@ The build gives two files. The APK is for installing directly on a phone. The ap
 the only format Google Play takes for new apps; it holds the same code and the same engine
 (arm64-v8a). In Google Play the key above is the upload key: Google checks that each upload is
 signed with it and re-signs what phones download with an app signing key that it keeps (Play App
-Signing). The version code of both files comes from the build time (ten-minute steps since 2026-01-01 UTC,
-a number in the tens of thousands), so every later build is newer for Google Play without any counter
-to maintain. The code Firefox inherits from Fennec is not used: it starts near Google Play's limit of
-2 100 000 000, and Google Play does not take a first release with it. The bundle carries libraries for arm64-v8a only:
+Signing). The version code of both files comes from the build time: 2 016 200 000 plus ten-minute steps since
+2026-11-13 UTC, so every later build is newer for Google Play without any counter to maintain. The
+base continues the codes of the first builds published to Google Play, which used the scheme Firefox
+inherits from Fennec; that scheme runs out in 2029, this one stays under Google Play's limit of
+2 100 000 000 for centuries. For a first release the console warns that the code is far above the
+previous one; the release can still be sent. The bundle carries libraries for arm64-v8a only:
 third-party dependencies ship other architectures too, and with them in the bundle Google Play would
 offer the app to phones that have no engine to run it (`build.gradle.patch`; checked by `tools/build.py`).
 

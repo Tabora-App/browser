@@ -1208,9 +1208,10 @@ def build_android(config: dict, brand: str) -> None:
     # Two gradle runs, not one: with a bundle task among the requested ones the app's build file turns the
     # per-ABI split off (isAppBundle), and the APK would come out universal, without arm64-v8a in its
     # name. The bundle run reuses everything the APK run compiled; only the packaging differs.
-    # One version code for the APK and the bundle of this build: ten-minute steps since 2026-01-01 UTC,
-    # so every later build is newer for Google Play and there is no counter to maintain.
-    version_code = int((time.time() - 1767225600) // 600) + 1
+    # One version code for the APK and the bundle of this build: 2 016 200 000 plus ten-minute steps
+    # since 2026-11-13 UTC, so every later build is newer for Google Play and there is no counter to
+    # maintain. The base is above the codes of the first builds already in Google Play.
+    version_code = 2016200000 + int((time.time() - 1794528000) // 600) + 1
     gradle_flags = [f"-PtaboraVersionName={version}", f"-PtaboraVersionCode={version_code}", "-PdisableDebugSigning",
                     "-Dorg.gradle.jvmargs=-Xmx7g -XX:MaxMetaspaceSize=2g -XX:+UseParallelGC",
                     "-Pkotlin.daemon.jvmargs=-Xmx3g", "--max-workers=3"]
