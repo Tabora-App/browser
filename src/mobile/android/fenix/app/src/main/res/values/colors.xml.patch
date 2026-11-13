@@ -1,5 +1,5 @@
 diff --git a/mobile/android/fenix/app/src/main/res/values/colors.xml b/mobile/android/fenix/app/src/main/res/values/colors.xml
-index a76bc4853d..96de0887df 100644
+index a76bc4853d..1d3ee99d54 100644
 --- a/mobile/android/fenix/app/src/main/res/values/colors.xml
 +++ b/mobile/android/fenix/app/src/main/res/values/colors.xml
 @@ -57,7 +57,7 @@
@@ -11,8 +11,32 @@ index a76bc4853d..96de0887df 100644
  
      <!-- Design system color variables -->
  
-@@ -243,10 +243,10 @@
-     <color name="protections_dashboard_gradient_end_private">@color/novaOrange70</color>
+@@ -229,24 +229,24 @@
+     <color name="search_suggestion_indicator_icon_bookmark_color_normal_theme">@color/photonBlue50</color>
+ 
+     <!-- Tracking protection dashboard colors used in normal browsing mode -->
+-    <color name="protections_dashboard_chip_background">#66FFFFFF</color>
+-    <color name="protections_dashboard_chip_text">#FF312A64</color>
+-    <color name="protections_dashboard_progress_bar">@color/novaViolet50</color>
+-    <color name="protections_dashboard_gradient_start">@color/novaViolet10</color>
+-    <color name="protections_dashboard_gradient_end">@color/novaOrange10</color>
++    <color name="protections_dashboard_chip_background">#99FFFFFF</color>
++    <color name="protections_dashboard_chip_text">#FF1A1B1F</color>
++    <color name="protections_dashboard_progress_bar">#FF5E8A00</color>
++    <color name="protections_dashboard_gradient_start">#FFF5F5F1</color>
++    <color name="protections_dashboard_gradient_end">#FFE4F5B0</color>
+ 
+     <!-- Tracking protection dashboard colors used in private browsing mode -->
+-    <color name="protections_dashboard_chip_background_private">#FF3D3264</color>
+-    <color name="protections_dashboard_chip_text_private">#FFD9D0F5</color>
+-    <color name="protections_dashboard_progress_bar_private">@color/novaViolet50</color>
+-    <color name="protections_dashboard_gradient_start_private">@color/novaVioletDesaturated90</color>
+-    <color name="protections_dashboard_gradient_end_private">@color/novaOrange70</color>
++    <color name="protections_dashboard_chip_background_private">#FF2A2D33</color>
++    <color name="protections_dashboard_chip_text_private">#FFE9F7C4</color>
++    <color name="protections_dashboard_progress_bar_private">#FFC8F25A</color>
++    <color name="protections_dashboard_gradient_start_private">#FF15171B</color>
++    <color name="protections_dashboard_gradient_end_private">#FF2B3414</color>
  
      <!-- Colors for Edge to Edge background  -->
 -    <color name="homepage_edge_to_edge_gradient_start">#FFF7EAE8</color>

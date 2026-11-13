@@ -7,6 +7,9 @@ package org.mozilla.fenix.tabora
 import android.content.Context
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -92,7 +95,7 @@ class TaboraSyncedTabsIntegration(
                             device.tabs.map { tab ->
                                 SyncedTabsListItem.Tab(
                                     displayTitle = tab.title.ifEmpty { tab.url },
-                                    displayURL = tab.url,
+                                    displayURL = readableUrl(tab.url),
                                     action = SyncedTabsListItem.Tab.Action.None,
                                     tab =
                                         SyncTab(
@@ -111,3 +114,33 @@ class TaboraSyncedTabsIntegration(
         const val SPIN_MS = 2500L
     }
 }
+
+private val NON_ASCII_ESCAPES = Regex("(?:%[89A-Fa-f][0-9A-Fa-f])+")
+
+private fun Char.isLetterDigitOrMark(): Boolean =
+    Character.isLetterOrDigit(this) ||
+        Character.getType(this).let {
+            it == Character.NON_SPACING_MARK.toInt() || it == Character.COMBINING_SPACING_MARK.toInt()
+        }
+
+/**
+ * An address as people read it: percent-escapes of non-ASCII letters are decoded ("%D0%91" becomes
+ * "Б"). ASCII escapes and anything that does not decode to plain letters, digits or marks stay as
+ * written, so a decoded address never gains a slash, a space or an invisible character.
+ */
+private fun readableUrl(url: String): String =
+    NON_ASCII_ESCAPES.replace(url) { match ->
+        val escapes = match.value
+        val bytes = ByteArray(escapes.length / 3) { i -> escapes.substring(i * 3 + 1, i * 3 + 3).toInt(16).toByte() }
+        try {
+            val text =
+                Charsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(bytes))
+                    .toString()
+            if (text.all { it.isLetterDigitOrMark() }) text else escapes
+        } catch (e: CharacterCodingException) {
+            escapes
+        }
+    }
