@@ -1,5 +1,5 @@
 diff --git a/mobile/android/fenix/app/build.gradle b/mobile/android/fenix/app/build.gradle
-index e8032b0120..33de652301 100644
+index e8032b0120..cec69c6c28 100644
 --- a/mobile/android/fenix/app/build.gradle
 +++ b/mobile/android/fenix/app/build.gradle
 @@ -46,7 +46,8 @@ android {
@@ -50,7 +50,7 @@ index e8032b0120..33de652301 100644
                      "deepLinkScheme": deepLinkSchemeValue,
              ])
          }
-@@ -300,9 +303,13 @@ androidComponents {
+@@ -300,16 +303,25 @@ androidComponents {
              // The Google Play Store does not allow multiple APKs for the same app that all have the
              // same version code. Therefore we need to have different version codes for our ARM and x86
              // builds.
@@ -67,7 +67,20 @@ index e8032b0120..33de652301 100644
              project.logger.debug("versionName override: $versionName")
  
              variant.outputs.each { output ->
-@@ -343,8 +350,9 @@ androidComponents {
+                 // We use the same version code generator, that we inherited from Fennec, across all channels - even on
+                 // channels that never shipped a Fennec build.
+                 def abi = output.filters.find { it.filterType == FilterConfiguration.FilterType.ABI }?.identifier ?: "universal"
+-                def versionCodeOverride = Config.generateFennecVersionCode(abi)
++                // Tabora: ten-minute steps since 2026-01-01 UTC, one number for every output of a build
++                // (-PtaboraVersionCode). The code inherited from Fennec starts near Google Play's limit
++                // of 2 100 000 000 and runs out in 2029; Google Play does not take a first release with it.
++                def versionCodeOverride = project.hasProperty("taboraVersionCode") ?
++                        project.property("taboraVersionCode").toString().toInteger() :
++                        (int) ((System.currentTimeMillis() - 1767225600000L) / 600000L) + 1
+                 project.logger.debug("versionCode for $abi = $versionCodeOverride")
+                 output.versionName.set(versionName)
+                 output.versionCode.set(versionCodeOverride)
+@@ -343,8 +355,9 @@ androidComponents {
  // -------------------------------------------------------------------------------------------------
  
  android.defaultConfig.with {
