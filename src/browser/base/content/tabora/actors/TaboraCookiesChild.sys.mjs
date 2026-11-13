@@ -32,6 +32,8 @@ const RULES = [
 
 const REJECT = /^(?:reject(?: all)?(?: cookies)?|decline(?: all)?|deny(?: all)?|refuse(?: all)?|disagree|only (?:essential|necessary|required)(?: cookies)?|(?:essential|necessary|strictly necessary) (?:cookies )?only|allow (?:only )?(?:essential|necessary)(?: cookies)?(?: only)?|use (?:only )?(?:essential|necessary)(?: cookies)?|continue without (?:accepting|agreeing)|отклонить(?: вс[её])?|отказаться(?: от всех)?|только (?:необходимые|обязательные|нужные)(?: cookie| куки| файлы cookie)?|запретить(?: все)?|не принимать|alle ablehnen|ablehnen|nur (?:notwendige|erforderliche)|tout refuser|refuser(?: tout)?|rechazar(?: todo)?|rifiuta(?: tutto)?|weigeren|odrzuć(?: wszystkie)?|odmítnout(?: vše)?)[.!]?$/i;
 const ACCEPT = /^(?:accept(?: all)?(?: cookies)?|allow all(?: cookies)?|agree(?: and close)?|i agree|ok(?:ay)?|got it|принять(?: вс[её])?|разрешить вс[её]|согласен|согласиться|хорошо|понятно|alle akzeptieren|akzeptieren|tout accepter|aceptar(?: todo)?|accetta(?: tutto)?|zaakceptuj|přijmout)[.!]?$/i;
+const BANNER_NAMES = /cookie|consent|gdpr|privacy|cmp|banner|notice|couki|куки/i;
+const CONSENT_NAMES = /cookie|consent|gdpr|couki|куки/i;
 const BANNER_WORDS = /cookie|куки|consent|gdpr|согласи|privacy|конфиденциальн|datenschutz|файл[ыа]? cookie/i;
 
 export class TaboraCookiesChild extends JSWindowActorChild {
@@ -81,23 +83,34 @@ export class TaboraCookiesChild extends JSWindowActorChild {
     return cs.visibility !== "hidden" && cs.display !== "none" && parseFloat(cs.opacity) > 0.05;
   }
 
-  textOf(el) {
-    return (el.getAttribute("aria-label") || el.value || el.textContent || "").replace(/\s+/g, " ").trim();
+  /** What a button says: its visible text and its accessible name. The two can differ: a short
+   * "Reject all" on the button and a whole sentence as its label. */
+  labelsOf(el) {
+    const clean = v => (v || "").replace(/\s+/g, " ").trim();
+    return [clean(el.value || el.textContent), clean(el.getAttribute("aria-label"))].filter(Boolean);
   }
 
-  /** Элемент похож на баннер: закреплён поверх страницы или назван как cookie/consent. */
+  /** The banner a button sits in: the nearest ancestor that is pinned over the page or named like a
+   * notice. One exception: a part of a consent component (named so) that says nothing about cookies
+   * itself is a wrapper around the buttons, and the banner is further up. Anything pinned ends the
+   * search, so a dialog about something else is never taken for a part of the page around it. */
   bannerAncestor(el) {
     let node = el;
-    for (let i = 0; i < 10 && node && node !== this.document.body; i++) {
+    let wrapper = null;
+    for (let i = 0; i < 14 && node && node !== this.document.body; i++) {
       const cs = node.ownerDocument.defaultView.getComputedStyle(node);
       const idc = `${node.id} ${node.className && typeof node.className === "string" ? node.className : ""}`;
-      if (cs.position === "fixed" || cs.position === "sticky" || /cookie|consent|gdpr|privacy|cmp|banner|notice|couki|куки/i.test(idc)) {
-        return node;
+      const pinned = cs.position === "fixed" || cs.position === "sticky";
+      if (pinned || BANNER_NAMES.test(idc)) {
+        if (pinned || !CONSENT_NAMES.test(idc) || BANNER_WORDS.test((node.textContent || "").slice(0, 4000))) {
+          return node;
+        }
+        wrapper = wrapper || node;
       }
       node = node.parentElement;
     }
-    // отдельный документ в iframe целиком является баннером
-    return this.browsingContext.parent ? this.document.body : null;
+    // a separate document in an iframe is a banner as a whole
+    return wrapper || (this.browsingContext.parent ? this.document.body : null);
   }
 
   scan(mode) {
@@ -133,11 +146,12 @@ export class TaboraCookiesChild extends JSWindowActorChild {
     const pattern = want ? ACCEPT : REJECT;
     const candidates = [];
     for (const el of doc.querySelectorAll("button, a[role=button], [role=button], input[type=button], input[type=submit], a.btn, a.button")) {
-      const text = this.textOf(el);
-      if (!text || text.length > 60 || !pattern.test(text) || !this.visible(el)) {
+      const labels = this.labelsOf(el);
+      const text = labels.find(t => t.length <= 60 && pattern.test(t));
+      if (!text || !this.visible(el)) {
         continue;
       }
-      if (/subscribe|подпис|pay|€|\$|£|premium|ad-lite/i.test(text) || /subscribe|подпис/i.test(el.closest("a, button")?.getAttribute("href") || "")) {
+      if (/subscribe|подпис|pay|€|\$|£|premium|ad-lite/i.test(labels.join(" ")) || /subscribe|подпис/i.test(el.closest("a, button")?.getAttribute("href") || "")) {
         continue; // «отклонить и подписаться» — это оплата, не отказ
       }
       const banner = this.bannerAncestor(el);
