@@ -3283,5 +3283,8 @@
  "Удаление аккаунта": "Deleting the account",
  "Удалить навсегда": "Delete for good",
  "Удаляем аккаунт": "Deleting the account",
- "Я понимаю, что отменить это нельзя": "I understand that this cannot be undone"
+ "Я понимаю, что отменить это нельзя": "I understand that this cannot be undone",
+ "Проматывать рекламу в роликах YouTube": "Skip ads in YouTube videos",
+ "Когда в ролике начинается реклама, браузер сразу проматывает её до конца без звука и не показывает её.": "When an ad starts in a video, the browser runs through it at once, without sound, and does not show it.",
+ "реклама в ролике": "ad in the video"
 }

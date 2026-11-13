@@ -1195,6 +1195,7 @@ const SYNCED_PREFS = {
   "tabora.user.name": ["string", v => v.length <= 80],
   "tabora.account.avatarColor": ["string", v => /^(|#[0-9a-f]{6})$/i.test(v)],
   "tabora.shield.enabled": ["bool"],
+  "tabora.shield.youtube": ["bool"],
   "tabora.shield.lists": ["string", v => /^[a-z0-9,_-]{0,300}$/.test(v)],
   "tabora.shield.allow": ["string", jsonList(40000, host)],
   "tabora.cookies.banners": ["string", v => /^(reject|accept|off)$/.test(v)],

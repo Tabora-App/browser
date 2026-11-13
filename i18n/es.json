@@ -3283,5 +3283,8 @@
  "Удаление аккаунта": "Eliminación de la cuenta",
  "Удалить навсегда": "Eliminar para siempre",
  "Удаляем аккаунт": "Eliminando la cuenta",
- "Я понимаю, что отменить это нельзя": "Entiendo que esto no se puede deshacer"
+ "Я понимаю, что отменить это нельзя": "Entiendo que esto no se puede deshacer",
+ "Проматывать рекламу в роликах YouTube": "Saltar los anuncios en los vídeos de YouTube",
+ "Когда в ролике начинается реклама, браузер сразу проматывает её до конца без звука и не показывает её.": "Cuando empieza un anuncio en un vídeo, el navegador lo pasa enseguida hasta el final, sin sonido, y no lo muestra.",
+ "реклама в ролике": "anuncio en el vídeo"
 }

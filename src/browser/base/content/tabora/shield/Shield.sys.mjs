@@ -44,6 +44,27 @@ const MAX_LIST = 40 * 1024 * 1024;
 const MAX_PAGES = 400;
 const HOLD_MS = 4000; // дольше запросы страниц сборку правил не ждут
 
+/* Ads inside YouTube videos. They come from the same servers as the video itself and are described
+ * in the player's own data, so cancelling requests by address does not touch them. The browser
+ * passes them instead: when the player starts an ad, the page actor (actors/TaboraShieldChild)
+ * plays it at sixteen times the speed, without sound, and presses "Skip" if the button is there;
+ * while that happens the ad's picture is not shown. Nothing from filter lists is executed on the page
+ * for this: it is the browser's own code working with the page's video element from outside. */
+const TUBE_HOST = /(^|\.)(youtube\.com|youtube-nocookie\.com|youtubekids\.com)$/;
+/* Ad blocks around the video and in the feed: placeholders that would stay empty otherwise. */
+const TUBE_CSS =
+  "ytd-ad-slot-renderer, ytd-in-feed-ad-layout-renderer, ytd-promoted-sparkles-web-renderer, ytd-display-ad-renderer, ytd-companion-slot-renderer, " +
+  "ytd-action-companion-ad-renderer, ytd-banner-promo-renderer, ytd-player-legacy-desktop-watch-ads-renderer, ytd-rich-item-renderer:has(ytd-ad-slot-renderer), " +
+  "ytd-engagement-panel-section-list-renderer[target-id=\"engagement-panel-ads\"], #masthead-ad, #player-ads, ytm-promoted-sparkles-web-renderer, " +
+  "ytm-companion-ad-renderer, ytm-promoted-video-renderer, .ytp-ad-overlay-container, .ytp-ad-message-container { display: none !important; }";
+/* While an ad is being skipped its picture and its controls are not shown (the controls stay in
+ * place, so "Skip" can still be pressed by the actor). The actor takes this sheet away if an ad
+ * could not be skipped, so a person is never left with a black player. */
+const TUBE_HIDE_CSS =
+  ".html5-video-player.ad-showing video, .html5-video-player.ad-interrupting video { visibility: hidden !important; } " +
+  ".html5-video-player.ad-showing .ytp-ad-module, .html5-video-player.ad-interrupting .ytp-ad-module, .html5-video-player.ad-showing .video-ads, " +
+  ".html5-video-player.ad-showing .ytp-ad-player-overlay-layout { opacity: 0 !important; }";
+
 export const LISTS = [
   { id: "easylist", title: "EasyList", note: tt`Реклама на сайтах всего мира`, kind: "ads", url: "https://easylist.to/easylist/easylist.txt" },
   { id: "ruadlist", title: "RU AdList", note: tt`Реклама на русскоязычных сайтах`, kind: "ads", url: "https://easylist-downloads.adblockplus.org/advblock.txt" },
@@ -101,6 +122,25 @@ export const Shield = {
 
   get enabled() {
     return Services.prefs.getBoolPref(`${PREF}enabled`, true);
+  },
+
+  /** Ads inside YouTube videos are skipped (a part of the blocker with its own switch). */
+  get tubeOn() {
+    return Services.prefs.getBoolPref(`${PREF}youtube`, true);
+  },
+
+  setTube(on) {
+    Services.prefs.setBoolPref(`${PREF}youtube`, !!on);
+    this.notify("settings");
+  },
+
+  /** A host whose player the skipping works with. The extra hosts are for tests only. */
+  _tubeHost(host) {
+    if (TUBE_HOST.test(host)) {
+      return true;
+    }
+    const extra = Services.prefs.getStringPref(`${PREF}youtube.hosts`, "");
+    return !!extra && extra.split(",").includes(host);
   },
 
   setEnabled(on) {
@@ -372,7 +412,7 @@ export const Shield = {
     if (!page) {
       const principal = topGlobal.documentPrincipal;
       // не страница сайта (служебная, файл с диска): блокировщик её не касается
-      page = { off: true, host: "", generichide: false, elemhide: false, ads: new Map(), privacy: new Map(), total: 0 };
+      page = { off: true, host: "", generichide: false, elemhide: false, ads: new Map(), privacy: new Map(), total: 0, tube: 0 };
       if (principal?.isContentPrincipal && (principal.schemeIs("https") || principal.schemeIs("http"))) {
         page.host = principal.asciiHost.toLowerCase();
         page.off = this.allowed(page.host);
@@ -461,7 +501,19 @@ export const Shield = {
     const global = browser?.browsingContext?.currentWindowGlobal;
     const page = global ? this._pages.get(global.innerWindowId) : null;
     const sorted = map => [...map].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-    return page ? { off: page.off, ads: sorted(page.ads), privacy: sorted(page.privacy), total: page.total } : { off: false, ads: [], privacy: [], total: 0 };
+    return page ? { off: page.off, ads: sorted(page.ads), privacy: sorted(page.privacy), total: page.total, tube: page.tube } : { off: false, ads: [], privacy: [], total: 0, tube: 0 };
+  },
+
+  /** An ad break inside a video was passed on the page (actors/TaboraShieldChild, TubeSkipper). */
+  tubePassed(windowGlobal, info) {
+    const topGlobal = windowGlobal.browsingContext.top.currentWindowGlobal;
+    const page = topGlobal ? this._page(topGlobal) : null;
+    const entry = { at: Date.now(), ms: Number(info?.ms) || 0, did: Array.isArray(info?.did) ? info.did.slice(0, 4).map(d => String(d).slice(0, 12)) : [], given: !!info?.given };
+    this._tubeLog = [...(this._tubeLog || []), entry].slice(-30);
+    if (page && !page.off && !entry.given) {
+      page.tube++;
+      page.total++;
+    }
   },
 
   /* ---- стили страниц -------------------------------------------------------------------------- */
@@ -497,7 +549,9 @@ export const Shield = {
         this._customGeneric.set(host, extra);
       }
     }
-    return { v: this._version, generic, extra, css: mine.selectors.length ? hideSheet(mine.selectors, 20) : "" };
+    const tube = this.tubeOn && this._tubeHost(host);
+    const css = (mine.selectors.length ? hideSheet(mine.selectors, 20) : "") + (tube ? TUBE_CSS : "");
+    return { v: this._version, generic, extra, css, tube: tube ? TUBE_HIDE_CSS : "" };
   },
 
   /* ---- запуск --------------------------------------------------------------------------------- */

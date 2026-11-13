@@ -227,6 +227,8 @@ pref("tabora.mail.suggest", true);
 pref("tabora.shield.enabled", true);
 pref("tabora.shield.lists", "easylist,ruadlist,easyprivacy,lowe");
 pref("tabora.shield.allow", "[]");
+// Ads inside YouTube videos are skipped by the browser (shield/Shield.sys.mjs, TubeSkipper).
+pref("tabora.shield.youtube", true);
 
 // Синхронизация между устройствами аккаунта (sync/Sync.sys.mjs): включена с момента входа в
 // аккаунт — данные шифруются на устройстве ключом аккаунта; человек может выключить её целиком

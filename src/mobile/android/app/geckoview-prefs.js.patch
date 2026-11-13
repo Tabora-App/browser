@@ -1,8 +1,8 @@
 diff --git a/mobile/android/app/geckoview-prefs.js b/mobile/android/app/geckoview-prefs.js
-index 3cf841dd1b..8843ed2469 100644
+index 3cf841dd1b..a44ffaf79f 100644
 --- a/mobile/android/app/geckoview-prefs.js
 +++ b/mobile/android/app/geckoview-prefs.js
-@@ -387,3 +387,24 @@ pref("xpinstall.whitelist.fileRequest", false);
+@@ -387,3 +387,25 @@ pref("xpinstall.whitelist.fileRequest", false);
  pref("browser.ipProtection.enabled", true);
  pref("browser.ipProtection.guardian.endpoint", "https://vpn.mozilla.org/");
  pref("toolkit.ipProtection.android.authProvider", "fxa");
@@ -27,3 +27,4 @@ index 3cf841dd1b..8843ed2469 100644
 +pref("tabora.shield.enabled", true);
 +pref("tabora.shield.lists", "easylist,ruadlist,easyprivacy,lowe");
 +pref("tabora.shield.allow", "[]");
++pref("tabora.shield.youtube", true);

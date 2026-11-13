@@ -37,6 +37,10 @@
    user's confirmation before submitting forms.
 8. **Ad blocker** (`shield/`): our own filter engine for Adblock Plus syntax. It cancels requests
    to ad and tracker hosts and hides page elements; the same engine is loaded into the Android app.
+   Ads inside YouTube videos come from the same servers as the videos, so they are not cancelled
+   but passed: while the player shows an ad, the page actor plays it at 16x without sound or
+   picture and presses "Skip" (`TubeSkipper` in `actors/TaboraShieldChild.sys.mjs`). Nothing from
+   filter lists is ever executed on a page.
 9. **Sync** (`sync/`): passwords, codes, bookmarks, spaces, start page shortcuts and open tabs are
    stored on the account server as records encrypted with a key derived from the account's data
    key. Merge rules are written so that a merge mistake cannot cost data. "Send to device" lives in

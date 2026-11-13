@@ -4353,7 +4353,11 @@ var Tabora = {
       const items = entries.map(([host, n]) => ({ host, n })).sort((a, b) => b.n - a.n || a.host.localeCompare(b.host));
       return { key, title, items, count: items.reduce((sum, it) => sum + it.n, 0) };
     };
-    const groups = [group("ads", tt`Реклама`, shield.ads.map(([host, n]) => [host.replace(/^www\./, ""), n])), ...this.BLOCK_KINDS.map(k => group(k.key, k.title, [...kinds.get(k.key)]))].filter(g => g.count);
+    const ads = shield.ads.map(([host, n]) => [host.replace(/^www\./, ""), n]);
+    if (shield.tube) {
+      ads.push([tt`реклама в ролике`, shield.tube]); // ad breaks passed inside the video (shield, TubeSkipper)
+    }
+    const groups = [group("ads", tt`Реклама`, ads), ...this.BLOCK_KINDS.map(k => group(k.key, k.title, [...kinds.get(k.key)]))].filter(g => g.count);
     return { groups, count: groups.reduce((sum, g) => sum + g.count, 0), ads: groups.find(g => g.key === "ads")?.count || 0 };
   },
 

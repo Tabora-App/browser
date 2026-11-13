@@ -13,6 +13,12 @@ ChromeUtils.defineESModuleGetters(lazy, {
 
 export class TaboraShieldParent extends JSWindowActorParent {
   receiveMessage(message) {
+    if (message.name === "Shield:Tube") {
+      try {
+        lazy.Shield.tubePassed(this.manager, message.data);
+      } catch (e) {}
+      return null;
+    }
     if (message.name !== "Shield:Style") {
       return null;
     }

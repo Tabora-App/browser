@@ -88,6 +88,16 @@ var { tt, tr: ttr, form: ttForm, locale: ttLocale } = ChromeUtils.importESModule
       toggle.pressed = on;
       toggle.addEventListener("toggle", () => Shield.setEnabled(toggle.pressed));
       body.append(toggle);
+      // ads inside YouTube videos cannot be cancelled by address: the browser skips them instead
+      const tube = h("moz-toggle", {
+        id: "tabora-shield-tube",
+        label: tt`Проматывать рекламу в роликах YouTube`,
+        description: tt`Когда в ролике начинается реклама, браузер сразу проматывает её до конца без звука и не показывает её.`,
+      });
+      tube.pressed = on && Shield.tubeOn;
+      tube.disabled = !on;
+      tube.addEventListener("toggle", () => Shield.setTube(tube.pressed));
+      body.append(tube);
 
       const lists = h("div", { class: "tabora-shield-lists" });
       for (const l of Shield.lists()) {
