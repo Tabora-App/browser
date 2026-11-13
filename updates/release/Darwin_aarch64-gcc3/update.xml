@@ -1,2 +1,6 @@
-<?xml version="1.0"?>
-<updates></updates>
+<?xml version="1.0" encoding="UTF-8"?>
+<updates>
+  <update type="minor" displayVersion="0.3.1" taboraVersion="0.3.1" appVersion="159.0.1" buildID="20261113095141" detailsURL="https://github.com/Tabora-App/browser/releases">
+    <patch type="complete" URL="https://github.com/Tabora-App/browser/releases/download/v0.3.1/tabora-0.3.1-darwin-aarch64.complete.mar" hashFunction="sha512" hashValue="bb7c314cf345713c51c6bda0768a255887af5f96b9fb2741c6bb62a9b3792134acff651e50eaab695556c382e7ecc9fc96e62ea4728b8b4db6bd19b0ed0904c5" size="77153293" />
+  </update>
+</updates>

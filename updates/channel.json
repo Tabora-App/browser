@@ -1,9 +1,9 @@
 {
   "release": {
-    "version": "0.1.0",
+    "version": "0.3.1",
     "minimum": "0.1.0",
-    "notes": "",
+    "notes": "Tabora 0.3.1 is the first version delivered through the built-in updater.\n\nNew since 0.2.0:\n\n- Passkeys: sign in to sites without a password. The keys live in the vault and sync between your computers.\n- Breach check for saved passwords.\n- Sync of history, open and sent tabs, addresses, cards and settings, encrypted on your devices.\n- Tab groups and split view.\n- Import of bookmarks, history and passwords from another browser.\n- The ad blocker passes ads inside YouTube videos in about a second.\n- Delete your account from the app; write to support at support.tabora.app.\n- The About window links to support, the privacy policy and the terms of use, and says what to do when an update waits for another account window to be closed.\n\nmacOS 11 or later, Apple silicon. The installer and the update are signed with a Developer ID and notarized by Apple.",
     "notesUrl": "https://github.com/Tabora-App/browser/releases",
-    "published": "2026-11-09"
+    "published": "2026-11-13"
   }
 }
