@@ -1,5 +1,5 @@
 diff --git a/mobile/android/fenix/app/src/main/AndroidManifest.xml b/mobile/android/fenix/app/src/main/AndroidManifest.xml
-index d226b42d3b..fd0f22c025 100644
+index d226b42d3b..6ad7d5f921 100644
 --- a/mobile/android/fenix/app/src/main/AndroidManifest.xml
 +++ b/mobile/android/fenix/app/src/main/AndroidManifest.xml
 @@ -51,9 +51,10 @@
@@ -16,7 +16,7 @@ index d226b42d3b..fd0f22c025 100644
  
      <uses-permission android:name="${applicationId}.permission.PROFILER_INTERNAL" />
  
-@@ -877,17 +878,6 @@
+@@ -877,16 +878,11 @@
                  tools:node="remove" />
          </provider>
  
@@ -30,7 +30,11 @@ index d226b42d3b..fd0f22c025 100644
 -                <action android:name="com.attribution.SYSTEM_INSTALLER_REFERRER" />
 -            </intent-filter>
 -        </receiver>
--
++        <!-- The attribution library starts itself through this provider; Tabora does not use attribution. -->
++        <provider
++            android:name="com.adjust.sdk.SystemLifecycleContentProvider"
++            android:authorities="${applicationId}.adjust-lifecycle-provider"
++            tools:node="remove" />
+ 
          <receiver android:name="org.mozilla.fenix.components.share.SaveToPdfReceiver"
              android:exported="false">
-             <intent-filter>

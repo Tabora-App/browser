@@ -1011,6 +1011,15 @@ def build_phone_module() -> None:
     run(["node", str(ROOT / "tools" / "web" / "build-phone.mjs"), str(ENGINE / ANDROID_ACCOUNT_MODULE)])
 
 
+# What the attribution libraries bundled with the app add to its manifest; Tabora does not use attribution
+# and says so in the store listing, so none of it may reach a package.
+ANDROID_ATTRIBUTION_MARKS = (
+    (b"com.google.android.gms.permission.AD_ID", "разрешение на рекламный идентификатор"),
+    (b"BIND_GET_INSTALL_REFERRER_SERVICE", "право читать источник установки"),
+    (b"com.adjust", "компонент библиотеки атрибуции"),
+)
+
+
 def _apk_problems(apk: Path) -> List[str]:
     """Готовый файл приложения: тот ли это продукт и всё ли в нём на месте."""
     import io
@@ -1030,6 +1039,9 @@ def _apk_problems(apk: Path) -> List[str]:
                                 f"пакет должен быть {ANDROID_APP_ID} без него")
             if ANDROID_APP_ID.encode() not in manifest and ANDROID_APP_ID.encode("utf-16-le") not in manifest:
                 problems.append(f"имя пакета в {apk.name} не {ANDROID_APP_ID}")
+            for mark, what in ANDROID_ATTRIBUTION_MARKS:
+                if mark in manifest or mark.decode().encode("utf-16-le") in manifest:
+                    problems.append(f"в описании пакета {apk.name} есть {what} ({mark.decode()})")
             if any(n.startswith("META-INF/") and n.endswith((".RSA", ".DSA", ".EC")) for n in names):
                 problems.append(f"{apk.name} уже подписан: сборка должна отдавать неподписанный файл "
                                 "(подпись — tools/android/sign.sh)")
@@ -1075,6 +1087,14 @@ def _aab_problems(aab: Path) -> List[str]:
             if any(n.startswith("META-INF/") and n.endswith((".RSA", ".DSA", ".EC")) for n in names):
                 problems.append(f"{aab.name} уже подписан: сборка должна отдавать неподписанный файл "
                                 "(подпись — tools/android/sign.sh)")
+            # the engine is built for one ABI: libraries of any other ABI would make Google Play offer the
+            # app to devices that cannot run it
+            other = sorted({n.split("/")[2] for n in names if n.startswith("base/lib/")} - {ANDROID_ABI})
+            if other:
+                problems.append(f"в {aab.name} есть библиотеки для других архитектур: {', '.join(other)}")
+            for mark, what in ANDROID_ATTRIBUTION_MARKS:
+                if mark in manifest:
+                    problems.append(f"в описании пакета {aab.name} есть {what} ({mark.decode()})")
             build = "base/assets/extensions/tabora/build.json"
             if build not in names:
                 problems.append(f"в {aab.name} нет модуля аккаунта: {build}")

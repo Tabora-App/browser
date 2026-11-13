@@ -1,5 +1,5 @@
 diff --git a/mobile/android/fenix/app/build.gradle b/mobile/android/fenix/app/build.gradle
-index e8032b0120..49af39c355 100644
+index e8032b0120..33de652301 100644
 --- a/mobile/android/fenix/app/build.gradle
 +++ b/mobile/android/fenix/app/build.gradle
 @@ -46,7 +46,8 @@ android {
@@ -12,7 +12,23 @@ index e8032b0120..49af39c355 100644
          minSdk config.minSdkVersion
          targetSdk config.targetSdkVersion
          versionCode 1
-@@ -139,18 +140,11 @@ android {
+@@ -75,6 +76,15 @@ android {
+ 
+         buildConfigField "String[]", "SUPPORTED_LOCALE_ARRAY", getSupportedLocales()
+         buildConfigField "boolean", "IS_BENCHMARK_BUILD", "false"
++
++        // Tabora builds the engine for one ABI. An app bundle has no per-ABI split to filter by, so without
++        // this it would carry other ABIs' libraries from third-party dependencies, and Google Play would
++        // offer the app to devices that have no engine to run it.
++        if (isAppBundle) {
++            ndk {
++                abiFilters "${gradle.mozconfig.substs.ANDROID_CPU_ARCH}"
++            }
++        }
+     }
+ 
+     def releaseTemplate = {
+@@ -139,18 +149,11 @@ android {
          }
          release releaseTemplate >> {
              buildConfigField "boolean", "USE_RELEASE_VERSIONING", "true"
@@ -34,7 +50,7 @@ index e8032b0120..49af39c355 100644
                      "deepLinkScheme": deepLinkSchemeValue,
              ])
          }
-@@ -300,9 +294,13 @@ androidComponents {
+@@ -300,9 +303,13 @@ androidComponents {
              // The Google Play Store does not allow multiple APKs for the same app that all have the
              // same version code. Therefore we need to have different version codes for our ARM and x86
              // builds.
@@ -51,7 +67,7 @@ index e8032b0120..49af39c355 100644
              project.logger.debug("versionName override: $versionName")
  
              variant.outputs.each { output ->
-@@ -343,8 +341,9 @@ androidComponents {
+@@ -343,8 +350,9 @@ androidComponents {
  // -------------------------------------------------------------------------------------------------
  
  android.defaultConfig.with {
