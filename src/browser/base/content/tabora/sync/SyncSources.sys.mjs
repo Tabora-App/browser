@@ -1060,6 +1060,11 @@ function autofillSource(name, collection, clean, sameThing, content = f => f) {
       const out = new Map();
       for (const rec of await (await this._coll()).getAll({ rawData: true })) {
         const f = ID_RE.test(rec.guid || "") ? clean(rec) : null;
+        if (!f && collection === "creditCards") {
+          // The storage could not read the card's number (the vault was locked meanwhile) and
+          // gave its mask. Taking that for "no such card" would delete the card everywhere.
+          throw new Error("card numbers cannot be read now");
+        }
         if (f && out.size < AUTOFILL_MAX) {
           out.set(rec.guid, { f, c: rec.timeCreated || 0, m: rec.timeLastModified || 0 });
         }

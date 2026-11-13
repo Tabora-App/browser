@@ -85,6 +85,8 @@ Object.assign(Tabora, {
   initSync() {
     try {
       ChromeUtils.importESModule("chrome://tabora/content/sync/Sync.sys.mjs").Sync.start();
+      // bank card numbers are bound to the vault (vault/CardKey.sys.mjs)
+      ChromeUtils.importESModule("chrome://tabora/content/vault/CardKey.sys.mjs").CardKey.init();
       const applied = (subject, topic, what) => {
         if (what === "spaces") {
           this.syncSpaces();

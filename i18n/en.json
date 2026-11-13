@@ -3207,5 +3207,7 @@
  "Список установленных расширений. Само расширение на другом компьютере не ставится: его можно открыть в каталоге и установить.": "The list of installed extensions. An extension is not installed on another computer by itself: it can be opened in the catalog and installed there.",
  "На других компьютерах нет расширений, которых нет здесь": "Your other computers have no extensions that are missing here",
  "Расширения с других компьютеров": "Extensions from other computers",
- "Установленные на других ваших компьютерах, но не здесь. Нажатие открывает страницу расширения в каталоге.": "Installed on your other computers but not here. A click opens the extension’s page in the catalog."
+ "Установленные на других ваших компьютерах, но не здесь. Нажатие открывает страницу расширения в каталоге.": "Installed on your other computers but not here. A click opens the extension’s page in the catalog.",
+ "Войдите в аккаунт Tabora, чтобы подставлять карты": "Sign in to your Tabora account to fill in cards",
+ "Сейф заблокирован: разблокируйте его, чтобы подставить карту": "The vault is locked: unlock it to fill in the card"
 }

@@ -3207,5 +3207,7 @@
  "Список установленных расширений. Само расширение на другом компьютере не ставится: его можно открыть в каталоге и установить.": "La lista de extensiones instaladas. Una extensión no se instala sola en otro ordenador: se puede abrir en el catálogo e instalarla allí.",
  "На других компьютерах нет расширений, которых нет здесь": "En tus otros ordenadores no hay extensiones que falten aquí",
  "Расширения с других компьютеров": "Extensiones de otros ordenadores",
- "Установленные на других ваших компьютерах, но не здесь. Нажатие открывает страницу расширения в каталоге.": "Instaladas en tus otros ordenadores pero no aquí. Un clic abre la página de la extensión en el catálogo."
+ "Установленные на других ваших компьютерах, но не здесь. Нажатие открывает страницу расширения в каталоге.": "Instaladas en tus otros ordenadores pero no aquí. Un clic abre la página de la extensión en el catálogo.",
+ "Войдите в аккаунт Tabora, чтобы подставлять карты": "Inicia sesión en tu cuenta de Tabora para rellenar tarjetas",
+ "Сейф заблокирован: разблокируйте его, чтобы подставить карту": "La caja fuerte está bloqueada: desbloquéala para rellenar la tarjeta"
 }

@@ -57,6 +57,8 @@ Object.assign(Tabora, {
       if (Vault.waitingReason === "passwords" && Date.now() - (this._vaultAskedAt || 0) >= 180000) {
         this._vaultAskedAt = Date.now();
         this.notice(tt`Войдите в аккаунт Tabora, чтобы подставлять пароли`);
+      } else if (Vault.waitingReason === "cards") {
+        this.notice(tt`Войдите в аккаунт Tabora, чтобы подставлять карты`);
       }
       return;
     }
@@ -67,6 +69,9 @@ Object.assign(Tabora, {
       }
       this._vaultAskedAt = Date.now();
       this.notice(tt`Сейф заблокирован: разблокируйте его, чтобы подставить пароль`);
+    } else if (Vault.waitingReason === "cards") {
+      // a card is asked for by the person's own action (a pick in the form, the list of cards)
+      this.notice(tt`Сейф заблокирован: разблокируйте его, чтобы подставить карту`);
     } else {
       this.notice(tt`Введите мастер-пароль сейфа, чтобы включить пароли сайтов`);
     }

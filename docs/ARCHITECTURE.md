@@ -19,7 +19,10 @@
 3. **Account** (`account/`): sign-in, devices, two-factor protection, recovery key. The password
    never leaves the device: a login hash and a separate wrapping key are derived from it.
 4. **Vault** (`vault/`): saved passwords and sign-in codes, encrypted with keys of the account.
-   Codes are filled into site forms by a page actor.
+   Codes are filled into site forms by a page actor. Numbers of saved bank cards are bound to
+   the vault too: the engine encrypts them with a key from the system keychain, and that
+   ciphertext is encrypted once more with a key of the vault (`vault/CardKey.sys.mjs`), so a
+   card number is readable only while the vault is open.
 5. **Mail** (`mail/`): the `@tabora.app` mailbox over JMAP, external mailboxes over IMAP and SMTP,
    aliases, OpenPGP. Mail from outside is rendered in a separate content process without scripts.
 6. **Wallet** (`wallet/`): keys are derived from the recovery phrase on the device; the phrase is
