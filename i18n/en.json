@@ -1955,7 +1955,6 @@
  "манифест старее уже полученного (откат)": "the manifest is older than the one already received (rollback)",
  "нет ответа": "no response",
  "Сведения об обновлениях устарели: действительный манифест не получен. Проверьте новую версию на сайте Tabora": "Update information is out of date: no valid manifest was received. Check the Tabora website for a new version",
- "Манифест обновлений недоступен: {0}": "The update manifest is unavailable: {0}",
  ", но пакет для этой системы не найден": ", but there’s no package for this system",
  "Доступна версия {0}{1}": "Version {0} is available{1}",
  "Установлена последняя версия": "You have the latest version",
@@ -3285,5 +3284,6 @@
  "Создавая аккаунт, вы принимаете ": "By creating an account you accept the ",
  "условия использования": "terms of use",
  " и @@согласие": " and the ",
- "политику конфиденциальности": "privacy policy"
+ "политику конфиденциальности": "privacy policy",
+ "Не удалось получить сведения об обновлениях": "Couldn’t get update information"
 }

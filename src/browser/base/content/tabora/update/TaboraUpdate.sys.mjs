@@ -587,12 +587,18 @@ export const TaboraUpdate = {
     return this.stale && !idle ? `${STALE_TEXT}. ${text}` : text;
   },
 
+  /** The technical reason behind the status line, for a tooltip and for support; "" when there is none. */
+  statusDetail() {
+    return this.manifestError ? String(this.manifestError) : "";
+  },
+
   _idleText(noPackage) {
     if (this.stale) {
       return STALE_TEXT;
     }
     if (this.manifestError) {
-      return tt`Манифест обновлений недоступен: ${this.manifestError}`;
+      // the reason (an HTTP code, a signature that does not verify) is for support, see statusDetail()
+      return tt`Не удалось получить сведения об обновлениях`;
     }
     if (this.available) {
       return tt`Доступна версия ${this.channel.version}${noPackage ? tt`, но пакет для этой системы не найден` : ""}`;

@@ -55,6 +55,7 @@ function fill() {
   const restart = document.getElementById("restart-update");
   const renderUpdates = () => {
     upd.textContent = TaboraUpdate.statusText();
+    upd.title = TaboraUpdate.statusDetail();
     restart.hidden = !TaboraUpdate.readyForRestart;
   };
   renderUpdates();

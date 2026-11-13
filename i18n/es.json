@@ -1955,7 +1955,6 @@
  "манифест старее уже полученного (откат)": "el manifiesto es más antiguo que el ya recibido (retroceso)",
  "нет ответа": "sin respuesta",
  "Сведения об обновлениях устарели: действительный манифест не получен. Проверьте новую версию на сайте Tabora": "La información de actualizaciones está desactualizada: no se recibió un manifiesto válido. Consulta si hay una versión nueva en el sitio de Tabora",
- "Манифест обновлений недоступен: {0}": "El manifiesto de actualizaciones no está disponible: {0}",
  ", но пакет для этой системы не найден": ", pero no hay paquete para este sistema",
  "Доступна версия {0}{1}": "Versión {0} disponible{1}",
  "Установлена последняя версия": "Tienes la última versión",
@@ -3285,5 +3284,6 @@
  "Создавая аккаунт, вы принимаете ": "Al crear la cuenta aceptas las ",
  "условия использования": "condiciones de uso",
  " и @@согласие": " y la ",
- "политику конфиденциальности": "política de privacidad"
+ "политику конфиденциальности": "política de privacidad",
+ "Не удалось получить сведения об обновлениях": "No se pudo obtener la información de actualizaciones"
 }
