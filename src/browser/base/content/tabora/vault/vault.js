@@ -62,6 +62,12 @@ Object.assign(Tabora, {
       }
       return;
     }
+    if (Vault.waitingReason === "passkeys") {
+      // asked by the person's own click in the passkey sheet
+      this.notice(tt`Сейф заблокирован: разблокируйте его, чтобы продолжить с ключом доступа`);
+      this.openDrawer("codes");
+      return;
+    }
     if (Vault.waitingReason === "passwords") {
       // хранилище паролей спрашивает при каждом поле входа: раздел открываем не чаще раза в 3 минуты
       if (Date.now() - (this._vaultAskedAt || 0) < 180000) {
@@ -204,7 +210,7 @@ Object.assign(Tabora, {
     const mark = h("div", { class: "w-lock-mark" }, null, [this.wIcon(["M7 11V8a5 5 0 0 1 10 0v3", "M5 11h14v10H5z"], 22, 1.8)]);
     const err = h("div", { class: "w-error", hidden: "true" });
     const recovery = Vault.hasRecoveryKey ? this.wButton(tt`Войти по ключу восстановления`, "ghost", () => this.vaultRecoverySheet()) : null;
-    const later = Vault.waiting && Vault.waitingReason === "passwords" ? this.wButton(tt`Не сейчас`, "ghost", () => Vault.cancelWaiting()) : null;
+    const later = Vault.waiting && ["passwords", "passkeys"].includes(Vault.waitingReason) ? this.wButton(tt`Не сейчас`, "ghost", () => Vault.cancelWaiting()) : null;
     const canTouch = Vault.hasOsKey && Vault.osUnlockEnabled;
     const touch = canTouch ? this.wButton(Vault.hasPassword ? tt`Touch ID или пароль macOS` : tt`Разблокировать`, Vault.hasPassword ? "ghost" : "primary", async () => {
       touch.disabled = true;
@@ -1639,6 +1645,128 @@ Object.assign(Tabora, {
       return a;
     };
     return { pass, again, read };
+  },
+
+  /* ---- Passkeys ---------------------------------------------------------------------------
+   * The question the vault asks before it makes a passkey or signs in with one
+   * (vault/PasskeyService.sys.mjs). The browser draws it over its own window: a page cannot draw
+   * into it or click in it. The confirming button starts to answer a moment after the sheet
+   * appeared, so a click that a page provoked just before does not land on it; after the click
+   * the owner is still checked by the vault or by the system.
+   *
+   * q: { kind: "create" | "get" | "exists", rpId, userName, userDisplayName, accounts: [{ id, userName, userDisplayName }] }
+   * → { answer: Promise<{ action: "ok" | "other" | "cancel", id }>, close() } */
+  passkeyPrompt(q) {
+    const h = (t, a, x, c) => this.html(t, a, x, c);
+    const ARM_MS = 600;
+    let done = false;
+    let settle;
+    const answer = new Promise(resolve => (settle = resolve));
+    const onTab = () => finish({ action: "cancel" });
+    // the question belongs to the page that asked: when the tab goes to another page, it is withdrawn
+    const browser = gBrowser.selectedBrowser;
+    const onPage = {
+      onLocationChange(aBrowser, webProgress, request, location, flags) {
+        if (aBrowser === browser && webProgress.isTopLevel && !(flags & Ci.nsIWebProgressListener.LOCATION_CHANGE_SAME_DOCUMENT)) {
+          finish({ action: "cancel" });
+        }
+      },
+    };
+    const finish = result => {
+      if (done) {
+        return;
+      }
+      done = true;
+      clearTimeout(armTimer);
+      gBrowser.tabContainer.removeEventListener("TabSelect", onTab);
+      gBrowser.removeTabsProgressListener(onPage);
+      const held = box.contains(document.activeElement);
+      box.remove();
+      // the sheet took the keyboard from the page: give it back, or the page stays inactive and
+      // its next request (a site often asks to sign in right after making a passkey) is refused
+      if (held) {
+        const back = () => {
+          const at = document.activeElement;
+          if (!at || at === document.body || at === document.documentElement) {
+            gBrowser.selectedBrowser.focus();
+          }
+        };
+        back();
+        // once more a moment later: while the tab is loading another page the first try may be lost
+        setTimeout(back, 400);
+      }
+      settle(result);
+    };
+    const site = q.rpId;
+    const accounts = q.kind === "get" ? q.accounts : q.kind === "create" ? [{ id: "", userName: q.userName, userDisplayName: q.userDisplayName }] : [];
+    const several = accounts.length > 1;
+    let picked = accounts[0]?.id || "";
+    const rows = accounts.map(a => {
+      const name = a.userName || a.userDisplayName || tt`Аккаунт без имени`;
+      const icon = h("span", { class: "w-origin-icon" }, null, [h("img", { src: `page-icon:https://${site}/`, alt: "" })]);
+      icon.firstChild.addEventListener("error", () => icon.replaceChildren(h("b", {}, this.letterOf(site))));
+      const text = h("div", { class: "w-origin-text" }, null, [h("b", {}, name), h("span", {}, a.userDisplayName && a.userDisplayName !== name ? a.userDisplayName : site)]);
+      if (!several) {
+        return h("div", { class: "w-origin pk-account" }, null, [icon, text]);
+      }
+      const row = h("button", { class: "w-origin pk-account", type: "button", role: "radio", "aria-checked": String(a.id === picked) }, null, [icon, text]);
+      row.addEventListener("click", () => {
+        picked = a.id;
+        for (const other of rows) {
+          other.setAttribute("aria-checked", String(other === row));
+        }
+      });
+      row.addEventListener("dblclick", () => ok.click());
+      return row;
+    });
+    const title = { create: tt`Сохранить ключ доступа?`, get: tt`Войти с ключом доступа`, exists: tt`Ключ доступа уже есть` }[q.kind];
+    const text = {
+      create: tt`Ключ доступа заменяет пароль на ${site}: для входа хватит подтвердить, что это вы. Он хранится в сейфе Tabora.`,
+      get: several ? tt`Выберите аккаунт для входа на ${site}.` : tt`Вход на ${site} без пароля.`,
+      exists: tt`В сейфе уже сохранён ключ доступа для ${site}. Второй не нужен.`,
+    }[q.kind];
+    const ok = this.wButton({ create: tt`Сохранить`, get: tt`Войти`, exists: tt`Понятно` }[q.kind], "primary arming", () => finish({ action: "ok", id: picked }), { disabled: "true" });
+    const other = this.wButton(tt`Другое устройство`, "ghost", () => finish({ action: "other" }), { title: tt`Телефон или аппаратный ключ` });
+    const cancel = q.kind === "exists" ? null : this.wButton(tt`Отмена`, "ghost", () => finish({ action: "cancel" }));
+    const card = h("div", { class: "w-sheet-card pk-sheet", role: "dialog", "aria-modal": "true", "aria-label": title, tabindex: "-1" }, null, [
+      h("b", {}, title),
+      h("p", { class: "w-sub" }, text),
+      rows.length ? h("div", { class: "pk-accounts", ...(several ? { role: "radiogroup", "aria-label": tt`Аккаунт` } : {}) }, null, rows) : null,
+      h("div", { class: "w-actions" }, null, [cancel, other, ok].filter(Boolean)),
+    ].filter(Boolean));
+    card.addEventListener("keydown", e => {
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        finish({ action: "cancel" });
+      } else if (e.key === "Enter" && !ok.disabled && e.target.localName !== "button") {
+        ok.click();
+      }
+    });
+    const box = h("div", { class: "w-sheet" }, null, [card]);
+    const armTimer = setTimeout(() => {
+      if (!done) {
+        ok.disabled = false;
+        ok.classList.remove("arming");
+        ok.focus();
+      }
+    }, ARM_MS);
+    gBrowser.tabContainer.addEventListener("TabSelect", onTab);
+    gBrowser.addTabsProgressListener(onPage);
+    this.sheetModal().append(box);
+    card.focus();
+    return { answer, close: () => finish({ action: "cancel" }) };
+  },
+
+  /** Delete a passkey of the vault (asked from the settings). */
+  passkeyRemoveSheet(p) {
+    const { Passkeys } = ChromeUtils.importESModule("chrome://tabora/content/vault/Passkeys.sys.mjs");
+    const who = p.un || p.dn ? tt`${p.rp}, аккаунт ${p.un || p.dn}` : p.rp;
+    this.vaultSheet(tt`Удалить ключ доступа?`, tt`Ключ для ${who} будет удалён из сейфа, а с синхронизацией — и с других ваших компьютеров. Войти с ним больше не получится: сначала убедитесь, что на сайте есть другой способ входа.`, [], tt`Удалить`, async () => {
+      if (!(await Passkeys.remove(p.id))) {
+        throw new Error(tt`Ключ не найден: возможно, он уже удалён`);
+      }
+      this.notice(tt`Ключ доступа удалён`);
+    });
   },
 
   vaultSheet(title, text, body, okLabel, onOk) {

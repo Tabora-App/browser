@@ -1,8 +1,8 @@
 diff --git a/browser/base/jar.mn b/browser/base/jar.mn
-index b2b5db6040..13a81d4de4 100644
+index b2b5db6040..b874b213da 100644
 --- a/browser/base/jar.mn
 +++ b/browser/base/jar.mn
-@@ -33,6 +33,107 @@ browser.jar:
+@@ -33,6 +33,110 @@ browser.jar:
          content/browser/aboutTabCrashed.xhtml         (content/aboutTabCrashed.xhtml)
          content/browser/blanktab.html                 (content/blanktab.html)
          content/browser/browser.js                    (content/browser.js)
@@ -50,6 +50,9 @@ index b2b5db6040..13a81d4de4 100644
 +        content/tabora/vault/Otp.sys.mjs  (content/tabora/vault/Otp.sys.mjs)
 +        content/tabora/vault/Breach.sys.mjs  (content/tabora/vault/Breach.sys.mjs)
 +        content/tabora/vault/CardKey.sys.mjs  (content/tabora/vault/CardKey.sys.mjs)
++        content/tabora/vault/PasskeyCore.sys.mjs  (content/tabora/vault/PasskeyCore.sys.mjs)
++        content/tabora/vault/Passkeys.sys.mjs  (content/tabora/vault/Passkeys.sys.mjs)
++        content/tabora/vault/PasskeyService.sys.mjs  (content/tabora/vault/PasskeyService.sys.mjs)
 +        content/tabora/vault/vendor/qr.sys.mjs  (content/tabora/vault/vendor/qr.sys.mjs)
 +        content/tabora/vault/vendor/argon2.sys.mjs  (content/tabora/vault/vendor/argon2.sys.mjs)
 +        content/tabora/actors/TaboraVaultChild.sys.mjs  (content/tabora/actors/TaboraVaultChild.sys.mjs)

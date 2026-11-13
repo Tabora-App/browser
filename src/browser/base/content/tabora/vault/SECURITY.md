@@ -305,6 +305,37 @@
 - Время: сверка по заголовку Date известных серверов (Cloudflare, Google, Apple); при расхождении больше
   5 с коды считаются с поправкой (`tabora.otp.clockOffsetMs`), неправдоподобные ответы отбрасываются.
 
+## Passkeys (`vault/PasskeyService.sys.mjs`, `Passkeys.sys.mjs`, `PasskeyCore.sys.mjs`)
+- The vault is a WebAuthn authenticator. The engine checks the site (origin, relying party ID) and
+  builds the client data as it does for any authenticator; then it asks the vault first
+  (`dom/webauthn/nsITaboraPasskeys.idl`). The vault answers, refuses, or passes the request on to
+  the system's authenticator and hardware keys ("Another device", a site that asks for a
+  cross-platform key or accepts only key types the vault does not make, nothing saved for the site).
+- Nothing is saved and nothing is signed without a click in a sheet that the browser draws over
+  its own window (a page cannot draw into it; the confirming button starts to answer 600 ms after
+  the sheet appeared) and a proof of the owner after the click: unlocking the vault if it was
+  locked, the system's check (Touch ID or the computer's password) if it was open. An open vault
+  alone is not taken as a proof. Switching to another tab or leaving the page withdraws the request.
+- A site that excludes a passkey the vault already has is told so only after the person saw the
+  notice: a page cannot quietly ask what is kept here.
+- Keys: ES256 (P-256), made by WebCrypto. Attestation format is "none": a synced passkey has no
+  device to attest. The signature counter is always zero. Flags: user present, user verified,
+  backup eligible; "backed up" while passkeys are being synced.
+- Storage: `tabora-passkeys.json` in the profile. The site, the account on it and the credential ID
+  are in the clear, so the browser knows whether it has a passkey for a site while the vault is
+  locked; the private key (PKCS #8) is encrypted with the vault subkey `passkeys`. The site, the
+  credential ID and the user handle are repeated inside the ciphertext and compared when the key
+  is opened: a record whose clear fields were edited in the file is refused, so a key cannot be made
+  to sign for another site. Private keys are re-encrypted when the vault's key changes.
+- Passkeys belong to the Tabora account of the profile: without a sign-in they are neither listed
+  nor used, and sites are not told that a built-in authenticator exists.
+- Sync: the collection `passkeys`, records with their private keys, encrypted on the device with
+  the account's key like passwords. A record from another device is kept only if its key really
+  signs. A passkey is never edited, only made and deleted.
+- Not done: passkeys in the Android app; filling a passkey from the sign-in field's suggestion
+  list (conditional mediation is left to the engine); the system's own passkeys on macOS, which
+  need an entitlement from Apple.
+
 ## Почта (`mail/`)
 - Страница почты проверяет вход в аккаунт при открытии и при каждом обращении к данным (посредник над
   `MailStore`); без входа показывает «Войдите в аккаунт», при заблокированном сейфе — «Разблокировать».

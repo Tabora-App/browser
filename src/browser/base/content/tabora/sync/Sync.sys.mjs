@@ -58,6 +58,7 @@ const ROUNDS = 4;
 export const GROUPS = {
   passwords: ["logins"],
   codes: ["otp"],
+  passkeys: ["passkeys"],
   bookmarks: ["marks"],
   tabs: ["spaces", "start", "tabs", "sent"],
   history: ["history"],

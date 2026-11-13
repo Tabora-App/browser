@@ -1,0 +1,12 @@
+diff --git a/dom/webauthn/moz.build b/dom/webauthn/moz.build
+index 20671238d9..e204f5e7fb 100644
+--- a/dom/webauthn/moz.build
++++ b/dom/webauthn/moz.build
+@@ -16,6 +16,7 @@ XPCOM_MANIFESTS += [
+ ]
+ 
+ XPIDL_SOURCES += [
++    "nsITaboraPasskeys.idl",
+     "nsIWebAuthnArgs.idl",
+     "nsIWebAuthnAttObj.idl",
+     "nsIWebAuthnPromise.idl",

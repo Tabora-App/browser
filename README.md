@@ -28,12 +28,13 @@
 | **Ad and tracker blocker** | Our own filter engine, on by default, no extension to install. Filter lists (EasyList, RU AdList, EasyPrivacy, Peter Lowe's list) update on their own; every site has its own switch. |
 | **Password vault** | Saved passwords are encrypted with a key derived from your account password. The vault opens only for the signed-in account and can be locked at any moment. Saved passwords can be checked against known breaches: only the first five characters of a password's hash leave the computer. |
 | **Sign-in codes (2FA)** | One-time codes for your sites live next to the passwords and are filled into the code field for you. Import from Google Authenticator, Aegis and 2FAS. |
+| **Passkeys** | On sites that support passkeys you sign in without a password. Tabora keeps passkeys in the vault next to the passwords: saving one or signing in with one takes a click and a Touch ID or computer-password check. |
 | **Mail** | A mailbox on `@tabora.app` inside the browser, a separate alias for every site, OpenPGP encryption with keys generated on your device, and external mailboxes over IMAP and SMTP. |
 | **Crypto wallet** | Ethereum-compatible networks, Bitcoin, Solana and TRON. The recovery phrase stays on the device and is never synced. |
 | **AI agent** | Works inside your tabs: plans the steps, fills in forms, and asks before it sends anything. |
 | **Spaces** | Work, personal, a side project: each space has its own tabs and its own sign-ins on sites. |
 | **Tab groups and split view** | Tabs can be gathered into named, colored groups, and two sites can be shown side by side in one window. A group stays in the space it was made in. |
-| **Sync** | Tabs, history, bookmarks, passwords, sign-in codes, spaces, autofill addresses and settings are shared between your devices; bank cards too, if you turn that on. Extensions installed on one computer are offered on the others. A page can be sent from one device to another. Everything is encrypted on the device with a key the server never sees. A phone signs in by scanning a QR code from the computer. |
+| **Sync** | Tabs, history, bookmarks, passwords, passkeys, sign-in codes, spaces, autofill addresses and settings are shared between your devices; bank cards too, if you turn that on. Extensions installed on one computer are offered on the others. A page can be sent from one device to another. Everything is encrypted on the device with a key the server never sees. A phone signs in by scanning a QR code from the computer. |
 | **Import** | Bookmarks, history and passwords come over from Chrome, Safari, Edge and other browsers; passwords and sign-in codes also from files. |
 | **No telemetry** | Mozilla telemetry, studies, sponsored tiles and account prompts are switched off. |
 
@@ -116,7 +117,7 @@ See [web/README.md](web/README.md).
 
 ## Security
 
-- Passwords, sign-in codes, bookmarks, tabs and spaces leave the device only encrypted; the key is
+- Passwords, passkeys, sign-in codes, bookmarks, tabs and spaces leave the device only encrypted; the key is
   derived from the account password and is never sent to the server.
 - The wallet recovery phrase is not synced at all.
 - Mail from the outside world is rendered in a separate content process without scripts; remote

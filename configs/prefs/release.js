@@ -228,6 +228,7 @@ pref("tabora.shield.allow", "[]");
 pref("tabora.sync.enabled", true);
 pref("tabora.sync.passwords", true);
 pref("tabora.sync.codes", true);
+pref("tabora.sync.passkeys", true);
 pref("tabora.sync.bookmarks", true);
 pref("tabora.sync.tabs", true);
 pref("tabora.sync.history", true);
@@ -236,6 +237,9 @@ pref("tabora.sync.addresses", true);
 pref("tabora.sync.cards", false);
 pref("tabora.sync.settings", true);
 pref("tabora.sync.extensions", true);
+// Passkeys kept in the vault (vault/PasskeyService.sys.mjs): when a site offers a passkey, the
+// vault is asked before the system's authenticator and hardware keys.
+pref("tabora.passkeys.enabled", true);
 // Address autofill is offered to everyone: the engine enables it by the detected country, and
 // country detection is turned off here.
 pref("extensions.formautofill.addresses.supported", "on");

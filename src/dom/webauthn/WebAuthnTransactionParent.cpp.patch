@@ -1,0 +1,32 @@
+diff --git a/dom/webauthn/WebAuthnTransactionParent.cpp b/dom/webauthn/WebAuthnTransactionParent.cpp
+index f826447dac..c6c3e84e4a 100644
+--- a/dom/webauthn/WebAuthnTransactionParent.cpp
++++ b/dom/webauthn/WebAuthnTransactionParent.cpp
+@@ -13,6 +13,7 @@
+ #include "mozilla/dom/PWindowGlobalParent.h"
+ #include "mozilla/dom/WindowGlobalParent.h"
+ #include "nsComponentManagerUtils.h"
++#include "nsITaboraPasskeys.h"
+ #include "nsIWebAuthnRelatedOriginFetcher.h"
+ #include "nsThreadUtils.h"
+ 
+@@ -804,6 +805,19 @@ mozilla::ipc::IPCResult WebAuthnTransactionParent::RecvRequestIsUVPAA(
+ 
+ #else
+ 
++  // Tabora: the vault is an authenticator that verifies its owner. Its
++  // service lives on the main thread, so it is asked here and not in
++  // WebAuthnService::GetIsUVPAA, which runs on a background thread.
++  {
++    nsCOMPtr<nsITaboraPasskeys> tabora =
++        do_GetService("@tabora.app/passkeys;1");
++    bool enabled = false;
++    if (tabora && NS_SUCCEEDED(tabora->GetEnabled(&enabled)) && enabled) {
++      aResolver(true);
++      return IPC_OK();
++    }
++  }
++
+   nsCOMPtr<nsISerialEventTarget> target = GetCurrentSerialEventTarget();
+   nsCOMPtr<nsIRunnable> runnable(NS_NewRunnableFunction(
+       __func__, [target, resolver = std::move(aResolver)]() {

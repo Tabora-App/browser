@@ -23,6 +23,11 @@
    the vault too: the engine encrypts them with a key from the system keychain, and that
    ciphertext is encrypted once more with a key of the vault (`vault/CardKey.sys.mjs`), so a
    card number is readable only while the vault is open.
+   Passkeys are kept here as well. The engine's WebAuthn service (`dom/webauthn`) asks the vault
+   before the system's authenticator and hardware keys through a small scriptable interface
+   (`nsITaboraPasskeys.idl`); the vault's side is `vault/PasskeyService.sys.mjs` (who is asked and
+   when), `vault/Passkeys.sys.mjs` (the encrypted store) and `vault/PasskeyCore.sys.mjs` (key
+   pairs, attestation objects and signatures; tested under Node in `tools/test`).
 5. **Mail** (`mail/`): the `@tabora.app` mailbox over JMAP, external mailboxes over IMAP and SMTP,
    aliases, OpenPGP. Mail from outside is rendered in a separate content process without scripts.
 6. **Wallet** (`wallet/`): keys are derived from the recovery phrase on the device; the phrase is

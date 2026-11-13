@@ -131,6 +131,33 @@ window.TaboraAccountPane = (function () {
     render();
   }
 
+  /* ---- Passkeys ----------------------------------------------------------------------------
+   * Passkeys kept in the vault (vault/Passkeys.sys.mjs). The list is read without opening the
+   * vault: the private keys stay encrypted. A passkey is deleted after a confirmation in the
+   * shell's sheet. */
+
+  function passkeysGroup() {
+    const { Passkeys } = ChromeUtils.importESModule("chrome://tabora/content/vault/Passkeys.sys.mjs");
+    if (!Passkeys.loaded) {
+      Passkeys.ready().then(() => state.tab === "security" && render(), () => {});
+    }
+    const toggle = el("moz-toggle", { slot: "actions", "aria-label": tt`Сохранять ключи доступа в сейфе` });
+    toggle.pressed = Services.prefs.getBoolPref("tabora.passkeys.enabled", true);
+    toggle.addEventListener("toggle", () => Services.prefs.setBoolPref("tabora.passkeys.enabled", toggle.pressed));
+    const list = Passkeys.list().sort((a, b) => a.rp.localeCompare(b.rp) || (a.un || "").localeCompare(b.un || ""));
+    const rows = list.map(p =>
+      item(p.rp, (p.un || p.dn ? tt`Аккаунт: ${p.un || p.dn}.` + " " : "") + tt`Создан ${date(p.c)}.`, [button(tt`Удалить`, shell(s => s.passkeyRemoveSheet(p)))])
+    );
+    return group(
+      tt`Ключи доступа`,
+      tt`Ключ доступа заменяет пароль на сайте: для входа хватит подтвердить, что это вы. Ключи хранятся в сейфе, а с синхронизацией переносятся на другие ваши компьютеры зашифрованными.`,
+      [
+        item(tt`Сохранять ключи доступа в сейфе`, tt`Когда сайт предложит ключ доступа, Tabora спросит, сохранить ли его. Если выключить, остаются ключи системы и аппаратные ключи.`, [toggle]),
+        ...(list.length ? rows : [item(tt`Сохранённых ключей пока нет`, tt`Ключ появится здесь, когда вы создадите его на сайте, который их поддерживает.`)]),
+      ]
+    );
+  }
+
   function breachGroup() {
     const b = state.breach;
     const about = tt`Сверяет сохранённые пароли с базой паролей, которые уже попадали в утечки. Пароли этот компьютер не покидают: в сервис Have I Been Pwned уходят только первые пять знаков хеша каждого пароля. По ним пароль не восстановить, сравнение делается здесь.`;
@@ -191,6 +218,9 @@ window.TaboraAccountPane = (function () {
     answered: staffView ? tt`отвечено` : tt`поддержка ответила`,
     closed: tt`закрыто`,
   }[status] || status);
+
+  /** The author as support sees them: a request from the support site without an account is marked. */
+  const supAuthor = t => (t.guest ? `${t.author} (${tt`без аккаунта`})` : t.author);
 
   const supWhen = iso => {
     const d = new Date(iso);
@@ -538,7 +568,7 @@ window.TaboraAccountPane = (function () {
         thread.scrollTop = thread.scrollHeight;
       });
       return [el("moz-card", { role: "presentation", class: "tabora-acc-group tabora-sup-card" }, [
-        el("moz-fieldset", { label: t.subject, description: tt`Обращение № ${t.id} · ${supStatus(t.status, staffView)}${staffView && t.author ? ` · ${t.author}` : ""}`, headinglevel: "2" }, [
+        el("moz-fieldset", { label: t.subject, description: tt`Обращение № ${t.id} · ${supStatus(t.status, staffView)}${staffView && t.author ? ` · ${supAuthor(t)}` : ""}`, headinglevel: "2" }, [
           el("div", { class: "tabora-sup-form" }, [el("div", { class: "tabora-sup-buttons" }, [back, toggle]), info, thread, c.node, el("div", { class: "tabora-sup-buttons" }, [send, c.pick])]),
         ]),
       ])];
@@ -559,7 +589,7 @@ window.TaboraAccountPane = (function () {
       const b = button(tt`Открыть`, () => supOpen(t.id), { type: t.unread ? "primary" : "default" });
       return item(
         `${t.unread ? "● " : ""}${t.subject}`,
-        `№ ${t.id} · ${supStatus(t.status, staffView)}${staffView && t.author ? ` · ${t.author}` : ""} · ${supWhen(t.updatedAt)}`,
+        `№ ${t.id} · ${supStatus(t.status, staffView)}${staffView && t.author ? ` · ${supAuthor(t)}` : ""} · ${supWhen(t.updatedAt)}`,
         [b]
       );
     };
@@ -682,6 +712,7 @@ window.TaboraAccountPane = (function () {
             [button(rkAt ? tt`Создать новый` : tt`Создать ключ`, shell(s => s.vaultRecoveryCreateSheet()), { type: !rkAt || upgrade ? "primary" : "default" })]
           ),
         ]),
+        passkeysGroup(),
         breachGroup(),
         group(tt`Сейф`, "", [
           item(tt`Открывать сейф через связку ключей macOS`, silent ? tt`Сейф открывается сам при запуске браузера на этом компьютере.` : tt`При каждом запуске браузер спрашивает пароль.`, [toggle]),
@@ -728,6 +759,7 @@ window.TaboraAccountPane = (function () {
       const what = [
         ["passwords", tt`Пароли сайтов`, tt`Логины и пароли из сейфа.`, tt`пароль|пароля|паролей`],
         ["codes", tt`Коды входа`, tt`Одноразовые коды двухфакторной защиты.`, tt`код|кода|кодов`],
+        ["passkeys", tt`Ключи доступа`, tt`Ключи для входа на сайты без пароля, сохранённые в сейфе.`, tt`ключ|ключа|ключей`],
         ["bookmarks", tt`Закладки`, tt`Папки и ссылки из раздела «Закладки».`, tt`запись|записи|записей`],
         ["tabs", tt`Вкладки и пространства`, tt`Список открытых вкладок, ярлыки стартовой страницы и пространства.`, null],
         ["addresses", tt`Адреса`, tt`Адреса, телефоны и почта, которые браузер подставляет в формы.`, tt`адрес|адреса|адресов`],
@@ -1158,6 +1190,7 @@ window.TaboraAccountPane = (function () {
   };
   Services.obs.addObserver(refresh, Account.TOPIC);
   Services.obs.addObserver(refresh, Vault.TOPIC);
+  Services.obs.addObserver(refresh, "tabora-passkeys-changed");
   // ход сверки и её итог видны на вкладке «Синхронизация» сразу
   const syncRefresh = () => state.tab === "sync" && refresh();
   Services.obs.addObserver(syncRefresh, Sync.TOPIC);
@@ -1166,6 +1199,7 @@ window.TaboraAccountPane = (function () {
   window.addEventListener("unload", () => {
     Services.obs.removeObserver(refresh, Account.TOPIC);
     Services.obs.removeObserver(refresh, Vault.TOPIC);
+    Services.obs.removeObserver(refresh, "tabora-passkeys-changed");
     Services.obs.removeObserver(syncRefresh, Sync.TOPIC);
     Services.obs.removeObserver(loadProfiles, Profiles.TOPIC);
   }, { once: true });

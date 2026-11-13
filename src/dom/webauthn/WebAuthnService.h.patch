@@ -1,0 +1,46 @@
+diff --git a/dom/webauthn/WebAuthnService.h b/dom/webauthn/WebAuthnService.h
+index 7f79a43da4..e8ebebd6f0 100644
+--- a/dom/webauthn/WebAuthnService.h
++++ b/dom/webauthn/WebAuthnService.h
+@@ -9,6 +9,7 @@
+ #include "WebAuthnArgs.h"
+ #include "mozilla/StaticPrefs_security.h"
+ #include "mozilla/dom/WebAuthnPromiseHolder.h"
++#include "nsITaboraPasskeys.h"
+ #include "nsIWebAuthnService.h"
+ 
+ #ifdef MOZ_WIDGET_ANDROID
+@@ -32,6 +33,12 @@ class WebAuthnService final : public nsIWebAuthnService {
+   NS_DECL_THREADSAFE_ISUPPORTS
+   NS_DECL_NSIWEBAUTHNSERVICE
+ 
++  // Tabora: the vault passed a request on (nsITaboraPasskeysReply.pass): the
++  // next call for this transaction goes to the engine's own authenticators.
++  void TaboraPassed(uint64_t aTransactionId) {
++    mTaboraPassed = Some(aTransactionId);
++  }
++
+   WebAuthnService() {
+     (void)authrs_service_constructor(getter_AddRefs(mAuthrsService));
+ #if defined(XP_WIN)
+@@ -111,6 +118,20 @@ class WebAuthnService final : public nsIWebAuthnService {
+ 
+   nsCOMPtr<nsIWebAuthnService> mAuthrsService;
+   nsCOMPtr<nsIWebAuthnService> mPlatformService;
++
++  // Tabora: passkeys kept in the vault (nsITaboraPasskeys.idl). The vault is
++  // asked first; it answers itself or passes the request on.
++  nsITaboraPasskeys* Tabora();
++  bool TaboraMakeCredential(uint64_t aTransactionId,
++                            uint64_t aBrowsingContextId,
++                            nsIWebAuthnRegisterArgs* aArgs,
++                            nsIWebAuthnRegisterPromise* aPromise);
++  bool TaboraGetAssertion(uint64_t aTransactionId, uint64_t aBrowsingContextId,
++                          nsIWebAuthnSignArgs* aArgs,
++                          nsIWebAuthnSignPromise* aPromise);
++  nsCOMPtr<nsITaboraPasskeys> mTabora;
++  bool mTaboraLooked = false;
++  Maybe<uint64_t> mTaboraPassed;
+ };
+ 
+ }  // namespace mozilla::dom

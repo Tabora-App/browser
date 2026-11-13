@@ -390,3 +390,60 @@
   align-items: center;
   justify-content: center;
 }
+
+/* ---- Passkeys: the sheet the vault shows before it makes a passkey or signs in with one ---- */
+#tabora-modal .pk-sheet {
+  gap: 12px;
+  outline: none;
+}
+
+#tabora-modal .pk-accounts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 264px;
+  overflow: auto;
+}
+
+#tabora-modal .pk-account {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  text-align: start;
+  font: inherit;
+  color: inherit;
+}
+
+#tabora-modal button.pk-account {
+  appearance: none;
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+#tabora-modal button.pk-account:hover {
+  background: var(--tabora-hover);
+}
+
+#tabora-modal button.pk-account[aria-checked="true"] {
+  border-color: var(--tabora-accent);
+  background: color-mix(in srgb, var(--tabora-accent) 9%, var(--tabora-bg));
+}
+
+#tabora-modal button.pk-account:focus-visible {
+  outline: 2px solid var(--tabora-accent);
+  outline-offset: 1px;
+}
+
+#tabora-modal .pk-sheet .w-actions {
+  flex-wrap: nowrap;
+}
+
+#tabora-modal .pk-sheet .w-actions .w-btn {
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #tabora-modal button.pk-account {
+    transition: none;
+  }
+}

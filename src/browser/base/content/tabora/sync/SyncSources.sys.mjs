@@ -26,6 +26,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   Vault: "chrome://tabora/content/vault/Vault.sys.mjs",
   Otp: "chrome://tabora/content/vault/Otp.sys.mjs",
   base32Encode: "chrome://tabora/content/vault/Otp.sys.mjs",
+  Passkeys: "chrome://tabora/content/vault/Passkeys.sys.mjs",
   PlacesUtils: "resource://gre/modules/PlacesUtils.sys.mjs",
   ContextualIdentityService: "moz-src:///toolkit/components/contextualidentity/ContextualIdentityService.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
@@ -218,6 +219,46 @@ const otp = {
 
   watch(notify) {
     Services.obs.addObserver({ observe: () => notify() }, lazy.Otp.TOPIC);
+  },
+};
+
+/* ---- passkeys ------------------------------------------------------------------------------------
+ * A record is one passkey of the vault with its private key (vault/Passkeys.sys.mjs); its number
+ * is the credential ID, which the site knows it by. A passkey is never edited, only made and
+ * deleted, so two computers cannot change one record differently. Two passkeys for one account
+ * of one site, made on two computers before they met, are both kept: the site knows both. */
+
+const passkeys = {
+  name: "passkeys",
+
+  async available() {
+    if (!lazy.Vault.unlocked || !lazy.Passkeys.allowed) {
+      return false;
+    }
+    await lazy.Passkeys.ready();
+    return !lazy.Passkeys.loadError;
+  },
+
+  async list() {
+    const out = new Map();
+    for (const e of await lazy.Passkeys.exportAll()) {
+      out.set(e.id, { rp: e.rp, rn: e.rn, uh: e.uh, un: e.un, dn: e.dn, c: e.c, k: e.key });
+    }
+    return out;
+  },
+
+  hashable: d => ({ rp: d.rp, rn: d.rn, uh: d.uh, un: d.un, dn: d.dn, k: d.k }),
+
+  async apply(changes) {
+    await lazy.Passkeys.applyRemote(
+      changes.map(({ id, data }) => ({ id, data: data ? { rp: str(data.rp, 253), rn: str(data.rn, 120), uh: str(data.uh, 88), un: str(data.un, 200), dn: str(data.dn, 200), c: Number(data.c) || 0, key: str(data.k, 600) } : null }))
+    );
+    return {};
+  },
+
+  watch(notify) {
+    // what sync itself has just written is not a local change
+    Services.obs.addObserver({ observe: (subject, topic, what) => what !== "synced" && notify() }, lazy.Passkeys.TOPIC);
   },
 };
 
@@ -1387,4 +1428,4 @@ const addons = {
   },
 };
 
-export const SOURCES = { logins, otp, marks, spaces, start, tabs, sent, history, addresses, cards, prefs, addons };
+export const SOURCES = { logins, otp, passkeys, marks, spaces, start, tabs, sent, history, addresses, cards, prefs, addons };

@@ -1,0 +1,21 @@
+diff --git a/dom/webauthn/components.conf b/dom/webauthn/components.conf
+index 326269c960..6317d4fff6 100644
+--- a/dom/webauthn/components.conf
++++ b/dom/webauthn/components.conf
+@@ -17,3 +17,16 @@ Classes = [
+         'processes': ProcessSelector.MAIN_PROCESS_ONLY,
+     },
+ ]
++
++# Tabora: passkeys kept in the vault. The service is a part of the desktop shell; where the
++# shell is absent (the phone) there is nothing to register.
++if buildconfig.substs['MOZ_WIDGET_TOOLKIT'] != 'android':
++    Classes += [
++        {
++            'cid': '{ffffa142-ba52-41ee-841c-affa76cbeab0}',
++            'contract_ids': ['@tabora.app/passkeys;1'],
++            'esModule': 'chrome://tabora/content/vault/PasskeyService.sys.mjs',
++            'constructor': 'PasskeyService',
++            'processes': ProcessSelector.MAIN_PROCESS_ONLY,
++        },
++    ]

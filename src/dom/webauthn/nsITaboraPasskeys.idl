@@ -1,0 +1,82 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "nsISupports.idl"
+
+/**
+ * Tabora: passkeys kept in the vault.
+ *
+ * The engine's WebAuthn service asks this one before its own authenticators (the system's, a
+ * hardware key). The service is written in JavaScript
+ * (chrome://tabora/content/vault/PasskeyService.sys.mjs) and gets a request as plain values,
+ * because the engine's own argument and result objects are not open to scripts. It is only an
+ * authenticator: the engine has already checked the site and built the client data.
+ */
+
+/** The answer to one request. Exactly one of the methods is called, once. */
+[scriptable, uuid(0d8c3191-a356-45d1-bbaf-39d19221c379)]
+interface nsITaboraPasskeysReply : nsISupports
+{
+    /** A passkey was made: its attestation object (CBOR) and credential ID. */
+    void created(in Array<uint8_t> aAttestationObject,
+                 in Array<uint8_t> aCredentialId);
+
+    /** An assertion was signed with a passkey of the vault. */
+    void asserted(in Array<uint8_t> aAuthenticatorData,
+                  in Array<uint8_t> aCredentialId,
+                  in Array<uint8_t> aSignature,
+                  in Array<uint8_t> aUserHandle);
+
+    /** The person refused, or it failed: the page gets NotAllowedError. */
+    void refused();
+
+    /** The vault already has a passkey from the request's exclude list: InvalidStateError. */
+    void exists();
+
+    /**
+     * The vault is not the one to answer (the person chose a hardware key, the site asks for
+     * something the vault does not do): the engine goes on as it would without the vault.
+     */
+    void pass();
+};
+
+[scriptable, uuid(27ede8e3-57e2-4864-afd8-c017e324a22d)]
+interface nsITaboraPasskeys : nsISupports
+{
+    /** Passkeys of the vault are on and there is an account to keep them in. */
+    readonly attribute boolean enabled;
+
+    /** Whether a new passkey for the site is to be offered by the vault. */
+    boolean wantsCreate(in AString aRpId, in AString aAttachment);
+
+    /** Whether the vault has a passkey that fits the request. */
+    boolean wantsGet(in AString aRpId, in Array<Array<uint8_t> > aAllowList);
+
+    void create(in uint64_t aTransactionId,
+                in uint64_t aBrowsingContextId,
+                in AString aOrigin,
+                in AString aRpId,
+                in AString aRpName,
+                in Array<uint8_t> aUserId,
+                in AString aUserName,
+                in AString aUserDisplayName,
+                in Array<int32_t> aCoseAlgs,
+                in Array<Array<uint8_t> > aExcludeList,
+                in boolean aRequireUserVerification,
+                in boolean aPrivateBrowsing,
+                in nsITaboraPasskeysReply aReply);
+
+    void get(in uint64_t aTransactionId,
+             in uint64_t aBrowsingContextId,
+             in AString aOrigin,
+             in AString aRpId,
+             in Array<Array<uint8_t> > aAllowList,
+             in Array<uint8_t> aClientDataHash,
+             in boolean aRequireUserVerification,
+             in boolean aPrivateBrowsing,
+             in nsITaboraPasskeysReply aReply);
+
+    /** The request was withdrawn (the page left, the time ran out): close what was shown. */
+    void cancel(in uint64_t aTransactionId);
+};

@@ -1,0 +1,307 @@
+diff --git a/dom/webauthn/WebAuthnService.cpp b/dom/webauthn/WebAuthnService.cpp
+index 6e3a91b1e4..ce9fa60313 100644
+--- a/dom/webauthn/WebAuthnService.cpp
++++ b/dom/webauthn/WebAuthnService.cpp
+@@ -5,10 +5,12 @@
+ #include "WebAuthnService.h"
+ 
+ #include "WebAuthnEnumStrings.h"
++#include "WebAuthnResult.h"
+ #include "WebAuthnTransportIdentifiers.h"
+ #include "mozilla/Services.h"
+ #include "mozilla/StaticPrefs_security.h"
+ #include "nsIObserverService.h"
++#include "nsServiceManagerUtils.h"
+ #include "nsTextFormatter.h"
+ #include "nsThreadUtils.h"
+ 
+@@ -70,6 +72,252 @@ bool PrfRequestedForSecurityKey(nsIWebAuthnSignArgs* aArgs) {
+ 
+ NS_IMPL_ISUPPORTS(WebAuthnService, nsIWebAuthnService)
+ 
++// Tabora: passkeys kept in the vault. The vault's service is written in
++// JavaScript and cannot see the engine's argument and result objects, so the
++// request goes to it as plain values and its answer comes back here, where
++// the engine's result is made of it. See nsITaboraPasskeys.idl.
++namespace {
++
++class TaboraPasskeysReply final : public nsITaboraPasskeysReply {
++ public:
++  NS_DECL_ISUPPORTS
++  NS_DECL_NSITABORAPASSKEYSREPLY
++
++  TaboraPasskeysReply(WebAuthnService* aService, uint64_t aTransactionId,
++                      uint64_t aBrowsingContextId,
++                      nsIWebAuthnRegisterArgs* aRegisterArgs,
++                      nsIWebAuthnRegisterPromise* aRegisterPromise,
++                      nsIWebAuthnSignArgs* aSignArgs,
++                      nsIWebAuthnSignPromise* aSignPromise)
++      : mService(aService),
++        mTransactionId(aTransactionId),
++        mBrowsingContextId(aBrowsingContextId),
++        mRegisterArgs(aRegisterArgs),
++        mRegisterPromise(aRegisterPromise),
++        mSignArgs(aSignArgs),
++        mSignPromise(aSignPromise) {}
++
++ private:
++  ~TaboraPasskeysReply() = default;
++
++  // An answer is taken once; anything after it is refused.
++  bool Take() {
++    if (mDone) {
++      return false;
++    }
++    mDone = true;
++    return true;
++  }
++
++  void Reject(nsresult aError) {
++    if (mRegisterPromise) {
++      mRegisterPromise->Reject(aError);
++    }
++    if (mSignPromise) {
++      mSignPromise->Reject(aError);
++    }
++  }
++
++  RefPtr<WebAuthnService> mService;
++  uint64_t mTransactionId;
++  uint64_t mBrowsingContextId;
++  nsCOMPtr<nsIWebAuthnRegisterArgs> mRegisterArgs;
++  nsCOMPtr<nsIWebAuthnRegisterPromise> mRegisterPromise;
++  nsCOMPtr<nsIWebAuthnSignArgs> mSignArgs;
++  nsCOMPtr<nsIWebAuthnSignPromise> mSignPromise;
++  bool mDone = false;
++};
++
++NS_IMPL_ISUPPORTS(TaboraPasskeysReply, nsITaboraPasskeysReply)
++
++NS_IMETHODIMP
++TaboraPasskeysReply::Created(const nsTArray<uint8_t>& aAttestationObject,
++                             const nsTArray<uint8_t>& aCredentialId) {
++  MOZ_ASSERT(NS_IsMainThread());
++  if (!mRegisterPromise || !Take()) {
++    return NS_ERROR_UNEXPECTED;
++  }
++  nsTArray<nsString> transports;
++  transports.AppendElement(u"internal"_ns);
++  RefPtr<WebAuthnRegisterResult> result = new WebAuthnRegisterResult(
++      aAttestationObject, Nothing(), aCredentialId, transports,
++      Some(nsString(u"platform"_ns)), Nothing(), Nothing(), Nothing(),
++      Nothing());
++  // A passkey of the vault is found by the site's ID alone: it is a
++  // discoverable credential.
++  (void)result->SetCredPropsRk(true);
++  mRegisterPromise->Resolve(result);
++  return NS_OK;
++}
++
++NS_IMETHODIMP
++TaboraPasskeysReply::Asserted(const nsTArray<uint8_t>& aAuthenticatorData,
++                              const nsTArray<uint8_t>& aCredentialId,
++                              const nsTArray<uint8_t>& aSignature,
++                              const nsTArray<uint8_t>& aUserHandle) {
++  MOZ_ASSERT(NS_IsMainThread());
++  if (!mSignPromise || !Take()) {
++    return NS_ERROR_UNEXPECTED;
++  }
++  RefPtr<WebAuthnSignResult> result = new WebAuthnSignResult(
++      aAuthenticatorData, Nothing(), aCredentialId, aSignature, aUserHandle,
++      Some(nsString(u"platform"_ns)), Nothing(), Nothing(), Nothing(),
++      Nothing(), Nothing());
++  mSignPromise->Resolve(result);
++  return NS_OK;
++}
++
++NS_IMETHODIMP
++TaboraPasskeysReply::Refused() {
++  MOZ_ASSERT(NS_IsMainThread());
++  if (!Take()) {
++    return NS_ERROR_UNEXPECTED;
++  }
++  Reject(NS_ERROR_DOM_NOT_ALLOWED_ERR);
++  return NS_OK;
++}
++
++NS_IMETHODIMP
++TaboraPasskeysReply::Exists() {
++  MOZ_ASSERT(NS_IsMainThread());
++  if (!Take()) {
++    return NS_ERROR_UNEXPECTED;
++  }
++  Reject(NS_ERROR_DOM_INVALID_STATE_ERR);
++  return NS_OK;
++}
++
++NS_IMETHODIMP
++TaboraPasskeysReply::Pass() {
++  MOZ_ASSERT(NS_IsMainThread());
++  if (!Take()) {
++    return NS_ERROR_UNEXPECTED;
++  }
++  // The same request, this time for the engine's own authenticators.
++  mService->TaboraPassed(mTransactionId);
++  if (mRegisterPromise) {
++    return mService->MakeCredential(mTransactionId, mBrowsingContextId,
++                                    mRegisterArgs, mRegisterPromise);
++  }
++  return mService->GetAssertion(mTransactionId, mBrowsingContextId, mSignArgs,
++                                mSignPromise);
++}
++
++}  // namespace
++
++nsITaboraPasskeys* WebAuthnService::Tabora() {
++  MOZ_ASSERT(NS_IsMainThread());
++  if (!mTaboraLooked) {
++    mTaboraLooked = true;
++    mTabora = do_GetService("@tabora.app/passkeys;1");
++  }
++  bool enabled = false;
++  if (!mTabora || NS_FAILED(mTabora->GetEnabled(&enabled)) || !enabled) {
++    return nullptr;
++  }
++  return mTabora;
++}
++
++bool WebAuthnService::TaboraMakeCredential(
++    uint64_t aTransactionId, uint64_t aBrowsingContextId,
++    nsIWebAuthnRegisterArgs* aArgs, nsIWebAuthnRegisterPromise* aPromise) {
++  if (mTaboraPassed == Some(aTransactionId)) {
++    mTaboraPassed.reset();
++    return false;
++  }
++  nsITaboraPasskeys* tabora = Tabora();
++  if (!tabora) {
++    return false;
++  }
++  nsString rpId;
++  if (NS_FAILED(aArgs->GetRpId(rpId))) {
++    return false;
++  }
++  nsString attachment;
++  if (NS_FAILED(aArgs->GetAuthenticatorAttachment(attachment))) {
++    attachment.Truncate();
++  }
++  bool wants = false;
++  if (NS_FAILED(tabora->WantsCreate(rpId, attachment, &wants)) || !wants) {
++    return false;
++  }
++
++  nsString origin, rpName, userName, userDisplayName, userVerification;
++  nsTArray<uint8_t> userId;
++  nsTArray<int32_t> coseAlgs;
++  nsTArray<nsTArray<uint8_t>> excludeList;
++  bool privateBrowsing = false;
++  (void)aArgs->GetOrigin(origin);
++  (void)aArgs->GetRpName(rpName);
++  (void)aArgs->GetUserId(userId);
++  (void)aArgs->GetUserName(userName);
++  (void)aArgs->GetUserDisplayName(userDisplayName);
++  (void)aArgs->GetCoseAlgs(coseAlgs);
++  (void)aArgs->GetExcludeList(excludeList);
++  (void)aArgs->GetUserVerification(userVerification);
++  (void)aArgs->GetPrivateBrowsing(&privateBrowsing);
++
++  ResetActiveTransaction();
++  RefPtr<TaboraPasskeysReply> reply = new TaboraPasskeysReply(
++      this, aTransactionId, aBrowsingContextId, aArgs, aPromise, nullptr,
++      nullptr);
++  nsresult rv = tabora->Create(
++      aTransactionId, aBrowsingContextId, origin, rpId, rpName, userId,
++      userName, userDisplayName, coseAlgs, excludeList,
++      userVerification.EqualsLiteral(
++          MOZ_WEBAUTHN_USER_VERIFICATION_REQUIREMENT_REQUIRED),
++      privateBrowsing, reply);
++  // If the vault's service failed before it took the request, the engine
++  // goes on by itself.
++  return NS_SUCCEEDED(rv);
++}
++
++bool WebAuthnService::TaboraGetAssertion(uint64_t aTransactionId,
++                                         uint64_t aBrowsingContextId,
++                                         nsIWebAuthnSignArgs* aArgs,
++                                         nsIWebAuthnSignPromise* aPromise) {
++  if (mTaboraPassed == Some(aTransactionId)) {
++    mTaboraPassed.reset();
++    return false;
++  }
++  nsITaboraPasskeys* tabora = Tabora();
++  if (!tabora) {
++    return false;
++  }
++  nsString rpId;
++  nsTArray<nsTArray<uint8_t>> allowList;
++  if (NS_FAILED(aArgs->GetRpId(rpId)) ||
++      NS_FAILED(aArgs->GetAllowList(allowList))) {
++    return false;
++  }
++  bool wants = false;
++  if (NS_FAILED(tabora->WantsGet(rpId, allowList, &wants)) || !wants) {
++    return false;
++  }
++
++  nsString origin, userVerification;
++  nsTArray<uint8_t> clientDataHash;
++  bool privateBrowsing = false;
++  (void)aArgs->GetOrigin(origin);
++  (void)aArgs->GetUserVerification(userVerification);
++  (void)aArgs->GetPrivateBrowsing(&privateBrowsing);
++  if (NS_FAILED(aArgs->GetClientDataHash(clientDataHash))) {
++    return false;
++  }
++
++  ResetActiveTransaction();
++  RefPtr<TaboraPasskeysReply> reply = new TaboraPasskeysReply(
++      this, aTransactionId, aBrowsingContextId, nullptr, nullptr, aArgs,
++      aPromise);
++  nsresult rv = tabora->Get(
++      aTransactionId, aBrowsingContextId, origin, rpId, allowList,
++      clientDataHash,
++      userVerification.EqualsLiteral(
++          MOZ_WEBAUTHN_USER_VERIFICATION_REQUIREMENT_REQUIRED),
++      privateBrowsing, reply);
++  return NS_SUCCEEDED(rv);
++}
++
+ void WebAuthnService::ShowAttestationConsentPrompt(
+     const nsString& aOrigin, uint64_t aTransactionId,
+     uint64_t aBrowsingContextId) {
+@@ -117,6 +365,12 @@ WebAuthnService::MakeCredential(uint64_t aTransactionId,
+   MOZ_ASSERT(aArgs);
+   MOZ_ASSERT(aPromise);
+ 
++  // Tabora: a passkey kept in the vault is offered first.
++  if (TaboraMakeCredential(aTransactionId, aBrowsingContextId, aArgs,
++                           aPromise)) {
++    return NS_OK;
++  }
++
+   ResetActiveTransaction();
+   mActiveTransaction =
+       Some(TransactionState{.service = DefaultService(),
+@@ -269,6 +523,12 @@ WebAuthnService::GetAssertion(uint64_t aTransactionId,
+     return NS_OK;
+   }
+ 
++  // Tabora: if the vault has a passkey that fits, it answers.
++  if (TaboraGetAssertion(aTransactionId, aBrowsingContextId, aArgs,
++                         aPromise)) {
++    return NS_OK;
++  }
++
+   ResetActiveTransaction();
+   mActiveTransaction = Some(TransactionState{.service = DefaultService(),
+                                              .transactionId = aTransactionId});
+@@ -479,6 +739,10 @@ WebAuthnService::Reset() {
+ NS_IMETHODIMP
+ WebAuthnService::Cancel(uint64_t aTransactionId) {
+   MOZ_ASSERT(NS_IsMainThread());
++  // Tabora: the vault closes what it showed for this request, if anything.
++  if (mTabora) {
++    (void)mTabora->Cancel(aTransactionId);
++  }
+   if (Maybe<ConditionalGet> found = TakeConditionalByTid(aTransactionId);
+       found.isSome()) {
+     found.ref().signPromise->Reject(NS_ERROR_DOM_NOT_ALLOWED_ERR);
