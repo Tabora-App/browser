@@ -633,7 +633,12 @@ export const TaboraUpdate = {
       case S.INTERNAL_ERROR:
         return tt`Внутренняя ошибка обновлятора`;
       case S.OTHER_INSTANCE_HANDLING_UPDATES:
-        return tt`Обновление ставит другая копия браузера`;
+        // Another running copy of this installation, in Tabora a window of another account (each
+        // account is a profile of its own). The engine installs nothing while it is open; whether there
+        // is anything to install is known from the manifest, which does not depend on other copies.
+        return this.available && !this.stale && !this.manifestError
+          ? tt`Чтобы установить версию ${this.channel.version}, закройте окна других аккаунтов Tabora`
+          : this._idleText(false);
       default:
         return this._idleText(false);
     }
