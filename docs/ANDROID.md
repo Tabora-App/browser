@@ -38,6 +38,13 @@ determines the format of dates and numbers on pages and the language of the engi
 pages themselves ("Submit Query", "Browse…", field validation messages) stay English in any
 language — Firefox for Android works the same way: the engine takes them from the shared English set.
 
+The app itself carries the same four languages and no others (`taboraLanguages()` in
+`fenix/app/build.gradle`): "Settings → Language" offers English, Russian, Ukrainian and Spanish, and the
+resources of every other language are left out of the package, the libraries' included. A phone set
+to a fifth language gets the whole app in English rather than a mix of two languages; a regional
+variant (es-MX, en-GB) gets the base language. To check: `aapt2 dump badging <apk>` lists
+`locales: '--_--' 'es' 'ru' 'uk'`.
+
 ### Tabora account and sync
 
 Account sign-in and sync run in a built-in module — an engine extension that

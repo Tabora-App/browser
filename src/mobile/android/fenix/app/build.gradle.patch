@@ -1,5 +1,5 @@
 diff --git a/mobile/android/fenix/app/build.gradle b/mobile/android/fenix/app/build.gradle
-index e8032b0120..8a9f4f7dea 100644
+index e8032b0120..643b53c37e 100644
 --- a/mobile/android/fenix/app/build.gradle
 +++ b/mobile/android/fenix/app/build.gradle
 @@ -46,7 +46,8 @@ android {
@@ -50,7 +50,19 @@ index e8032b0120..8a9f4f7dea 100644
                      "deepLinkScheme": deepLinkSchemeValue,
              ])
          }
-@@ -300,16 +303,27 @@ androidComponents {
+@@ -173,6 +176,11 @@ android {
+     }
+ 
+     androidResources {
++        // Tabora is translated into four languages. Resources of the others are left out, here and in
++        // the libraries, so a phone set to a fifth language shows the whole app in English instead of
++        // a mix of that language and English. Regional variants (es-MX, en-GB) go too: the base language is shown.
++        localeFilters.addAll(taboraLanguages())
++
+         // All JavaScript code used internally by GeckoView is packaged in a
+         // file called omni.ja. If this file is compressed in the APK,
+         // GeckoView must uncompress it before it can do anything else which
+@@ -300,16 +308,27 @@ androidComponents {
              // The Google Play Store does not allow multiple APKs for the same app that all have the
              // same version code. Therefore we need to have different version codes for our ARM and x86
              // builds.
@@ -82,7 +94,7 @@ index e8032b0120..8a9f4f7dea 100644
                  project.logger.debug("versionCode for $abi = $versionCodeOverride")
                  output.versionName.set(versionName)
                  output.versionCode.set(versionCodeOverride)
-@@ -343,8 +357,9 @@ androidComponents {
+@@ -343,8 +362,9 @@ androidComponents {
  // -------------------------------------------------------------------------------------------------
  
  android.defaultConfig.with {
@@ -94,3 +106,25 @@ index e8032b0120..8a9f4f7dea 100644
  
      // Reading the sentry token from a local file (if it exists). In a release task on taskcluster it will be available.
      buildConfigField 'String', 'SENTRY_TOKEN', 'null'
+@@ -795,6 +815,10 @@ ${f.text}"""
+     }
+ }
+ 
++def taboraLanguages() {
++    return ["en", "es", "ru", "uk"]
++}
++
+ def getSupportedLocales() {
+     // This isn't running as a task, instead the array is build when the gradle file is parsed.
+     // https://github.com/mozilla-mobile/fenix/issues/14175
+@@ -805,6 +829,10 @@ def getSupportedLocales() {
+         if (details.file.path.endsWith("${File.separator}strings.xml")) {
+             def languageCode = details.file.parent.tokenize(File.separator).last().replaceAll('values-', '').replaceAll('-r', '-')
+             languageCode = (languageCode == "values") ? "en-US" : languageCode
++            // Tabora: the language list in settings offers the languages the app is translated into
++            if (languageCode != "en-US" && !(languageCode in taboraLanguages())) {
++                return
++            }
+             foundLocales.append("\"").append(languageCode).append("\"").append(",")
+         }
+     }
