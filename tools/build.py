@@ -1212,11 +1212,16 @@ def build_android(config: dict, brand: str) -> None:
     # since 2026-11-13 UTC, so every later build is newer for Google Play and there is no counter to
     # maintain. The base is above the codes of the first builds already in Google Play.
     version_code = 2016200000 + int((time.time() - 1794528000) // 600) + 1
+    build_type = ANDROID_BUILD_TYPE.capitalize()
+    # No lint: it analyses a hundred of Mozilla's modules that Tabora does not change, in the same
+    # memory R8 needs, and adds nothing to the package.
+    no_lint = [flag for task in ("lintVitalAnalyze", "lintVitalReport", "lintVital") for flag in ("-x", task + build_type)]
     gradle_flags = [f"-PtaboraVersionName={version}", f"-PtaboraVersionCode={version_code}", "-PdisableDebugSigning",
                     "-Dorg.gradle.jvmargs=-Xmx7g -XX:MaxMetaspaceSize=2g -XX:+UseParallelGC",
-                    "-Pkotlin.daemon.jvmargs=-Xmx3g", "--max-workers=3"]
-    mach(["gradle", f"fenix:assemble{ANDROID_BUILD_TYPE.capitalize()}", *gradle_flags], config, brand)
-    mach(["gradle", f"fenix:bundle{ANDROID_BUILD_TYPE.capitalize()}", *gradle_flags], config, brand)
+                    "-Pkotlin.daemon.jvmargs=-Xmx3g", "--max-workers=3", *no_lint]
+    stop_gradle_daemons(config, brand)
+    mach(["gradle", f"fenix:assemble{build_type}", *gradle_flags], config, brand)
+    mach(["gradle", f"fenix:bundle{build_type}", *gradle_flags], config, brand)
     apks = android_apks()
     if not apks:
         die(f"приложение не собрано: в {android_apk_dir()} нет файлов .apk")
@@ -1224,6 +1229,19 @@ def build_android(config: dict, brand: str) -> None:
         log(f"собрано: {apk.relative_to(ENGINE)} ({apk.stat().st_size >> 20} МБ)")
     for bundle in android_bundles():
         log(f"собрано: {bundle.relative_to(ENGINE)} ({bundle.stat().st_size >> 20} МБ)")
+
+
+def stop_gradle_daemons(config: dict, brand: str) -> None:
+    """The gradle and Kotlin daemons left by the engine build were started with other JVM flags: the app
+    build cannot reuse them, and they keep their heaps (the Kotlin one for two hours). On a machine
+    with 16 GB that pushes the app build deep into swap, until the machine stops answering and the CI
+    run ends with "the runner lost communication"."""
+    try:
+        mach(["gradle", "--stop"], config, brand)
+    except subprocess.CalledProcessError as e:
+        warn(f"gradle --stop: код {e.returncode}")
+    if os.environ.get("GITHUB_ACTIONS"):
+        subprocess.run(["pkill", "-f", "KotlinCompileDaemon"], check=False)
 
 
 def android_multilocale(config: dict, brand: str) -> None:
